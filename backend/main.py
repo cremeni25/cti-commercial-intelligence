@@ -20,24 +20,24 @@ class Meta(BaseModel):
     meta_share: float
 
 
+class Cliente(BaseModel):
+    nome: str
+    cidade: str
+    estado: str
+    segmento: str
+
+
 @app.get("/")
 def status():
-    return {"CTI": "Sistema ativo", "modulo": "Planejamento Comercial"}
+    return {"CTI": "Sistema ativo"}
 
+
+# METAS
 
 @app.post("/metas")
 def criar_meta(meta: Meta):
 
-    data = {
-        "periodo": meta.periodo,
-        "meta_faturamento": meta.meta_faturamento,
-        "meta_novos_clientes": meta.meta_novos_clientes,
-        "meta_reativacao": meta.meta_reativacao,
-        "meta_mix": meta.meta_mix,
-        "meta_share": meta.meta_share
-    }
-
-    result = supabase.table("metas").insert(data).execute()
+    result = supabase.table("metas").insert(meta.dict()).execute()
 
     return result.data
 
@@ -46,5 +46,23 @@ def criar_meta(meta: Meta):
 def listar_metas():
 
     result = supabase.table("metas").select("*").execute()
+
+    return result.data
+
+
+# CLIENTES
+
+@app.post("/clientes")
+def criar_cliente(cliente: Cliente):
+
+    result = supabase.table("clientes").insert(cliente.dict()).execute()
+
+    return result.data
+
+
+@app.get("/clientes")
+def listar_clientes():
+
+    result = supabase.table("clientes").select("*").execute()
 
     return result.data
