@@ -66,3 +66,30 @@ def listar_clientes():
     result = supabase.table("clientes").select("*").execute()
 
     return result.data
+
+# ==============================
+# MODULO OEM - IMPLEMENTADORES
+# ==============================
+
+class Implementador(BaseModel):
+    nome: str
+    estado: str | None = None
+    tipo: str | None = None
+
+
+@app.post("/implementadores")
+def criar_implementador(implementador: Implementador):
+
+    result = supabase.table("implementadores").insert(
+        implementador.dict()
+    ).execute()
+
+    return result.data
+
+
+@app.get("/implementadores")
+def listar_implementadores():
+
+    result = supabase.table("implementadores").select("*").execute()
+
+    return result.data
