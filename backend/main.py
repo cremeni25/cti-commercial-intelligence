@@ -93,3 +93,30 @@ def listar_implementadores():
     result = supabase.table("implementadores").select("*").execute()
 
     return result.data
+
+# ==============================
+# MODULO EQUIPAMENTOS
+# ==============================
+
+class Equipamento(BaseModel):
+    linha: str
+    modelo: str
+    observacao: str | None = None
+
+
+@app.post("/equipamentos")
+def criar_equipamento(equipamento: Equipamento):
+
+    result = supabase.table("equipamentos").insert(
+        equipamento.dict()
+    ).execute()
+
+    return result.data
+
+
+@app.get("/equipamentos")
+def listar_equipamentos():
+
+    result = supabase.table("equipamentos").select("*").execute()
+
+    return result.data
