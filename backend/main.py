@@ -214,3 +214,105 @@ async def criar_venda_corrigida(payload: dict):
             "detalhe": str(e),
             "payload": venda
         }
+
+# ============================================================
+# ANALYTICS MODULE
+# ============================================================
+
+@app.get("/analytics/vendas-por-linha")
+async def vendas_por_linha():
+
+    query = """
+    select
+        e.linha,
+        count(v.id) as total_vendas,
+        sum(v.valor) as valor_total
+    from vendas v
+    join equipamentos e on v.equipamento_id = e.id
+    group by e.linha
+    order by valor_total desc
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    return result.data
+
+
+@app.get("/analytics/vendas-por-modelo")
+async def vendas_por_modelo():
+
+    query = """
+    select
+        e.modelo,
+        e.linha,
+        count(v.id) as total_vendas,
+        sum(v.valor) as valor_total
+    from vendas v
+    join equipamentos e on v.equipamento_id = e.id
+    group by e.modelo, e.linha
+    order by valor_total desc
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    return result.data
+
+
+@app.get("/analytics/ranking-clientes")
+async def ranking_clientes():
+
+    query = """
+    select
+        c.nome,
+        c.estado,
+        count(v.id) as total_vendas,
+        sum(v.valor) as valor_total
+    from vendas v
+    join clientes c on v.cliente_id = c.id
+    group by c.nome, c.estado
+    order by valor_total desc
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    return result.data
+
+
+@app.get("/analytics/ranking-oem")
+async def ranking_oem():
+
+    query = """
+    select
+        i.nome,
+        i.estado,
+        i.tipo,
+        count(v.id) as total_vendas,
+        sum(v.valor) as valor_total
+    from vendas v
+    join implementadores i on v.implementador_id = i.id
+    group by i.nome, i.estado, i.tipo
+    order by valor_total desc
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    return result.data
+
+
+@app.get("/analytics/vendas-por-estado")
+async def vendas_por_estado():
+
+    query = """
+    select
+        c.estado,
+        count(v.id) as total_vendas,
+        sum(v.valor) as valor_total
+    from vendas v
+    join clientes c on v.cliente_id = c.id
+    group by c.estado
+    order by valor_total desc
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    return result.data
