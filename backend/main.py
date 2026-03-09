@@ -32,7 +32,9 @@ def status():
     return {"CTI": "Sistema ativo"}
 
 
+# ==============================
 # METAS
+# ==============================
 
 @app.post("/metas")
 def criar_meta(meta: Meta):
@@ -50,7 +52,9 @@ def listar_metas():
     return result.data
 
 
+# ==============================
 # CLIENTES
+# ==============================
 
 @app.post("/clientes")
 def criar_cliente(cliente: Cliente):
@@ -66,6 +70,7 @@ def listar_clientes():
     result = supabase.table("clientes").select("*").execute()
 
     return result.data
+
 
 # ==============================
 # MODULO OEM - IMPLEMENTADORES
@@ -94,6 +99,7 @@ def listar_implementadores():
 
     return result.data
 
+
 # ==============================
 # MODULO EQUIPAMENTOS
 # ==============================
@@ -121,32 +127,62 @@ def listar_equipamentos():
 
     return result.data
 
+
 # ==============================
 # MODULO VENDAS
 # ==============================
 
 @app.get("/vendas")
 def listar_vendas():
+
     response = supabase.table("vendas").select("*").execute()
+
     return response.data
 
 
 @app.post("/vendas")
-def criar_venda(venda: dict):
-    response = supabase.table("vendas").insert(venda).execute()
-    return response.data
+def criar_venda(payload: dict):
+
+    venda = {
+        "cliente_id": payload.get("cliente_id"),
+        "equipamento_id": payload.get("equipamento_id"),
+        "implementador_id": payload.get("implementador_id"),
+        "tipo_venda": payload.get("tipo_venda"),
+        "valor": payload.get("valor"),
+        "data_venda": payload.get("data_venda"),
+        "observacao": payload.get("observacao")
+    }
+
+    try:
+
+        response = supabase.table("vendas").insert(venda).execute()
+
+        return response.data
+
+    except Exception as e:
+
+        return {
+            "erro": "Falha ao registrar venda",
+            "detalhe": str(e),
+            "payload": venda
+        }
 
 
 @app.get("/vendas/{venda_id}")
 def buscar_venda(venda_id: str):
+
     response = supabase.table("vendas").select("*").eq("id", venda_id).execute()
+
     return response.data
 
 
 @app.delete("/vendas/{venda_id}")
 def deletar_venda(venda_id: str):
+
     response = supabase.table("vendas").delete().eq("id", venda_id).execute()
+
     return {"deleted": venda_id}
+
 
 # ==============================
 # CORREÇÃO OPERACIONAL VENDAS
@@ -165,6 +201,16 @@ async def criar_venda_corrigida(payload: dict):
         "observacao": payload.get("observacao")
     }
 
-    response = supabase.table("vendas").insert(venda).execute()
+    try:
 
-    return response.data
+        response = supabase.table("vendas").insert(venda).execute()
+
+        return response.data
+
+    except Exception as e:
+
+        return {
+            "erro": "Falha ao registrar venda",
+            "detalhe": str(e),
+            "payload": venda
+        }
