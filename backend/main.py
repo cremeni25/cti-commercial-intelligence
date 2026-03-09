@@ -316,3 +316,124 @@ async def vendas_por_estado():
     result = supabase.rpc("execute_sql", {"query": query}).execute()
 
     return result.data
+# ============================================================
+# ANALYTICS MODULE
+# ============================================================
+
+@app.get("/analytics/vendas-por-linha")
+async def vendas_por_linha():
+
+    vendas = supabase.table("vendas").select("*, equipamentos(linha)").execute()
+
+    resultado = {}
+
+    for v in vendas.data:
+        linha = v["equipamentos"]["linha"]
+
+        if linha not in resultado:
+            resultado[linha] = {
+                "linha": linha,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[linha]["total_vendas"] += 1
+        resultado[linha]["valor_total"] += v["valor"]
+
+    return list(resultado.values())
+
+
+@app.get("/analytics/ranking-clientes")
+async def ranking_clientes():
+
+    vendas = supabase.table("vendas").select("valor, clientes(nome)").execute()
+
+    ranking = {}
+
+    for v in vendas.data:
+
+        cliente = v["clientes"]["nome"]
+
+        if cliente not in ranking:
+            ranking[cliente] = {
+                "cliente": cliente,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        ranking[cliente]["total_vendas"] += 1
+        ranking[cliente]["valor_total"] += v["valor"]
+
+    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/ranking-oem")
+async def ranking_oem():
+
+    vendas = supabase.table("vendas").select("valor, implementadores(nome)").execute()
+
+    ranking = {}
+
+    for v in vendas.data:
+
+        oem = v["implementadores"]["nome"]
+
+        if oem not in ranking:
+            ranking[oem] = {
+                "oem": oem,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        ranking[oem]["total_vendas"] += 1
+        ranking[oem]["valor_total"] += v["valor"]
+
+    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/vendas-por-modelo")
+async def vendas_por_modelo():
+
+    vendas = supabase.table("vendas").select("valor, equipamentos(modelo)").execute()
+
+    resultado = {}
+
+    for v in vendas.data:
+
+        modelo = v["equipamentos"]["modelo"]
+
+        if modelo not in resultado:
+            resultado[modelo] = {
+                "modelo": modelo,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[modelo]["total_vendas"] += 1
+        resultado[modelo]["valor_total"] += v["valor"]
+
+    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/vendas-por-estado")
+async def vendas_por_estado():
+
+    vendas = supabase.table("vendas").select("valor, clientes(estado)").execute()
+
+    resultado = {}
+
+    for v in vendas.data:
+
+        estado = v["clientes"]["estado"]
+
+        if estado not in resultado:
+            resultado[estado] = {
+                "estado": estado,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[estado]["total_vendas"] += 1
+        resultado[estado]["valor_total"] += v["valor"]
+
+    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
