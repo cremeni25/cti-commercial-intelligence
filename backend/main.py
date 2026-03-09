@@ -147,3 +147,24 @@ def buscar_venda(venda_id: str):
 def deletar_venda(venda_id: str):
     response = supabase.table("vendas").delete().eq("id", venda_id).execute()
     return {"deleted": venda_id}
+
+# ==============================
+# CORREÇÃO OPERACIONAL VENDAS
+# ==============================
+
+@app.post("/vendas2")
+async def criar_venda_corrigida(payload: dict):
+
+    venda = {
+        "cliente_id": payload.get("cliente_id"),
+        "equipamento_id": payload.get("equipamento_id"),
+        "implementador_id": payload.get("implementador_id"),
+        "tipo_venda": payload.get("tipo_venda"),
+        "valor": payload.get("valor"),
+        "data_venda": payload.get("data_venda"),
+        "observacao": payload.get("observacao")
+    }
+
+    response = supabase.table("vendas").insert(venda).execute()
+
+    return response.data
