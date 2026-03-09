@@ -120,3 +120,30 @@ def listar_equipamentos():
     result = supabase.table("equipamentos").select("*").execute()
 
     return result.data
+
+# ==============================
+# MODULO VENDAS
+# ==============================
+
+@app.get("/vendas")
+def listar_vendas():
+    response = supabase.table("vendas").select("*").execute()
+    return response.data
+
+
+@app.post("/vendas")
+def criar_venda(venda: dict):
+    response = supabase.table("vendas").insert(venda).execute()
+    return response.data
+
+
+@app.get("/vendas/{venda_id}")
+def buscar_venda(venda_id: str):
+    response = supabase.table("vendas").select("*").eq("id", venda_id).execute()
+    return response.data
+
+
+@app.delete("/vendas/{venda_id}")
+def deletar_venda(venda_id: str):
+    response = supabase.table("vendas").delete().eq("id", venda_id).execute()
+    return {"deleted": venda_id}
