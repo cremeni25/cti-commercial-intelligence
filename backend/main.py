@@ -651,3 +651,93 @@ async def radar_mercado():
         "radar_linhas": list(radar_linhas.values()),
         "oportunidades_detectadas": oportunidades
     }
+
+# ============================================================
+# RADAR COMERCIAL POR DDD (VIENA REGION)
+# ============================================================
+
+DDD_VIENA = ["011","012","013","014","015","018"]
+
+@app.get("/analytics/radar-ddd")
+async def radar_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+
+    radar_ddds = {}
+    radar_linhas = {}
+
+    total_vendas = 0
+    faturamento_total = 0
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+
+        if not cliente or not equipamento:
+            continue
+
+        cidade = cliente.get("cidade","")
+
+        # extrair DDD do cliente se existir
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        linha = equipamento["linha"]
+
+        total_vendas += 1
+        faturamento_total += v["valor"]
+
+        # radar por DDD
+        if ddd not in radar_ddds:
+            radar_ddds[ddd] = {
+                "ddd": ddd,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        radar_ddds[ddd]["vendas"] += 1
+        radar_ddds[ddd]["faturamento"] += v["valor"]
+
+        # radar por linha
+        if linha not in radar_linhas:
+            radar_linhas[linha] = {
+                "linha": linha,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        radar_linhas[linha]["vendas"] += 1
+        radar_linhas[linha]["faturamento"] += v["valor"]
+
+    oportunidades = []
+
+    for ddd in radar_ddds.values():
+
+        if ddd["vendas"] <= 2:
+
+            oportunidades.append({
+                "tipo": "ddd_subexplorado",
+                "ddd": ddd["ddd"],
+                "observacao": "baixo volume de vendas na região"
+            })
+
+    return {
+        "resumo_regional": {
+            "total_vendas": total_vendas,
+            "faturamento_total": faturamento_total
+        },
+        "radar_por_ddd": list(radar_ddds.values()),
+        "radar_por_linha": list(radar_linhas.values()),
+        "oportunidades_detectadas": oportunidades
+    }
