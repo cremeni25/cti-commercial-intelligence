@@ -574,3 +574,80 @@ async def inteligencia_comercial():
         ),
         "oportunidades_detectadas": oportunidades
     }
+
+# ============================================================
+# RADAR ESTRATEGICO DE MERCADO
+# ============================================================
+
+@app.get("/analytics/radar-mercado")
+async def radar_mercado():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+
+    radar_estados = {}
+    radar_linhas = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+
+        if not cliente or not equipamento:
+            continue
+
+        estado = cliente["estado"]
+        linha = equipamento["linha"]
+
+        # radar por estado
+        if estado not in radar_estados:
+            radar_estados[estado] = {
+                "estado": estado,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        radar_estados[estado]["vendas"] += 1
+        radar_estados[estado]["faturamento"] += v["valor"]
+
+        # radar por linha
+        if linha not in radar_linhas:
+            radar_linhas[linha] = {
+                "linha": linha,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        radar_linhas[linha]["vendas"] += 1
+        radar_linhas[linha]["faturamento"] += v["valor"]
+
+    # identificar oportunidades
+    oportunidades = []
+
+    for estado in radar_estados.values():
+
+        if estado["vendas"] <= 1:
+            oportunidades.append({
+                "tipo": "estado_subexplorado",
+                "estado": estado["estado"],
+                "observacao": "baixa presença comercial"
+            })
+
+    for linha in radar_linhas.values():
+
+        if linha["vendas"] <= 2:
+            oportunidades.append({
+                "tipo": "linha_com_potencial",
+                "linha": linha["linha"],
+                "observacao": "linha com espaço de crescimento"
+            })
+
+    return {
+        "radar_estados": list(radar_estados.values()),
+        "radar_linhas": list(radar_linhas.values()),
+        "oportunidades_detectadas": oportunidades
+    }
