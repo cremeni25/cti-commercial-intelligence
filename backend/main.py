@@ -1041,3 +1041,155 @@ async def inteligencia_mercado():
         "ddd_vendas": ddds,
         "oportunidades_detectadas": oportunidades
     }
+
+# ============================================================
+# HEATMAP COMERCIAL POR DDD
+# ============================================================
+
+@app.get("/analytics/heatmap-comercial-ddd")
+async def heatmap_comercial_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+
+    ddd_stats = {}
+
+    total_vendas = 0
+    total_valor = 0
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+
+        if not cliente:
+            continue
+
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        if ddd not in ddd_stats:
+
+            ddd_stats[ddd] = {
+                "ddd": ddd,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        ddd_stats[ddd]["total_vendas"] += 1
+        ddd_stats[ddd]["valor_total"] += v["valor"]
+
+        total_vendas += 1
+        total_valor += v["valor"]
+
+    resultado = []
+
+    for ddd in ddd_stats:
+
+        vendas_ddd = ddd_stats[ddd]["total_vendas"]
+        valor_ddd = ddd_stats[ddd]["valor_total"]
+
+        participacao = 0
+
+        if total_valor > 0:
+            participacao = round((valor_ddd / total_valor) * 100, 2)
+
+        classificacao = "baixo"
+
+        if participacao > 40:
+            classificacao = "dominante"
+
+        elif participacao > 20:
+            classificacao = "forte"
+
+        elif participacao > 10:
+            classificacao = "moderado"
+
+        resultado.append({
+            "ddd": ddd,
+            "total_vendas": vendas_ddd,
+            "valor_total": valor_ddd,
+            "participacao_regional": participacao,
+            "classificacao": classificacao
+        })
+
+    return {
+        "total_vendas_regiao": total_vendas,
+        "faturamento_regiao": total_valor,
+        "heatmap": sorted(resultado, key=lambda x: x["valor_total"], reverse=True)
+    }
+
+# ============================================================
+# PROJECAO DE POTENCIAL DE MERCADO POR DDD
+# ============================================================
+
+@app.get("/analytics/projecao-mercado-ddd")
+async def projecao_mercado_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+
+    ddd_stats = {}
+
+    total_valor = 0
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+
+        if not cliente:
+            continue
+
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        if ddd not in ddd_stats:
+
+            ddd_stats[ddd] = {
+                "ddd": ddd,
+                "valor_total": 0
+            }
+
+        ddd_stats[ddd]["valor_total"] += v["valor"]
+
+        total_valor += v["valor"]
+
+    resultado = []
+
+    for ddd in ddd_stats:
+
+        valor = ddd_stats[ddd]["valor_total"]
+
+        participacao = 0
+
+        if total_valor > 0:
+            participacao = round((valor / total_valor) * 100, 2)
+
+        potencial_estimado = valor * 1.35
+
+        crescimento_possivel = potencial_estimado - valor
+
+        resultado.append({
+
+            "ddd": ddd,
+            "vendas_atuais": valor,
+            "participacao_regional": participacao,
+            "potencial_estimado": round(potencial_estimado,2),
+            "crescimento_possivel": round(crescimento_possivel,2)
+
+        })
+
+    return sorted(resultado, key=lambda x: x["potencial_estimado"], reverse=True)
