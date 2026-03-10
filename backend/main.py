@@ -1325,3 +1325,25 @@ async def upload_anfir(file: UploadFile = File(...)):
         "status": "importado",
         "total_registros": len(registros)
     }
+
+# ============================================================
+# NORMALIZAÇÃO GEOGRÁFICA (CIDADE → DDD)
+# ============================================================
+
+def identificar_ddd(cidade):
+
+    mapa_ddd = {
+        "SAO PAULO": "011",
+        "SANTOS": "013",
+        "SOROCABA": "015",
+        "BAURU": "014",
+        "SAO JOSE DOS CAMPOS": "012",
+        "ANDRADINA": "018"
+    }
+
+    if not cidade:
+        return None
+
+    cidade = cidade.upper().strip()
+
+    return mapa_ddd.get(cidade)
