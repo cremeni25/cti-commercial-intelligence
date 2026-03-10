@@ -1347,3 +1347,24 @@ def identificar_ddd(cidade):
     cidade = cidade.upper().strip()
 
     return mapa_ddd.get(cidade)
+
+# ============================================================
+# CONSULTA GEOGRÁFICA CIDADE → DDD
+# ============================================================
+
+def buscar_ddd_por_cidade(cidade):
+
+    if not cidade:
+        return None
+
+    cidade = cidade.upper().strip()
+
+    response = supabase.table("cidades_ddd")\
+        .select("ddd")\
+        .ilike("cidade", cidade)\
+        .execute()
+
+    if response.data and len(response.data) > 0:
+        return response.data[0]["ddd"]
+
+    return None
