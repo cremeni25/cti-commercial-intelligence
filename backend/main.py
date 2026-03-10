@@ -1193,3 +1193,84 @@ async def projecao_mercado_ddd():
         })
 
     return sorted(resultado, key=lambda x: x["potencial_estimado"], reverse=True)
+
+# ============================================================
+# RADAR DE CLIENTES ESTRATÉGICOS
+# ============================================================
+
+@app.get("/analytics/radar-clientes")
+def radar_clientes():
+
+    query = """
+    SELECT 
+        cliente,
+        cidade,
+        ddd,
+        COUNT(*) as total_compras,
+        COUNT(DISTINCT fabricante) as fabricantes_diferentes,
+        MIN(data_venda) as primeira_compra,
+        MAX(data_venda) as ultima_compra
+    FROM vendas
+    GROUP BY cliente, cidade, ddd
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    clientes = result.data if result.data else []
+
+    prioritarios = []
+    fidelizados = []
+    risco = []
+
+    for c in clientes:
+
+        if c["fabricantes_diferentes"] == 1 and c["total_compras"] >= 2:
+            fidelizados.append(c)
+
+        elif c["fabricantes_diferentes"] > 1:
+            risco.append(c)
+
+        else:
+            prioritarios.append(c)
+
+    return {
+        "clientes_prioritarios": prioritarios,
+        "clientes_fidelizados": fidelizados,
+        "clientes_em_risco": risco
+    }
+
+# ============================================================
+# ANALISE TEMPORAL DE CLIENTES
+# ============================================================
+
+@app.get("/analytics/clientes-recorrencia")
+def clientes_recorrencia():
+
+    query = """
+    SELECT
+        cliente,
+        cidade,
+        ddd,
+        COUNT(*) as total_compras,
+        EXTRACT(YEAR FROM MIN(data_venda)) as primeiro_ano,
+        EXTRACT(YEAR FROM MAX(data_venda)) as ultimo_ano
+    FROM vendas
+    GROUP BY cliente, cidade, ddd
+    """
+
+    result = supabase.rpc("execute_sql", {"query": query}).execute()
+
+    clientes = result.data if result.data else []
+
+    for c in clientes:
+
+        anos = (c["ultimo_ano"] - c["primeiro_ano"]) + 1
+        if anos <= 0:
+            anos = 1
+
+        c["periodo_analise"] = f'{c["primeiro_ano"]}-{c["ultimo_ano"]}'
+        c["media_anual"] = round(c["total_compras"] / anos, 2)
+
+    return {
+        "analise_clientes": clientes
+    }
