@@ -437,3 +437,38 @@ async def vendas_por_estado():
         resultado[estado]["valor_total"] += v["valor"]
 
     return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
+
+# ============================================================
+# SAFE ANALYTICS (fix for relations)
+# ============================================================
+
+@app.get("/analytics/vendas-por-linha-safe")
+async def vendas_por_linha_safe():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+
+    resultado = {}
+
+    for v in vendas.data:
+
+        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+
+        if not equipamento:
+            continue
+
+        linha = equipamento["linha"]
+
+        if linha not in resultado:
+            resultado[linha] = {
+                "linha": linha,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[linha]["total_vendas"] += 1
+        resultado[linha]["valor_total"] += v["valor"]
+
+    return list(resultado.values())
