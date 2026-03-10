@@ -741,3 +741,165 @@ async def radar_ddd():
         "radar_por_linha": list(radar_linhas.values()),
         "oportunidades_detectadas": oportunidades
     }
+
+# ============================================================
+# ANALYTICS POR DDD (VIENA REGION)
+# ============================================================
+
+DDD_VIENA = ["011","012","013","014","015","018"]
+
+
+@app.get("/analytics/vendas-por-ddd")
+async def vendas_por_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+
+    resultado = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+
+        if not cliente:
+            continue
+
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        if ddd not in resultado:
+            resultado[ddd] = {
+                "ddd": ddd,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[ddd]["total_vendas"] += 1
+        resultado[ddd]["valor_total"] += v["valor"]
+
+    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/ranking-oem-por-ddd")
+async def ranking_oem_por_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    implementadores = supabase.table("implementadores").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_oem = {i["id"]: i for i in implementadores.data}
+
+    ranking = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        oem = mapa_oem.get(v["implementador_id"])
+
+        if not cliente or not oem:
+            continue
+
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        chave = f"{ddd}-{oem['nome']}"
+
+        if chave not in ranking:
+            ranking[chave] = {
+                "ddd": ddd,
+                "oem": oem["nome"],
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        ranking[chave]["total_vendas"] += 1
+        ranking[chave]["valor_total"] += v["valor"]
+
+    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/vendas-por-linha-ddd")
+async def vendas_por_linha_ddd():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+
+    resultado = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+
+        if not cliente or not equipamento:
+            continue
+
+        ddd = cliente.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        linha = equipamento["linha"]
+
+        chave = f"{ddd}-{linha}"
+
+        if chave not in resultado:
+            resultado[chave] = {
+                "ddd": ddd,
+                "linha": linha,
+                "total_vendas": 0,
+                "valor_total": 0
+            }
+
+        resultado[chave]["total_vendas"] += 1
+        resultado[chave]["valor_total"] += v["valor"]
+
+    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
+
+
+@app.get("/analytics/clientes-por-ddd")
+async def clientes_por_ddd():
+
+    clientes = supabase.table("clientes").select("*").execute()
+
+    resultado = {}
+
+    for c in clientes.data:
+
+        ddd = c.get("ddd")
+
+        if not ddd:
+            continue
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        if ddd not in resultado:
+            resultado[ddd] = {
+                "ddd": ddd,
+                "total_clientes": 0
+            }
+
+        resultado[ddd]["total_clientes"] += 1
+
+    return sorted(resultado.values(), key=lambda x: x["total_clientes"], reverse=True)
