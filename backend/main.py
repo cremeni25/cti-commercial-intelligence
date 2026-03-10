@@ -472,3 +472,105 @@ async def vendas_por_linha_safe():
         resultado[linha]["valor_total"] += v["valor"]
 
     return list(resultado.values())
+
+# ============================================================
+# INTELIGENCIA COMERCIAL
+# ============================================================
+
+@app.get("/analytics/inteligencia-comercial")
+async def inteligencia_comercial():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+    implementadores = supabase.table("implementadores").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+    mapa_oem = {i["id"]: i for i in implementadores.data}
+
+    analise_estado = {}
+    analise_linha = {}
+    analise_oem = {}
+
+    total_vendas = 0
+    faturamento_total = 0
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+        oem = mapa_oem.get(v["implementador_id"])
+
+        if not cliente or not equipamento:
+            continue
+
+        estado = cliente["estado"]
+        linha = equipamento["linha"]
+
+        total_vendas += 1
+        faturamento_total += v["valor"]
+
+        # estado
+        if estado not in analise_estado:
+            analise_estado[estado] = {
+                "estado": estado,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        analise_estado[estado]["vendas"] += 1
+        analise_estado[estado]["faturamento"] += v["valor"]
+
+        # linha
+        if linha not in analise_linha:
+            analise_linha[linha] = {
+                "linha": linha,
+                "vendas": 0,
+                "faturamento": 0
+            }
+
+        analise_linha[linha]["vendas"] += 1
+        analise_linha[linha]["faturamento"] += v["valor"]
+
+        # oem
+        if oem:
+            nome_oem = oem["nome"]
+
+            if nome_oem not in analise_oem:
+                analise_oem[nome_oem] = {
+                    "oem": nome_oem,
+                    "vendas": 0,
+                    "faturamento": 0
+                }
+
+            analise_oem[nome_oem]["vendas"] += 1
+            analise_oem[nome_oem]["faturamento"] += v["valor"]
+
+    # oportunidades
+    oportunidades = []
+
+    for linha in analise_linha.values():
+
+        if linha["vendas"] < 3:
+
+            oportunidades.append({
+                "tipo": "linha_subexplorada",
+                "linha": linha["linha"],
+                "observacao": "linha com baixa presença comercial"
+            })
+
+    return {
+        "resumo_geral": {
+            "total_vendas": total_vendas,
+            "faturamento_total": faturamento_total
+        },
+        "performance_por_estado": list(analise_estado.values()),
+        "performance_por_linha": list(analise_linha.values()),
+        "ranking_oem": sorted(
+            analise_oem.values(),
+            key=lambda x: x["faturamento"],
+            reverse=True
+        ),
+        "oportunidades_detectadas": oportunidades
+    }
