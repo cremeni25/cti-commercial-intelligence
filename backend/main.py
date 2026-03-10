@@ -1274,3 +1274,54 @@ def clientes_recorrencia():
     return {
         "analise_clientes": clientes
     }
+
+# ============================================================
+# IMPORTADOR ANFIR
+# ============================================================
+
+import pandas as pd
+from fastapi import UploadFile, File
+
+@app.post("/upload/anfir")
+async def upload_anfir(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    excel = pd.ExcelFile(contents)
+
+    registros = []
+
+    for aba in excel.sheet_names:
+
+        df = pd.read_excel(excel, sheet_name=aba)
+
+        for _, row in df.iterrows():
+
+            cliente = row.get("cliente")
+            cidade = row.get("cidade") or row.get("municipio")
+            uf = row.get("uf")
+            produto = row.get("produto")
+            fabricante = row.get("fabricante")
+            data = row.get("data")
+
+            if not cliente or not cidade:
+                continue
+
+            registro = {
+                "cliente": str(cliente),
+                "cidade": str(cidade),
+                "uf": str(uf),
+                "produto": str(produto),
+                "fabricante": str(fabricante),
+                "data_venda": str(data)
+            }
+
+            registros.append(registro)
+
+    if registros:
+        supabase.table("vendas").insert(registros).execute()
+
+    return {
+        "status": "importado",
+        "total_registros": len(registros)
+    }
