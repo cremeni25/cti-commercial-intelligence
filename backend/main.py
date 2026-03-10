@@ -903,3 +903,141 @@ async def clientes_por_ddd():
         resultado[ddd]["total_clientes"] += 1
 
     return sorted(resultado.values(), key=lambda x: x["total_clientes"], reverse=True)
+
+# ============================================================
+# BENCHMARK TERRITORIAL
+# ============================================================
+
+@app.get("/analytics/benchmark-territorial")
+async def benchmark_territorial():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equip = {e["id"]: e for e in equipamentos.data}
+
+    total_brasil = 0
+    total_sp = 0
+
+    linhas_brasil = {}
+    linhas_sp = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equip = mapa_equip.get(v["equipamento_id"])
+
+        if not cliente or not equip:
+            continue
+
+        estado = cliente.get("estado")
+        ddd = cliente.get("ddd")
+        linha = equip.get("linha")
+
+        total_brasil += v["valor"]
+
+        linhas_brasil[linha] = linhas_brasil.get(linha, 0) + v["valor"]
+
+        if ddd in DDD_VIENA:
+
+            total_sp += v["valor"]
+
+            linhas_sp[linha] = linhas_sp.get(linha, 0) + v["valor"]
+
+    participacao_sp = 0
+
+    if total_brasil > 0:
+        participacao_sp = round((total_sp / total_brasil) * 100, 2)
+
+    diferencas = []
+
+    for linha in linhas_brasil:
+
+        valor_br = linhas_brasil.get(linha, 0)
+        valor_sp = linhas_sp.get(linha, 0)
+
+        part_br = 0
+        part_sp = 0
+
+        if total_brasil > 0:
+            part_br = round((valor_br / total_brasil) * 100, 2)
+
+        if total_sp > 0:
+            part_sp = round((valor_sp / total_sp) * 100, 2)
+
+        diferencas.append({
+            "linha": linha,
+            "participacao_brasil": part_br,
+            "participacao_sp": part_sp
+        })
+
+    return {
+        "participacao_sp_no_brasil": participacao_sp,
+        "comparativo_linhas": diferencas
+    }
+
+# ============================================================
+# INTELIGENCIA DE MERCADO
+# ============================================================
+
+@app.get("/analytics/inteligencia-mercado")
+async def inteligencia_mercado():
+
+    vendas = supabase.table("vendas").select("*").execute()
+    clientes = supabase.table("clientes").select("*").execute()
+    equipamentos = supabase.table("equipamentos").select("*").execute()
+
+    mapa_clientes = {c["id"]: c for c in clientes.data}
+    mapa_equip = {e["id"]: e for e in equipamentos.data}
+
+    linhas = {}
+    ddds = {}
+
+    for v in vendas.data:
+
+        cliente = mapa_clientes.get(v["cliente_id"])
+        equip = mapa_equip.get(v["equipamento_id"])
+
+        if not cliente or not equip:
+            continue
+
+        linha = equip.get("linha")
+        ddd = cliente.get("ddd")
+
+        linhas[linha] = linhas.get(linha, 0) + v["valor"]
+
+        if ddd in DDD_VIENA:
+            ddds[ddd] = ddds.get(ddd, 0) + v["valor"]
+
+    linhas_ordenadas = sorted(linhas.items(), key=lambda x: x[1])
+    ddd_ordenados = sorted(ddds.items(), key=lambda x: x[1])
+
+    oportunidades = []
+
+    if linhas_ordenadas:
+
+        linha_fraca = linhas_ordenadas[0][0]
+
+        oportunidades.append({
+            "tipo": "linha_subexplorada",
+            "linha": linha_fraca,
+            "observacao": "linha com menor volume de vendas"
+        })
+
+    if ddd_ordenados:
+
+        ddd_fraco = ddd_ordenados[0][0]
+
+        oportunidades.append({
+            "tipo": "territorio_subexplorado",
+            "ddd": ddd_fraco,
+            "observacao": "baixo volume de vendas na regiao"
+        })
+
+    return {
+        "linhas_vendas": linhas,
+        "ddd_vendas": ddds,
+        "oportunidades_detectadas": oportunidades
+    }
