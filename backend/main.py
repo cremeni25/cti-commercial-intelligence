@@ -1468,3 +1468,60 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
         "total_registros": len(registros),
         "base_cti": len(dados_anfir)
     }
+
+# ===============================
+# ANALYTICS DO CTI
+# ===============================
+
+from collections import Counter
+
+@app.get("/analytics/inteligencia-comercial")
+def analytics_inteligencia_comercial():
+
+    total_vendas = len(dados_anfir)
+
+    estados = Counter()
+    linhas = Counter()
+    oems = Counter()
+
+    for r in dados_anfir:
+
+        uf = r.get("uf")
+        produto = r.get("produto")
+        fabricante = r.get("fabricante")
+
+        if uf:
+            estados[uf] += 1
+
+        if produto:
+            linhas[produto] += 1
+
+        if fabricante:
+            oems[fabricante] += 1
+
+    performance_estado = [
+        {"estado": k, "vendas": v}
+        for k, v in estados.items()
+    ]
+
+    performance_linha = [
+        {"linha": k, "vendas": v}
+        for k, v in linhas.items()
+    ]
+
+    ranking_oem = [
+        {"oem": k, "vendas": v}
+        for k, v in oems.items()
+    ]
+
+    return {
+
+        "resumo_geral": {
+            "total_vendas": total_vendas,
+            "faturamento_total": total_vendas * 100000
+        },
+
+        "performance_por_estado": performance_estado,
+        "performance_por_linha": performance_linha,
+        "ranking_oem": ranking_oem
+    }
