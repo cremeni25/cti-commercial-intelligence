@@ -1467,7 +1467,7 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
     registros = processar_planilha_anfir(contents)
 
-    dados_anfir.extend(registros)
+    supabase.table("cti_anfir").insert(registros).execute()
 
     return {
         "status": "dados inseridos no CTI",
