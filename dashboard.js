@@ -11,13 +11,16 @@ async function loadDashboard() {
     try {
 
         const response = await fetch(API + "/analytics/inteligencia-comercial");
+
         const data = await response.json();
+
+        console.log("Dados recebidos:", data);
 
         renderDashboard(data);
 
     } catch (error) {
 
-        console.error("Erro ao carregar dashboard:", error);
+        console.error("Erro:", error);
 
         content.innerHTML = "<p>Erro ao carregar dados.</p>";
 
@@ -25,9 +28,13 @@ async function loadDashboard() {
 
 }
 
+
 function renderDashboard(data) {
 
     const content = document.getElementById("content");
+
+    const total = data?.resumo_geral?.total_vendas ?? 0;
+    const faturamento = data?.resumo_geral?.faturamento_total ?? 0;
 
     content.innerHTML = `
         <h2>Dashboard Comercial</h2>
@@ -36,12 +43,12 @@ function renderDashboard(data) {
 
             <div class="card">
                 <h3>Total de Vendas</h3>
-                <p>${data.resumo_geral.total_vendas}</p>
+                <p>${total}</p>
             </div>
 
             <div class="card">
-                <h3>Faturamento Total</h3>
-                <p>R$ ${data.resumo_geral.faturamento_total}</p>
+                <h3>Faturamento</h3>
+                <p>R$ ${faturamento}</p>
             </div>
 
         </div>
@@ -51,10 +58,20 @@ function renderDashboard(data) {
         <canvas id="graficoOEM"></canvas>
     `;
 
-    renderGraficoEstados(data.performance_por_estado);
-    renderGraficoLinhas(data.performance_por_linha);
-    renderGraficoOEM(data.ranking_oem);
+    if (data.performance_por_estado) {
+        renderGraficoEstados(data.performance_por_estado);
+    }
+
+    if (data.performance_por_linha) {
+        renderGraficoLinhas(data.performance_por_linha);
+    }
+
+    if (data.ranking_oem) {
+        renderGraficoOEM(data.ranking_oem);
+    }
+
 }
+
 
 function renderGraficoEstados(estados) {
 
@@ -62,7 +79,9 @@ function renderGraficoEstados(estados) {
     const valores = estados.map(e => e.vendas);
 
     new Chart(document.getElementById("graficoEstados"), {
+
         type: "bar",
+
         data: {
             labels: labels,
             datasets: [{
@@ -70,9 +89,11 @@ function renderGraficoEstados(estados) {
                 data: valores
             }]
         }
+
     });
 
 }
+
 
 function renderGraficoLinhas(linhas) {
 
@@ -80,7 +101,9 @@ function renderGraficoLinhas(linhas) {
     const valores = linhas.map(l => l.vendas);
 
     new Chart(document.getElementById("graficoLinhas"), {
+
         type: "pie",
+
         data: {
             labels: labels,
             datasets: [{
@@ -88,9 +111,11 @@ function renderGraficoLinhas(linhas) {
                 data: valores
             }]
         }
+
     });
 
 }
+
 
 function renderGraficoOEM(oems) {
 
@@ -98,7 +123,9 @@ function renderGraficoOEM(oems) {
     const valores = oems.map(o => o.vendas);
 
     new Chart(document.getElementById("graficoOEM"), {
+
         type: "doughnut",
+
         data: {
             labels: labels,
             datasets: [{
@@ -106,9 +133,11 @@ function renderGraficoOEM(oems) {
                 data: valores
             }]
         }
+
     });
 
 }
+
 
 function loadMarket() {
 
@@ -116,7 +145,9 @@ function loadMarket() {
 
     document.getElementById("content").innerHTML =
         "<h2>Market Intelligence</h2><p>Módulo em construção.</p>";
+
 }
+
 
 function loadClients() {
 
@@ -124,7 +155,9 @@ function loadClients() {
 
     document.getElementById("content").innerHTML =
         "<h2>Client Radar</h2><p>Módulo em construção.</p>";
+
 }
+
 
 function loadOEM() {
 
@@ -132,7 +165,9 @@ function loadOEM() {
 
     document.getElementById("content").innerHTML =
         "<h2>OEM Radar</h2><p>Módulo em construção.</p>";
+
 }
+
 
 function loadLocadoras() {
 
@@ -140,7 +175,9 @@ function loadLocadoras() {
 
     document.getElementById("content").innerHTML =
         "<h2>Locadoras</h2><p>Módulo em construção.</p>";
+
 }
+
 
 function loadUploads() {
 
@@ -151,7 +188,9 @@ function loadUploads() {
         <input type="file" id="fileUpload"/>
         <button onclick="enviarArquivo()">Enviar</button>
     `;
+
 }
+
 
 function loadAnalytics() {
 
@@ -159,39 +198,5 @@ function loadAnalytics() {
 
     document.getElementById("content").innerHTML =
         "<h2>Analytics</h2><p>Módulo em construção.</p>";
-}
-
-async function enviarArquivo() {
-
-    const fileInput = document.getElementById("fileUpload");
-
-    const file = fileInput.files[0];
-
-    if (!file) {
-        alert("Selecione um arquivo");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-
-        const response = await fetch(API + "/upload/anfir", {
-            method: "POST",
-            body: formData
-        });
-
-        const result = await response.json();
-
-        alert("Upload concluído");
-
-        console.log(result);
-
-    } catch (error) {
-
-        console.error("Erro no upload:", error);
-
-    }
 
 }
