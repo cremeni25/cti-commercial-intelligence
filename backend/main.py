@@ -1525,3 +1525,61 @@ def analytics_inteligencia_comercial():
         "performance_por_linha": performance_linha,
         "ranking_oem": ranking_oem
     }
+
+# ===============================
+# ANALYTICS CTI CORRIGIDO
+# ===============================
+
+@app.get("/analytics/inteligencia-comercial")
+def inteligencia_comercial():
+
+    global base_cti
+
+    total_vendas = len(base_cti)
+
+    faturamento_total = sum(
+        item.get("valor_total",0) for item in base_cti
+    )
+
+    performance_estado = {}
+    performance_linha = {}
+    ranking_oem = {}
+
+    for item in base_cti:
+
+        estado = item.get("estado","NA")
+        linha = item.get("linha","NA")
+        oem = item.get("oem","NA")
+        valor = item.get("valor_total",0)
+
+        # estado
+        if estado not in performance_estado:
+            performance_estado[estado] = {"estado":estado,"vendas":0,"faturamento":0}
+
+        performance_estado[estado]["vendas"] += 1
+        performance_estado[estado]["faturamento"] += valor
+
+        # linha
+        if linha not in performance_linha:
+            performance_linha[linha] = {"linha":linha,"vendas":0,"faturamento":0}
+
+        performance_linha[linha]["vendas"] += 1
+        performance_linha[linha]["faturamento"] += valor
+
+        # oem
+        if oem not in ranking_oem:
+            ranking_oem[oem] = {"oem":oem,"vendas":0,"faturamento":0}
+
+        ranking_oem[oem]["vendas"] += 1
+        ranking_oem[oem]["faturamento"] += valor
+
+    return {
+        "resumo_geral":{
+            "total_vendas": total_vendas,
+            "faturamento_total": faturamento_total
+        },
+        "performance_por_estado": list(performance_estado.values()),
+        "performance_por_linha": list(performance_linha.values()),
+        "ranking_oem": list(ranking_oem.values()),
+        "oportunidades_detectadas":[]
+    }
