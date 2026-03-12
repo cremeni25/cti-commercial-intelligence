@@ -1455,6 +1455,35 @@ async def upload_anfir_processado(file: UploadFile = File(...)):
     }
 
 # ===============================
+# PROCESSAMENTO PLANILHA ANFIR
+# ===============================
+
+from io import BytesIO
+import pandas as pd
+
+def processar_planilha_anfir(contents):
+
+    df = pd.read_excel(BytesIO(contents))
+
+    df = df.fillna("")
+
+    registros = []
+
+    for _, row in df.iterrows():
+
+        registro = {
+            "cliente": str(row.get("Cliente", "")),
+            "estado": str(row.get("Estado", "")),
+            "implementador": str(row.get("Implementador", "")),
+            "linha": str(row.get("Linha", "")),
+            "valor": float(row.get("Valor", 0))
+        }
+
+        registros.append(registro)
+
+    return registros
+
+# ===============================
 # ARMAZENAMENTO TEMPORÁRIO CTI
 # ===============================
 
