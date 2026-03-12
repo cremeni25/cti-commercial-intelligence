@@ -1,295 +1,244 @@
 const API = "https://cti-backend-5ugf.onrender.com";
 
-async function loadDashboard() {
+// ---------------------
+// DASHBOARD
+// ---------------------
 
-    window.location.hash = "dashboard";
+async function loadDashboard(){
 
-    const content = document.getElementById("content");
+window.location.hash="dashboard";
 
-    content.innerHTML = "<p>Carregando dados do dashboard...</p>";
+const content=document.getElementById("content");
 
-    try {
+content.innerHTML="<p>Carregando dashboard...</p>";
 
-        const response = await fetch(API + "/analytics/inteligencia-comercial");
+try{
 
-        const data = await response.json();
+const response=await fetch(API+"/analytics/inteligencia-comercial");
 
-        console.log("Dados recebidos:", data);
+const data=await response.json();
 
-        renderDashboard(data);
+renderDashboard(data);
 
-    } catch (error) {
+}catch(error){
 
-        console.error("Erro:", error);
-
-        content.innerHTML = "<p>Erro ao carregar dados.</p>";
-
-    }
+content.innerHTML="<p>Erro ao carregar dados</p>";
 
 }
 
+}
 
-function renderDashboard(data) {
+function renderDashboard(data){
 
-    const content = document.getElementById("content");
+const total=data?.resumo_geral?.total_vendas??0;
+const faturamento=data?.resumo_geral?.faturamento_total??0;
 
-    const total = data?.resumo_geral?.total_vendas ?? 0;
-    const faturamento = data?.resumo_geral?.faturamento_total ?? 0;
+const estados=data.performance_por_estado||[];
+const linhas=data.performance_por_linha||[];
+const oems=data.ranking_oem||[];
 
-    content.innerHTML = `
-        <h2>Dashboard Comercial</h2>
+const content=document.getElementById("content");
 
-        <div class="dashboard-grid">
+content.innerHTML=`
 
-            <div class="card">
-                <h3>Total de Vendas</h3>
-                <p>${total}</p>
-            </div>
+<h2>Dashboard Comercial</h2>
 
-            <div class="card">
-                <h3>Faturamento</h3>
-                <p>R$ ${faturamento}</p>
-            </div>
+<div class="cards">
 
-        </div>
+<div class="card">
+<h3>Total de Vendas</h3>
+<p>${total}</p>
+</div>
 
-        <canvas id="graficoEstados"></canvas>
-        <canvas id="graficoLinhas"></canvas>
-        <canvas id="graficoOEM"></canvas>
-    `;
+<div class="card">
+<h3>Faturamento</h3>
+<p>R$ ${faturamento}</p>
+</div>
 
-    if (data.performance_por_estado) {
-        renderGraficoEstados(data.performance_por_estado);
-    }
+</div>
 
-    if (data.performance_por_linha) {
-        renderGraficoLinhas(data.performance_por_linha);
-    }
+<div class="charts">
 
-    if (data.ranking_oem) {
-        renderGraficoOEM(data.ranking_oem);
-    }
+<canvas id="graficoEstados"></canvas>
+<canvas id="graficoLinhas"></canvas>
+<canvas id="graficoOEM"></canvas>
+
+</div>
+
+`;
+
+renderGraficoEstados(estados);
+renderGraficoLinhas(linhas);
+renderGraficoOEM(oems);
 
 }
 
+function renderGraficoEstados(estados){
 
-function renderGraficoEstados(estados) {
+const labels=estados.map(e=>e.estado);
+const valores=estados.map(e=>e.vendas);
 
-    const labels = estados.map(e => e.estado);
-    const valores = estados.map(e => e.vendas);
+new Chart(document.getElementById("graficoEstados"),{
 
-    new Chart(document.getElementById("graficoEstados"), {
+type:"bar",
 
-        type: "bar",
+data:{
+labels:labels,
+datasets:[{
+label:"Vendas por Estado",
+data:valores
+}]
+}
 
-        data: {
-            labels: labels,
-            datasets: [{
-                label: "Vendas por Estado",
-                data: valores
-            }]
-        }
-
-    });
+});
 
 }
 
+function renderGraficoLinhas(linhas){
 
-function renderGraficoLinhas(linhas) {
+const labels=linhas.map(e=>e.linha);
+const valores=linhas.map(e=>e.vendas);
 
-    const labels = linhas.map(l => l.linha);
-    const valores = linhas.map(l => l.vendas);
+new Chart(document.getElementById("graficoLinhas"),{
 
-    new Chart(document.getElementById("graficoLinhas"), {
+type:"pie",
 
-        type: "pie",
+data:{
+labels:labels,
+datasets:[{
+data:valores
+}]
+}
 
-        data: {
-            labels: labels,
-            datasets: [{
-                label: "Vendas por Linha",
-                data: valores
-            }]
-        }
-
-    });
+});
 
 }
 
+function renderGraficoOEM(oems){
 
-function renderGraficoOEM(oems) {
+const labels=oems.map(e=>e.oem);
+const valores=oems.map(e=>e.vendas);
 
-    const labels = oems.map(o => o.oem);
-    const valores = oems.map(o => o.vendas);
+new Chart(document.getElementById("graficoOEM"),{
 
-    new Chart(document.getElementById("graficoOEM"), {
+type:"doughnut",
 
-        type: "doughnut",
+data:{
+labels:labels,
+datasets:[{
+data:valores
+}]
+}
 
-        data: {
-            labels: labels,
-            datasets: [{
-                label: "Ranking OEM",
-                data: valores
-            }]
-        }
-
-    });
+});
 
 }
 
+// ---------------------
+// UPLOAD
+// ---------------------
 
-function loadMarket() {
+function loadUploads(){
 
-    window.location.hash = "market";
+window.location.hash="uploads";
 
-    document.getElementById("content").innerHTML =
-        "<h2>Market Intelligence</h2><p>Módulo em construção.</p>";
+const content=document.getElementById("content");
 
-}
+content.innerHTML=`
 
+<h2>Upload ANFIR</h2>
 
-function loadClients() {
+<input type="file" id="uploadAnfir">
 
-    window.location.hash = "clients";
+<br><br>
 
-    document.getElementById("content").innerHTML =
-        "<h2>Client Radar</h2><p>Módulo em construção.</p>";
+<button id="btnUpload">Enviar</button>
 
-}
+<p id="statusUpload"></p>
 
+`;
 
-function loadOEM() {
-
-    window.location.hash = "oem";
-
-    document.getElementById("content").innerHTML =
-        "<h2>OEM Radar</h2><p>Módulo em construção.</p>";
+document.getElementById("btnUpload").addEventListener("click",enviarANFIR);
 
 }
 
+async function enviarANFIR(){
 
-function loadLocadoras() {
+const input=document.getElementById("uploadAnfir");
 
-    window.location.hash = "locadoras";
+const status=document.getElementById("statusUpload");
 
-    document.getElementById("content").innerHTML =
-        "<h2>Locadoras</h2><p>Módulo em construção.</p>";
+if(!input.files.length){
 
-}
+alert("Selecione um arquivo");
 
-
-function loadUploads() {
-
-    window.location.hash = "uploads";
-
-    document.getElementById("content").innerHTML = `
-        <h2>Upload ANFIR</h2>
-        <input type="file" id="fileUpload"/>
-        <button onclick="enviarArquivo()">Enviar</button>
-    `;
-
-}
-
-
-function loadAnalytics() {
-
-    window.location.hash = "analytics";
-
-    document.getElementById("content").innerHTML =
-        "<h2>Analytics</h2><p>Módulo em construção.</p>";
-
-}
-
-// ---------------------------------------
-// CTI Upload ANFIR
-// ---------------------------------------
-
-async function uploadANFIR() {
-
-    const input = document.querySelector('#upload-anfir');
-    const file = input.files[0];
-
-    if (!file) {
-        alert("Selecione um arquivo primeiro.");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-
-        const response = await fetch(
-            "https://cti-backend-5ugf.onrender.com/upload/anfir",
-            {
-                method: "POST",
-                body: formData
-            }
-        );
-
-        if (!response.ok) {
-            throw new Error("Erro no upload");
-        }
-
-        const data = await response.json();
-
-        alert("Upload realizado com sucesso!");
-
-        console.log(data);
-
-    } catch (error) {
-
-        console.error(error);
-        alert("Erro ao enviar arquivo");
-
-    }
-
-}
-
-// -------------------------------
-// Upload ANFIR
-// -------------------------------
-
-function enviarANFIR(){
-
-const input = document.getElementById("uploadAnfir");
-
-if(!input || input.files.length === 0){
-
-alert("Selecione um arquivo primeiro");
 return;
 
 }
 
-const arquivo = input.files[0];
+const file=input.files[0];
 
-const formData = new FormData();
+const formData=new FormData();
 
-formData.append("file", arquivo);
+formData.append("file",file);
 
-fetch("https://cti-backend-5ugf.onrender.com/upload/anfir", {
+status.innerHTML="Enviando arquivo...";
 
-method: "POST",
-body: formData
+try{
 
-})
+const response=await fetch(API+"/upload/anfir",{
 
-.then(response => response.json())
+method:"POST",
+body:formData
 
-.then(data => {
+});
 
-alert("Upload realizado com sucesso");
+const data=await response.json();
+
+status.innerHTML="Upload concluído";
 
 console.log(data);
 
-})
+}catch(error){
 
-.catch(error => {
+status.innerHTML="Erro no upload";
 
 console.error(error);
-alert("Erro no upload");
 
-});
+}
+
+}
+
+// ---------------------
+// OUTROS MENUS
+// ---------------------
+
+function loadMarket(){
+
+document.getElementById("content").innerHTML="<h2>Market Intelligence</h2>";
+
+}
+
+function loadClients(){
+
+document.getElementById("content").innerHTML="<h2>Client Radar</h2>";
+
+}
+
+function loadOEM(){
+
+document.getElementById("content").innerHTML="<h2>OEM Radar</h2>";
+
+}
+
+function loadLocadoras(){
+
+document.getElementById("content").innerHTML="<h2>Locadoras</h2>";
+
+}
+
+function loadAnalytics(){
+
+document.getElementById("content").innerHTML="<h2>Analytics</h2>";
 
 }
