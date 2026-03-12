@@ -1583,3 +1583,12 @@ def inteligencia_comercial():
         "ranking_oem": list(ranking_oem.values()),
         "oportunidades_detectadas":[]
     }
+
+@app.get("/analytics/cti-debug")
+def cti_debug():
+
+    global base_cti
+
+    return {
+        "registros_na_base": len(base_cti)
+    }
