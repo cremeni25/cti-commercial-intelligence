@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
+
 <head>
 
 <meta charset="UTF-8">
@@ -9,7 +10,6 @@
 
 <link rel="stylesheet" href="style.css">
 
-<!-- Biblioteca de gráficos -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 </head>
@@ -17,8 +17,6 @@
 <body>
 
 <div class="container">
-
-<!-- MENU LATERAL -->
 
 <div class="sidebar">
 
@@ -38,39 +36,13 @@
 
 </div>
 
-<!-- CONTEÚDO PRINCIPAL -->
-
 <div class="main">
 
 <h1>Commercial Thermal Intelligence</h1>
 
 <div id="content">
 
-<p>Sistema CTI iniciado.</p>
-
-<!-- DASHBOARD VISUAL -->
-
-<div class="dashboard">
-
-<h2>Dashboard Comercial</h2>
-
-<div class="charts">
-
-<div class="chart-box">
-<canvas id="grafico-linhas"></canvas>
-</div>
-
-<div class="chart-box">
-<canvas id="grafico-estados"></canvas>
-</div>
-
-<div class="chart-box">
-<canvas id="grafico-oem"></canvas>
-</div>
-
-</div>
-
-</div>
+<p>Inicializando CTI...</p>
 
 </div>
 
@@ -81,6 +53,15 @@
 <script src="dashboard.js"></script>
 <script src="api.js"></script>
 
-</body>
+<script>
 
+window.onload = function(){
+
+loadDashboard();
+
+}
+
+</script>
+
+</body>
 </html>
