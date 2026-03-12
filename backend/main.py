@@ -1413,4 +1413,4 @@ async def upload_anfir(file: UploadFile = File(...)):
         return {
             "status": "erro",
             "mensagem": str(e)
-        }«
+        }
