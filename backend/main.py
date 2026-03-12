@@ -3,6 +3,12 @@ from pydantic import BaseModel
 from supabase import create_client
 import os
 
+# ===============================
+# BASE GLOBAL CTI
+# ===============================
+
+base_cti = []
+
 app = FastAPI()
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
