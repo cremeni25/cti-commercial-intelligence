@@ -200,3 +200,49 @@ function loadAnalytics() {
         "<h2>Analytics</h2><p>Módulo em construção.</p>";
 
 }
+
+// ---------------------------------------
+// CTI Upload ANFIR
+// ---------------------------------------
+
+async function uploadANFIR() {
+
+    const input = document.querySelector('#upload-anfir');
+    const file = input.files[0];
+
+    if (!file) {
+        alert("Selecione um arquivo primeiro.");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+
+        const response = await fetch(
+            "https://cti-backend-5ugf.onrender.com/upload/anfir",
+            {
+                method: "POST",
+                body: formData
+            }
+        );
+
+        if (!response.ok) {
+            throw new Error("Erro no upload");
+        }
+
+        const data = await response.json();
+
+        alert("Upload realizado com sucesso!");
+
+        console.log(data);
+
+    } catch (error) {
+
+        console.error(error);
+        alert("Erro ao enviar arquivo");
+
+    }
+
+}
