@@ -1458,8 +1458,6 @@ async def upload_anfir_processado(file: UploadFile = File(...)):
 # ARMAZENAMENTO TEMPORÁRIO CTI
 # ===============================
 
-dados_anfir = []
-
 @app.post("/upload/anfir/cti")
 async def upload_anfir_cti(file: UploadFile = File(...)):
 
@@ -1469,10 +1467,12 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
     supabase.table("cti_anfir").insert(registros).execute()
 
+    dados = supabase.table("cti_anfir").select("*").execute()
+
     return {
         "status": "dados inseridos no CTI",
         "total_registros": len(registros),
-        "base_cti": len(dados_anfir)
+        "base_cti": len(dados.data)
     }
 
 # ===============================
