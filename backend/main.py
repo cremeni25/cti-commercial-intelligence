@@ -1496,7 +1496,11 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
     registros = [dict(r) for r in registros]
 
-    supabase.table("cti_anfir").insert(registros).execute()
+    batch_size = 500
+
+for i in range(0, len(registros), batch_size):
+    batch = registros[i:i+batch_size]
+    supabase.table("cti_anfir").insert(batch).execute()
 
     dados = supabase.table("cti_anfir").select("*").execute()
 
