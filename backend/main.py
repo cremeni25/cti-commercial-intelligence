@@ -1388,3 +1388,45 @@ app.add_middleware(
 # ---------------------------------------------------
 # FIM BLOCO CORS
 # ---------------------------------------------------
+
+# ===============================
+# LEITURA COMPLETA PLANILHA ANFIR
+# ===============================
+
+import io
+import pandas as pd
+
+def processar_planilha_anfir(contents):
+
+    excel = pd.ExcelFile(io.BytesIO(contents))
+
+    registros = []
+
+    for aba in excel.sheet_names:
+
+        df = pd.read_excel(excel, sheet_name=aba)
+
+        df = df.dropna(how="all")
+
+        for _, row in df.iterrows():
+
+            cliente = row.get("cliente") or row.get("Cliente")
+            cidade = row.get("cidade") or row.get("municipio") or row.get("Cidade")
+            uf = row.get("uf") or row.get("UF")
+            produto = row.get("produto") or row.get("Produto")
+            fabricante = row.get("fabricante") or row.get("Fabricante")
+            data = row.get("data") or row.get("Data")
+
+            if cliente is None:
+                continue
+
+            registros.append({
+                "cliente": str(cliente),
+                "cidade": str(cidade),
+                "uf": str(uf),
+                "produto": str(produto),
+                "fabricante": str(fabricante),
+                "data": str(data)
+            })
+
+    return registros
