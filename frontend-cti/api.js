@@ -1,4 +1,4 @@
-const API_URL = "https://SEU-ENDERECO-RENDER.onrender.com";
+const API_URL = "https://cti-backend-5ugf.onrender.com";
 
 async function fetchAPI(endpoint){
 
