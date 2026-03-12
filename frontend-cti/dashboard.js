@@ -123,3 +123,59 @@ function renderOportunidades(lista) {
 }
 
 carregarDashboard();
+
+// ===============================
+// CTI GRÁFICOS
+// ===============================
+
+async function carregarGraficosCTI() {
+
+    const resposta = await fetch("https://cti-backend-5ugf.onrender.com/analytics/inteligencia-comercial");
+    const dados = await resposta.json();
+
+    const linhas = dados.performance_por_linha;
+    const estados = dados.performance_por_estado;
+    const oems = dados.ranking_oem;
+
+    const ctxLinhas = document.getElementById("grafico-linhas");
+
+    new Chart(ctxLinhas, {
+        type: "bar",
+        data: {
+            labels: linhas.map(l => l.linha),
+            datasets: [{
+                label: "Vendas por Linha",
+                data: linhas.map(l => l.vendas)
+            }]
+        }
+    });
+
+    const ctxEstados = document.getElementById("grafico-estados");
+
+    new Chart(ctxEstados, {
+        type: "bar",
+        data: {
+            labels: estados.map(e => e.estado),
+            datasets: [{
+                label: "Vendas por Estado",
+                data: estados.map(e => e.vendas)
+            }]
+        }
+    });
+
+    const ctxOEM = document.getElementById("grafico-oem");
+
+    new Chart(ctxOEM, {
+        type: "pie",
+        data: {
+            labels: oems.map(o => o.oem),
+            datasets: [{
+                label: "Ranking OEM",
+                data: oems.map(o => o.vendas)
+            }]
+        }
+    });
+
+}
+
+window.addEventListener("load", carregarGraficosCTI);
