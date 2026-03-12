@@ -1447,3 +1447,24 @@ async def upload_anfir_processado(file: UploadFile = File(...)):
         "registros_lidos": len(registros),
         "amostra": registros[:5]
     }
+
+# ===============================
+# ARMAZENAMENTO TEMPORÁRIO CTI
+# ===============================
+
+dados_anfir = []
+
+@app.post("/upload/anfir/cti")
+async def upload_anfir_cti(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    registros = processar_planilha_anfir(contents)
+
+    dados_anfir.extend(registros)
+
+    return {
+        "status": "dados inseridos no CTI",
+        "total_registros": len(registros),
+        "base_cti": len(dados_anfir)
+    }
