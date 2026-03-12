@@ -1414,3 +1414,20 @@ async def upload_anfir(file: UploadFile = File(...)):
             "status": "erro",
             "mensagem": str(e)
         }
+
+# =========================
+# UPLOAD ANFIR
+# =========================
+
+from fastapi import UploadFile, File
+
+@app.post("/upload/anfir")
+async def upload_anfir(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    return {
+        "status": "arquivo recebido",
+        "arquivo": file.filename,
+        "tamanho_bytes": len(contents)
+    }
