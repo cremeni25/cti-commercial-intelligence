@@ -1386,3 +1386,31 @@ app.add_middleware(
 # ---------------------------------------------------
 # FIM BLOCO CORS
 # ---------------------------------------------------
+
+# ----------------------------------------
+# UPLOAD ANFIR
+# ----------------------------------------
+
+from fastapi import UploadFile, File
+import pandas as pd
+
+@app.post("/upload/anfir")
+async def upload_anfir(file: UploadFile = File(...)):
+
+    try:
+
+        df = pd.read_excel(file.file)
+
+        linhas = len(df)
+
+        return {
+            "status": "ok",
+            "linhas_lidas": linhas
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }«
