@@ -1465,6 +1465,8 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
     registros = processar_planilha_anfir(contents)
 
+    registros = [dict(r) for r in registros]
+
     supabase.table("cti_anfir").insert(registros).execute()
 
     dados = supabase.table("cti_anfir").select("*").execute()
