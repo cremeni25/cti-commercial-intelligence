@@ -1285,10 +1285,12 @@ from fastapi import UploadFile, File
 @app.post("/upload/anfir")
 async def upload_anfir(file: UploadFile = File(...)):
 
+    import io
+
     contents = await file.read()
 
-    excel = pd.ExcelFile(contents)
-
+    excel = pd.ExcelFile(io.BytesIO(contents))
+                         
     registros = []
 
     for aba in excel.sheet_names:
