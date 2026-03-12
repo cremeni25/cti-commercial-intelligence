@@ -246,3 +246,50 @@ async function uploadANFIR() {
     }
 
 }
+
+// -------------------------------
+// Upload ANFIR
+// -------------------------------
+
+function enviarANFIR(){
+
+const input = document.getElementById("uploadAnfir");
+
+if(!input || input.files.length === 0){
+
+alert("Selecione um arquivo primeiro");
+return;
+
+}
+
+const arquivo = input.files[0];
+
+const formData = new FormData();
+
+formData.append("file", arquivo);
+
+fetch("https://cti-backend-5ugf.onrender.com/upload/anfir", {
+
+method: "POST",
+body: formData
+
+})
+
+.then(response => response.json())
+
+.then(data => {
+
+alert("Upload realizado com sucesso");
+
+console.log(data);
+
+})
+
+.catch(error => {
+
+console.error(error);
+alert("Erro no upload");
+
+});
+
+}
