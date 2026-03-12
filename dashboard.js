@@ -1,196 +1,9 @@
-// CTI - Dashboard Controller
-
-const API_BASE = "https://cti-backend-5ugf.onrender.com";
-
-async function carregarDashboard() {
-
-    try {
-
-        const resposta = await fetch(`${API_BASE}/analytics/inteligencia-comercial`);
-        const dados = await resposta.json();
-
-        renderResumo(dados.resumo_geral);
-        renderLinhas(dados.performance_por_linha);
-        renderEstados(dados.performance_por_estado);
-        renderOEM(dados.ranking_oem);
-        renderOportunidades(dados.oportunidades_detectadas);
-
-    } catch (erro) {
-
-        console.error("Erro ao carregar dashboard:", erro);
-
-    }
-
-}
-
-function renderResumo(resumo) {
-
-    document.getElementById("total-vendas").innerText = resumo.total_vendas;
-    document.getElementById("faturamento-total").innerText =
-        "R$ " + resumo.faturamento_total.toLocaleString("pt-BR");
-
-}
-
-function renderLinhas(linhas) {
-
-    const container = document.getElementById("linhas");
-
-    container.innerHTML = "";
-
-    linhas.forEach(linha => {
-
-        const item = document.createElement("div");
-        item.className = "card";
-
-        item.innerHTML = `
-            <h3>Linha ${linha.linha}</h3>
-            <p>Vendas: ${linha.vendas}</p>
-            <p>Faturamento: R$ ${linha.faturamento.toLocaleString("pt-BR")}</p>
-        `;
-
-        container.appendChild(item);
-
-    });
-
-}
-
-function renderEstados(estados) {
-
-    const container = document.getElementById("estados");
-
-    container.innerHTML = "";
-
-    estados.forEach(estado => {
-
-        const item = document.createElement("div");
-        item.className = "card";
-
-        item.innerHTML = `
-            <h3>${estado.estado}</h3>
-            <p>Vendas: ${estado.vendas}</p>
-            <p>Faturamento: R$ ${estado.faturamento.toLocaleString("pt-BR")}</p>
-        `;
-
-        container.appendChild(item);
-
-    });
-
-}
-
-function renderOEM(oems) {
-
-    const container = document.getElementById("oem");
-
-    container.innerHTML = "";
-
-    oems.forEach(oem => {
-
-        const item = document.createElement("div");
-        item.className = "card";
-
-        item.innerHTML = `
-            <h3>${oem.oem}</h3>
-            <p>Vendas: ${oem.vendas}</p>
-            <p>Faturamento: R$ ${oem.faturamento.toLocaleString("pt-BR")}</p>
-        `;
-
-        container.appendChild(item);
-
-    });
-
-}
-
-function renderOportunidades(lista) {
-
-    const container = document.getElementById("oportunidades");
-
-    container.innerHTML = "";
-
-    lista.forEach(o => {
-
-        const item = document.createElement("div");
-        item.className = "alert";
-
-        item.innerHTML = `
-            <strong>${o.tipo}</strong><br>
-            ${o.observacao}
-        `;
-
-        container.appendChild(item);
-
-    });
-
-}
-
-carregarDashboard();
-
-// ===============================
-// CTI GRÁFICOS
-// ===============================
-
-async function carregarGraficosCTI() {
-
-    const resposta = await fetch("https://cti-backend-5ugf.onrender.com/analytics/inteligencia-comercial");
-    const dados = await resposta.json();
-
-    const linhas = dados.performance_por_linha;
-    const estados = dados.performance_por_estado;
-    const oems = dados.ranking_oem;
-
-    const ctxLinhas = document.getElementById("grafico-linhas");
-
-    new Chart(ctxLinhas, {
-        type: "bar",
-        data: {
-            labels: linhas.map(l => l.linha),
-            datasets: [{
-                label: "Vendas por Linha",
-                data: linhas.map(l => l.vendas)
-            }]
-        }
-    });
-
-    const ctxEstados = document.getElementById("grafico-estados");
-
-    new Chart(ctxEstados, {
-        type: "bar",
-        data: {
-            labels: estados.map(e => e.estado),
-            datasets: [{
-                label: "Vendas por Estado",
-                data: estados.map(e => e.vendas)
-            }]
-        }
-    });
-
-    const ctxOEM = document.getElementById("grafico-oem");
-
-    new Chart(ctxOEM, {
-        type: "pie",
-        data: {
-            labels: oems.map(o => o.oem),
-            datasets: [{
-                label: "Ranking OEM",
-                data: oems.map(o => o.vendas)
-            }]
-        }
-    });
-
-}
-
-window.addEventListener("load", carregarGraficosCTI);
-
-// =============================
-// CTI DASHBOARD ENGINE
-// =============================
-
 const API = "https://cti-backend-5ugf.onrender.com";
 
-// =============================
-// DASHBOARD PRINCIPAL
-// =============================
 
 async function loadDashboard() {
+
+    window.location.hash = "dashboard";
 
     try {
 
@@ -207,87 +20,218 @@ async function loadDashboard() {
 
 }
 
-// =============================
-// RENDERIZAÇÃO DOS GRÁFICOS
-// =============================
+
+
+async function loadMarket() {
+
+    window.location.hash = "market";
+
+    try {
+
+        const response = await fetch(API + "/analytics/radar-mercado");
+        const data = await response.json();
+
+        renderRadarMercado(data);
+
+    } catch (error) {
+
+        console.error("Erro ao carregar market intelligence:", error);
+
+    }
+
+}
+
+
+
+async function loadClients() {
+
+    window.location.hash = "clients";
+
+    try {
+
+        const response = await fetch(API + "/analytics/radar-clientes");
+        const data = await response.json();
+
+        renderRadarClientes(data);
+
+    } catch (error) {
+
+        console.error("Erro ao carregar client radar:", error);
+
+    }
+
+}
+
+
+
+async function loadOEM() {
+
+    window.location.hash = "oem";
+
+    try {
+
+        const response = await fetch(API + "/analytics/radar-oem");
+        const data = await response.json();
+
+        renderRadarOEM(data);
+
+    } catch (error) {
+
+        console.error("Erro ao carregar OEM radar:", error);
+
+    }
+
+}
+
+
+
+async function loadLocadoras() {
+
+    window.location.hash = "locadoras";
+
+    try {
+
+        const response = await fetch(API + "/analytics/radar-locadoras");
+        const data = await response.json();
+
+        renderRadarLocadoras(data);
+
+    } catch (error) {
+
+        console.error("Erro ao carregar radar locadoras:", error);
+
+    }
+
+}
+
+
+
+async function loadUploads() {
+
+    window.location.hash = "uploads";
+
+    const content = document.getElementById("content");
+
+    content.innerHTML = `
+        <h2>Uploads de Dados</h2>
+
+        <p>Envie arquivos ANFIR ou planilhas de mercado.</p>
+
+        <input type="file" id="fileUpload"/>
+
+        <button onclick="enviarArquivo()">Enviar</button>
+    `;
+
+}
+
+
+
+async function loadAnalytics() {
+
+    window.location.hash = "analytics";
+
+    try {
+
+        const response = await fetch(API + "/analytics/inteligencia-comercial");
+        const data = await response.json();
+
+        renderAnalytics(data);
+
+    } catch (error) {
+
+        console.error("Erro ao carregar analytics:", error);
+
+    }
+
+}
+
+
 
 function renderGraficos(data) {
 
-    const linhas = data.performance_por_linha;
-    const estados = data.performance_por_estado;
-    const oems = data.ranking_oem;
-
-    renderGraficoLinhas(linhas);
-    renderGraficoEstados(estados);
-    renderGraficoOEM(oems);
+    console.log("Dados dashboard:", data);
 
 }
 
-// =============================
-// GRÁFICO LINHAS
-// =============================
 
-function renderGraficoLinhas(linhas) {
 
-    const ctx = document.getElementById("grafico-linhas");
+function renderRadarMercado(data) {
 
-    new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: linhas.map(l => l.linha),
-            datasets: [{
-                label: "Vendas por Linha",
-                data: linhas.map(l => l.vendas)
-            }]
-        }
-    });
+    console.log("Radar mercado:", data);
 
 }
 
-// =============================
-// GRÁFICO ESTADOS
-// =============================
 
-function renderGraficoEstados(estados) {
 
-    const ctx = document.getElementById("grafico-estados");
+function renderRadarClientes(data) {
 
-    new Chart(ctx, {
-        type: "bar",
-        data: {
-            labels: estados.map(e => e.estado),
-            datasets: [{
-                label: "Vendas por Estado",
-                data: estados.map(e => e.vendas)
-            }]
-        }
-    });
+    console.log("Radar clientes:", data);
 
 }
 
-// =============================
-// GRÁFICO OEM
-// =============================
 
-function renderGraficoOEM(oems) {
 
-    const ctx = document.getElementById("grafico-oem");
+function renderRadarOEM(data) {
 
-    new Chart(ctx, {
-        type: "pie",
-        data: {
-            labels: oems.map(o => o.oem),
-            datasets: [{
-                label: "Ranking OEM",
-                data: oems.map(o => o.vendas)
-            }]
-        }
-    });
+    console.log("Radar OEM:", data);
 
 }
 
-// =============================
-// AUTO LOAD
-// =============================
 
-window.addEventListener("load", loadDashboard);
+
+function renderRadarLocadoras(data) {
+
+    console.log("Radar locadoras:", data);
+
+}
+
+
+
+function renderAnalytics(data) {
+
+    console.log("Analytics:", data);
+
+}
+
+
+
+async function enviarArquivo() {
+
+    const fileInput = document.getElementById("fileUpload");
+
+    const file = fileInput.files[0];
+
+    if (!file) {
+
+        alert("Selecione um arquivo");
+
+        return;
+
+    }
+
+    const formData = new FormData();
+
+    formData.append("file", file);
+
+    try {
+
+        const response = await fetch(API + "/upload/anfir", {
+
+            method: "POST",
+            body: formData
+
+        });
+
+        const result = await response.json();
+
+        alert("Upload concluído");
+
+        console.log(result);
+
+    } catch (error) {
+
+        console.error("Erro upload:", error);
+
+    }
+
+}
