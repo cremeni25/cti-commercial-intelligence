@@ -1430,3 +1430,20 @@ def processar_planilha_anfir(contents):
             })
 
     return registros
+
+# ===============================
+# CONEXÃO DO UPLOAD COM O PARSER
+# ===============================
+
+@app.post("/upload/anfir/processado")
+async def upload_anfir_processado(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    registros = processar_planilha_anfir(contents)
+
+    return {
+        "status": "processado",
+        "registros_lidos": len(registros),
+        "amostra": registros[:5]
+    }
