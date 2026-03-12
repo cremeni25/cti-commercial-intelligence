@@ -486,7 +486,7 @@ async def vendas_por_linha_safe():
 @app.get("/analytics/inteligencia-comercial")
 async def inteligencia_comercial():
 
-    vendas = supabase.table("vendas").select("*").execute()
+    vendas = base_cti
     clientes = supabase.table("clientes").select("*").execute()
     equipamentos = supabase.table("equipamentos").select("*").execute()
     implementadores = supabase.table("implementadores").select("*").execute()
@@ -502,8 +502,8 @@ async def inteligencia_comercial():
     total_vendas = 0
     faturamento_total = 0
 
-    for v in vendas.data:
-
+    for v in vendas:
+        
         cliente = mapa_clientes.get(v["cliente_id"])
         equipamento = mapa_equipamentos.get(v["equipamento_id"])
         oem = mapa_oem.get(v["implementador_id"])
