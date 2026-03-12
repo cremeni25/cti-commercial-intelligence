@@ -1368,3 +1368,21 @@ def buscar_ddd_por_cidade(cidade):
         return response.data[0]["ddd"]
 
     return None
+
+# ---------------------------------------------------
+# LIBERAÇÃO DE CORS PARA FRONTEND CTI
+# ---------------------------------------------------
+
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ---------------------------------------------------
+# FIM BLOCO CORS
+# ---------------------------------------------------
