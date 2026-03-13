@@ -1469,43 +1469,49 @@ def processar_planilha_anfir(contents):
 
     df = pd.read_excel(BytesIO(contents))
 
-    df.columns = [c.strip().upper() for c in df.columns]
-
-    mapa_colunas = {
-        "estado": ["ESTADO","UF"],
-        "linha": ["PRODUTO","LINHA","LINHA PRODUTO"],
-        "fabricante": ["FABRICANTE","IMPLEMENTADOR","OEM"],
-        "valor": ["VALOR","VALOR UNIT","VALOR UNITARIO"]
-    }
-
-    def encontrar_coluna(opcoes):
-        for c in df.columns:
-            if c in opcoes:
-                return c
-        return None
-
-    col_estado = encontrar_coluna(mapa_colunas["estado"])
-    col_linha = encontrar_coluna(mapa_colunas["linha"])
-    col_fabricante = encontrar_coluna(mapa_colunas["fabricante"])
-    col_valor = encontrar_coluna(mapa_colunas["valor"])
+    # normalizar nomes das colunas
+    df.columns = [str(c).strip().upper() for c in df.columns]
 
     registros = []
 
+    # palavras-chave possíveis
+    colunas_estado = ["UF","ESTADO"]
+    colunas_linha = ["LINHA","PRODUTO","IMPLEMENTO","TIPO"]
+    colunas_fabricante = ["FABRICANTE","MARCA","OEM","IMPLEMENTADOR"]
+    colunas_valor = ["VALOR","TOTAL","PRECO","UNIT"]
+
+    # função de detecção automática
+    def detectar_coluna(palavras):
+
+        for c in df.columns:
+            for p in palavras:
+                if p in c:
+                    return c
+
+        return None
+
+    col_estado = detectar_coluna(colunas_estado)
+    col_linha = detectar_coluna(colunas_linha)
+    col_fabricante = detectar_coluna(colunas_fabricante)
+    col_valor = detectar_coluna(colunas_valor)
+
     for _, row in df.iterrows():
 
-        estado = row.get(col_estado)
-        linha = row.get(col_linha)
-        fabricante = row.get(col_fabricante)
-        valor = row.get(col_valor)
+        estado = row.get(col_estado) if col_estado else None
+        linha = row.get(col_linha) if col_linha else None
+        fabricante = row.get(col_fabricante) if col_fabricante else None
+        valor = row.get(col_valor) if col_valor else None
 
-        if not estado and not linha:
-            continue
+        if pd.isna(valor):
+            valor = 0
 
         registros.append({
-            "estado": str(estado) if estado else "",
-            "linha": str(linha) if linha else "",
-            "implementador": str(fabricante) if fabricante else "",
-            "valor": float(valor) if valor and not pd.isna(valor) else 0
+
+            "estado": str(estado) if estado and not pd.isna(estado) else "",
+            "linha": str(linha) if linha and not pd.isna(linha) else "",
+            "implementador": str(fabricante) if fabricante and not pd.isna(fabricante) else "",
+            "valor": float(valor)
+
         })
 
     return registros
