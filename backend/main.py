@@ -486,7 +486,8 @@ async def vendas_por_linha_safe():
 @app.get("/analytics/inteligencia-comercial")
 async def inteligencia_comercial():
 
-    vendas = base_cti
+    dados = supabase.table("cti_anfir").select("*").execute()
+    vendas = dados.data
     clientes = supabase.table("clientes").select("*").execute()
     equipamentos = supabase.table("equipamentos").select("*").execute()
     implementadores = supabase.table("implementadores").select("*").execute()
@@ -1514,114 +1515,9 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
 from collections import Counter
 
-@app.get("/analytics/inteligencia-comercial")
-def analytics_inteligencia_comercial():
-
-    total_vendas = len(dados_anfir)
-
-    estados = Counter()
-    linhas = Counter()
-    oems = Counter()
-
-    for r in dados_anfir:
-
-        uf = r.get("uf")
-        produto = r.get("produto")
-        fabricante = r.get("fabricante")
-
-        if uf:
-            estados[uf] += 1
-
-        if produto:
-            linhas[produto] += 1
-
-        if fabricante:
-            oems[fabricante] += 1
-
-    performance_estado = [
-        {"estado": k, "vendas": v}
-        for k, v in estados.items()
-    ]
-
-    performance_linha = [
-        {"linha": k, "vendas": v}
-        for k, v in linhas.items()
-    ]
-
-    ranking_oem = [
-        {"oem": k, "vendas": v}
-        for k, v in oems.items()
-    ]
-
-    return {
-
-        "resumo_geral": {
-            "total_vendas": total_vendas,
-            "faturamento_total": total_vendas * 100000
-        },
-
-        "performance_por_estado": performance_estado,
-        "performance_por_linha": performance_linha,
-        "ranking_oem": ranking_oem
-    }
-
 # ===============================
 # ANALYTICS CTI CORRIGIDO
 # ===============================
-
-@app.get("/analytics/inteligencia-comercial")
-def inteligencia_comercial():
-
-    dados = supabase.table("cti_anfir").select("*").execute().data
-
-    total_vendas = len(dados)
-
-    faturamento_total = sum(
-        item.get("valor",0) for item in dados
-    )
-
-    performance_estado = {}
-    performance_linha = {}
-    ranking_oem = {}
-
-    for item in dados:
-
-        estado = item.get("estado","NA")
-        linha = item.get("linha","NA")
-        oem = item.get("oem","NA")
-        valor = item.get("valor_total",0)
-
-        # estado
-        if estado not in performance_estado:
-            performance_estado[estado] = {"estado":estado,"vendas":0,"faturamento":0}
-
-        performance_estado[estado]["vendas"] += 1
-        performance_estado[estado]["faturamento"] += valor
-
-        # linha
-        if linha not in performance_linha:
-            performance_linha[linha] = {"linha":linha,"vendas":0,"faturamento":0}
-
-        performance_linha[linha]["vendas"] += 1
-        performance_linha[linha]["faturamento"] += valor
-
-        # oem
-        if oem not in ranking_oem:
-            ranking_oem[oem] = {"oem":oem,"vendas":0,"faturamento":0}
-
-        ranking_oem[oem]["vendas"] += 1
-        ranking_oem[oem]["faturamento"] += valor
-
-    return {
-        "resumo_geral":{
-            "total_vendas": total_vendas,
-            "faturamento_total": faturamento_total
-        },
-        "performance_por_estado": list(performance_estado.values()),
-        "performance_por_linha": list(performance_linha.values()),
-        "ranking_oem": list(ranking_oem.values()),
-        "oportunidades_detectadas":[]
-    }
 
 @app.get("/analytics/cti-debug")
 def cti_debug():
