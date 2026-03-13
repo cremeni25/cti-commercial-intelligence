@@ -505,9 +505,9 @@ async def inteligencia_comercial():
 
     for v in vendas:
         
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equipamento = mapa_equipamentos.get(v["equipamento_id"])
-        oem = mapa_oem.get(v["implementador_id"])
+        cliente = {"estado": v.get("estado")}
+        equipamento = {"linha": v.get("linha")}
+        oem = {"nome": v.get("implementador")}
 
         if not cliente or not equipamento:
             continue
