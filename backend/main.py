@@ -1,23 +1,172 @@
-from fastapi import FastAPI
+# ============================================================
+# CTI BACKEND V2
+# CORE SYSTEM
+# ============================================================
+
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
+import pandas as pd
 import os
+import io
+import re
+from datetime import datetime
 
-# ===============================
-# BASE GLOBAL CTI
-# ===============================
+# ============================================================
+# CONFIGURAÇÃO GLOBAL
+# ============================================================
 
-base_cti = []
+APP_NAME = "CTI Commercial Intelligence"
+APP_VERSION = "2.0"
 
-app = FastAPI()
+# ============================================================
+# INICIALIZAÇÃO FASTAPI
+# ============================================================
+
+app = FastAPI(
+    title=APP_NAME,
+    version=APP_VERSION
+)
+
+# ============================================================
+# CORS (frontend GitHub Pages)
+# ============================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================
+# CONEXÃO SUPABASE
+# ============================================================
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
+# ============================================================
+# LOGS DO SISTEMA
+# ============================================================
+
+def log(msg):
+
+    agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    print(f"[CTI] {agora} | {msg}")
+
+# ============================================================
+# PAGINAÇÃO AUTOMÁTICA SUPABASE
+# Remove limite de 1000 registros
+# ============================================================
+
+def select_all(table_name):
+
+    page_size = 1000
+    offset = 0
+    resultados = []
+
+    while True:
+
+        response = supabase.table(table_name)\
+            .select("*")\
+            .range(offset, offset + page_size - 1)\
+            .execute()
+
+        data = response.data
+
+        if not data:
+            break
+
+        resultados.extend(data)
+
+        if len(data) < page_size:
+            break
+
+        offset += page_size
+
+    return resultados
+
+# ============================================================
+# LIMPEZA DE DADOS
+# remove NAN e valores inválidos
+# ============================================================
+
+def limpar_valor(v):
+
+    try:
+
+        if v is None:
+            return 0
+
+        if pd.isna(v):
+            return 0
+
+        return float(v)
+
+    except:
+
+        return 0
+
+# ============================================================
+# NORMALIZAÇÃO DE TEXTO
+# ============================================================
+
+def normalizar_texto(txt):
+
+    if not txt:
+        return ""
+
+    txt = str(txt).strip().upper()
+
+    txt = re.sub(r"\s+", " ", txt)
+
+    return txt
+
+# ============================================================
+# DETECÇÃO AUTOMÁTICA DE IDENTIFICADOR
+# (PLACA / CNPJ / NOME)
+# ============================================================
+
+def detectar_identificador(valor):
+
+    if not valor:
+        return "NOME"
+
+    numeros = re.sub(r"\D", "", str(valor))
+
+    if len(numeros) == 14:
+        return "CNPJ"
+
+    if len(valor) >= 7 and any(c.isalpha() for c in valor):
+        return "PLACA"
+
+    return "NOME"
+
+# ============================================================
+# STATUS DA API
+# ============================================================
+
+@app.get("/")
+def status():
+
+    return {
+        "sistema": APP_NAME,
+        "versao": APP_VERSION,
+        "status": "ativo"
+    }
+
+# ============================================================
+# MODELOS DE DADOS (Pydantic)
+# ============================================================
 
 class Meta(BaseModel):
+
     periodo: str
     meta_faturamento: float
     meta_novos_clientes: int
@@ -27,20 +176,40 @@ class Meta(BaseModel):
 
 
 class Cliente(BaseModel):
+
     nome: str
     cidade: str
     estado: str
-    segmento: str
+    segmento: str | None = None
+    cnpj: str | None = None
 
 
-@app.get("/")
-def status():
-    return {"CTI": "Sistema ativo"}
+class Equipamento(BaseModel):
+
+    linha: str
+    modelo: str
+    observacao: str | None = None
 
 
-# ==============================
-# METAS
-# ==============================
+class Implementador(BaseModel):
+
+    nome: str
+    estado: str | None = None
+    tipo: str | None = None
+
+
+class Veiculo(BaseModel):
+
+    placa: str
+    cliente: str
+    cnpj: str | None = None
+    cidade: str | None = None
+    estado: str | None = None
+
+
+# ============================================================
+# ROTAS DE METAS
+# ============================================================
 
 @app.post("/metas")
 def criar_meta(meta: Meta):
@@ -58,9 +227,9 @@ def listar_metas():
     return result.data
 
 
-# ==============================
-# CLIENTES
-# ==============================
+# ============================================================
+# ROTAS DE CLIENTES
+# ============================================================
 
 @app.post("/clientes")
 def criar_cliente(cliente: Cliente):
@@ -78,15 +247,9 @@ def listar_clientes():
     return result.data
 
 
-# ==============================
-# MODULO OEM - IMPLEMENTADORES
-# ==============================
-
-class Implementador(BaseModel):
-    nome: str
-    estado: str | None = None
-    tipo: str | None = None
-
+# ============================================================
+# ROTAS DE IMPLEMENTADORES (OEM)
+# ============================================================
 
 @app.post("/implementadores")
 def criar_implementador(implementador: Implementador):
@@ -106,15 +269,9 @@ def listar_implementadores():
     return result.data
 
 
-# ==============================
-# MODULO EQUIPAMENTOS
-# ==============================
-
-class Equipamento(BaseModel):
-    linha: str
-    modelo: str
-    observacao: str | None = None
-
+# ============================================================
+# ROTAS DE EQUIPAMENTOS
+# ============================================================
 
 @app.post("/equipamentos")
 def criar_equipamento(equipamento: Equipamento):
@@ -134,82 +291,87 @@ def listar_equipamentos():
     return result.data
 
 
-# ==============================
-# MODULO VENDAS
-# ==============================
+# ============================================================
+# BASE DE VEÍCULOS (RESOLUÇÃO DE PLACA)
+# ============================================================
+
+@app.post("/veiculos")
+def criar_veiculo(veiculo: Veiculo):
+
+    result = supabase.table("veiculos").insert(
+        veiculo.dict()
+    ).execute()
+
+    return result.data
+
+
+@app.get("/veiculos")
+def listar_veiculos():
+
+    result = supabase.table("veiculos").select("*").execute()
+
+    return result.data
+
+# ============================================================
+# MODULO DE VENDAS
+# ============================================================
+
+class Venda(BaseModel):
+
+    cliente_id: str
+    equipamento_id: str
+    implementador_id: str
+    tipo_venda: str | None = None
+    valor: float
+    data_venda: str
+    observacao: str | None = None
+
+
+# ============================================================
+# LISTAR VENDAS
+# ============================================================
 
 @app.get("/vendas")
 def listar_vendas():
 
-    response = supabase.table("vendas").select("*").execute()
+    vendas = select_all("vendas")
 
-    return response.data
+    return vendas
 
 
-@app.post("/vendas")
-def criar_venda(payload: dict):
-
-    venda = {
-        "cliente_id": payload.get("cliente_id"),
-        "equipamento_id": payload.get("equipamento_id"),
-        "implementador_id": payload.get("implementador_id"),
-        "tipo_venda": payload.get("tipo_venda"),
-        "valor": payload.get("valor"),
-        "data_venda": payload.get("data_venda"),
-        "observacao": payload.get("observacao")
-    }
-
-    try:
-
-        response = supabase.table("vendas").insert(venda).execute()
-
-        return response.data
-
-    except Exception as e:
-
-        return {
-            "erro": "Falha ao registrar venda",
-            "detalhe": str(e),
-            "payload": venda
-        }
-
+# ============================================================
+# BUSCAR VENDA ESPECÍFICA
+# ============================================================
 
 @app.get("/vendas/{venda_id}")
 def buscar_venda(venda_id: str):
 
-    response = supabase.table("vendas").select("*").eq("id", venda_id).execute()
+    response = supabase.table("vendas")\
+        .select("*")\
+        .eq("id", venda_id)\
+        .execute()
 
     return response.data
 
 
-@app.delete("/vendas/{venda_id}")
-def deletar_venda(venda_id: str):
+# ============================================================
+# CRIAR VENDA
+# ============================================================
 
-    response = supabase.table("vendas").delete().eq("id", venda_id).execute()
+@app.post("/vendas")
+def criar_venda(venda: Venda):
 
-    return {"deleted": venda_id}
+    payload = venda.dict()
 
-
-# ==============================
-# CORREÇÃO OPERACIONAL VENDAS
-# ==============================
-
-@app.post("/vendas2")
-async def criar_venda_corrigida(payload: dict):
-
-    venda = {
-        "cliente_id": payload.get("cliente_id"),
-        "equipamento_id": payload.get("equipamento_id"),
-        "implementador_id": payload.get("implementador_id"),
-        "tipo_venda": payload.get("tipo_venda"),
-        "valor": payload.get("valor"),
-        "data_venda": payload.get("data_venda"),
-        "observacao": payload.get("observacao")
-    }
+    payload["valor"] = limpar_valor(payload.get("valor"))
 
     try:
 
-        response = supabase.table("vendas").insert(venda).execute()
+        response = supabase.table("vendas")\
+            .insert(payload)\
+            .execute()
+
+        log("Venda registrada")
 
         return response.data
 
@@ -218,283 +380,361 @@ async def criar_venda_corrigida(payload: dict):
         return {
             "erro": "Falha ao registrar venda",
             "detalhe": str(e),
+            "payload": payload
+        }
+
+
+# ============================================================
+# DELETAR VENDA
+# ============================================================
+
+@app.delete("/vendas/{venda_id}")
+def deletar_venda(venda_id: str):
+
+    response = supabase.table("vendas")\
+        .delete()\
+        .eq("id", venda_id)\
+        .execute()
+
+    return {
+        "deleted": venda_id
+    }
+
+
+# ============================================================
+# CORREÇÃO OPERACIONAL DE VENDAS
+# ============================================================
+
+@app.post("/vendas/corrigir")
+def corrigir_venda(payload: dict):
+
+    venda = {
+        "cliente_id": payload.get("cliente_id"),
+        "equipamento_id": payload.get("equipamento_id"),
+        "implementador_id": payload.get("implementador_id"),
+        "tipo_venda": payload.get("tipo_venda"),
+        "valor": limpar_valor(payload.get("valor")),
+        "data_venda": payload.get("data_venda"),
+        "observacao": payload.get("observacao")
+    }
+
+    try:
+
+        response = supabase.table("vendas")\
+            .insert(venda)\
+            .execute()
+
+        log("Venda corrigida inserida")
+
+        return response.data
+
+    except Exception as e:
+
+        return {
+            "erro": "Falha na correção da venda",
+            "detalhe": str(e),
             "payload": venda
         }
 
-# ============================================================
-# ANALYTICS MODULE
-# ============================================================
-
-@app.get("/analytics/vendas-por-linha")
-async def vendas_por_linha():
-
-    query = """
-    select
-        e.linha,
-        count(v.id) as total_vendas,
-        sum(v.valor) as valor_total
-    from vendas v
-    join equipamentos e on v.equipamento_id = e.id
-    group by e.linha
-    order by valor_total desc
-    """
-
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
-
-    return result.data
-
-
-@app.get("/analytics/vendas-por-modelo")
-async def vendas_por_modelo():
-
-    query = """
-    select
-        e.modelo,
-        e.linha,
-        count(v.id) as total_vendas,
-        sum(v.valor) as valor_total
-    from vendas v
-    join equipamentos e on v.equipamento_id = e.id
-    group by e.modelo, e.linha
-    order by valor_total desc
-    """
-
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
-
-    return result.data
-
-
-@app.get("/analytics/ranking-clientes")
-async def ranking_clientes():
-
-    query = """
-    select
-        c.nome,
-        c.estado,
-        count(v.id) as total_vendas,
-        sum(v.valor) as valor_total
-    from vendas v
-    join clientes c on v.cliente_id = c.id
-    group by c.nome, c.estado
-    order by valor_total desc
-    """
-
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
-
-    return result.data
-
-
-@app.get("/analytics/ranking-oem")
-async def ranking_oem():
-
-    query = """
-    select
-        i.nome,
-        i.estado,
-        i.tipo,
-        count(v.id) as total_vendas,
-        sum(v.valor) as valor_total
-    from vendas v
-    join implementadores i on v.implementador_id = i.id
-    group by i.nome, i.estado, i.tipo
-    order by valor_total desc
-    """
-
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
-
-    return result.data
-
-
-@app.get("/analytics/vendas-por-estado")
-async def vendas_por_estado():
-
-    query = """
-    select
-        c.estado,
-        count(v.id) as total_vendas,
-        sum(v.valor) as valor_total
-    from vendas v
-    join clientes c on v.cliente_id = c.id
-    group by c.estado
-    order by valor_total desc
-    """
-
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
-
-    return result.data
-# ============================================================
-# ANALYTICS MODULE
-# ============================================================
-
-@app.get("/analytics/vendas-por-linha")
-async def vendas_por_linha():
-
-    vendas = supabase.table("vendas").select("*, equipamentos(linha)").execute()
-
-    resultado = {}
-
-    for v in vendas.data:
-        linha = v["equipamentos"]["linha"]
-
-        if linha not in resultado:
-            resultado[linha] = {
-                "linha": linha,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[linha]["total_vendas"] += 1
-        resultado[linha]["valor_total"] += v["valor"]
-
-    return list(resultado.values())
-
-
-@app.get("/analytics/ranking-clientes")
-async def ranking_clientes():
-
-    vendas = supabase.table("vendas").select("valor, clientes(nome)").execute()
-
-    ranking = {}
-
-    for v in vendas.data:
-
-        cliente = v["clientes"]["nome"]
-
-        if cliente not in ranking:
-            ranking[cliente] = {
-                "cliente": cliente,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        ranking[cliente]["total_vendas"] += 1
-        ranking[cliente]["valor_total"] += v["valor"]
-
-    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/ranking-oem")
-async def ranking_oem():
-
-    vendas = supabase.table("vendas").select("valor, implementadores(nome)").execute()
-
-    ranking = {}
-
-    for v in vendas.data:
-
-        oem = v["implementadores"]["nome"]
-
-        if oem not in ranking:
-            ranking[oem] = {
-                "oem": oem,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        ranking[oem]["total_vendas"] += 1
-        ranking[oem]["valor_total"] += v["valor"]
-
-    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/vendas-por-modelo")
-async def vendas_por_modelo():
-
-    vendas = supabase.table("vendas").select("valor, equipamentos(modelo)").execute()
-
-    resultado = {}
-
-    for v in vendas.data:
-
-        modelo = v["equipamentos"]["modelo"]
-
-        if modelo not in resultado:
-            resultado[modelo] = {
-                "modelo": modelo,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[modelo]["total_vendas"] += 1
-        resultado[modelo]["valor_total"] += v["valor"]
-
-    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/vendas-por-estado")
-async def vendas_por_estado():
-
-    vendas = supabase.table("vendas").select("valor, clientes(estado)").execute()
-
-    resultado = {}
-
-    for v in vendas.data:
-
-        estado = v["clientes"]["estado"]
-
-        if estado not in resultado:
-            resultado[estado] = {
-                "estado": estado,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[estado]["total_vendas"] += 1
-        resultado[estado]["valor_total"] += v["valor"]
-
-    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
 
 # ============================================================
-# SAFE ANALYTICS (fix for relations)
+# RESUMO OPERACIONAL DE VENDAS
 # ============================================================
 
-@app.get("/analytics/vendas-por-linha-safe")
-async def vendas_por_linha_safe():
+@app.get("/vendas/resumo")
+def resumo_vendas():
 
-    vendas = supabase.table("vendas").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
+    vendas = select_all("vendas")
 
-    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+    total_vendas = len(vendas)
 
-    resultado = {}
+    faturamento = 0
 
-    for v in vendas.data:
+    for v in vendas:
 
-        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+        faturamento += limpar_valor(v.get("valor"))
 
-        if not equipamento:
-            continue
+    return {
 
-        linha = equipamento["linha"]
+        "total_vendas": total_vendas,
+        "faturamento_total": faturamento
 
-        if linha not in resultado:
-            resultado[linha] = {
-                "linha": linha,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[linha]["total_vendas"] += 1
-        resultado[linha]["valor_total"] += v["valor"]
-
-    return list(resultado.values())
+    }
 
 # ============================================================
-# INTELIGENCIA COMERCIAL
+# ENGINE UNIVERSAL DE PLANILHAS
+# ============================================================
+
+def detectar_coluna(df, palavras):
+
+    for coluna in df.columns:
+
+        for p in palavras:
+
+            if p in coluna:
+
+                return coluna
+
+    return None
+
+
+# ============================================================
+# PROCESSADOR UNIVERSAL DE PLANILHAS
+# ============================================================
+
+def processar_planilha_universal(contents):
+
+    df = pd.read_excel(io.BytesIO(contents))
+
+    df = df.fillna("")
+
+    # normalizar nomes das colunas
+    df.columns = [normalizar_texto(c) for c in df.columns]
+
+    registros = []
+
+    # palavras chave possíveis
+    colunas_estado = ["UF", "ESTADO"]
+    colunas_cidade = ["CIDADE", "MUNICIPIO"]
+    colunas_linha = ["LINHA", "PRODUTO", "IMPLEMENTO", "TIPO"]
+    colunas_fabricante = ["FABRICANTE", "MARCA", "OEM", "IMPLEMENTADOR"]
+    colunas_valor = ["VALOR", "TOTAL", "PRECO", "UNIT"]
+    colunas_cliente = ["CLIENTE", "RAZAO", "EMPRESA"]
+    colunas_cnpj = ["CNPJ"]
+    colunas_placa = ["PLACA", "VEICULO"]
+
+    col_estado = detectar_coluna(df, colunas_estado)
+    col_cidade = detectar_coluna(df, colunas_cidade)
+    col_linha = detectar_coluna(df, colunas_linha)
+    col_fabricante = detectar_coluna(df, colunas_fabricante)
+    col_valor = detectar_coluna(df, colunas_valor)
+    col_cliente = detectar_coluna(df, colunas_cliente)
+    col_cnpj = detectar_coluna(df, colunas_cnpj)
+    col_placa = detectar_coluna(df, colunas_placa)
+
+    for _, row in df.iterrows():
+
+        estado = normalizar_texto(row.get(col_estado)) if col_estado else ""
+        cidade = normalizar_texto(row.get(col_cidade)) if col_cidade else ""
+        linha = normalizar_texto(row.get(col_linha)) if col_linha else ""
+        fabricante = normalizar_texto(row.get(col_fabricante)) if col_fabricante else ""
+        cliente = normalizar_texto(row.get(col_cliente)) if col_cliente else ""
+        cnpj = row.get(col_cnpj) if col_cnpj else ""
+        placa = normalizar_texto(row.get(col_placa)) if col_placa else ""
+
+        valor = limpar_valor(row.get(col_valor)) if col_valor else 0
+
+        identificador = None
+        tipo_id = None
+
+        if placa:
+
+            identificador = placa
+            tipo_id = "PLACA"
+
+        elif cnpj:
+
+            identificador = re.sub(r"\D", "", str(cnpj))
+            tipo_id = "CNPJ"
+
+        elif cliente:
+
+            identificador = cliente
+            tipo_id = "NOME"
+
+        registros.append({
+
+            "estado": estado,
+            "cidade": cidade,
+            "linha": linha,
+            "fabricante": fabricante,
+            "cliente": cliente,
+            "cnpj": cnpj,
+            "placa": placa,
+            "identificador": identificador,
+            "tipo_identificador": tipo_id,
+            "valor": valor
+
+        })
+
+    return registros
+
+
+# ============================================================
+# UPLOAD UNIVERSAL DE PLANILHAS
+# ============================================================
+
+@app.post("/upload/universal")
+async def upload_universal(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    registros = processar_planilha_universal(contents)
+
+    return {
+
+        "status": "processado",
+        "registros_lidos": len(registros),
+        "amostra": registros[:5]
+
+    }
+
+# ============================================================
+# MONITORAMENTO ANFIR
+# ============================================================
+
+def resolver_cliente_por_placa(placa):
+
+    if not placa:
+        return None
+
+    response = supabase.table("veiculos")\
+        .select("*")\
+        .eq("placa", placa)\
+        .execute()
+
+    if response.data and len(response.data) > 0:
+
+        return response.data[0]
+
+    return None
+
+
+def resolver_cliente_por_cnpj(cnpj):
+
+    if not cnpj:
+        return None
+
+    cnpj = re.sub(r"\D", "", str(cnpj))
+
+    response = supabase.table("clientes")\
+        .select("*")\
+        .eq("cnpj", cnpj)\
+        .execute()
+
+    if response.data and len(response.data) > 0:
+
+        return response.data[0]
+
+    return None
+
+
+def resolver_cliente_por_nome(nome):
+
+    if not nome:
+        return None
+
+    nome = normalizar_texto(nome)
+
+    response = supabase.table("clientes")\
+        .select("*")\
+        .ilike("nome", f"%{nome}%")\
+        .execute()
+
+    if response.data and len(response.data) > 0:
+
+        return response.data[0]
+
+    return None
+
+
+# ============================================================
+# ENRIQUECIMENTO DE REGISTROS ANFIR
+# ============================================================
+
+def enriquecer_registro_anfir(registro):
+
+    cliente_resolvido = None
+
+    if registro["tipo_identificador"] == "PLACA":
+
+        cliente_resolvido = resolver_cliente_por_placa(registro["placa"])
+
+    elif registro["tipo_identificador"] == "CNPJ":
+
+        cliente_resolvido = resolver_cliente_por_cnpj(registro["cnpj"])
+
+    elif registro["tipo_identificador"] == "NOME":
+
+        cliente_resolvido = resolver_cliente_por_nome(registro["cliente"])
+
+    if cliente_resolvido:
+
+        registro["cliente_resolvido"] = cliente_resolvido.get("nome")
+        registro["cnpj_resolvido"] = cliente_resolvido.get("cnpj")
+
+    else:
+
+        registro["cliente_resolvido"] = None
+        registro["cnpj_resolvido"] = None
+
+    registro["data_processamento"] = datetime.now().strftime("%Y-%m-%d")
+
+    return registro
+
+
+# ============================================================
+# PROCESSAR PRINTS ANFIR
+# ============================================================
+
+@app.post("/upload/anfir-monitoramento")
+async def upload_anfir_monitoramento(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    registros = processar_planilha_universal(contents)
+
+    registros_enriquecidos = []
+
+    for r in registros:
+
+        enriquecido = enriquecer_registro_anfir(r)
+
+        registros_enriquecidos.append(enriquecido)
+
+    batch_size = 500
+
+    for i in range(0, len(registros_enriquecidos), batch_size):
+
+        batch = registros_enriquecidos[i:i + batch_size]
+
+        supabase.table("anfir_monitoramento")\
+            .insert(batch)\
+            .execute()
+
+    log(f"ANFIR monitoramento inserido: {len(registros_enriquecidos)} registros")
+
+    return {
+
+        "status": "monitoramento atualizado",
+        "registros_processados": len(registros_enriquecidos)
+
+    }
+
+
+# ============================================================
+# CONSULTA MONITORAMENTO ANFIR
+# ============================================================
+
+@app.get("/anfir/monitoramento")
+def consultar_monitoramento():
+
+    registros = select_all("anfir_monitoramento")
+
+    return registros
+
+# ============================================================
+# MOTOR DE ANALYTICS
 # ============================================================
 
 @app.get("/analytics/inteligencia-comercial")
-async def inteligencia_comercial():
+def inteligencia_comercial():
 
-    dados = supabase.table("cti_anfir").select("*").execute()
-    vendas = dados.data
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
-    implementadores = supabase.table("implementadores").select("*").execute()
+    # ========================================================
+    # LEITURA DA BASE CTI (ANFIR)
+    # ========================================================
 
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
-    mapa_oem = {i["id"]: i for i in implementadores.data}
+    vendas = select_all("cti_anfir")
 
     analise_estado = {}
     analise_linha = {}
@@ -504,22 +744,22 @@ async def inteligencia_comercial():
     faturamento_total = 0
 
     for v in vendas:
-        
-        cliente = {"estado": v.get("estado")}
-        equipamento = {"linha": v.get("linha")}
-        oem = {"nome": v.get("implementador")}
 
-        if not cliente or not equipamento:
-            continue
+        estado = normalizar_texto(v.get("estado"))
+        linha = normalizar_texto(v.get("linha"))
+        oem = normalizar_texto(v.get("implementador"))
 
-        estado = cliente["estado"]
-        linha = equipamento["linha"]
+        valor = limpar_valor(v.get("valor"))
 
         total_vendas += 1
-        faturamento_total += float(v.get("valor", 0))
+        faturamento_total += valor
 
-        # estado
+        # ----------------------------------------------------
+        # ANALISE POR ESTADO
+        # ----------------------------------------------------
+
         if estado not in analise_estado:
+
             analise_estado[estado] = {
                 "estado": estado,
                 "vendas": 0,
@@ -527,10 +767,14 @@ async def inteligencia_comercial():
             }
 
         analise_estado[estado]["vendas"] += 1
-        faturamento_total += float(v.get("valor", 0))
+        analise_estado[estado]["faturamento"] += valor
 
-        # linha
+        # ----------------------------------------------------
+        # ANALISE POR LINHA
+        # ----------------------------------------------------
+
         if linha not in analise_linha:
+
             analise_linha[linha] = {
                 "linha": linha,
                 "vendas": 0,
@@ -538,80 +782,95 @@ async def inteligencia_comercial():
             }
 
         analise_linha[linha]["vendas"] += 1
-        faturamento_total += float(v.get("valor", 0))
+        analise_linha[linha]["faturamento"] += valor
 
-        # oem
-        if oem:
-            nome_oem = oem["nome"]
+        # ----------------------------------------------------
+        # ANALISE OEM
+        # ----------------------------------------------------
 
-            if nome_oem not in analise_oem:
-                analise_oem[nome_oem] = {
-                    "oem": nome_oem,
-                    "vendas": 0,
-                    "faturamento": 0
-                }
+        if oem not in analise_oem:
 
-            analise_oem[nome_oem]["vendas"] += 1
-            faturamento_total += float(v.get("valor", 0))
+            analise_oem[oem] = {
+                "oem": oem,
+                "vendas": 0,
+                "faturamento": 0
+            }
 
-    # oportunidades
+        analise_oem[oem]["vendas"] += 1
+        analise_oem[oem]["faturamento"] += valor
+
+    # ========================================================
+    # DETECÇÃO DE OPORTUNIDADES
+    # ========================================================
+
     oportunidades = []
 
     for linha in analise_linha.values():
 
-        if linha["vendas"] < 3:
+        if linha["vendas"] <= 2:
 
             oportunidades.append({
+
                 "tipo": "linha_subexplorada",
                 "linha": linha["linha"],
                 "observacao": "linha com baixa presença comercial"
+
             })
 
+    # ========================================================
+    # RESULTADO FINAL
+    # ========================================================
+
     return {
+
         "resumo_geral": {
+
             "total_vendas": total_vendas,
             "faturamento_total": faturamento_total
+
         },
+
         "performance_por_estado": list(analise_estado.values()),
+
         "performance_por_linha": list(analise_linha.values()),
+
         "ranking_oem": sorted(
+
             analise_oem.values(),
             key=lambda x: x["faturamento"],
             reverse=True
+
         ),
+
         "oportunidades_detectadas": oportunidades
+
     }
 
 # ============================================================
-# RADAR ESTRATEGICO DE MERCADO
+# RADAR DE MERCADO
 # ============================================================
 
 @app.get("/analytics/radar-mercado")
-async def radar_mercado():
+def radar_mercado():
 
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+    vendas = select_all("cti_anfir")
 
     radar_estados = {}
     radar_linhas = {}
 
-    for v in vendas.data:
+    for v in vendas:
 
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+        estado = normalizar_texto(v.get("estado"))
+        linha = normalizar_texto(v.get("linha"))
 
-        if not cliente or not equipamento:
-            continue
+        valor = limpar_valor(v.get("valor"))
 
-        estado = cliente["estado"]
-        linha = equipamento["linha"]
+        # ----------------------------------------------------
+        # RADAR ESTADOS
+        # ----------------------------------------------------
 
-        # radar por estado
         if estado not in radar_estados:
+
             radar_estados[estado] = {
                 "estado": estado,
                 "vendas": 0,
@@ -619,10 +878,14 @@ async def radar_mercado():
             }
 
         radar_estados[estado]["vendas"] += 1
-        radar_estados[estado]["faturamento"] += v["valor"]
+        radar_estados[estado]["faturamento"] += valor
 
-        # radar por linha
+        # ----------------------------------------------------
+        # RADAR LINHAS
+        # ----------------------------------------------------
+
         if linha not in radar_linhas:
+
             radar_linhas[linha] = {
                 "linha": linha,
                 "vendas": 0,
@@ -630,69 +893,65 @@ async def radar_mercado():
             }
 
         radar_linhas[linha]["vendas"] += 1
-        radar_linhas[linha]["faturamento"] += v["valor"]
+        radar_linhas[linha]["faturamento"] += valor
 
-    # identificar oportunidades
     oportunidades = []
 
     for estado in radar_estados.values():
 
         if estado["vendas"] <= 1:
+
             oportunidades.append({
+
                 "tipo": "estado_subexplorado",
                 "estado": estado["estado"],
                 "observacao": "baixa presença comercial"
+
             })
 
     for linha in radar_linhas.values():
 
         if linha["vendas"] <= 2:
+
             oportunidades.append({
-                "tipo": "linha_com_potencial",
+
+                "tipo": "linha_subexplorada",
                 "linha": linha["linha"],
                 "observacao": "linha com espaço de crescimento"
+
             })
 
     return {
+
         "radar_estados": list(radar_estados.values()),
         "radar_linhas": list(radar_linhas.values()),
         "oportunidades_detectadas": oportunidades
+
     }
 
+
 # ============================================================
-# RADAR COMERCIAL POR DDD (VIENA REGION)
+# RADAR COMERCIAL POR DDD
 # ============================================================
 
-DDD_VIENA = ["011","012","013","014","015","018"]
+DDD_VIENA = ["011", "012", "013", "014", "015", "018"]
+
 
 @app.get("/analytics/radar-ddd")
-async def radar_ddd():
+def radar_ddd():
 
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
+    vendas = select_all("cti_anfir")
 
     radar_ddds = {}
-    radar_linhas = {}
 
-    total_vendas = 0
-    faturamento_total = 0
+    for v in vendas:
 
-    for v in vendas.data:
+        cidade = normalizar_texto(v.get("cidade"))
+        linha = normalizar_texto(v.get("linha"))
 
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equipamento = mapa_equipamentos.get(v["equipamento_id"])
+        ddd = v.get("ddd")
 
-        if not cliente or not equipamento:
-            continue
-
-        cidade = cliente.get("cidade","")
-
-        # extrair DDD do cliente se existir
-        ddd = cliente.get("ddd")
+        valor = limpar_valor(v.get("valor"))
 
         if not ddd:
             continue
@@ -700,32 +959,18 @@ async def radar_ddd():
         if ddd not in DDD_VIENA:
             continue
 
-        linha = equipamento["linha"]
-
-        total_vendas += 1
-        faturamento_total += v["valor"]
-
-        # radar por DDD
         if ddd not in radar_ddds:
+
             radar_ddds[ddd] = {
+
                 "ddd": ddd,
                 "vendas": 0,
                 "faturamento": 0
+
             }
 
         radar_ddds[ddd]["vendas"] += 1
-        radar_ddds[ddd]["faturamento"] += v["valor"]
-
-        # radar por linha
-        if linha not in radar_linhas:
-            radar_linhas[linha] = {
-                "linha": linha,
-                "vendas": 0,
-                "faturamento": 0
-            }
-
-        radar_linhas[linha]["vendas"] += 1
-        radar_linhas[linha]["faturamento"] += v["valor"]
+        radar_ddds[ddd]["faturamento"] += valor
 
     oportunidades = []
 
@@ -734,468 +979,116 @@ async def radar_ddd():
         if ddd["vendas"] <= 2:
 
             oportunidades.append({
+
                 "tipo": "ddd_subexplorado",
                 "ddd": ddd["ddd"],
                 "observacao": "baixo volume de vendas na região"
+
             })
 
     return {
-        "resumo_regional": {
-            "total_vendas": total_vendas,
-            "faturamento_total": faturamento_total
-        },
+
         "radar_por_ddd": list(radar_ddds.values()),
-        "radar_por_linha": list(radar_linhas.values()),
         "oportunidades_detectadas": oportunidades
+
     }
 
-# ============================================================
-# ANALYTICS POR DDD (VIENA REGION)
-# ============================================================
-
-DDD_VIENA = ["011","012","013","014","015","018"]
-
-
-@app.get("/analytics/vendas-por-ddd")
-async def vendas_por_ddd():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-
-    resultado = {}
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-
-        if not cliente:
-            continue
-
-        ddd = cliente.get("ddd")
-
-        if not ddd:
-            continue
-
-        if ddd not in DDD_VIENA:
-            continue
-
-        if ddd not in resultado:
-            resultado[ddd] = {
-                "ddd": ddd,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[ddd]["total_vendas"] += 1
-        resultado[ddd]["valor_total"] += v["valor"]
-
-    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/ranking-oem-por-ddd")
-async def ranking_oem_por_ddd():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    implementadores = supabase.table("implementadores").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_oem = {i["id"]: i for i in implementadores.data}
-
-    ranking = {}
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-        oem = mapa_oem.get(v["implementador_id"])
-
-        if not cliente or not oem:
-            continue
-
-        ddd = cliente.get("ddd")
-
-        if not ddd:
-            continue
-
-        if ddd not in DDD_VIENA:
-            continue
-
-        chave = f"{ddd}-{oem['nome']}"
-
-        if chave not in ranking:
-            ranking[chave] = {
-                "ddd": ddd,
-                "oem": oem["nome"],
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        ranking[chave]["total_vendas"] += 1
-        ranking[chave]["valor_total"] += v["valor"]
-
-    return sorted(ranking.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/vendas-por-linha-ddd")
-async def vendas_por_linha_ddd():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equipamentos = {e["id"]: e for e in equipamentos.data}
-
-    resultado = {}
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equipamento = mapa_equipamentos.get(v["equipamento_id"])
-
-        if not cliente or not equipamento:
-            continue
-
-        ddd = cliente.get("ddd")
-
-        if not ddd:
-            continue
-
-        if ddd not in DDD_VIENA:
-            continue
-
-        linha = equipamento["linha"]
-
-        chave = f"{ddd}-{linha}"
-
-        if chave not in resultado:
-            resultado[chave] = {
-                "ddd": ddd,
-                "linha": linha,
-                "total_vendas": 0,
-                "valor_total": 0
-            }
-
-        resultado[chave]["total_vendas"] += 1
-        resultado[chave]["valor_total"] += v["valor"]
-
-    return sorted(resultado.values(), key=lambda x: x["valor_total"], reverse=True)
-
-
-@app.get("/analytics/clientes-por-ddd")
-async def clientes_por_ddd():
-
-    clientes = supabase.table("clientes").select("*").execute()
-
-    resultado = {}
-
-    for c in clientes.data:
-
-        ddd = c.get("ddd")
-
-        if not ddd:
-            continue
-
-        if ddd not in DDD_VIENA:
-            continue
-
-        if ddd not in resultado:
-            resultado[ddd] = {
-                "ddd": ddd,
-                "total_clientes": 0
-            }
-
-        resultado[ddd]["total_clientes"] += 1
-
-    return sorted(resultado.values(), key=lambda x: x["total_clientes"], reverse=True)
 
 # ============================================================
-# BENCHMARK TERRITORIAL
+# HEATMAP COMERCIAL
 # ============================================================
 
-@app.get("/analytics/benchmark-territorial")
-async def benchmark_territorial():
+@app.get("/analytics/heatmap-comercial")
+def heatmap_comercial():
 
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
+    vendas = select_all("cti_anfir")
 
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equip = {e["id"]: e for e in equipamentos.data}
+    mapa = {}
 
-    total_brasil = 0
-    total_sp = 0
-
-    linhas_brasil = {}
-    linhas_sp = {}
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equip = mapa_equip.get(v["equipamento_id"])
-
-        if not cliente or not equip:
-            continue
-
-        estado = cliente.get("estado")
-        ddd = cliente.get("ddd")
-        linha = equip.get("linha")
-
-        total_brasil += v["valor"]
-
-        linhas_brasil[linha] = linhas_brasil.get(linha, 0) + v["valor"]
-
-        if ddd in DDD_VIENA:
-
-            total_sp += v["valor"]
-
-            linhas_sp[linha] = linhas_sp.get(linha, 0) + v["valor"]
-
-    participacao_sp = 0
-
-    if total_brasil > 0:
-        participacao_sp = round((total_sp / total_brasil) * 100, 2)
-
-    diferencas = []
-
-    for linha in linhas_brasil:
-
-        valor_br = linhas_brasil.get(linha, 0)
-        valor_sp = linhas_sp.get(linha, 0)
-
-        part_br = 0
-        part_sp = 0
-
-        if total_brasil > 0:
-            part_br = round((valor_br / total_brasil) * 100, 2)
-
-        if total_sp > 0:
-            part_sp = round((valor_sp / total_sp) * 100, 2)
-
-        diferencas.append({
-            "linha": linha,
-            "participacao_brasil": part_br,
-            "participacao_sp": part_sp
-        })
-
-    return {
-        "participacao_sp_no_brasil": participacao_sp,
-        "comparativo_linhas": diferencas
-    }
-
-# ============================================================
-# INTELIGENCIA DE MERCADO
-# ============================================================
-
-@app.get("/analytics/inteligencia-mercado")
-async def inteligencia_mercado():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-    equipamentos = supabase.table("equipamentos").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-    mapa_equip = {e["id"]: e for e in equipamentos.data}
-
-    linhas = {}
-    ddds = {}
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-        equip = mapa_equip.get(v["equipamento_id"])
-
-        if not cliente or not equip:
-            continue
-
-        linha = equip.get("linha")
-        ddd = cliente.get("ddd")
-
-        linhas[linha] = linhas.get(linha, 0) + v["valor"]
-
-        if ddd in DDD_VIENA:
-            ddds[ddd] = ddds.get(ddd, 0) + v["valor"]
-
-    linhas_ordenadas = sorted(linhas.items(), key=lambda x: x[1])
-    ddd_ordenados = sorted(ddds.items(), key=lambda x: x[1])
-
-    oportunidades = []
-
-    if linhas_ordenadas:
-
-        linha_fraca = linhas_ordenadas[0][0]
-
-        oportunidades.append({
-            "tipo": "linha_subexplorada",
-            "linha": linha_fraca,
-            "observacao": "linha com menor volume de vendas"
-        })
-
-    if ddd_ordenados:
-
-        ddd_fraco = ddd_ordenados[0][0]
-
-        oportunidades.append({
-            "tipo": "territorio_subexplorado",
-            "ddd": ddd_fraco,
-            "observacao": "baixo volume de vendas na regiao"
-        })
-
-    return {
-        "linhas_vendas": linhas,
-        "ddd_vendas": ddds,
-        "oportunidades_detectadas": oportunidades
-    }
-
-# ============================================================
-# HEATMAP COMERCIAL POR DDD
-# ============================================================
-
-@app.get("/analytics/heatmap-comercial-ddd")
-async def heatmap_comercial_ddd():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-
-    ddd_stats = {}
-
-    total_vendas = 0
     total_valor = 0
 
-    for v in vendas.data:
+    for v in vendas:
 
-        cliente = mapa_clientes.get(v["cliente_id"])
+        estado = normalizar_texto(v.get("estado"))
 
-        if not cliente:
-            continue
+        valor = limpar_valor(v.get("valor"))
 
-        ddd = cliente.get("ddd")
+        total_valor += valor
 
-        if not ddd:
-            continue
+        if estado not in mapa:
 
-        if ddd not in DDD_VIENA:
-            continue
+            mapa[estado] = {
 
-        if ddd not in ddd_stats:
+                "estado": estado,
+                "valor_total": 0,
+                "participacao": 0
 
-            ddd_stats[ddd] = {
-                "ddd": ddd,
-                "total_vendas": 0,
-                "valor_total": 0
             }
 
-        ddd_stats[ddd]["total_vendas"] += 1
-        ddd_stats[ddd]["valor_total"] += v["valor"]
-
-        total_vendas += 1
-        total_valor += v["valor"]
+        mapa[estado]["valor_total"] += valor
 
     resultado = []
 
-    for ddd in ddd_stats:
+    for estado in mapa:
 
-        vendas_ddd = ddd_stats[ddd]["total_vendas"]
-        valor_ddd = ddd_stats[ddd]["valor_total"]
+        valor = mapa[estado]["valor_total"]
 
         participacao = 0
 
         if total_valor > 0:
-            participacao = round((valor_ddd / total_valor) * 100, 2)
 
-        classificacao = "baixo"
-
-        if participacao > 40:
-            classificacao = "dominante"
-
-        elif participacao > 20:
-            classificacao = "forte"
-
-        elif participacao > 10:
-            classificacao = "moderado"
-
-        resultado.append({
-            "ddd": ddd,
-            "total_vendas": vendas_ddd,
-            "valor_total": valor_ddd,
-            "participacao_regional": participacao,
-            "classificacao": classificacao
-        })
-
-    return {
-        "total_vendas_regiao": total_vendas,
-        "faturamento_regiao": total_valor,
-        "heatmap": sorted(resultado, key=lambda x: x["valor_total"], reverse=True)
-    }
-
-# ============================================================
-# PROJECAO DE POTENCIAL DE MERCADO POR DDD
-# ============================================================
-
-@app.get("/analytics/projecao-mercado-ddd")
-async def projecao_mercado_ddd():
-
-    vendas = supabase.table("vendas").select("*").execute()
-    clientes = supabase.table("clientes").select("*").execute()
-
-    mapa_clientes = {c["id"]: c for c in clientes.data}
-
-    ddd_stats = {}
-
-    total_valor = 0
-
-    for v in vendas.data:
-
-        cliente = mapa_clientes.get(v["cliente_id"])
-
-        if not cliente:
-            continue
-
-        ddd = cliente.get("ddd")
-
-        if not ddd:
-            continue
-
-        if ddd not in DDD_VIENA:
-            continue
-
-        if ddd not in ddd_stats:
-
-            ddd_stats[ddd] = {
-                "ddd": ddd,
-                "valor_total": 0
-            }
-
-        ddd_stats[ddd]["valor_total"] += v["valor"]
-
-        total_valor += v["valor"]
-
-    resultado = []
-
-    for ddd in ddd_stats:
-
-        valor = ddd_stats[ddd]["valor_total"]
-
-        participacao = 0
-
-        if total_valor > 0:
             participacao = round((valor / total_valor) * 100, 2)
 
-        potencial_estimado = valor * 1.35
+        resultado.append({
 
-        crescimento_possivel = potencial_estimado - valor
+            "estado": estado,
+            "valor_total": valor,
+            "participacao": participacao
+
+        })
+
+    return sorted(resultado, key=lambda x: x["valor_total"], reverse=True)
+
+
+# ============================================================
+# PROJEÇÃO DE POTENCIAL DE MERCADO
+# ============================================================
+
+@app.get("/analytics/projecao-mercado")
+def projecao_mercado():
+
+    vendas = select_all("cti_anfir")
+
+    linhas = {}
+
+    total_valor = 0
+
+    for v in vendas:
+
+        linha = normalizar_texto(v.get("linha"))
+
+        valor = limpar_valor(v.get("valor"))
+
+        total_valor += valor
+
+        linhas[linha] = linhas.get(linha, 0) + valor
+
+    resultado = []
+
+    for linha in linhas:
+
+        valor = linhas[linha]
+
+        potencial = valor * 1.35
+
+        crescimento = potencial - valor
 
         resultado.append({
 
-            "ddd": ddd,
+            "linha": linha,
             "vendas_atuais": valor,
-            "participacao_regional": participacao,
-            "potencial_estimado": round(potencial_estimado,2),
-            "crescimento_possivel": round(crescimento_possivel,2)
+            "potencial_estimado": round(potencial, 2),
+            "crescimento_possivel": round(crescimento, 2)
 
         })
 
@@ -1208,355 +1101,490 @@ async def projecao_mercado_ddd():
 @app.get("/analytics/radar-clientes")
 def radar_clientes():
 
-    query = """
-    SELECT 
-        cliente,
-        cidade,
-        ddd,
-        COUNT(*) as total_compras,
-        COUNT(DISTINCT fabricante) as fabricantes_diferentes,
-        MIN(data_venda) as primeira_compra,
-        MAX(data_venda) as ultima_compra
-    FROM vendas
-    GROUP BY cliente, cidade, ddd
-    """
+    vendas = select_all("vendas")
+    clientes = select_all("clientes")
 
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
+    mapa_clientes = {c["id"]: c for c in clientes}
 
-    clientes = result.data if result.data else []
+    estatisticas = {}
+
+    for v in vendas:
+
+        cliente_id = v.get("cliente_id")
+
+        if not cliente_id:
+            continue
+
+        cliente = mapa_clientes.get(cliente_id)
+
+        if not cliente:
+            continue
+
+        nome = normalizar_texto(cliente.get("nome"))
+
+        if nome not in estatisticas:
+
+            estatisticas[nome] = {
+
+                "cliente": nome,
+                "total_compras": 0,
+                "faturamento": 0
+
+            }
+
+        estatisticas[nome]["total_compras"] += 1
+        estatisticas[nome]["faturamento"] += limpar_valor(v.get("valor"))
 
     prioritarios = []
     fidelizados = []
     risco = []
 
-    for c in clientes:
+    for c in estatisticas.values():
 
-        if c["fabricantes_diferentes"] == 1 and c["total_compras"] >= 2:
-            fidelizados.append(c)
+        compras = c["total_compras"]
 
-        elif c["fabricantes_diferentes"] > 1:
-            risco.append(c)
+        if compras >= 5:
 
-        else:
             prioritarios.append(c)
 
+        elif compras >= 2:
+
+            fidelizados.append(c)
+
+        else:
+
+            risco.append(c)
+
     return {
-        "clientes_prioritarios": prioritarios,
-        "clientes_fidelizados": fidelizados,
-        "clientes_em_risco": risco
+
+        "clientes_prioritarios": sorted(
+            prioritarios,
+            key=lambda x: x["faturamento"],
+            reverse=True
+        ),
+
+        "clientes_fidelizados": sorted(
+            fidelizados,
+            key=lambda x: x["faturamento"],
+            reverse=True
+        ),
+
+        "clientes_em_risco": sorted(
+            risco,
+            key=lambda x: x["faturamento"],
+            reverse=True
+        )
+
     }
 
+
 # ============================================================
-# ANALISE TEMPORAL DE CLIENTES
+# ANÁLISE DE RECORRÊNCIA DE CLIENTES
 # ============================================================
 
 @app.get("/analytics/clientes-recorrencia")
 def clientes_recorrencia():
 
-    query = """
-    SELECT
-        cliente,
-        cidade,
-        ddd,
-        COUNT(*) as total_compras,
-        EXTRACT(YEAR FROM MIN(data_venda)) as primeiro_ano,
-        EXTRACT(YEAR FROM MAX(data_venda)) as ultimo_ano
-    FROM vendas
-    GROUP BY cliente, cidade, ddd
-    """
+    vendas = select_all("vendas")
+    clientes = select_all("clientes")
 
-    result = supabase.rpc("execute_sql", {"query": query}).execute()
+    mapa_clientes = {c["id"]: c for c in clientes}
 
-    clientes = result.data if result.data else []
+    historico = {}
 
-    for c in clientes:
+    for v in vendas:
 
-        anos = (c["ultimo_ano"] - c["primeiro_ano"]) + 1
-        if anos <= 0:
-            anos = 1
+        cliente_id = v.get("cliente_id")
 
-        c["periodo_analise"] = f'{c["primeiro_ano"]}-{c["ultimo_ano"]}'
-        c["media_anual"] = round(c["total_compras"] / anos, 2)
+        if not cliente_id:
+            continue
 
-    return {
-        "analise_clientes": clientes
-    }
+        cliente = mapa_clientes.get(cliente_id)
 
-# ============================================================
-# IMPORTADOR ANFIR
-# ============================================================
+        if not cliente:
+            continue
 
-import pandas as pd
-from fastapi import UploadFile, File
+        nome = normalizar_texto(cliente.get("nome"))
 
-@app.post("/upload/anfir")
-async def upload_anfir(file: UploadFile = File(...)):
+        data = v.get("data_venda")
 
-    import io
+        if not data:
+            continue
 
-    contents = await file.read()
+        ano = str(data)[:4]
 
-    excel = pd.ExcelFile(io.BytesIO(contents))
-                         
-    registros = []
+        if nome not in historico:
 
-    for aba in excel.sheet_names:
+            historico[nome] = {
 
-        df = pd.read_excel(excel, sheet_name=aba)
+                "cliente": nome,
+                "primeiro_ano": ano,
+                "ultimo_ano": ano,
+                "total_compras": 0
 
-        for _, row in df.iterrows():
-
-            cliente = row.get("cliente")
-            cidade = row.get("cidade") or row.get("municipio")
-            uf = row.get("uf")
-            produto = row.get("produto")
-            fabricante = row.get("fabricante")
-            data = row.get("data")
-
-            if not cliente or not cidade:
-                continue
-
-            registro = {
-                "cliente": str(cliente),
-                "cidade": str(cidade),
-                "uf": str(uf),
-                "produto": str(produto),
-                "fabricante": str(fabricante),
-                "data_venda": str(data)
             }
 
-            registros.append(registro)
+        historico[nome]["total_compras"] += 1
 
-    if registros:
-        supabase.table("vendas").insert(registros).execute()
+        if ano < historico[nome]["primeiro_ano"]:
 
-    return {
-        "status": "importado",
-        "total_registros": len(registros)
-    }
+            historico[nome]["primeiro_ano"] = ano
 
-# ============================================================
-# NORMALIZAÇÃO GEOGRÁFICA (CIDADE → DDD)
-# ============================================================
+        if ano > historico[nome]["ultimo_ano"]:
 
-def identificar_ddd(cidade):
+            historico[nome]["ultimo_ano"] = ano
 
-    mapa_ddd = {
-        "SAO PAULO": "011",
-        "SANTOS": "013",
-        "SOROCABA": "015",
-        "BAURU": "014",
-        "SAO JOSE DOS CAMPOS": "012",
-        "ANDRADINA": "018"
-    }
+    resultado = []
 
-    if not cidade:
-        return None
+    for c in historico.values():
 
-    cidade = cidade.upper().strip()
+        primeiro = int(c["primeiro_ano"])
+        ultimo = int(c["ultimo_ano"])
 
-    return mapa_ddd.get(cidade)
+        anos = (ultimo - primeiro) + 1
 
-# ============================================================
-# CONSULTA GEOGRÁFICA CIDADE → DDD
-# ============================================================
+        if anos <= 0:
 
-def buscar_ddd_por_cidade(cidade):
+            anos = 1
 
-    if not cidade:
-        return None
+        media = round(c["total_compras"] / anos, 2)
 
-    cidade = cidade.upper().strip()
+        resultado.append({
 
-    response = supabase.table("cidades_ddd")\
-        .select("ddd")\
-        .ilike("cidade", cidade)\
-        .execute()
-
-    if response.data and len(response.data) > 0:
-        return response.data[0]["ddd"]
-
-    return None
-
-# ---------------------------------------------------
-# LIBERAÇÃO DE CORS PARA FRONTEND CTI
-# ---------------------------------------------------
-
-from fastapi.middleware.cors import CORSMiddleware
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ---------------------------------------------------
-# FIM BLOCO CORS
-# ---------------------------------------------------
-
-# ===============================
-# LEITURA COMPLETA PLANILHA ANFIR
-# ===============================
-
-import io
-import pandas as pd
-
-def processar_planilha_anfir(contents):
-
-    excel = pd.ExcelFile(io.BytesIO(contents))
-
-    registros = []
-
-    for aba in excel.sheet_names:
-
-        df = pd.read_excel(excel, sheet_name=aba)
-
-        df = df.dropna(how="all")
-
-        for _, row in df.iterrows():
-
-            cliente = row.get("cliente") or row.get("Cliente")
-            cidade = row.get("cidade") or row.get("municipio") or row.get("Cidade")
-            uf = row.get("uf") or row.get("UF")
-            produto = row.get("produto") or row.get("Produto")
-            fabricante = row.get("fabricante") or row.get("Fabricante")
-            data = row.get("data") or row.get("Data")
-
-            if cliente is None:
-                continue
-
-            registros.append({
-                "cliente": str(cliente),
-                "cidade": str(cidade),
-                "uf": str(uf),
-                "produto": str(produto),
-                "fabricante": str(fabricante),
-                "data": str(data)
-            })
-
-    return registros
-
-# ===============================
-# CONEXÃO DO UPLOAD COM O PARSER
-# ===============================
-
-@app.post("/upload/anfir/processado")
-async def upload_anfir_processado(file: UploadFile = File(...)):
-
-    contents = await file.read()
-
-    registros = processar_planilha_anfir(contents)
-
-    return {
-        "status": "processado",
-        "registros_lidos": len(registros),
-        "amostra": registros[:5]
-    }
-
-# ===============================
-# PROCESSAMENTO PLANILHA ANFIR
-# ===============================
-
-from io import BytesIO
-import pandas as pd
-
-def processar_planilha_anfir(contents):
-
-    from io import BytesIO
-    import pandas as pd
-
-    df = pd.read_excel(BytesIO(contents))
-
-    # normalizar nomes das colunas
-    df.columns = [str(c).strip().upper() for c in df.columns]
-
-    registros = []
-
-    # palavras-chave possíveis
-    colunas_estado = ["UF","ESTADO"]
-    colunas_linha = ["LINHA","PRODUTO","IMPLEMENTO","TIPO"]
-    colunas_fabricante = ["FABRICANTE","MARCA","OEM","IMPLEMENTADOR"]
-    colunas_valor = ["VALOR","TOTAL","PRECO","UNIT"]
-
-    # função de detecção automática
-    def detectar_coluna(palavras):
-
-        for c in df.columns:
-            for p in palavras:
-                if p in c:
-                    return c
-
-        return None
-
-    col_estado = detectar_coluna(colunas_estado)
-    col_linha = detectar_coluna(colunas_linha)
-    col_fabricante = detectar_coluna(colunas_fabricante)
-    col_valor = detectar_coluna(colunas_valor)
-
-    for _, row in df.iterrows():
-
-        estado = row.get(col_estado) if col_estado else None
-        linha = row.get(col_linha) if col_linha else None
-        fabricante = row.get(col_fabricante) if col_fabricante else None
-        valor = row.get(col_valor) if col_valor else None
-
-        if pd.isna(valor):
-            valor = 0
-
-        registros.append({
-
-            "estado": str(estado) if estado and not pd.isna(estado) else "",
-            "linha": str(linha) if linha and not pd.isna(linha) else "",
-            "implementador": str(fabricante) if fabricante and not pd.isna(fabricante) else "",
-            "valor": float(valor)
+            "cliente": c["cliente"],
+            "periodo": f"{primeiro}-{ultimo}",
+            "total_compras": c["total_compras"],
+            "media_anual": media
 
         })
 
-    return registros
-# ===============================
-# ARMAZENAMENTO TEMPORÁRIO CTI
-# ===============================
+    return sorted(resultado, key=lambda x: x["total_compras"], reverse=True)
 
-@app.post("/upload/anfir/cti")
-async def upload_anfir_cti(file: UploadFile = File(...)):
+    # ============================================================
+# MODELO DE NEGOCIAÇÃO
+# ============================================================
 
-    contents = await file.read()
+class Negociacao(BaseModel):
 
-    from planilha_engine import processar_planilha_universal
+    cliente: str
+    cidade: str | None = None
+    estado: str | None = None
+    produto: str | None = None
+    valor: float | None = None
+    status: str | None = None
+    data: str | None = None
+    observacao: str | None = None
 
-    registros = processar_planilha_universal(contents)
 
-    batch_size = 500
+# ============================================================
+# REGISTRAR NEGOCIAÇÃO
+# ============================================================
 
-    for i in range(0, len(registros), batch_size):
-        batch = registros[i:i+batch_size]
-        supabase.table("cti_anfir").insert(batch).execute()
+@app.post("/negociacoes")
+def criar_negociacao(negociacao: Negociacao):
 
-    dados = supabase.table("cti_anfir").select("*", count="exact").limit(1).execute()
+    payload = negociacao.dict()
+
+    payload["cliente"] = normalizar_texto(payload.get("cliente"))
+
+    payload["valor"] = limpar_valor(payload.get("valor"))
+
+    response = supabase.table("negociacoes")\
+        .insert(payload)\
+        .execute()
+
+    log("Nova negociação registrada")
+
+    return response.data
+
+
+# ============================================================
+# LISTAR NEGOCIAÇÕES
+# ============================================================
+
+@app.get("/negociacoes")
+def listar_negociacoes():
+
+    negociacoes = select_all("negociacoes")
+
+    return negociacoes
+
+
+# ============================================================
+# RESUMO DO PIPELINE COMERCIAL
+# ============================================================
+
+@app.get("/analytics/pipeline")
+def pipeline_comercial():
+
+    negociacoes = select_all("negociacoes")
+
+    pipeline_total = 0
+
+    por_status = {}
+
+    for n in negociacoes:
+
+        status = normalizar_texto(n.get("status"))
+
+        valor = limpar_valor(n.get("valor"))
+
+        pipeline_total += valor
+
+        if status not in por_status:
+
+            por_status[status] = {
+
+                "status": status,
+                "negociacoes": 0,
+                "valor_total": 0
+
+            }
+
+        por_status[status]["negociacoes"] += 1
+        por_status[status]["valor_total"] += valor
 
     return {
-        "status": "dados inseridos no CTI",
-        "total_registros": len(registros),
-        "base_cti": dados.count
+
+        "pipeline_total": pipeline_total,
+
+        "pipeline_por_status": list(por_status.values())
+
     }
 
-# ===============================
-# ANALYTICS DO CTI
-# ===============================
 
-from collections import Counter
+# ============================================================
+# MODELO DE CONTATO
+# ============================================================
 
-# ===============================
-# ANALYTICS CTI CORRIGIDO
-# ===============================
+class Contato(BaseModel):
 
-@app.get("/analytics/cti-debug")
-def cti_debug():
+    cliente: str
+    cargo: str | None = None
+    telefone: str | None = None
+    email: str | None = None
+    relacionamento: str | None = None
+    observacoes: str | None = None
 
-    global base_cti
+
+# ============================================================
+# REGISTRAR CONTATO
+# ============================================================
+
+@app.post("/contatos")
+def criar_contato(contato: Contato):
+
+    payload = contato.dict()
+
+    payload["cliente"] = normalizar_texto(payload.get("cliente"))
+
+    response = supabase.table("contatos")\
+        .insert(payload)\
+        .execute()
+
+    log("Contato registrado")
+
+    return response.data
+
+
+# ============================================================
+# LISTAR CONTATOS
+# ============================================================
+
+@app.get("/contatos")
+def listar_contatos():
+
+    contatos = select_all("contatos")
+
+    return contatos
+
+
+# ============================================================
+# CLIENTES COM NEGOCIAÇÃO ATIVA
+# ============================================================
+
+@app.get("/analytics/clientes-negociacao")
+def clientes_em_negociacao():
+
+    negociacoes = select_all("negociacoes")
+
+    clientes = {}
+
+    for n in negociacoes:
+
+        cliente = normalizar_texto(n.get("cliente"))
+
+        valor = limpar_valor(n.get("valor"))
+
+        if cliente not in clientes:
+
+            clientes[cliente] = {
+
+                "cliente": cliente,
+                "negociacoes": 0,
+                "valor_total": 0
+
+            }
+
+        clientes[cliente]["negociacoes"] += 1
+        clientes[cliente]["valor_total"] += valor
+
+    return sorted(
+
+        clientes.values(),
+        key=lambda x: x["valor_total"],
+        reverse=True
+
+    )
+
+# ============================================================
+# DASHBOARD MASTER CTI
+# ============================================================
+
+@app.get("/analytics/dashboard")
+def dashboard_master():
+
+    vendas = select_all("vendas")
+    clientes = select_all("clientes")
+    negociacoes = select_all("negociacoes")
+    equipamentos = select_all("equipamentos")
+
+    total_vendas = len(vendas)
+
+    faturamento = sum(limpar_valor(v.get("valor")) for v in vendas)
+
+    pipeline = sum(limpar_valor(n.get("valor")) for n in negociacoes)
+
+    clientes_ativos = len(clientes)
+
+    linhas = {}
+
+    for v in vendas:
+
+        equip_id = v.get("equipamento_id")
+
+        if not equip_id:
+            continue
+
+        equip = next((e for e in equipamentos if e["id"] == equip_id), None)
+
+        if not equip:
+            continue
+
+        linha = normalizar_texto(equip.get("linha"))
+
+        if linha not in linhas:
+
+            linhas[linha] = {
+
+                "linha": linha,
+                "vendas": 0,
+                "valor": 0
+
+            }
+
+        linhas[linha]["vendas"] += 1
+
+        linhas[linha]["valor"] += limpar_valor(v.get("valor"))
+
+    ranking_linhas = sorted(
+
+        linhas.values(),
+        key=lambda x: x["valor"],
+        reverse=True
+
+    )
 
     return {
-        "registros_na_base": len(base_cti)
+
+        "resumo": {
+
+            "total_vendas": total_vendas,
+            "faturamento": faturamento,
+            "pipeline": pipeline,
+            "clientes": clientes_ativos
+
+        },
+
+        "ranking_linhas": ranking_linhas
+
+    }
+
+
+# ============================================================
+# STATUS DO SISTEMA
+# ============================================================
+
+@app.get("/cti/status")
+def status_cti():
+
+    try:
+
+        clientes = select_all("clientes")
+        vendas = select_all("vendas")
+        negociacoes = select_all("negociacoes")
+
+        return {
+
+            "sistema": "CTI",
+            "status": "operacional",
+
+            "modulos": {
+
+                "clientes": len(clientes),
+                "vendas": len(vendas),
+                "negociacoes": len(negociacoes)
+
+            }
+
+        }
+
+    except Exception as e:
+
+        return {
+
+            "sistema": "CTI",
+            "status": "erro",
+            "detalhe": str(e)
+
+        }
+
+
+# ============================================================
+# HEALTHCHECK PARA RENDER
+# ============================================================
+
+@app.get("/health")
+def health():
+
+    return {"status": "ok"}
+
+
+# ============================================================
+# INFORMAÇÕES DO SISTEMA
+# ============================================================
+
+@app.get("/cti/info")
+def info_cti():
+
+    return {
+
+        "plataforma": "CTI — Commercial Tactical Intelligence",
+
+        "versao": "2.0",
+
+        "modulos": [
+
+            "mercado_anfir",
+            "clientes",
+            "equipamentos",
+            "implementadores",
+            "vendas",
+            "pipeline",
+            "contatos",
+            "analytics",
+            "radar_territorial"
+
+        ]
+
     }
