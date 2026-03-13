@@ -516,7 +516,7 @@ async def inteligencia_comercial():
         linha = equipamento["linha"]
 
         total_vendas += 1
-        faturamento_total += v["valor"]
+        faturamento_total += float(v.get("valor", 0))
 
         # estado
         if estado not in analise_estado:
@@ -527,7 +527,7 @@ async def inteligencia_comercial():
             }
 
         analise_estado[estado]["vendas"] += 1
-        analise_estado[estado]["faturamento"] += v["valor"]
+        += float(v.get("valor", 0))
 
         # linha
         if linha not in analise_linha:
@@ -538,7 +538,7 @@ async def inteligencia_comercial():
             }
 
         analise_linha[linha]["vendas"] += 1
-        analise_linha[linha]["faturamento"] += v["valor"]
+        += float(v.get("valor", 0))
 
         # oem
         if oem:
@@ -552,7 +552,7 @@ async def inteligencia_comercial():
                 }
 
             analise_oem[nome_oem]["vendas"] += 1
-            analise_oem[nome_oem]["faturamento"] += v["valor"]
+            += float(v.get("valor", 0))
 
     # oportunidades
     oportunidades = []
