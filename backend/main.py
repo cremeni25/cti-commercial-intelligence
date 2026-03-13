@@ -1464,26 +1464,51 @@ import pandas as pd
 
 def processar_planilha_anfir(contents):
 
+    from io import BytesIO
+    import pandas as pd
+
     df = pd.read_excel(BytesIO(contents))
 
-    df = df.fillna("")
+    df.columns = [c.strip().upper() for c in df.columns]
+
+    mapa_colunas = {
+        "estado": ["ESTADO","UF"],
+        "linha": ["PRODUTO","LINHA","LINHA PRODUTO"],
+        "fabricante": ["FABRICANTE","IMPLEMENTADOR","OEM"],
+        "valor": ["VALOR","VALOR UNIT","VALOR UNITARIO"]
+    }
+
+    def encontrar_coluna(opcoes):
+        for c in df.columns:
+            if c in opcoes:
+                return c
+        return None
+
+    col_estado = encontrar_coluna(mapa_colunas["estado"])
+    col_linha = encontrar_coluna(mapa_colunas["linha"])
+    col_fabricante = encontrar_coluna(mapa_colunas["fabricante"])
+    col_valor = encontrar_coluna(mapa_colunas["valor"])
 
     registros = []
 
     for _, row in df.iterrows():
 
-        registro = {
-            "cliente": str(row.get("Cliente", "")),
-            "estado": str(row.get("Estado", "")),
-            "implementador": str(row.get("Implementador", "")),
-            "linha": str(row.get("Linha", "")),
-            "valor": float(row.get("Valor", 0))
-        }
+        estado = row.get(col_estado)
+        linha = row.get(col_linha)
+        fabricante = row.get(col_fabricante)
+        valor = row.get(col_valor)
 
-        registros.append(registro)
+        if not estado and not linha:
+            continue
+
+        registros.append({
+            "estado": str(estado) if estado else "",
+            "linha": str(linha) if linha else "",
+            "implementador": str(fabricante) if fabricante else "",
+            "valor": float(valor) if valor else 0
+        })
 
     return registros
-
 # ===============================
 # ARMAZENAMENTO TEMPORÁRIO CTI
 # ===============================
