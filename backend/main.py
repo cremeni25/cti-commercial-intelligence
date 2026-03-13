@@ -1505,7 +1505,7 @@ def processar_planilha_anfir(contents):
             "estado": str(estado) if estado else "",
             "linha": str(linha) if linha else "",
             "implementador": str(fabricante) if fabricante else "",
-            "valor": float(valor) if valor else 0
+            "valor": float(valor) if valor and not pd.isna(valor) else 0
         })
 
     return registros
