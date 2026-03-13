@@ -1524,7 +1524,9 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
 
     contents = await file.read()
 
-    registros = processar_planilha_anfir(contents)
+    from planilha_engine import processar_planilha_universal
+
+    registros = processar_planilha_universal(contents)
 
     batch_size = 500
 
