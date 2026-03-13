@@ -1534,12 +1534,12 @@ async def upload_anfir_cti(file: UploadFile = File(...)):
         batch = registros[i:i+batch_size]
         supabase.table("cti_anfir").insert(batch).execute()
 
-    dados = supabase.table("cti_anfir").select("*").range(0,100000).execute()
+    dados = supabase.table("cti_anfir").select("*", count="exact").limit(1).execute()
 
     return {
         "status": "dados inseridos no CTI",
         "total_registros": len(registros),
-        "base_cti": len(dados.data)
+        "base_cti": dados.count
     }
 
 # ===============================
