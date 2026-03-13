@@ -1572,19 +1572,19 @@ def analytics_inteligencia_comercial():
 @app.get("/analytics/inteligencia-comercial")
 def inteligencia_comercial():
 
-    global base_cti
+    dados = supabase.table("cti_anfir").select("*").execute().data
 
-    total_vendas = len(base_cti)
+    total_vendas = len(dados)
 
     faturamento_total = sum(
-        item.get("valor_total",0) for item in base_cti
+        item.get("valor",0) for item in dados
     )
 
     performance_estado = {}
     performance_linha = {}
     ranking_oem = {}
 
-    for item in base_cti:
+    for item in dados:
 
         estado = item.get("estado","NA")
         linha = item.get("linha","NA")
