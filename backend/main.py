@@ -1588,3 +1588,160 @@ def info_cti():
         ]
 
     }
+
+# ============================================================
+# CONTROLE DE PERÍODO ANFIR (EVITAR DUPLICAÇÃO)
+# ============================================================
+
+from datetime import datetime
+
+def limpar_periodo_anfir(ano, mes):
+
+    try:
+
+        supabase.table("cti_anfir") \
+        .delete() \
+        .eq("ano", ano) \
+        .eq("mes", mes) \
+        .execute()
+
+        print(f"[ANFIR] registros antigos removidos {mes}/{ano}")
+
+    except Exception as e:
+
+        print(f"[ANFIR] erro ao limpar período: {str(e)}")
+
+
+# ============================================================
+# UPLOAD ANFIR COM CONTROLE DE MÊS
+# ============================================================
+
+@app.post("/upload/anfir/seguro")
+async def upload_anfir_seguro(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    from planilha_engine import processar_planilha_universal
+
+    registros = processar_planilha_universal(contents)
+
+    ano = datetime.now().year
+    mes = datetime.now().month
+
+    # limpar mês existente
+    limpar_periodo_anfir(ano, mes)
+
+    # adicionar controle de período
+    registros_processados = []
+
+    for r in registros:
+
+        registros_processados.append({
+
+            "ano": ano,
+            "mes": mes,
+            "estado": r.get("estado"),
+            "linha": r.get("linha"),
+            "implementador": r.get("implementador"),
+            "valor": float(r.get("valor", 0))
+
+        })
+
+    batch_size = 500
+
+    for i in range(0, len(registros_processados), batch_size):
+
+        batch = registros_processados[i:i+batch_size]
+
+        supabase.table("cti_anfir").insert(batch).execute()
+
+    return {
+
+        "status": "ANFIR atualizado",
+        "mes": mes,
+        "ano": ano,
+        "registros_inseridos": len(registros_processados)
+
+    }
+
+
+# ============================================================
+# LOG DE UPLOAD ANFIR
+# ============================================================
+
+def registrar_log_upload_anfir(ano, mes, total):
+
+    try:
+
+        supabase.table("anfir_upload_logs").insert({
+
+            "data_upload": datetime.now().isoformat(),
+            "ano": ano,
+            "mes": mes,
+            "linhas_importadas": total
+
+        }).execute()
+
+    except Exception as e:
+
+        print(f"[ANFIR LOG] erro: {str(e)}")
+
+
+# ============================================================
+# EXPORTAÇÃO DE RELATÓRIO PDF
+# ============================================================
+
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from fastapi.responses import FileResponse
+import uuid
+import os
+
+
+@app.get("/analytics/export-pdf")
+def exportar_relatorio_pdf():
+
+    vendas = supabase.table("vendas").select("*").execute()
+
+    total_vendas = len(vendas.data)
+
+    faturamento_total = 0
+
+    for v in vendas.data:
+
+        valor = v.get("valor")
+
+        try:
+
+            faturamento_total += float(valor)
+
+        except:
+
+            pass
+
+    filename = f"/tmp/cti_report_{uuid.uuid4()}.pdf"
+
+    c = canvas.Canvas(filename, pagesize=A4)
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(80, 800, "CTI — Commercial Tactical Intelligence")
+
+    c.setFont("Helvetica", 12)
+
+    c.drawString(80, 760, f"Total de vendas registradas: {total_vendas}")
+    c.drawString(80, 740, f"Faturamento total: R$ {round(faturamento_total,2)}")
+
+    c.drawString(80, 700, "Relatório gerado automaticamente pelo sistema CTI")
+
+    c.drawString(80, 680, f"Data de geração: {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+
+    c.save()
+
+    return FileResponse(
+
+        filename,
+        media_type="application/pdf",
+        filename="cti_relatorio.pdf"
+
+    )
+
