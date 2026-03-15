@@ -1788,3 +1788,111 @@ def periodos_disponiveis():
     ]
 
     return {"periodos": periodos_formatados}
+
+# ==========================================================
+# ENDPOINT — PERÍODOS DISPONÍVEIS
+# ==========================================================
+
+@app.get("/analytics/periodos-disponiveis")
+def periodos_disponiveis():
+
+    try:
+
+        response = supabase.table("cti_anfir")\
+            .select("ano, mes")\
+            .execute()
+
+        dados = response.data
+
+        periodos = sorted(
+            {(d["ano"], d["mes"]) for d in dados},
+            reverse=True
+        )
+
+        lista = [
+            {"ano": p[0], "mes": p[1]}
+            for p in periodos
+        ]
+
+        return {"periodos": lista}
+
+    except Exception as e:
+
+        return {
+            "erro": "falha ao buscar períodos",
+            "detalhe": str(e)
+        }
+
+# ==========================================================
+# ENDPOINT — INTELIGÊNCIA COMERCIAL COM FILTRO
+# ==========================================================
+
+@app.get("/analytics/inteligencia-comercial")
+def inteligencia_comercial(ano: int = None, mes: int = None):
+
+    try:
+
+        query = supabase.table("cti_anfir").select("*")
+
+        if ano:
+            query = query.eq("ano", ano)
+
+        if mes:
+            query = query.eq("mes", mes)
+
+        response = query.execute()
+
+        dados = response.data
+
+        if not dados:
+            return {"mensagem": "sem dados para período"}
+
+        df = pd.DataFrame(dados)
+
+        resumo = {
+            "total_vendas": int(df["valor"].sum()),
+            "total_registros": len(df)
+        }
+
+        performance_estado = (
+            df.groupby("estado")["valor"]
+            .sum()
+            .reset_index()
+            .to_dict(orient="records")
+        )
+
+        performance_linha = (
+            df.groupby("linha")["valor"]
+            .sum()
+            .reset_index()
+            .to_dict(orient="records")
+        )
+
+        ranking_oem = (
+            df.groupby("implementador")["valor"]
+            .sum()
+            .sort_values(ascending=False)
+            .reset_index()
+            .to_dict(orient="records")
+        )
+
+        return {
+
+            "filtro": {
+                "ano": ano,
+                "mes": mes
+            },
+
+            "resumo_geral": resumo,
+            "performance_por_estado": performance_estado,
+            "performance_por_linha": performance_linha,
+            "ranking_oem": ranking_oem
+
+        }
+
+    except Exception as e:
+
+        return {
+            "erro": "falha na análise",
+            "detalhe": str(e)
+        }
