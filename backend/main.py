@@ -379,7 +379,6 @@ def criar_venda(venda: Venda):
             "payload": payload
         }
 
-
 # ============================================================
 # DELETAR VENDA
 # ============================================================
@@ -395,7 +394,6 @@ def deletar_venda(venda_id: str):
     return {
         "deleted": venda_id
     }
-
 
 # ============================================================
 # CORREÇÃO OPERACIONAL DE VENDAS
@@ -431,7 +429,6 @@ def corrigir_venda(payload: dict):
             "detalhe": str(e),
             "payload": venda
         }
-
 
 # ============================================================
 # RESUMO OPERACIONAL DE VENDAS
@@ -472,7 +469,6 @@ def detectar_coluna(df, palavras):
                 return coluna
 
     return None
-
 
 # ============================================================
 # PROCESSADOR UNIVERSAL DE PLANILHAS
@@ -555,7 +551,6 @@ def processar_planilha_universal(contents):
 
     return registros
 
-
 # ============================================================
 # UPLOAD UNIVERSAL DE PLANILHAS
 # ============================================================
@@ -614,7 +609,6 @@ def resolver_cliente_por_cnpj(cnpj):
 
     return None
 
-
 def resolver_cliente_por_nome(nome):
 
     if not nome:
@@ -632,7 +626,6 @@ def resolver_cliente_por_nome(nome):
         return response.data[0]
 
     return None
-
 
 # ============================================================
 # ENRIQUECIMENTO DE REGISTROS ANFIR
@@ -667,7 +660,6 @@ def enriquecer_registro_anfir(registro):
     registro["data_processamento"] = datetime.now().strftime("%Y-%m-%d")
 
     return registro
-
 
 # ============================================================
 # PROCESSAR PRINTS ANFIR
@@ -706,7 +698,6 @@ async def upload_anfir_monitoramento(file: UploadFile = File(...)):
         "registros_processados": len(registros_enriquecidos)
 
     }
-
 
 # ============================================================
 # CONSULTA MONITORAMENTO ANFIR
@@ -942,7 +933,6 @@ def radar_mercado():
 
 DDD_VIENA = ["011", "012", "013", "014", "015", "018"]
 
-
 @app.get("/analytics/radar-ddd")
 def radar_ddd():
 
@@ -999,7 +989,6 @@ def radar_ddd():
 
     }
 
-
 # ============================================================
 # HEATMAP COMERCIAL
 # ============================================================
@@ -1054,7 +1043,6 @@ def heatmap_comercial():
         })
 
     return sorted(resultado, key=lambda x: x["valor_total"], reverse=True)
-
 
 # ============================================================
 # PROJEÇÃO DE POTENCIAL DE MERCADO
@@ -1183,7 +1171,6 @@ def radar_clientes():
 
     }
 
-
 # ============================================================
 # ANÁLISE DE RECORRÊNCIA DE CLIENTES
 # ============================================================
@@ -1266,7 +1253,7 @@ def clientes_recorrencia():
 
     return sorted(resultado, key=lambda x: x["total_compras"], reverse=True)
 
-    # ============================================================
+# ============================================================
 # MODELO DE NEGOCIAÇÃO
 # ============================================================
 
@@ -1280,7 +1267,6 @@ class Negociacao(BaseModel):
     status: str | None = None
     data: str | None = None
     observacao: str | None = None
-
 
 # ============================================================
 # REGISTRAR NEGOCIAÇÃO
@@ -1302,7 +1288,6 @@ def criar_negociacao(negociacao: Negociacao):
     log("Nova negociação registrada")
 
     return response.data
-
 
 # ============================================================
 # LISTAR NEGOCIAÇÕES
@@ -1358,7 +1343,6 @@ def pipeline_comercial():
 
     }
 
-
 # ============================================================
 # MODELO DE CONTATO
 # ============================================================
@@ -1371,7 +1355,6 @@ class Contato(BaseModel):
     email: str | None = None
     relacionamento: str | None = None
     observacoes: str | None = None
-
 
 # ============================================================
 # REGISTRAR CONTATO
@@ -1392,7 +1375,6 @@ def criar_contato(contato: Contato):
 
     return response.data
 
-
 # ============================================================
 # LISTAR CONTATOS
 # ============================================================
@@ -1403,7 +1385,6 @@ def listar_contatos():
     contatos = select_all("contatos")
 
     return contatos
-
 
 # ============================================================
 # CLIENTES COM NEGOCIAÇÃO ATIVA
@@ -1516,7 +1497,6 @@ def dashboard_master():
 
     }
 
-
 # ============================================================
 # STATUS DO SISTEMA
 # ============================================================
@@ -1554,7 +1534,6 @@ def status_cti():
             "detalhe": str(e)
 
         }
-
 
 # ============================================================
 # HEALTHCHECK PARA RENDER
@@ -1617,7 +1596,6 @@ def limpar_periodo_anfir(ano, mes):
 
         print(f"[ANFIR] erro ao limpar período: {str(e)}")
 
-
 # ============================================================
 # UPLOAD ANFIR COM CONTROLE DE MÊS
 # ============================================================
@@ -1668,48 +1646,6 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
             detail=f"Erro ao processar planilha: {str(e)}"
         )
 
-    # =========================
-    # LIMPEZA AUTOMÁTICA ANFIR
-    # =========================
-    
-    # preencher valores nulos
-    df = df.fillna("DESCONHECIDO")
-    
-    # normalizar campos críticos
-    for col in ["oem", "linha", "estado"]:
-        if col in df.columns:
-            df[col] = df[col].replace("", "DESCONHECIDO")
-    
-    # garantir que vendas seja número
-    if "vendas" in df.columns:
-        df["vendas"] = pd.to_numeric(df["vendas"], errors="coerce").fillna(0).astype(int)
-    
-    for r in registros:
-    
-        registros_processados.append({
-            "ano": ano,
-            "mes": mes,
-            "estado": r.get("estado"),
-            "linha": r.get("linha"),
-            "implementador": r.get("implementador"),
-            "valor": float(r.get("valor", 0))
-        })
-    
-    batch_size = 500
-    
-    for i in range(0, len(registros_processados), batch_size):
-    
-        batch = registros_processados[i:i+batch_size]
-    
-        supabase.table("cti_anfir").insert(batch).execute()
-    
-    return {
-        "status": "ANFIR atualizado",
-        "mes": mes,
-        "ano": ano,
-        "registros_inseridos": len(registros_processados)
-    }
-
 # ============================================================
 # LOG DE UPLOAD ANFIR
 # ============================================================
@@ -1731,7 +1667,6 @@ def registrar_log_upload_anfir(ano, mes, total):
 
         print(f"[ANFIR LOG] erro: {str(e)}")
 
-
 # ============================================================
 # EXPORTAÇÃO DE RELATÓRIO PDF
 # ============================================================
@@ -1741,7 +1676,6 @@ from reportlab.pdfgen import canvas
 from fastapi.responses import FileResponse
 import uuid
 import os
-
 
 @app.get("/analytics/export-pdf")
 def exportar_relatorio_pdf():
@@ -1789,29 +1723,6 @@ def exportar_relatorio_pdf():
         filename="cti_relatorio.pdf"
 
     )
-
-# =========================
-# PERÍODOS DISPONÍVEIS
-# =========================
-
-@app.get("/analytics/periodos-disponiveis")
-def periodos_disponiveis():
-
-    res = supabase.table("cti_anfir")\
-        .select("ano, mes")\
-        .execute()
-
-    periodos = list({
-        (item["ano"], item["mes"])
-        for item in res.data
-    })
-
-    periodos_formatados = [
-        {"ano": ano, "mes": mes}
-        for ano, mes in sorted(periodos)
-    ]
-
-    return {"periodos": periodos_formatados}
 
 # ==========================================================
 # ENDPOINT — PERÍODOS DISPONÍVEIS
