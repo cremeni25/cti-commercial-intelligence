@@ -4,6 +4,7 @@
 # ============================================================
 
 from fastapi import FastAPI, UploadFile, File
+from routers.upload_router import router as upload_router
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from supabase import create_client
@@ -28,6 +29,7 @@ app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION
 )
+app.include_router(upload_router)
 
 # ============================================================
 # CORS (frontend GitHub Pages)
