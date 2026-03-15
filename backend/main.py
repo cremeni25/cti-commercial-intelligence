@@ -1628,6 +1628,7 @@ def limpar_periodo_anfir(ano, mes):
 
 @app.post("/upload/anfir/seguro")
 async def upload_anfir_seguro(file: UploadFile = File(...)):
+    df = pd.read_excel(file.file)
 
     contents = await file.read()
 
