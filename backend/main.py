@@ -728,12 +728,22 @@ def consultar_monitoramento():
 # ============================================================
 
 @app.get("/analytics/inteligencia-comercial")
-def inteligencia_comercial():
+def inteligencia_comercial(ano: int = None, mes: int = None):
 
     # ========================================================
     # LEITURA DA BASE CTI (ANFIR)
     # ========================================================
 
+    query = supabase.table("cti_anfir").select("*")
+
+    if ano:
+        query = query.eq("ano", ano)
+
+    if mes:
+        query = query.eq("mes", mes)
+
+    data = query.execute().data
+    
     vendas = select_all("cti_anfir")
 
     analise_estado = {}
@@ -1634,6 +1644,22 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
     # adicionar controle de período
     registros_processados = []
 
+# =========================
+# LIMPEZA AUTOMÁTICA ANFIR
+# =========================
+
+# preencher valores nulos
+df = df.fillna("DESCONHECIDO")
+
+# normalizar campos críticos
+for col in ["oem", "linha", "estado"]:
+    if col in df.columns:
+        df[col] = df[col].replace("", "DESCONHECIDO")
+
+# garantir que vendas seja número
+if "vendas" in df.columns:
+    df["vendas"] = pd.to_numeric(df["vendas"], errors="coerce").fillna(0).astype(int)
+    
     for r in registros:
 
         registros_processados.append({
@@ -1745,3 +1771,25 @@ def exportar_relatorio_pdf():
 
     )
 
+# =========================
+# PERÍODOS DISPONÍVEIS
+# =========================
+
+@app.get("/analytics/periodos-disponiveis")
+def periodos_disponiveis():
+
+    res = supabase.table("cti_anfir")\
+        .select("ano, mes")\
+        .execute()
+
+    periodos = list({
+        (item["ano"], item["mes"])
+        for item in res.data
+    })
+
+    periodos_formatados = [
+        {"ano": ano, "mes": mes}
+        for ano, mes in sorted(periodos)
+    ]
+
+    return {"periodos": periodos_formatados}
