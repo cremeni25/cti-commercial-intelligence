@@ -2,6 +2,8 @@ const API = "https://cti-backend-5ugf.onrender.com"
 
 async function carregarDados(){
 
+try{
+
 const equipamentos = await fetch(API + "/equipamentos").then(r=>r.json())
 const implementadores = await fetch(API + "/implementadores").then(r=>r.json())
 const clientes = await fetch(API + "/clientes").then(r=>r.json())
@@ -11,6 +13,12 @@ renderLinha(equipamentos)
 renderOEM(implementadores)
 renderClientes(clientes)
 renderMetas(metas)
+
+}catch(e){
+
+console.error("Erro ao carregar dados",e)
+
+}
 
 }
 
@@ -34,13 +42,17 @@ datasets:[{data:Object.values(linhas)}]
 
 function renderOEM(data){
 
-const nomes = data.map(i=>i.nome)
+const contagem = {}
+
+data.forEach(i=>{
+contagem[i.nome] = (contagem[i.nome] || 0) + 1
+})
 
 new Chart(document.getElementById("oemChart"),{
 type:"bar",
 data:{
-labels:nomes,
-datasets:[{data:nomes.map(()=>1)}]
+labels:Object.keys(contagem),
+datasets:[{data:Object.values(contagem)}]
 }
 })
 
@@ -65,6 +77,13 @@ datasets:[{data:Object.values(estados)}]
 }
 
 function renderMetas(data){
+
+if(!data || data.length === 0){
+
+console.warn("Nenhuma meta cadastrada")
+return
+
+}
 
 const m = data[0]
 
