@@ -3,6 +3,10 @@
 # CORE SYSTEM
 # ============================================================
 
+from routers.clientes_router import router as clientes_router
+from routers.vendas_router import router as vendas_router
+from routers.negociacoes_router import router as negociacoes_router
+from routers.analytics_router import router as analytics_router
 from core.config import APP_NAME, APP_VERSION
 from fastapi import FastAPI, UploadFile, File
 from routers.upload_router import router as upload_router
@@ -24,6 +28,10 @@ app = FastAPI(
     version=APP_VERSION
 )
 app.include_router(upload_router)
+app.include_router(clientes_router)
+app.include_router(vendas_router)
+app.include_router(negociacoes_router)
+app.include_router(analytics_router)
 
 # ============================================================
 # CORS (frontend GitHub Pages)
