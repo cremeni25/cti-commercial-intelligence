@@ -1,35 +1,33 @@
 const SUPABASE_URL = "https://fgljrlyxylhfaeeqijyoe.supabase.co"
-const SUPABASE_KEY = "SUA_ANON_KEY"
+const SUPABASE_KEY = "SUA_ANON_PUBLIC_KEY"
 
 const supabase = window.supabase.createClient(
   SUPABASE_URL,
   SUPABASE_KEY
 )
 
-document.getElementById("login-form").addEventListener("submit", async (e) => {
+document.getElementById("login-form").addEventListener("submit", async (e)=>{
 
-  e.preventDefault()
+e.preventDefault()
 
-  const email = document.getElementById("email").value
-  const password = document.getElementById("password").value
+const email = document.getElementById("email").value
+const password = document.getElementById("password").value
 
-  const { data, error } = await supabase.auth.signInWithPassword({
+const { data, error } = await supabase.auth.signInWithPassword({
 
-    email,
-    password
+email: email,
+password: password
 
-  })
+})
 
-  if (error) {
+if(error){
 
-    alert("Erro de login")
+alert("Erro de login")
 
-  } else {
+}else{
 
-    localStorage.setItem("cti_token", data.session.access_token)
+window.location.href = "index.html"
 
-    window.location.href = "dashboard.html"
-
-  }
+}
 
 })
