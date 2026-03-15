@@ -1,11 +1,21 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-br">
+
 <head>
+
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
 <title>CTI Intelligence Dashboard</title>
+
 <link rel="stylesheet" href="style.css">
+
+<!-- SUPABASE -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
+
+<!-- CHART -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
 </head>
 
 <body>
@@ -36,7 +46,49 @@
 
 </div>
 
-<script src="dashboard.js"></script>
+
+<!-- ========================= -->
+<!-- SUPABASE CONFIG -->
+<!-- ========================= -->
+
+<script>
+
+const SUPABASE_URL = "https://fgljrlyxylhfaeeqijyoe.supabase.co"
+const SUPABASE_KEY = "SUA_ANON_PUBLIC_KEY"
+
+const supabase = window.supabase.createClient(
+SUPABASE_URL,
+SUPABASE_KEY
+)
+
+</script>
+
+
+<!-- ========================= -->
+<!-- AUTH GUARD -->
+<!-- ========================= -->
+
+<script>
+
+async function verificarLogin(){
+
+const { data } = await supabase.auth.getSession()
+
+if(!data.session){
+
+window.location.href = "login.html"
+
+}
+
+}
+
+verificarLogin()
+
+</script>
+
+
+<!-- DASHBOARD ENGINE -->
+<script src="js/dashboard.js"></script>
 
 </body>
 </html>
