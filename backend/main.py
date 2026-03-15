@@ -1628,22 +1628,49 @@ def limpar_periodo_anfir(ano, mes):
 
 @app.post("/upload/anfir/seguro")
 async def upload_anfir_seguro(file: UploadFile = File(...)):
-    df = pd.read_excel(file.file)
 
-    contents = await file.read()
+    try:
 
-    from planilha_engine import processar_planilha_universal
+        # ler arquivo enviado
+        contents = await file.read()
 
-    registros = processar_planilha_universal(contents)
+        # processar planilha
+        registros = processar_planilha_universal(contents)
 
-    ano = datetime.now().year
-    mes = datetime.now().month
+        registros_processados = []
 
-    # limpar mês existente
-    limpar_periodo_anfir(ano, mes)
+        for r in registros:
 
-    # adicionar controle de período
-    registros_processados = []
+            registros_processados.append({
+                "ano": r.get("ano"),
+                "mes": r.get("mes"),
+                "estado": r.get("estado"),
+                "linha": r.get("linha"),
+                "implementador": r.get("implementador"),
+                "valor": float(r.get("valor", 0))
+            })
+
+        batch_size = 500
+
+        for i in range(0, len(registros_processados), batch_size):
+
+            batch = registros_processados[i:i + batch_size]
+
+            supabase.table("cti_anfir").insert(batch).execute()
+
+        return {
+            "status": "ANFIR atualizado",
+            "registros_inseridos": len(registros_processados)
+        }
+
+    except Exception as e:
+
+        print("ERRO UPLOAD ANFIR:", e)
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"Erro ao processar planilha: {str(e)}"
+        )
 
     # =========================
     # LIMPEZA AUTOMÁTICA ANFIR
