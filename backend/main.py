@@ -1659,37 +1659,32 @@ for col in ["oem", "linha", "estado"]:
 # garantir que vendas seja número
 if "vendas" in df.columns:
     df["vendas"] = pd.to_numeric(df["vendas"], errors="coerce").fillna(0).astype(int)
-    
-    for r in registros:
 
-        registros_processados.append({
+for r in registros:
 
-            "ano": ano,
-            "mes": mes,
-            "estado": r.get("estado"),
-            "linha": r.get("linha"),
-            "implementador": r.get("implementador"),
-            "valor": float(r.get("valor", 0))
-
-        })
-
-    batch_size = 500
-
-    for i in range(0, len(registros_processados), batch_size):
-
-        batch = registros_processados[i:i+batch_size]
-
-        supabase.table("cti_anfir").insert(batch).execute()
-
-    return {
-
-        "status": "ANFIR atualizado",
-        "mes": mes,
+    registros_processados.append({
         "ano": ano,
-        "registros_inseridos": len(registros_processados)
+        "mes": mes,
+        "estado": r.get("estado"),
+        "linha": r.get("linha"),
+        "implementador": r.get("implementador"),
+        "valor": float(r.get("valor", 0))
+    })
 
-    }
+batch_size = 500
 
+for i in range(0, len(registros_processados), batch_size):
+
+    batch = registros_processados[i:i+batch_size]
+
+    supabase.table("cti_anfir").insert(batch).execute()
+
+return {
+    "status": "ANFIR atualizado",
+    "mes": mes,
+    "ano": ano,
+    "registros_inseridos": len(registros_processados)
+}
 
 # ============================================================
 # LOG DE UPLOAD ANFIR
