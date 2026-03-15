@@ -3,6 +3,7 @@
 # CORE SYSTEM
 # ============================================================
 
+from core.config import APP_NAME, APP_VERSION
 from fastapi import FastAPI, UploadFile, File
 from routers.upload_router import router as upload_router
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,13 +14,6 @@ import os
 import io
 import re
 from datetime import datetime
-
-# ============================================================
-# CONFIGURAÇÃO GLOBAL
-# ============================================================
-
-APP_NAME = "CTI Commercial Intelligence"
-APP_VERSION = "2.0"
 
 # ============================================================
 # INICIALIZAÇÃO FASTAPI
