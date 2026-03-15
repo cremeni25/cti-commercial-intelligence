@@ -1,5 +1,5 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from backend.planilha_engine import processar_planilha_universal
+from planilha_engine import processar_planilha_universal
 from supabase import create_client
 import os
 
