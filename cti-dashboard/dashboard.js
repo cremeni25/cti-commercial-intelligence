@@ -1,4 +1,4 @@
-const API = "https://cti-backend-5ugf.onrender.com"
+const API = "https://api.cti-intelligence.com"
 
 async function carregarDados(){
 
