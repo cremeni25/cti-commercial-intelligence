@@ -1887,3 +1887,8 @@ def market_intelligence():
         "market_dominance": engine.market_dominance()
 
     }
+
+@app.get("/engine/test-db")
+def test_db():
+    data = supabase.table("cti_anfir").select("*").limit(5).execute()
+    return data.data
