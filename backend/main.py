@@ -18,6 +18,7 @@ import os
 import io
 import re
 from datetime import datetime
+from engine.market_engine import MarketEngine
 
 # ============================================================
 # INICIALIZAÇÃO FASTAPI
@@ -1839,3 +1840,28 @@ def inteligencia_comercial(ano: int = None, mes: int = None):
             "erro": "falha na análise",
             "detalhe": str(e)
         }
+
+# ==========================================================
+# ENGINE CTI — MARKET INTELLIGENCE
+# ==========================================================
+
+@app.get("/engine/market-intelligence")
+def market_intelligence():
+
+    vendas = select_all("cti_anfir")
+
+    engine = MarketEngine(vendas)
+
+    return {
+
+        "regional_analysis": engine.regional_analysis(),
+
+        "oem_share": engine.oem_share(),
+
+        "product_lines": engine.product_lines(),
+
+        "underperforming_regions": engine.underperforming_regions(),
+
+        "market_dominance": engine.market_dominance()
+
+    }
