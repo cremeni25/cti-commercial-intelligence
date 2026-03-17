@@ -13,7 +13,7 @@ class MarketEngine:
         for d in self.data:
             d["valor"] = d.get("valor") or 0
 
-        # cria dataframe (ESSENCIAL)
+        # cria dataframe
         self.df = pd.DataFrame(self.data)
 
     # ------------------------------
@@ -92,3 +92,16 @@ class MarketEngine:
         oportunidades = regional[regional < media]
 
         return oportunidades.reset_index().to_dict(orient="records")
+
+    # ------------------------------
+    # ENGINE COMPLETA (ORQUESTRADOR)
+    # ------------------------------
+
+    def market_intelligence(self):
+
+        return {
+            "regional_analysis": self.regional_analysis(),
+            "oem_share": self.oem_share(),
+            "product_lines": self.product_lines(),
+            "underperforming_regions": self.underperforming_regions()
+        }
