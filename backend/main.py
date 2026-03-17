@@ -20,6 +20,7 @@ import re
 from datetime import datetime
 from engine.market_engine import MarketEngine
 from core.supabase_client import supabase
+from routers.engine_router import router as engine_router
 
 # ============================================================
 # INICIALIZAÇÃO FASTAPI
@@ -34,6 +35,7 @@ app.include_router(clientes_router)
 app.include_router(vendas_router)
 app.include_router(negociacoes_router)
 app.include_router(analytics_router)
+app.include_router(engine_router)
 
 # ============================================================
 # CORS (frontend GitHub Pages)
