@@ -3,7 +3,8 @@ import pandas as pd
 class MarketEngine:
 
     def __init__(self, data):
-        self.df = pd.DataFrame(data)
+        # remove registros inválidos
+        self.data = [d for d in data if d.get("estado") and d.get("linha")]
 
     # ------------------------------
     # ANALISE REGIONAL
