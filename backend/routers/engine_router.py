@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from core.supabase_client import get_supabase
+from core.supabase_client import supabase
 from engine.market_engine import MarketEngine
 
 router = APIRouter()
@@ -10,8 +10,6 @@ router = APIRouter()
 
 @router.get("/engine/test-db")
 def test_db():
-
-    supabase = get_supabase()
 
     response = supabase.table("cti_anfir").select("*").limit(10).execute()
 
@@ -24,8 +22,6 @@ def test_db():
 
 @router.get("/engine/market-intelligence")
 def market_intelligence():
-
-    supabase = get_supabase()
 
     response = supabase.table("cti_anfir").select("*").execute()
 
