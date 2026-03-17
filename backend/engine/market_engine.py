@@ -3,14 +3,27 @@ import pandas as pd
 class MarketEngine:
 
     def __init__(self, data):
-        # remove registros inválidos
-        self.data = [d for d in data if d.get("estado") and d.get("linha")]
+        # limpa dados inválidos
+        self.data = [
+            d for d in data
+            if d.get("estado") and d.get("linha")
+        ]
+
+        # garante valor válido
+        for d in self.data:
+            d["valor"] = d.get("valor") or 0
+
+        # cria dataframe (ESSENCIAL)
+        self.df = pd.DataFrame(self.data)
 
     # ------------------------------
     # ANALISE REGIONAL
     # ------------------------------
 
     def regional_analysis(self):
+
+        if self.df.empty:
+            return []
 
         regional = (
             self.df.groupby("estado")["valor"]
@@ -27,7 +40,13 @@ class MarketEngine:
 
     def oem_share(self):
 
+        if self.df.empty:
+            return []
+
         total = self.df["valor"].sum()
+
+        if total == 0:
+            return []
 
         oem = (
             self.df.groupby("implementador")["valor"]
@@ -45,6 +64,9 @@ class MarketEngine:
 
     def product_lines(self):
 
+        if self.df.empty:
+            return []
+
         linhas = (
             self.df.groupby("linha")["valor"]
             .sum()
@@ -59,6 +81,9 @@ class MarketEngine:
     # ------------------------------
 
     def underperforming_regions(self):
+
+        if self.df.empty:
+            return []
 
         regional = self.df.groupby("estado")["valor"].sum()
 
