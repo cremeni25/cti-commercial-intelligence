@@ -1,19 +1,19 @@
+# engine/market_engine.py
+
 import pandas as pd
 
 class MarketEngine:
 
     def __init__(self, data):
-        # limpa dados inválidos
+
         self.data = [
             d for d in data
             if d.get("estado") and d.get("linha")
         ]
 
-        # garante valor válido
         for d in self.data:
-            d["valor"] = d.get("valor") or 0
+            d["valor"] = float(d.get("valor") or 0)
 
-        # cria dataframe
         self.df = pd.DataFrame(self.data)
 
     # ------------------------------
@@ -94,7 +94,44 @@ class MarketEngine:
         return oportunidades.reset_index().to_dict(orient="records")
 
     # ------------------------------
-    # ENGINE COMPLETA (ORQUESTRADOR)
+    # 🧠 NOVO — DIAGNÓSTICO ESTRATÉGICO
+    # ------------------------------
+
+    def diagnostico_estrategico(self):
+
+        if self.df.empty:
+            return {
+                "status": "sem dados"
+            }
+
+        total = self.df["valor"].sum()
+
+        if total == 0:
+            return {
+                "status": "sem faturamento"
+            }
+
+        # REGIÕES FORTES
+        regional = self.df.groupby("estado")["valor"].sum()
+        media = regional.mean()
+
+        fortes = regional[regional >= media]
+        fracos = regional[regional < media]
+
+        # LINHAS FORTES
+        linhas = self.df.groupby("linha")["valor"].sum()
+        top_linhas = linhas.sort_values(ascending=False).head(3)
+
+        return {
+            "total_faturamento": float(total),
+            "media_regional": float(media),
+            "regioes_fortes": fortes.reset_index().to_dict(orient="records"),
+            "regioes_fracas": fracos.reset_index().to_dict(orient="records"),
+            "top_linhas": top_linhas.reset_index().to_dict(orient="records")
+        }
+
+    # ------------------------------
+    # ORQUESTRADOR COMPLETO
     # ------------------------------
 
     def market_intelligence(self):
@@ -103,5 +140,6 @@ class MarketEngine:
             "regional_analysis": self.regional_analysis(),
             "oem_share": self.oem_share(),
             "product_lines": self.product_lines(),
-            "underperforming_regions": self.underperforming_regions()
+            "underperforming_regions": self.underperforming_regions(),
+            "diagnostico": self.diagnostico_estrategico()
         }
