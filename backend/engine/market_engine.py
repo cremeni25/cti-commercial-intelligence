@@ -2,44 +2,34 @@
 
 import pandas as pd
 
-PRECO_TABELA = {
-    "VECTOR": 178000,
-    "VECTOR HE19": 169000,
-    "X47700": 172000,
-    "X4 7500": 158000,
-
-    "SUPRA 750": 105000,
-    "SUPRA 850": 113000,
-    "SUPRA 1150": 128000,
-
-    "CITIMAX 280": 14500,
-    "CITIMAX 400": 18500,
-    "CITIMAX 500 ACOPLADO": 27000,
-    "CITIMAX 500 ACOP / ELÉTRICO": 41000,
-    "CITIMAX 600 ACOPLADO": 28000,
-    "CITIMAX 600 ACOP / ELÉTRICO": 43000,
-    "CITIMAX 700 ACOPLADO": 29000,
-    "CITIMAX 700 ACOP / ELÉTRICO": 45000,
-
-    "XARIOS 350": 43000,
-    "XARIOS 6": 53000
-}
 
 class MarketEngine:
 
     def __init__(self, data):
 
+        # ------------------------------
+        # FILTRO DE DADOS VÁLIDOS
+        # ------------------------------
         self.data = [
             d for d in data
             if d.get("estado") and d.get("linha")
         ]
 
+        # ------------------------------
+        # NORMALIZAÇÃO ESTRUTURAL
+        # ------------------------------
         for d in self.data:
 
-            linha = (d.get("linha") or "").upper().strip()
+            d["estado"] = (d.get("estado") or "").upper().strip()
+            d["linha"] = (d.get("linha") or "").upper().strip()
+            d["implementador"] = (d.get("implementador") or "").upper().strip()
 
-            d["valor"] = PRECO_TABELA.get(linha, 0)
+            # ⚠️ VALOR REMOVIDO (ANFIR NÃO POSSUI VALOR REAL)
+            d["valor"] = None
 
+        # ------------------------------
+        # DATAFRAME
+        # ------------------------------
         self.df = pd.DataFrame(self.data)
 
     # ------------------------------
@@ -51,8 +41,13 @@ class MarketEngine:
         if self.df.empty:
             return []
 
+        df = self.df.copy()
+
+        # substitui None por 0 apenas para cálculo
+        df["valor"] = df["valor"].fillna(0)
+
         regional = (
-            self.df.groupby("estado")["valor"]
+            df.groupby("estado")["valor"]
             .sum()
             .reset_index()
             .sort_values("valor", ascending=False)
@@ -69,13 +64,16 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        total = self.df["valor"].sum()
+        df = self.df.copy()
+        df["valor"] = df["valor"].fillna(0)
+
+        total = df["valor"].sum()
 
         if total == 0:
             return []
 
         oem = (
-            self.df.groupby("implementador")["valor"]
+            df.groupby("implementador")["valor"]
             .sum()
             .reset_index()
         )
@@ -93,8 +91,11 @@ class MarketEngine:
         if self.df.empty:
             return []
 
+        df = self.df.copy()
+        df["valor"] = df["valor"].fillna(0)
+
         linhas = (
-            self.df.groupby("linha")["valor"]
+            df.groupby("linha")["valor"]
             .sum()
             .reset_index()
             .sort_values("valor", ascending=False)
@@ -111,7 +112,10 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        regional = self.df.groupby("estado")["valor"].sum()
+        df = self.df.copy()
+        df["valor"] = df["valor"].fillna(0)
+
+        regional = df.groupby("estado")["valor"].sum()
 
         media = regional.mean()
 
@@ -120,7 +124,7 @@ class MarketEngine:
         return oportunidades.reset_index().to_dict(orient="records")
 
     # ------------------------------
-    # 🧠 NOVO — DIAGNÓSTICO ESTRATÉGICO
+    # 🧠 DIAGNÓSTICO ESTRATÉGICO
     # ------------------------------
 
     def diagnostico_estrategico(self):
@@ -130,22 +134,23 @@ class MarketEngine:
                 "status": "sem dados"
             }
 
-        total = self.df["valor"].sum()
+        df = self.df.copy()
+        df["valor"] = df["valor"].fillna(0)
+
+        total = df["valor"].sum()
 
         if total == 0:
             return {
-                "status": "sem faturamento"
+                "status": "sem faturamento (ANFIR não possui valores financeiros)"
             }
 
-        # REGIÕES FORTES
-        regional = self.df.groupby("estado")["valor"].sum()
+        regional = df.groupby("estado")["valor"].sum()
         media = regional.mean()
 
         fortes = regional[regional >= media]
         fracos = regional[regional < media]
 
-        # LINHAS FORTES
-        linhas = self.df.groupby("linha")["valor"].sum()
+        linhas = df.groupby("linha")["valor"].sum()
         top_linhas = linhas.sort_values(ascending=False).head(3)
 
         return {
@@ -155,6 +160,33 @@ class MarketEngine:
             "regioes_fracas": fracos.reset_index().to_dict(orient="records"),
             "top_linhas": top_linhas.reset_index().to_dict(orient="records")
         }
+
+    # ------------------------------
+    # DOMINÂNCIA DE MERCADO
+    # ------------------------------
+
+    def market_dominance(self):
+
+        if self.df.empty:
+            return []
+
+        df = self.df.copy()
+        df["valor"] = df["valor"].fillna(0)
+
+        total = df["valor"].sum()
+
+        if total == 0:
+            return []
+
+        dominance = (
+            df.groupby("implementador")["valor"]
+            .sum()
+            .reset_index()
+        )
+
+        dominance["dominancia"] = (dominance["valor"] / total) * 100
+
+        return dominance.sort_values("dominancia", ascending=False).to_dict(orient="records")
 
     # ------------------------------
     # ORQUESTRADOR COMPLETO
@@ -167,25 +199,6 @@ class MarketEngine:
             "oem_share": self.oem_share(),
             "product_lines": self.product_lines(),
             "underperforming_regions": self.underperforming_regions(),
-            "diagnostico": self.diagnostico_estrategico()
+            "diagnostico": self.diagnostico_estrategico(),
+            "market_dominance": self.market_dominance()
         }
-
-def market_dominance(self):
-
-    if self.df.empty:
-        return []
-
-    total = self.df["valor"].sum()
-
-    if total == 0:
-        return []
-
-    dominance = (
-        self.df.groupby("implementador")["valor"]
-        .sum()
-        .reset_index()
-    )
-
-    dominance["dominancia"] = (dominance["valor"] / total) * 100
-
-    return dominance.sort_values("dominancia", ascending=False).to_dict(orient="records")
