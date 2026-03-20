@@ -2,6 +2,29 @@
 
 import pandas as pd
 
+PRECO_TABELA = {
+    "VECTOR": 178000,
+    "VECTOR HE19": 169000,
+    "X47700": 172000,
+    "X4 7500": 158000,
+
+    "SUPRA 750": 105000,
+    "SUPRA 850": 113000,
+    "SUPRA 1150": 128000,
+
+    "CITIMAX 280": 14500,
+    "CITIMAX 400": 18500,
+    "CITIMAX 500 ACOPLADO": 27000,
+    "CITIMAX 500 ACOP / ELÉTRICO": 41000,
+    "CITIMAX 600 ACOPLADO": 28000,
+    "CITIMAX 600 ACOP / ELÉTRICO": 43000,
+    "CITIMAX 700 ACOPLADO": 29000,
+    "CITIMAX 700 ACOP / ELÉTRICO": 45000,
+
+    "XARIOS 350": 43000,
+    "XARIOS 6": 53000
+}
+
 class MarketEngine:
 
     def __init__(self, data):
@@ -12,7 +35,10 @@ class MarketEngine:
         ]
 
         for d in self.data:
-            d["valor"] = float(d.get("valor") or 0)
+
+            linha = (d.get("linha") or "").upper().strip()
+
+            d["valor"] = PRECO_TABELA.get(linha, 0)
 
         self.df = pd.DataFrame(self.data)
 
