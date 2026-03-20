@@ -143,3 +143,23 @@ class MarketEngine:
             "underperforming_regions": self.underperforming_regions(),
             "diagnostico": self.diagnostico_estrategico()
         }
+
+def market_dominance(self):
+
+    if self.df.empty:
+        return []
+
+    total = self.df["valor"].sum()
+
+    if total == 0:
+        return []
+
+    dominance = (
+        self.df.groupby("implementador")["valor"]
+        .sum()
+        .reset_index()
+    )
+
+    dominance["dominancia"] = (dominance["valor"] / total) * 100
+
+    return dominance.sort_values("dominancia", ascending=False).to_dict(orient="records")
