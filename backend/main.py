@@ -1905,3 +1905,15 @@ def win_loss_intelligence():
         "insights": engine.insights(),
         "analise_perdas": engine.analise_perdas()
     }
+
+@app.get("/analytics/win-loss-recomendacoes")
+def win_loss_recomendacoes():
+
+    anf_ir = supabase.table("cti_anfir").select("*").execute().data
+    negociacoes = supabase.table("negociacoes").select("*").execute().data
+
+    engine = WinLossEngine(anf_ir, negociacoes)
+
+    return {
+        "recomendacoes": engine.recomendacoes()
+    }
