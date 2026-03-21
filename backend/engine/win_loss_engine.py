@@ -165,3 +165,47 @@ def analise_perdas(self):
         })
 
     return insights
+
+# ------------------------------
+# 🤖 RECOMENDAÇÃO COMERCIAL
+# ------------------------------
+
+def recomendacoes(self):
+
+    self.normalizar()
+    base = self.cruzar_dados()
+
+    if base.empty:
+        return []
+
+    recomendacoes = []
+
+    # analisar perdas
+    perdas = base[base["status"] == "PERDIDO"]
+
+    for _, row in perdas.iterrows():
+
+        motivo = str(row.get("motivo_perda", "")).upper()
+        segmento = row.get("segmento")
+        estado = row.get("estado")
+
+        acao = "Revisar abordagem comercial"
+
+        if "PRAZO" in motivo:
+            acao = "Oferecer melhor condição de pagamento (prazo maior)"
+
+        elif "PRECO" in motivo:
+            acao = "Avaliar desconto ou reposicionamento de preço"
+
+        elif "ESTOQUE" in motivo or "ENTREGA" in motivo:
+            acao = "Priorizar disponibilidade / logística"
+
+        recomendacoes.append({
+            "cliente_id": row.get("cliente_id"),
+            "estado": estado,
+            "segmento": segmento,
+            "motivo_perda": motivo,
+            "recomendacao": acao
+        })
+
+    return recomendacoes
