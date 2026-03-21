@@ -1,109 +1,78 @@
-import pandas as pd
+# engine/win_loss_engine.py
 
 class WinLossEngine:
 
-    def __init__(self, anf ir_data, negociacoes_data):
+    def __init__(self, anfir_data, negociacoes_data):
 
-        self.anfir = pd.DataFrame(anf ir_data)
-        self.neg = pd.DataFrame(negociacoes_data)
+        self.anfir = anfir_data or []
+        self.negociacoes = negociacoes_data or []
 
-    # --------------------------------------------------
-    # NORMALIZAÇÃO
-    # --------------------------------------------------
-
-    def normalizar(self, df):
-
-        if df.empty:
-            return df
-
-        for col in ["estado", "cidade", "segmento", "linha"]:
-
-            if col in df.columns:
-                df[col] = df[col].astype(str).str.upper().str.strip()
-
-        return df
-
-    # --------------------------------------------------
-    # CRUZAMENTO PRINCIPAL
-    # --------------------------------------------------
-
-    def cruzar(self):
-
-        if self.anfir.empty or self.neg.empty:
-            return {
-                "status": "sem dados suficientes"
-            }
-
-        anf ir = self.normalizar(self.anfir.copy())
-        neg = self.normalizar(self.neg.copy())
-
-        resultado = []
-
-        for _, venda in anf ir.iterrows():
-
-            match = neg[
-                (neg["estado"] == venda.get("estado")) &
-                (neg["segmento"] == venda.get("segmento"))
-            ]
-
-            if match.empty:
-
-                resultado.append({
-                    "estado": venda.get("estado"),
-                    "segmento": venda.get("segmento"),
-                    "status": "PERDA",
-                    "motivo": "sem negociação registrada"
-                })
-
-            else:
-
-                for _, n in match.iterrows():
-
-                    status = (n.get("status") or "").upper()
-
-                    if "FECHADO" in status or "GANHO" in status:
-
-                        resultado.append({
-                            "estado": venda.get("estado"),
-                            "segmento": venda.get("segmento"),
-                            "status": "GANHO",
-                            "motivo": "negociação convertida"
-                        })
-
-                    else:
-
-                        resultado.append({
-                            "estado": venda.get("estado"),
-                            "segmento": venda.get("segmento"),
-                            "status": "PERDA",
-                            "motivo": "negociação não convertida"
-                        })
-
-        return resultado
-
-    # --------------------------------------------------
-    # RESUMO EXECUTIVO
-    # --------------------------------------------------
+    # -----------------------------------------
+    # RESUMO GERAL
+    # -----------------------------------------
 
     def resumo(self):
 
-        dados = self.cruzar()
+        total_anfir = len(self.anfir)
+        total_negociacoes = len(self.negociacoes)
 
-        if isinstance(dados, dict):
-            return dados
+        ganhos = 0
+        perdas = 0
 
-        df = pd.DataFrame(dados)
+        clientes_anfir = set([
+            (r.get("cliente_resolvido") or r.get("cliente") or "").upper()
+            for r in self.anfir
+        ])
 
-        total = len(df)
+        for n in self.negociacoes:
 
-        ganhos = len(df[df["status"] == "GANHO"])
-        perdas = len(df[df["status"] == "PERDA"])
+            cliente = (n.get("cliente") or "").upper()
 
-        taxa = (ganhos / total) * 100 if total > 0 else 0
+            if cliente in clientes_anfir:
+                ganhos += 1
+            else:
+                perdas += 1
+
+        taxa = 0
+
+        if total_negociacoes > 0:
+            taxa = round((ganhos / total_negociacoes) * 100, 2)
 
         return {
-            "total": total,
+            "total_anfir": total_anfir,
+            "total_negociacoes": total_negociacoes,
             "ganhos": ganhos,
             "perdas": perdas,
-            "taxa_conversao": round(taxa, 2)
+            "taxa_conversao": taxa
         }
+
+    # -----------------------------------------
+    # CRUZAMENTO DETALHADO
+    # -----------------------------------------
+
+    def cruzar(self):
+
+        resultado = []
+
+        clientes_anfir = set([
+            (r.get("cliente_resolvido") or r.get("cliente") or "").upper()
+            for r in self.anfir
+        ])
+
+        for n in self.negociacoes:
+
+            cliente = (n.get("cliente") or "").upper()
+
+            status = "GANHO" if cliente in clientes_anfir else "PERDIDO"
+
+            resultado.append({
+
+                "cliente": cliente,
+                "estado": n.get("estado"),
+                "produto": n.get("produto"),
+                "valor": n.get("valor"),
+                "status": status
+
+            })
+
+        return resultado
