@@ -1870,27 +1870,6 @@ def market_intelligence():
 
     }
 
-@app.get("/engine/market-intelligence")
-def market_intelligence():
-
-    vendas = supabase.table("cti_anfir").select("*").execute().data
-
-    engine = MarketEngine(vendas)
-
-    return {
-
-        "regional_analysis": engine.regional_analysis(),
-
-        "oem_share": engine.oem_share(),
-
-        "product_lines": engine.product_lines(),
-
-        "underperforming_regions": engine.underperforming_regions(),
-
-        "market_dominance": engine.market_dominance()
-
-    }
-
 @app.get("/engine/test-db")
 def test_db():
     data = supabase.table("cti_anfir").select("*").limit(5).execute()
