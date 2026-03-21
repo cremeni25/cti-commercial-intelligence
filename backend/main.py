@@ -19,6 +19,7 @@ import io
 import re
 from datetime import datetime
 from engine.market_engine import MarketEngine
+from engine.win_loss_engine import WinLossEngine
 from core.supabase_client import supabase
 from routers.engine_router import router as engine_router
 
@@ -1894,3 +1895,29 @@ def market_intelligence():
 def test_db():
     data = supabase.table("cti_anfir").select("*").limit(5).execute()
     return data.data
+
+# ==========================================================
+# WIN / LOSS ANALYSIS
+# ==========================================================
+
+@app.get("/analytics/win-loss")
+def win_loss():
+
+    try:
+
+        anf ir = select_all("cti_anfir")
+        negociacoes = select_all("negociacoes")
+
+        engine = WinLossEngine(anf ir, negociacoes)
+
+        return {
+            "resumo": engine.resumo(),
+            "detalhado": engine.cruzar()
+        }
+
+    except Exception as e:
+
+        return {
+            "erro": "falha na análise win/loss",
+            "detalhe": str(e)
+        }
