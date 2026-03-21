@@ -6,18 +6,17 @@ class WinLossEngine:
 
     def __init__(self, anf_ir_data, negociacoes_data):
 
-        # DataFrames
         self.anfir = pd.DataFrame(anf_ir_data)
         self.neg = pd.DataFrame(negociacoes_data)
 
-        # Segurança
+        # segurança
         if self.anfir.empty:
-            self.anfir = pd.DataFrame(columns=["cliente", "estado", "linha", "segmento"])
+            self.anfir = pd.DataFrame(columns=["cliente_id", "estado", "linha", "segmento"])
 
         if self.neg.empty:
             self.neg = pd.DataFrame(columns=[
-                "cliente", "estado", "produto",
-                "status", "valor", "condicao_pagamento"
+                "cliente_id", "produto", "status",
+                "valor_estimado", "motivo_perda"
             ])
 
     # ------------------------------
@@ -26,19 +25,12 @@ class WinLossEngine:
 
     def normalizar(self):
 
-        # ANFIR
-        if not self.anfir.empty:
-            self.anfir["cliente"] = self.anfir["cliente"].astype(str).str.upper().str.strip()
-            self.anfir["linha"] = self.anfir["linha"].astype(str).str.upper().str.strip()
-
-        # NEGOCIAÇÕES
         if not self.neg.empty:
-            self.neg["cliente"] = self.neg["cliente"].astype(str).str.upper().str.strip()
-            self.neg["produto"] = self.neg["produto"].astype(str).str.upper().str.strip()
             self.neg["status"] = self.neg["status"].astype(str).str.upper().str.strip()
+            self.neg["produto"] = self.neg["produto"].astype(str).str.upper().str.strip()
 
     # ------------------------------
-    # MATCH CLIENTE
+    # CRUZAMENTO POR CLIENTE_ID
     # ------------------------------
 
     def cruzar_dados(self):
@@ -46,11 +38,10 @@ class WinLossEngine:
         if self.neg.empty:
             return pd.DataFrame()
 
-        # merge por cliente
         merged = pd.merge(
             self.neg,
             self.anfir,
-            on="cliente",
+            on="cliente_id",
             how="left",
             suffixes=("_neg", "_anfir")
         )
@@ -97,7 +88,7 @@ class WinLossEngine:
         }
 
     # ------------------------------
-    # INSIGHT COMERCIAL
+    # INSIGHTS
     # ------------------------------
 
     def insights(self):
@@ -114,15 +105,14 @@ class WinLossEngine:
 
         for _, row in perdas.iterrows():
 
-            insight = {
-                "cliente": row.get("cliente"),
-                "produto_ofertado": row.get("produto"),
-                "segmento": row.get("segmento"),
+            insights.append({
+                "cliente_id": row.get("cliente_id"),
+                "produto": row.get("produto"),
                 "estado": row.get("estado"),
-                "condicao_pagamento": row.get("condicao_pagamento"),
-                "alerta": "Perda identificada — revisar condição comercial"
-            }
-
-            insights.append(insight)
+                "segmento": row.get("segmento"),
+                "valor_estimado": row.get("valor_estimado"),
+                "motivo_perda": row.get("motivo_perda"),
+                "alerta": "Perda — revisar estratégia comercial"
+            })
 
         return insights
