@@ -1905,10 +1905,10 @@ def win_loss():
 
     try:
 
-        anf ir = select_all("cti_anfir")
+        anfir = select_all("cti_anfir")
         negociacoes = select_all("negociacoes")
 
-        engine = WinLossEngine(anf ir, negociacoes)
+        engine = WinLossEngine(anfir, negociacoes)
 
         return {
             "resumo": engine.resumo(),
