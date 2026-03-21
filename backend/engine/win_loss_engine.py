@@ -9,7 +9,6 @@ class WinLossEngine:
         self.anfir = pd.DataFrame(anf_ir_data)
         self.neg = pd.DataFrame(negociacoes_data)
 
-        # segurança
         if self.anfir.empty:
             self.anfir = pd.DataFrame(columns=["cliente_id", "estado", "linha", "segmento"])
 
@@ -20,9 +19,6 @@ class WinLossEngine:
             ])
 
     # ------------------------------
-    # NORMALIZAÇÃO
-    # ------------------------------
-
     def normalizar(self):
 
         if not self.neg.empty:
@@ -30,15 +26,12 @@ class WinLossEngine:
             self.neg["produto"] = self.neg["produto"].astype(str).str.upper().str.strip()
 
     # ------------------------------
-    # CRUZAMENTO POR CLIENTE_ID
-    # ------------------------------
-
     def cruzar_dados(self):
 
         if self.neg.empty:
             return pd.DataFrame()
 
-        merged = pd.merge(
+        return pd.merge(
             self.neg,
             self.anfir,
             on="cliente_id",
@@ -46,12 +39,7 @@ class WinLossEngine:
             suffixes=("_neg", "_anfir")
         )
 
-        return merged
-
     # ------------------------------
-    # WIN / LOSS
-    # ------------------------------
-
     def calcular_win_loss(self):
 
         self.normalizar()
@@ -72,25 +60,18 @@ class WinLossEngine:
         perdas = base[base["status"] == "PERDIDO"]
 
         total = len(base)
-        total_ganhos = len(ganhos)
-        total_perdas = len(perdas)
-
-        taxa = (total_ganhos / total * 100) if total > 0 else 0
 
         return {
             "resumo": {
                 "total_negociacoes": int(total),
-                "ganhos": int(total_ganhos),
-                "perdas": int(total_perdas),
-                "taxa_conversao": round(taxa, 2)
+                "ganhos": int(len(ganhos)),
+                "perdas": int(len(perdas)),
+                "taxa_conversao": round((len(ganhos) / total * 100), 2) if total > 0 else 0
             },
             "detalhado": base.fillna("").to_dict(orient="records")
         }
 
     # ------------------------------
-    # INSIGHTS
-    # ------------------------------
-
     def insights(self):
 
         self.normalizar()
@@ -99,17 +80,17 @@ class WinLossEngine:
         if base.empty:
             return []
 
-        insights = []
-
         perdas = base[base["status"] == "PERDIDO"]
+
+        insights = []
 
         for _, row in perdas.iterrows():
 
             insights.append({
                 "cliente_id": row.get("cliente_id"),
                 "produto": row.get("produto"),
-                "estado": row.get("estado"),
-                "segmento": row.get("segmento"),
+                "estado": row.get("estado", ""),
+                "segmento": row.get("segmento", ""),
                 "valor_estimado": row.get("valor_estimado"),
                 "motivo_perda": row.get("motivo_perda"),
                 "alerta": "Perda — revisar estratégia comercial"
@@ -117,95 +98,83 @@ class WinLossEngine:
 
         return insights
 
-# ------------------------------
-# 🧠 INTELIGÊNCIA DE PERDAS
-# ------------------------------
+    # ------------------------------
+    def analise_perdas(self):
 
-def analise_perdas(self):
+        self.normalizar()
+        base = self.cruzar_dados()
 
-    self.normalizar()
-    base = self.cruzar_dados()
+        if base.empty:
+            return []
 
-    if base.empty:
-        return []
+        perdas = base[base["status"] == "PERDIDO"]
 
-    perdas = base[base["status"] == "PERDIDO"]
+        if perdas.empty:
+            return []
 
-    if perdas.empty:
-        return []
+        analise = (
+            perdas.groupby("motivo_perda")
+            .size()
+            .reset_index(name="quantidade")
+            .sort_values("quantidade", ascending=False)
+        )
 
-    analise = (
-        perdas.groupby("motivo_perda")
-        .size()
-        .reset_index(name="quantidade")
-        .sort_values("quantidade", ascending=False)
-    )
+        resultado = []
 
-    insights = []
+        for _, row in analise.iterrows():
 
-    for _, row in analise.iterrows():
+            motivo = row["motivo_perda"]
+            qtd = int(row["quantidade"])
 
-        motivo = row["motivo_perda"]
-        qtd = int(row["quantidade"])
+            if "PRAZO" in str(motivo).upper():
+                acao = "Revisar política de prazo"
+            elif "PRECO" in str(motivo).upper():
+                acao = "Revisar competitividade de preço"
+            elif "ESTOQUE" in str(motivo).upper():
+                acao = "Problema de disponibilidade"
+            else:
+                acao = "Análise manual"
 
-        # inteligência simples (evoluiremos depois)
-        if "PRAZO" in str(motivo).upper():
-            acao = "Revisar política de prazo (possível perda por financiamento)"
-        elif "PRECO" in str(motivo).upper():
-            acao = "Revisar competitividade de preço"
-        elif "ESTOQUE" in str(motivo).upper():
-            acao = "Problema de disponibilidade / entrega"
-        else:
-            acao = "Análise manual necessária"
+            resultado.append({
+                "motivo": motivo,
+                "quantidade": qtd,
+                "acao_sugerida": acao
+            })
 
-        insights.append({
-            "motivo": motivo,
-            "quantidade": qtd,
-            "acao_sugerida": acao
-        })
+        return resultado
 
-    return insights
+    # ------------------------------
+    def recomendacoes(self):
 
-# ------------------------------
-# 🤖 RECOMENDAÇÃO COMERCIAL
-# ------------------------------
+        self.normalizar()
+        base = self.cruzar_dados()
 
-def recomendacoes(self):
+        if base.empty:
+            return []
 
-    self.normalizar()
-    base = self.cruzar_dados()
+        perdas = base[base["status"] == "PERDIDO"]
 
-    if base.empty:
-        return []
+        recomendacoes = []
 
-    recomendacoes = []
+        for _, row in perdas.iterrows():
 
-    # analisar perdas
-    perdas = base[base["status"] == "PERDIDO"]
+            motivo = str(row.get("motivo_perda", "")).upper()
 
-    for _, row in perdas.iterrows():
+            acao = "Revisar abordagem comercial"
 
-        motivo = str(row.get("motivo_perda", "")).upper()
-        segmento = row.get("segmento")
-        estado = row.get("estado")
+            if "PRAZO" in motivo:
+                acao = "Oferecer melhor condição de pagamento"
+            elif "PRECO" in motivo:
+                acao = "Avaliar política de preço"
+            elif "ESTOQUE" in motivo:
+                acao = "Ajustar disponibilidade/logística"
 
-        acao = "Revisar abordagem comercial"
+            recomendacoes.append({
+                "cliente_id": row.get("cliente_id"),
+                "estado": row.get("estado", ""),
+                "segmento": row.get("segmento", ""),
+                "motivo_perda": motivo,
+                "recomendacao": acao
+            })
 
-        if "PRAZO" in motivo:
-            acao = "Oferecer melhor condição de pagamento (prazo maior)"
-
-        elif "PRECO" in motivo:
-            acao = "Avaliar desconto ou reposicionamento de preço"
-
-        elif "ESTOQUE" in motivo or "ENTREGA" in motivo:
-            acao = "Priorizar disponibilidade / logística"
-
-        recomendacoes.append({
-            "cliente_id": row.get("cliente_id"),
-            "estado": estado,
-            "segmento": segmento,
-            "motivo_perda": motivo,
-            "recomendacao": acao
-        })
-
-    return recomendacoes
+        return recomendacoes
