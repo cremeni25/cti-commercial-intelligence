@@ -1882,21 +1882,12 @@ def test_db():
 @app.get("/analytics/win-loss")
 def win_loss():
 
-    try:
+    anf_ir = supabase.table("cti_anfir").select("*").execute().data
+    negociacoes = supabase.table("negociacoes").select("*").execute().data
 
-        anfir = select_all("cti_anfir")
-        negociacoes = select_all("negociacoes")
+    engine = WinLossEngine(anf_ir, negociacoes)
 
-        engine = WinLossEngine(anfir, negociacoes)
-
-        return {
-            "resumo": engine.resumo(),
-            "detalhado": engine.cruzar()
-        }
-
-    except Exception as e:
-
-        return {
-            "erro": "falha na análise win/loss",
-            "detalhe": str(e)
-        }
+    return {
+        "win_loss": engine.calcular_win_loss(),
+        "insights": engine.insights()
+    }
