@@ -1,78 +1,128 @@
 # engine/win_loss_engine.py
 
+import pandas as pd
+
 class WinLossEngine:
 
-    def __init__(self, anfir_data, negociacoes_data):
+    def __init__(self, anf_ir_data, negociacoes_data):
 
-        self.anfir = anfir_data or []
-        self.negociacoes = negociacoes_data or []
+        # DataFrames
+        self.anfir = pd.DataFrame(anf_ir_data)
+        self.neg = pd.DataFrame(negociacoes_data)
 
-    # -----------------------------------------
-    # RESUMO GERAL
-    # -----------------------------------------
+        # Segurança
+        if self.anfir.empty:
+            self.anfir = pd.DataFrame(columns=["cliente", "estado", "linha", "segmento"])
 
-    def resumo(self):
+        if self.neg.empty:
+            self.neg = pd.DataFrame(columns=[
+                "cliente", "estado", "produto",
+                "status", "valor", "condicao_pagamento"
+            ])
 
-        total_anfir = len(self.anfir)
-        total_negociacoes = len(self.negociacoes)
+    # ------------------------------
+    # NORMALIZAÇÃO
+    # ------------------------------
 
-        ganhos = 0
-        perdas = 0
+    def normalizar(self):
 
-        clientes_anfir = set([
-            (r.get("cliente_resolvido") or r.get("cliente") or "").upper()
-            for r in self.anfir
-        ])
+        # ANFIR
+        if not self.anfir.empty:
+            self.anfir["cliente"] = self.anfir["cliente"].astype(str).str.upper().str.strip()
+            self.anfir["linha"] = self.anfir["linha"].astype(str).str.upper().str.strip()
 
-        for n in self.negociacoes:
+        # NEGOCIAÇÕES
+        if not self.neg.empty:
+            self.neg["cliente"] = self.neg["cliente"].astype(str).str.upper().str.strip()
+            self.neg["produto"] = self.neg["produto"].astype(str).str.upper().str.strip()
+            self.neg["status"] = self.neg["status"].astype(str).str.upper().str.strip()
 
-            cliente = (n.get("cliente") or "").upper()
+    # ------------------------------
+    # MATCH CLIENTE
+    # ------------------------------
 
-            if cliente in clientes_anfir:
-                ganhos += 1
-            else:
-                perdas += 1
+    def cruzar_dados(self):
 
-        taxa = 0
+        if self.neg.empty:
+            return pd.DataFrame()
 
-        if total_negociacoes > 0:
-            taxa = round((ganhos / total_negociacoes) * 100, 2)
+        # merge por cliente
+        merged = pd.merge(
+            self.neg,
+            self.anfir,
+            on="cliente",
+            how="left",
+            suffixes=("_neg", "_anfir")
+        )
+
+        return merged
+
+    # ------------------------------
+    # WIN / LOSS
+    # ------------------------------
+
+    def calcular_win_loss(self):
+
+        self.normalizar()
+        base = self.cruzar_dados()
+
+        if base.empty:
+            return {
+                "resumo": {
+                    "total_negociacoes": 0,
+                    "ganhos": 0,
+                    "perdas": 0,
+                    "taxa_conversao": 0
+                },
+                "detalhado": []
+            }
+
+        ganhos = base[base["status"] == "GANHO"]
+        perdas = base[base["status"] == "PERDIDO"]
+
+        total = len(base)
+        total_ganhos = len(ganhos)
+        total_perdas = len(perdas)
+
+        taxa = (total_ganhos / total * 100) if total > 0 else 0
 
         return {
-            "total_anfir": total_anfir,
-            "total_negociacoes": total_negociacoes,
-            "ganhos": ganhos,
-            "perdas": perdas,
-            "taxa_conversao": taxa
+            "resumo": {
+                "total_negociacoes": int(total),
+                "ganhos": int(total_ganhos),
+                "perdas": int(total_perdas),
+                "taxa_conversao": round(taxa, 2)
+            },
+            "detalhado": base.fillna("").to_dict(orient="records")
         }
 
-    # -----------------------------------------
-    # CRUZAMENTO DETALHADO
-    # -----------------------------------------
+    # ------------------------------
+    # INSIGHT COMERCIAL
+    # ------------------------------
 
-    def cruzar(self):
+    def insights(self):
 
-        resultado = []
+        self.normalizar()
+        base = self.cruzar_dados()
 
-        clientes_anfir = set([
-            (r.get("cliente_resolvido") or r.get("cliente") or "").upper()
-            for r in self.anfir
-        ])
+        if base.empty:
+            return []
 
-        for n in self.negociacoes:
+        insights = []
 
-            cliente = (n.get("cliente") or "").upper()
+        perdas = base[base["status"] == "PERDIDO"]
 
-            status = "GANHO" if cliente in clientes_anfir else "PERDIDO"
+        for _, row in perdas.iterrows():
 
-            resultado.append({
+            insight = {
+                "cliente": row.get("cliente"),
+                "produto_ofertado": row.get("produto"),
+                "segmento": row.get("segmento"),
+                "estado": row.get("estado"),
+                "condicao_pagamento": row.get("condicao_pagamento"),
+                "alerta": "Perda identificada — revisar condição comercial"
+            }
 
-                "cliente": cliente,
-                "estado": n.get("estado"),
-                "produto": n.get("produto"),
-                "valor": n.get("valor"),
-                "status": status
+            insights.append(insight)
 
-            })
-
-        return resultado
+        return insights
