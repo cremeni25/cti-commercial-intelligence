@@ -116,3 +116,52 @@ class WinLossEngine:
             })
 
         return insights
+
+# ------------------------------
+# 🧠 INTELIGÊNCIA DE PERDAS
+# ------------------------------
+
+def analise_perdas(self):
+
+    self.normalizar()
+    base = self.cruzar_dados()
+
+    if base.empty:
+        return []
+
+    perdas = base[base["status"] == "PERDIDO"]
+
+    if perdas.empty:
+        return []
+
+    analise = (
+        perdas.groupby("motivo_perda")
+        .size()
+        .reset_index(name="quantidade")
+        .sort_values("quantidade", ascending=False)
+    )
+
+    insights = []
+
+    for _, row in analise.iterrows():
+
+        motivo = row["motivo_perda"]
+        qtd = int(row["quantidade"])
+
+        # inteligência simples (evoluiremos depois)
+        if "PRAZO" in str(motivo).upper():
+            acao = "Revisar política de prazo (possível perda por financiamento)"
+        elif "PRECO" in str(motivo).upper():
+            acao = "Revisar competitividade de preço"
+        elif "ESTOQUE" in str(motivo).upper():
+            acao = "Problema de disponibilidade / entrega"
+        else:
+            acao = "Análise manual necessária"
+
+        insights.append({
+            "motivo": motivo,
+            "quantidade": qtd,
+            "acao_sugerida": acao
+        })
+
+    return insights
