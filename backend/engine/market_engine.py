@@ -1,35 +1,77 @@
-# engine/market_engine.py
-
 import pandas as pd
 
+# ============================================================
+# PREÇO OFICIAL (TABELA BRUTA)
+# ============================================================
+
+PRECO_TABELA = {
+    "VECTOR 8500": 178000,
+    "VECTOR HE19": 169000,
+    "X4 7700": 172000,
+    "X4 7500": 158000,
+
+    "SUPRA 750": 105000,
+    "SUPRA 850": 113000,
+    "SUPRA 1150": 128000,
+
+    "CITIMAX 280": 14500,
+    "CITIMAX 400": 18500,
+    "CITIMAX 500": 27000,
+    "CITIMAX 500 AE": 41000,
+
+    "D6": 28000,
+    "D6 AE": 43000,
+    "D7": 29000,
+    "D7 AE": 45000,
+
+    "XARIOS 350": 43000,
+    "XARIOS 6": 53000
+}
+
+# ============================================================
+# RELAÇÃO SEGMENTO → PRODUTOS
+# ============================================================
+
+SEGMENTO_MAP = {
+    "TRAILER": [
+        "VECTOR 8500", "VECTOR HE19", "X4 7700", "X4 7500"
+    ],
+    "DIESEL TRUCK": [
+        "SUPRA 1150", "SUPRA 850", "SUPRA 750"
+    ],
+    "DIRECT DRIVE": [
+        "CITIMAX 280", "CITIMAX 400", "CITIMAX 500", "CITIMAX 500 AE",
+        "D6", "D6 AE", "D7", "D7 AE",
+        "XARIOS 350", "XARIOS 6"
+    ]
+}
+
+# ============================================================
+# ENGINE
+# ============================================================
 
 class MarketEngine:
 
     def __init__(self, data):
 
-        # ------------------------------
-        # FILTRO DE DADOS VÁLIDOS
-        # ------------------------------
         self.data = [
             d for d in data
-            if d.get("estado") and d.get("linha")
+            if d.get("estado") and d.get("segmento")
         ]
 
-        # ------------------------------
-        # NORMALIZAÇÃO ESTRUTURAL
-        # ------------------------------
         for d in self.data:
 
-            d["estado"] = (d.get("estado") or "").upper().strip()
-            d["linha"] = (d.get("linha") or "").upper().strip()
-            d["implementador"] = (d.get("implementador") or "").upper().strip()
+            segmento = (d.get("segmento") or "").upper().strip()
+            linha = (d.get("linha") or "").upper().strip()
 
-            # ⚠️ VALOR REMOVIDO (ANFIR NÃO POSSUI VALOR REAL)
-            d["valor"] = None
+            produtos_validos = SEGMENTO_MAP.get(segmento, [])
 
-        # ------------------------------
-        # DATAFRAME
-        # ------------------------------
+            # MATCH EXATO
+            if linha in produtos_validos:
+                d["valor"] = PRECO_TABELA.get(linha, None)
+            else:
+                d["valor"] = None  # NÃO INVENTA VALOR
+
         self.df = pd.DataFrame(self.data)
 
     # ------------------------------
@@ -41,10 +83,7 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.copy()
-
-        # substitui None por 0 apenas para cálculo
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
 
         regional = (
             df.groupby("estado")["valor"]
@@ -64,8 +103,7 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.copy()
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
 
         total = df["valor"].sum()
 
@@ -91,8 +129,7 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.copy()
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
 
         linhas = (
             df.groupby("linha")["valor"]
@@ -112,8 +149,7 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.copy()
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
 
         regional = df.groupby("estado")["valor"].sum()
 
@@ -124,25 +160,20 @@ class MarketEngine:
         return oportunidades.reset_index().to_dict(orient="records")
 
     # ------------------------------
-    # 🧠 DIAGNÓSTICO ESTRATÉGICO
+    # DIAGNÓSTICO ESTRATÉGICO
     # ------------------------------
 
     def diagnostico_estrategico(self):
 
         if self.df.empty:
-            return {
-                "status": "sem dados"
-            }
+            return {"status": "sem dados"}
 
-        df = self.df.copy()
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
+
+        if df.empty:
+            return {"status": "sem valor válido"}
 
         total = df["valor"].sum()
-
-        if total == 0:
-            return {
-                "status": "sem faturamento (ANFIR não possui valores financeiros)"
-            }
 
         regional = df.groupby("estado")["valor"].sum()
         media = regional.mean()
@@ -170,8 +201,7 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.copy()
-        df["valor"] = df["valor"].fillna(0)
+        df = self.df.dropna(subset=["valor"])
 
         total = df["valor"].sum()
 
@@ -189,7 +219,7 @@ class MarketEngine:
         return dominance.sort_values("dominancia", ascending=False).to_dict(orient="records")
 
     # ------------------------------
-    # ORQUESTRADOR COMPLETO
+    # ORQUESTRADOR
     # ------------------------------
 
     def market_intelligence(self):
