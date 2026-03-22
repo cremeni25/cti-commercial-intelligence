@@ -1917,3 +1917,136 @@ def win_loss_recomendacoes():
     return {
         "recomendacoes": engine.recomendacoes()
     }
+
+# ============================================================
+# CTI V3 — CAMADA INTELIGENTE (SEM IMPACTO NO SISTEMA ATUAL)
+# ============================================================
+
+DDD_VIENA = ["011", "012", "013", "014", "015", "018"]
+
+def obter_ddd_safe(cidade):
+
+    try:
+        cidade = normalizar_texto(cidade)
+
+        response = supabase.table("cidades_ddd")\
+            .select("ddd")\
+            .ilike("cidade", f"%{cidade}%")\
+            .execute()
+
+        if response.data:
+            return response.data[0]["ddd"]
+
+    except:
+        pass
+
+    return None
+
+
+def normalizar_cnpj(cnpj):
+
+    if not cnpj:
+        return None
+
+    return re.sub(r"\D", "", str(cnpj))
+
+
+def indexar_por_cnpj(lista):
+
+    mapa = {}
+
+    for item in lista:
+
+        cnpj = normalizar_cnpj(item.get("cnpj"))
+
+        if not cnpj:
+            continue
+
+        mapa[cnpj] = item
+
+    return mapa
+
+
+@app.get("/cti/v3/win-loss-real")
+def cti_win_loss_real():
+
+    anf_ir = select_all("cti_anfir")
+    negociacoes = select_all("negociacoes")
+
+    anf_map = indexar_por_cnpj(anf_ir)
+    neg_map = indexar_por_cnpj(negociacoes)
+
+    ganhos = []
+    perdas = []
+    fora_area = []
+
+    for cnpj, venda in anf_map.items():
+
+        cidade = venda.get("cidade")
+        ddd = venda.get("ddd") or obter_ddd_safe(cidade)
+
+        if ddd not in DDD_VIENA:
+            fora_area.append(venda)
+            continue
+
+        if cnpj in neg_map:
+            ganhos.append(venda)
+        else:
+            perdas.append(venda)
+
+    return {
+        "ganhos": len(ganhos),
+        "perdas": len(perdas),
+        "fora_area": len(fora_area)
+    }
+
+
+@app.get("/cti/v3/perdas-detalhadas")
+def cti_perdas_detalhadas():
+
+    anf_ir = select_all("cti_anfir")
+    negociacoes = select_all("negociacoes")
+
+    anf_map = indexar_por_cnpj(anf_ir)
+    neg_map = indexar_por_cnpj(negociacoes)
+
+    perdas = []
+
+    for cnpj, venda in anf_map.items():
+
+        cidade = venda.get("cidade")
+        ddd = venda.get("ddd") or obter_ddd_safe(cidade)
+
+        if ddd not in DDD_VIENA:
+            continue
+
+        if cnpj not in neg_map:
+
+            perdas.append({
+                "cliente": venda.get("cliente"),
+                "cidade": cidade,
+                "ddd": ddd,
+                "valor": venda.get("valor"),
+                "implementador": venda.get("implementador")
+            })
+
+    return perdas[:100]
+
+
+@app.get("/cti/v3/oportunidades")
+def cti_oportunidades():
+
+    perdas = cti_perdas_detalhadas()
+
+    oportunidades = []
+
+    for p in perdas:
+
+        oportunidades.append({
+            "cliente": p["cliente"],
+            "acao": "Atuar imediatamente",
+            "regiao": p["cidade"],
+            "ddd": p["ddd"]
+        })
+
+    return oportunidades[:50]
