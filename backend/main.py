@@ -2050,3 +2050,115 @@ def cti_oportunidades():
         })
 
     return oportunidades[:50]
+
+# ============================================================
+# CTI CORE — CONSOLIDAÇÃO REAL DE DADOS
+# ============================================================
+
+def resolver_cnpj_unificado(registro):
+
+    # prioridade: CNPJ direto
+    if registro.get("cnpj"):
+        return re.sub(r"\D", "", str(registro.get("cnpj")))
+
+    # placa
+    if registro.get("placa"):
+        veiculo = resolver_cliente_por_placa(registro.get("placa"))
+        if veiculo:
+            return veiculo.get("cnpj")
+
+    # nome
+    if registro.get("cliente"):
+        cliente = resolver_cliente_por_nome(registro.get("cliente"))
+        if cliente:
+            return cliente.get("cnpj")
+
+    return None
+
+
+def obter_ddd_unificado(cidade):
+
+    try:
+        cidade = normalizar_texto(cidade)
+
+        response = supabase.table("cidades_ddd")\
+            .select("ddd")\
+            .ilike("cidade", f"%{cidade}%")\
+            .execute()
+
+        if response.data:
+            return response.data[0]["ddd"]
+
+    except:
+        pass
+
+    return None
+
+
+@app.get("/cti/core/consolidar")
+def cti_consolidar():
+
+    anf_ir = select_all("cti_anfir")
+    negociacoes = select_all("negociacoes")
+    pipeline = select_all("pipeline")
+
+    base_final = []
+
+    # ========================================================
+    # ANFIR → MERCADO (RESULTADO)
+    # ========================================================
+
+    for r in anf_ir:
+
+        cnpj = resolver_cnpj_unificado(r)
+
+        base_final.append({
+            "cliente": r.get("cliente"),
+            "cnpj": cnpj,
+            "cidade": r.get("cidade"),
+            "ddd": obter_ddd_unificado(r.get("cidade")),
+            "origem": "ANFIR",
+            "status": "REALIZADO",
+            "valor": r.get("valor")
+        })
+
+    # ========================================================
+    # NEGOCIAÇÕES → TENTATIVA
+    # ========================================================
+
+    for n in negociacoes:
+
+        cnpj = resolver_cnpj_unificado(n)
+
+        base_final.append({
+            "cliente": n.get("cliente"),
+            "cnpj": cnpj,
+            "cidade": n.get("cidade"),
+            "ddd": obter_ddd_unificado(n.get("cidade")),
+            "origem": "NEGOCIACAO",
+            "status": normalizar_texto(n.get("status")),
+            "valor": n.get("valor")
+        })
+
+    # ========================================================
+    # PIPELINE → INTENÇÃO
+    # ========================================================
+
+    for p in pipeline:
+
+        cnpj = resolver_cnpj_unificado(p)
+
+        base_final.append({
+            "cliente": p.get("cliente"),
+            "cnpj": cnpj,
+            "cidade": p.get("cidade"),
+            "ddd": obter_ddd_unificado(p.get("cidade")),
+            "origem": "FUNIL",
+            "status": "INTENCAO",
+            "valor": p.get("valor")
+        })
+
+    return {
+        "total_registros": len(base_final),
+        "amostra": base_final[:50]
+    }
