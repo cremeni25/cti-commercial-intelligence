@@ -1635,11 +1635,11 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
             cnpj = None
 
     if r.get("cnpj"):
-            cnpj = re.sub(r"\D", "", str(r.get("cnpj")))
-    else:
-            cliente_db = resolver_cliente_por_nome(cliente)
+    cnpj = re.sub(r"\D", "", str(r.get("cnpj")))
+else:
+    cliente_db = resolver_cliente_por_nome(cliente)
     if cliente_db:
-            cnpj = cliente_db.get("cnpj")
+        cnpj = cliente_db.get("cnpj")
 
             ddd = obter_ddd(cidade)
 
