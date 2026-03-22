@@ -1628,15 +1628,34 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
 
         for r in registros:
 
-            registros_processados.append({
-                "ano": r.get("ano"),
-                "mes": r.get("mes"),
-                "estado": r.get("estado"),
-                "linha": r.get("linha"),
-                "implementador": r.get("implementador"),
-                "valor": float(r.get("valor", 0))
-            })
+            cliente = normalizar_texto(r.get("cliente"))
+            cidade = normalizar_texto(r.get("cidade"))
+            estado = normalizar_texto(r.get("estado"))
 
+            cnpj = None
+
+    if r.get("cnpj"):
+            cnpj = re.sub(r"\D", "", str(r.get("cnpj")))
+    else:
+            cliente_db = resolver_cliente_por_nome(cliente)
+    if cliente_db:
+            cnpj = cliente_db.get("cnpj")
+
+            ddd = obter_ddd(cidade)
+
+            registros_processados.append({
+                "cliente": cliente,
+                "cidade": cidade,
+                "estado": estado,
+                "cnpj": cnpj,
+                "ddd": ddd,
+                "linha": normalizar_texto(r.get("linha")),
+                "implementador": normalizar_texto(r.get("fabricante")),
+                "valor": float(r.get("valor", 0)),
+                "ano": r.get("ano"),
+                "mes": r.get("mes")
+        })
+          
         batch_size = 500
 
         for i in range(0, len(registros_processados), batch_size):
