@@ -2346,7 +2346,7 @@ def processar_cti():
         cidade = normalizar_texto(r.get("cidade"))
 
         base.append({
-            "data": r.get("data"),
+            "data": r.get("data_venda"),
             "cliente": cliente,
             "cnpj": mapa_cnpj.get(cliente),
             "cidade": cidade,
