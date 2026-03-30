@@ -2452,3 +2452,41 @@ def normalizar_chave(texto):
     texto = re.sub(r"\s+", " ", texto).strip()
 
     return texto
+
+# ============================================================
+# VALIDAR DDD
+# ============================================================
+
+@app.get("/cti/validar-ddd")
+def validar_ddd():
+
+    dados = select_all("cti_unificado")
+
+    total = len(dados)
+    com_ddd = 0
+    sem_ddd = 0
+
+    exemplos_sem_ddd = []
+
+    for r in dados:
+
+        if r.get("ddd"):
+            com_ddd += 1
+        else:
+            sem_ddd += 1
+
+            if len(exemplos_sem_ddd) < 10:
+                exemplos_sem_ddd.append({
+                    "cliente": r.get("cliente"),
+                    "cidade": r.get("cidade")
+                })
+
+    percentual = (com_ddd / total * 100) if total > 0 else 0
+
+    return {
+        "total": total,
+        "com_ddd": com_ddd,
+        "sem_ddd": sem_ddd,
+        "percentual_cobertura": round(percentual, 2),
+        "exemplos_sem_ddd": exemplos_sem_ddd
+    }
