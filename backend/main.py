@@ -2344,6 +2344,7 @@ def processar_cti():
 
         cliente = normalizar_chave(r.get("cliente"))
         cidade = normalizar_chave(r.get("cidade"))
+        cidade = enriquecer_cidade(cliente, cidade, mapa_cidade)
 
         base.append({
             "data": r.get("data_venda"),
@@ -2368,12 +2369,13 @@ def processar_cti():
     for r in negociacoes:
 
         cliente = normalizar_chave(r.get("cliente"))
+        cidade = enriquecer_cidade(cliente, None, mapa_cidade)
 
         base.append({
             "data": r.get("data"),
             "cliente": cliente,
             "cnpj": mapa_cnpj.get(cliente),
-            "cidade": None,
+            "cidade": cidade,
             "uf": None,
             "ddd": None,
             "valor": limpar_valor(r.get("valor")),
@@ -2392,12 +2394,13 @@ def processar_cti():
     for r in funil:
 
         cliente = normalizar_chave(r.get("cliente"))
+        cidade = enriquecer_cidade(cliente, None, mapa_cidade)
 
         base.append({
             "data": r.get("data"),
             "cliente": cliente,
             "cnpj": mapa_cnpj.get(cliente),
-            "cidade": None,
+            "cidade": cidade,
             "uf": None,
             "ddd": None,
             "valor": limpar_valor(r.get("valor")),
@@ -2490,3 +2493,21 @@ def validar_ddd():
         "percentual_cobertura": round(percentual, 2),
         "exemplos_sem_ddd": exemplos_sem_ddd
     }
+
+def enriquecer_cidade(cliente, cidade, mapa_cidade):
+    if cidade:
+        return cidade
+    return mapa_cidade.get(cliente)
+
+def gerar_mapa_cidade():
+    mapa = {}
+    anfirs = select_all("cti_anfir")
+
+    for r in anfirs:
+        cliente = normalizar_texto(r.get("cliente"))
+        cidade = normalizar_texto(r.get("cidade"))
+
+        if cliente and cidade:
+            mapa[cliente] = cidade
+
+    return mapa
