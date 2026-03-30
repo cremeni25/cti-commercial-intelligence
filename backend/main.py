@@ -2307,3 +2307,122 @@ async def upload_negociacoes(file: UploadFile = File(...)):
         "status": "negociacoes carregadas",
         "registros": len(registros)
     }
+
+# ============================================================
+# CTI PROCESSADOR (CNPJ + CONSOLIDAÇÃO INICIAL)
+# ============================================================
+
+@app.post("/cti/processar")
+def processar_cti():
+
+    anfirs = select_all("cti_anfir")
+    negociacoes = select_all("negociacoes")
+    funil = select_all("funil")
+    contatos = select_all("contatos")
+    cidades = select_all("cidades_ddd")
+
+    # MAPA CNPJ
+    mapa_cnpj = {}
+    for c in contatos:
+        cliente = normalizar_texto(c.get("cliente"))
+        cnpj = re.sub(r"\D", "", str(c.get("cnpj")))
+        if cliente:
+            mapa_cnpj[cliente] = cnpj
+
+    # MAPA DDD
+    mapa_ddd = {}
+    for c in cidades:
+        cidade = normalizar_texto(c.get("cidade"))
+        mapa_ddd[cidade] = str(c.get("ddd"))
+
+    base = []
+
+    # =========================
+    # ANFIR
+    # =========================
+    for r in anfirs:
+
+        cliente = normalizar_texto(r.get("cliente"))
+        cidade = normalizar_texto(r.get("cidade"))
+
+        base.append({
+            "data": r.get("data"),
+            "cliente": cliente,
+            "cnpj": mapa_cnpj.get(cliente),
+            "cidade": cidade,
+            "uf": r.get("estado"),
+            "ddd": mapa_ddd.get(cidade),
+            "valor": 0,
+            "condicao_comercial": None,
+            "oem": r.get("implementador"),
+            "locadora": None,
+            "vendedor": None,
+            "tipo_venda": "indireta_oem" if r.get("implementador") else "direta",
+            "marca_caminhao": None,
+            "modelo_caminhao": None
+        })
+
+    # =========================
+    # NEGOCIAÇÕES
+    # =========================
+    for r in negociacoes:
+
+        cliente = normalizar_texto(r.get("cliente"))
+
+        base.append({
+            "data": r.get("data"),
+            "cliente": cliente,
+            "cnpj": mapa_cnpj.get(cliente),
+            "cidade": None,
+            "uf": None,
+            "ddd": None,
+            "valor": limpar_valor(r.get("valor")),
+            "condicao_comercial": r.get("condicao_comercial"),
+            "oem": None,
+            "locadora": None,
+            "vendedor": r.get("vendedor"),
+            "tipo_venda": "direta",
+            "marca_caminhao": None,
+            "modelo_caminhao": None
+        })
+
+    # =========================
+    # FUNIL
+    # =========================
+    for r in funil:
+
+        cliente = normalizar_texto(r.get("cliente"))
+
+        base.append({
+            "data": r.get("data"),
+            "cliente": cliente,
+            "cnpj": mapa_cnpj.get(cliente),
+            "cidade": None,
+            "uf": None,
+            "ddd": None,
+            "valor": limpar_valor(r.get("valor")),
+            "condicao_comercial": None,
+            "oem": None,
+            "locadora": None,
+            "vendedor": r.get("representante"),
+            "tipo_venda": "direta",
+            "marca_caminhao": None,
+            "modelo_caminhao": None
+        })
+
+    # LIMPAR BASE ANTIGA
+    supabase.table("cti_unificado").delete().neq("id", "").execute()
+
+    # INSERIR NOVA BASE
+    batch_size = 500
+
+    for i in range(0, len(base), batch_size):
+
+        batch = base[i:i + batch_size]
+
+        supabase.table("cti_unificado").insert(batch).execute()
+
+    return {
+        "status": "cti consolidado",
+        "registros": len(base)
+    }
