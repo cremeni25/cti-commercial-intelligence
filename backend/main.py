@@ -2342,8 +2342,8 @@ def processar_cti():
     # =========================
     for r in anfirs:
 
-        cliente = normalizar_texto(r.get("cliente"))
-        cidade = normalizar_texto(r.get("cidade"))
+        cliente = normalizar_chave(r.get("cliente"))
+        cidade = normalizar_chave(r.get("cidade"))
 
         base.append({
             "data": r.get("data_venda"),
@@ -2367,7 +2367,7 @@ def processar_cti():
     # =========================
     for r in negociacoes:
 
-        cliente = normalizar_texto(r.get("cliente"))
+        cliente = normalizar_chave(r.get("cliente"))
 
         base.append({
             "data": r.get("data"),
@@ -2391,7 +2391,7 @@ def processar_cti():
     # =========================
     for r in funil:
 
-        cliente = normalizar_texto(r.get("cliente"))
+        cliente = normalizar_chave(r.get("cliente"))
 
         base.append({
             "data": r.get("data"),
