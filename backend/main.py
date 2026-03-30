@@ -2411,7 +2411,7 @@ def processar_cti():
         })
 
     # LIMPAR BASE ANTIGA
-    supabase.table("cti_unificado").delete().neq("id", "").execute()
+    supabase.table("cti_unificado").delete().gt("created_at", "1900-01-01").execute()
 
     # INSERIR NOVA BASE
     batch_size = 500
