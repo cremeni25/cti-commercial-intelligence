@@ -2345,6 +2345,10 @@ def processar_cti():
     for r in anfirs:
 
         cliente = normalizar_chave(r.get("cliente"))
+
+        if not cliente:
+            continue
+            
         cidade = normalizar_chave(r.get("cidade"))
         cidade = enriquecer_cidade(cliente, cidade, mapa_cidade)
 
@@ -2371,6 +2375,10 @@ def processar_cti():
     for r in negociacoes:
 
         cliente = normalizar_chave(r.get("cliente"))
+
+        if not cliente:
+            continue
+            
         cidade = enriquecer_cidade(cliente, None, mapa_cidade)
 
         base.append({
@@ -2396,6 +2404,10 @@ def processar_cti():
     for r in funil:
 
         cliente = normalizar_chave(r.get("cliente"))
+
+        if not cliente:
+            continue
+        
         cidade = enriquecer_cidade(cliente, None, mapa_cidade)
 
         base.append({
@@ -2497,9 +2509,14 @@ def validar_ddd():
     }
 
 def enriquecer_cidade(cliente, cidade, mapa_cidade):
+
     if cidade:
         return cidade
-    return mapa_cidade.get(cliente)
+
+    if cliente and cliente in mapa_cidade:
+        return mapa_cidade.get(cliente)
+
+    return None
 
 def gerar_mapa_cidade():
     mapa = {}
