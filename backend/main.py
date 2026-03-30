@@ -2426,3 +2426,29 @@ def processar_cti():
         "status": "cti consolidado",
         "registros": len(base)
     }
+
+# ============================================================
+# NORMALIZAÇÃO AVANÇADA
+# ============================================================
+
+def normalizar_chave(texto):
+    if not texto:
+        return ""
+
+    texto = normalizar_texto(texto)
+
+    substituicoes = {
+        " LTDA": "",
+        " EIRELI": "",
+        " SA": "",
+        " S/A": "",
+        " ME": "",
+        " EPP": ""
+    }
+
+    for k, v in substituicoes.items():
+        texto = texto.replace(k, v)
+
+    texto = re.sub(r"\s+", " ", texto).strip()
+
+    return texto
