@@ -2321,6 +2321,8 @@ def processar_cti():
     contatos = select_all("contatos")
     cidades = select_all("cidades_ddd")
 
+    mapa_cidade = gerar_mapa_cidade()
+
     # MAPA CNPJ
     mapa_cnpj = {}
     for c in contatos:
