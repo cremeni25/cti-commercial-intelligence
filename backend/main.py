@@ -2207,3 +2207,52 @@ async def upload_contatos(file: UploadFile = File(...)):
         "status": "contatos carregados",
         "registros": len(registros)
     }
+
+# ============================================================
+# UPLOAD FUNIL
+# ============================================================
+
+@app.post("/upload/funil")
+async def upload_funil(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    df = pd.read_excel(io.BytesIO(contents))
+    df = df.fillna("")
+
+    df.columns = [str(c).strip().upper() for c in df.columns]
+
+    registros = []
+
+    for _, row in df.iterrows():
+
+        cliente = normalizar_texto(row.get("CLIENTE"))
+        valor = limpar_valor(row.get("VALOR"))
+        data = row.get("DATA")
+        representante = normalizar_texto(row.get("REPRESENTANTE"))
+
+        if not cliente:
+            continue
+
+        registros.append({
+            "cliente": cliente,
+            "valor": valor,
+            "data": data,
+            "representante": representante
+        })
+
+    if not registros:
+        return {"status": "sem dados"}
+
+    batch_size = 500
+
+    for i in range(0, len(registros), batch_size):
+
+        batch = registros[i:i + batch_size]
+
+        supabase.table("funil").insert(batch).execute()
+
+    return {
+        "status": "funil carregado",
+        "registros": len(registros)
+    }
