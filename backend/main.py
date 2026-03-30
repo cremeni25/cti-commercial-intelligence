@@ -2162,3 +2162,48 @@ def cti_consolidar():
         "total_registros": len(base_final),
         "amostra": base_final[:50]
     }
+
+# ============================================================
+# UPLOAD CONTATOS
+# ============================================================
+
+@app.post("/upload/contatos")
+async def upload_contatos(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    df = pd.read_excel(io.BytesIO(contents))
+    df = df.fillna("")
+
+    df.columns = [str(c).strip().upper() for c in df.columns]
+
+    registros = []
+
+    for _, row in df.iterrows():
+
+        cliente = normalizar_texto(row.get("CLIENTE"))
+        cnpj = re.sub(r"\D", "", str(row.get("CNPJ")))
+
+        if not cliente:
+            continue
+
+        registros.append({
+            "cliente": cliente,
+            "cnpj": cnpj
+        })
+
+    if not registros:
+        return {"status": "sem dados"}
+
+    batch_size = 500
+
+    for i in range(0, len(registros), batch_size):
+
+        batch = registros[i:i + batch_size]
+
+        supabase.table("contatos").insert(batch).execute()
+
+    return {
+        "status": "contatos carregados",
+        "registros": len(registros)
+    }
