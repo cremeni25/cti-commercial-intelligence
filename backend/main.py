@@ -1667,60 +1667,60 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
 
         batch_size = 500
 
-        # =========================
+# =========================
 # VALIDAÇÃO PRÉ-INSERT
 # =========================
 
-if not registros_processados:
-    raise Exception("ERRO: nenhum registro processado (parser falhou ou filtro eliminou tudo)")
+            if not registros_processados:
+                raise Exception("ERRO: nenhum registro processado (parser falhou ou filtro eliminou tudo)")
 
 # =========================
 # INSERT COM CONTROLE
 # =========================
 
-total_inserido = 0
-batch_size = 500
+            total_inserido = 0
+            batch_size = 500
 
-for i in range(0, len(registros_processados), batch_size):
+            for i in range(0, len(registros_processados), batch_size):
 
-    batch = registros_processados[i:i + batch_size]
+                batch = registros_processados[i:i + batch_size]
 
-    response = supabase.table("cti_anfir").insert(batch).execute()
+                response = supabase.table("cti_anfir").insert(batch).execute()
 
-    if response.data:
-        total_inserido += len(response.data)
+                if response.data:
+                    total_inserido += len(response.data)
 
 # =========================
 # VALIDAÇÃO PÓS-INSERT
 # =========================
 
-if total_inserido == 0:
-    raise Exception("ERRO CRÍTICO: insert não gravou nenhum registro")
+            if total_inserido == 0:
+                raise Exception("ERRO CRÍTICO: insert não gravou nenhum registro")
 
 # =========================
 # PROVA FINAL (BANCO)
 # =========================
 
-count_check = supabase.table("cti_anfir").select("*", count="exact").execute()
+            count_check = supabase.table("cti_anfir").select("*", count="exact").execute()
 
-if count_check.count == 0:
-    raise Exception("ERRO CRÍTICO: banco continua vazio após insert")
+            if count_check.count == 0:
+                raise Exception("ERRO CRÍTICO: banco continua vazio após insert")
 
-return {
-    "status": "ANFIR carregado com sucesso",
-    "processados": len(registros_processados),
-    "inseridos": total_inserido,
-    "total_tabela": count_check.count
-}
+            return {
+                "status": "ANFIR carregado com sucesso",
+                "processados": len(registros_processados),
+                "inseridos": total_inserido,
+                "total_tabela": count_check.count
+            }
 
-    except Exception as e:
+        except Exception as e:
 
-        print("ERRO UPLOAD ANFIR:", e)
+            print("ERRO UPLOAD ANFIR:", e)
 
-        raise HTTPException(
+            raise HTTPException(
             status_code=500,
             detail=f"Erro ao processar planilha: {str(e)}"
-        )
+            )
 
 # ============================================================
 # LOG DE UPLOAD ANFIR
