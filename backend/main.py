@@ -1622,7 +1622,7 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
         contents = await file.read()
 
         # processar planilha
-        registros = processar_planilha_universal(contents)
+        registros = processar_anfir_mensal(contents, datetime.now().year)
 
         registros_processados = []
 
