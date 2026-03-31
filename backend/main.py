@@ -1628,9 +1628,38 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
 
         for r in registros:
 
+            mes_texto = normalizar_texto(
+    r.get("mes") or 
+    r.get("MÊS") or 
+    r.get("MES")
+)
+
+mapa_meses = {
+    "JANEIRO": 1,
+    "FEVEREIRO": 2,
+    "MARCO": 3,
+    "MARÇO": 3,
+    "ABRIL": 4,
+    "MAIO": 5,
+    "JUNHO": 6,
+    "JULHO": 7,
+    "AGOSTO": 8,
+    "SETEMBRO": 9,
+    "OUTUBRO": 10,
+    "NOVEMBRO": 11,
+    "DEZEMBRO": 12
+}
+
+mes_num = mapa_meses.get(mes_texto)
+
+ano = datetime.now().year
+
+if not mes_num:
+    continue
+
             registros_processados.append({
-                "ano": r.get("ano"),
-                "mes": r.get("mes"),
+                "ano": ano,
+                "mes": mes_num,
                 "estado": r.get("estado"),
                 "linha": r.get("linha"),
                 "implementador": r.get("implementador"),
