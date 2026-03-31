@@ -2560,34 +2560,20 @@ def gerar_mapa_cidade():
     return mapa
 
 @app.post("/cti/reset")
-def reset_cti(ano: int = None):
+def reset_cti():
 
-    tabelas = [
-        "cti_unificado",
-        "cti_anfir",
-        "negociacoes",
-        "funil"
-    ]
+    try:
+        response = supabase.table("cti_anfir").delete().neq("id", None).execute()
 
-    for tabela in tabelas:
+        print("[RESET] Registros apagados:", response)
 
-        try:
+        return {
+            "status": "reset concluído"
+        }
 
-            if ano:
-                supabase.table(tabela)\
-                    .delete()\
-                    .eq("ano", ano)\
-                    .execute()
-            else:
-                supabase.table(tabela)\
-                    .delete()\
-                    .gt("id", 0)\
-                    .execute()
-
-        except Exception as e:
-            print(f"Erro ao limpar {tabela}: {e}")
-
-    return {
-        "status": "reset concluido",
-        "ano": ano
-    }
+    except Exception as e:
+        print("[RESET ERRO]", str(e))
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }
