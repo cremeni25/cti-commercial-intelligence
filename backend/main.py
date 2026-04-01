@@ -1713,7 +1713,7 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
                 "total_tabela": count_check.count
             }
 
-        except Exception as e:
+    except Exception as e:
 
             print("ERRO UPLOAD ANFIR:", e)
 
