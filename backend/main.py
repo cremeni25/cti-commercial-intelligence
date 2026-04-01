@@ -1618,13 +1618,27 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
 
     try:
 
-        # ler arquivo enviado
         contents = await file.read()
 
-        # processar planilha
         registros = processar_anfir_mensal(contents, datetime.now().year)
 
         registros_processados = []
+
+        mapa_meses = {
+            "JANEIRO": 1,
+            "FEVEREIRO": 2,
+            "MARCO": 3,
+            "MARÇO": 3,
+            "ABRIL": 4,
+            "MAIO": 5,
+            "JUNHO": 6,
+            "JULHO": 7,
+            "AGOSTO": 8,
+            "SETEMBRO": 9,
+            "OUTUBRO": 10,
+            "NOVEMBRO": 11,
+            "DEZEMBRO": 12
+        }
 
         for r in registros:
 
@@ -1634,52 +1648,35 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
                 r.get("MES")
             )
 
-            mapa_meses = {
-                "JANEIRO": 1,
-                "FEVEREIRO": 2,
-                "MARCO": 3,
-                "MARÇO": 3,
-                "ABRIL": 4,
-                "MAIO": 5,
-                "JUNHO": 6,
-                "JULHO": 7,
-                "AGOSTO": 8,
-                "SETEMBRO": 9,
-                "OUTUBRO": 10,
-                "NOVEMBRO": 11,
-                "DEZEMBRO": 12
-            }
-
             mes_num = mapa_meses.get(mes_texto)
             ano = datetime.now().year
 
-        if not mes_num:
-            continue
+            # 🔥 NÃO BLOQUEIA MAIS REGISTRO SEM MÊS
+            if not mes_num:
+                mes_num = 0
 
-        registros_processados.append({
-            "ano": ano,
-            "mes": mes_num,
-            "estado": r.get("estado"),
-            "linha": r.get("linha"),
-            "implementador": r.get("implementador"),
-            "valor": float(r.get("valor", 0))
-        })
+            registros_processados.append({
+                "ano": ano,
+                "mes": mes_num,
+                "estado": r.get("estado"),
+                "linha": r.get("linha"),
+                "implementador": r.get("implementador"),
+                "valor": float(r.get("valor", 0))
+            })
 
-            batch_size = 500
-
-# =========================
-# VALIDAÇÃO PRÉ-INSERT
-# =========================
+        # =========================
+        # VALIDAÇÃO PRÉ-INSERT
+        # =========================
 
         if not registros_processados:
-            raise Exception("ERRO: nenhum registro processado (parser falhou ou filtro eliminou tudo)")
+            raise Exception("ERRO: nenhum registro processado")
 
-# =========================
-# INSERT COM CONTROLE
-# =========================
+        # =========================
+        # INSERT CONTROLADO
+        # =========================
 
-            total_inserido = 0
-            batch_size = 500
+        total_inserido = 0
+        batch_size = 500
 
         for i in range(0, len(registros_processados), batch_size):
 
@@ -1687,41 +1684,37 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
 
             response = supabase.table("cti_anfir").insert(batch).execute()
 
-        if response.data:
-            total_inserido += len(response.data)
+            if response.data:
+                total_inserido += len(response.data)
 
-# =========================
-# VALIDAÇÃO PÓS-INSERT
-# =========================
+        # =========================
+        # VALIDAÇÃO PÓS-INSERT
+        # =========================
 
         if total_inserido == 0:
-            raise Exception("ERRO CRÍTICO: insert não gravou nenhum registro")
+            raise Exception("ERRO CRÍTICO: insert não gravou nada")
 
-# =========================
-# PROVA FINAL (BANCO)
-# =========================
-
-            count_check = supabase.table("cti_anfir").select("*", count="exact").execute()
+        count_check = supabase.table("cti_anfir").select("*", count="exact").execute()
 
         if count_check.count == 0:
-            raise Exception("ERRO CRÍTICO: banco continua vazio após insert")
+            raise Exception("ERRO CRÍTICO: tabela continua vazia")
 
-            return {
-                "status": "ANFIR carregado com sucesso",
-                "processados": len(registros_processados),
-                "inseridos": total_inserido,
-                "total_tabela": count_check.count
-            }
+        return {
+            "status": "ANFIR carregado com sucesso",
+            "processados": len(registros_processados),
+            "inseridos": total_inserido,
+            "total_tabela": count_check.count
+        }
 
     except Exception as e:
 
-            print("ERRO UPLOAD ANFIR:", e)
+        print("ERRO UPLOAD ANFIR:", str(e))
 
-            raise HTTPException(
+        raise HTTPException(
             status_code=500,
             detail=f"Erro ao processar planilha: {str(e)}"
-            )
-
+        )
+        
 # ============================================================
 # LOG DE UPLOAD ANFIR
 # ============================================================
