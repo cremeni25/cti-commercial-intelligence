@@ -1656,14 +1656,14 @@ async def upload_anfir_seguro(file: UploadFile = File(...)):
         if not mes_num:
             continue
 
-            registros_processados.append({
-                "ano": ano,
-                "mes": mes_num,
-                "estado": r.get("estado"),
-                "linha": r.get("linha"),
-                "implementador": r.get("implementador"),
-                "valor": float(r.get("valor", 0))
-            })
+        registros_processados.append({
+            "ano": ano,
+            "mes": mes_num,
+            "estado": r.get("estado"),
+            "linha": r.get("linha"),
+            "implementador": r.get("implementador"),
+            "valor": float(r.get("valor", 0))
+        })
 
             batch_size = 500
 
