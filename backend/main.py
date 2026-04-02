@@ -2660,3 +2660,38 @@ def reset_cti():
             "status": "erro",
             "mensagem": str(e)
         }
+
+# ============================================================
+# DEBUG INTELIGENTE ANFIR (NÃO AFETA SISTEMA ATUAL)
+# ============================================================
+
+@app.post("/debug/anfir")
+async def debug_anfir(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    df = pd.read_excel(io.BytesIO(contents))
+    df = df.fillna("")
+
+    colunas = list(df.columns)
+
+    total_linhas = len(df)
+
+    # tenta identificar colunas numéricas automaticamente
+    colunas_numericas = []
+
+    for col in df.columns:
+        try:
+            if pd.to_numeric(df[col], errors="coerce").notna().sum() > 0:
+                colunas_numericas.append(col)
+        except:
+            continue
+
+    amostra = df.head(5).to_dict(orient="records")
+
+    return {
+        "total_linhas": total_linhas,
+        "colunas": colunas,
+        "colunas_numericas_detectadas": colunas_numericas,
+        "amostra_dados": amostra
+    }
