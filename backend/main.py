@@ -2816,3 +2816,161 @@ def normalizar_anfir_100(contents):
             continue
 
     return registros
+
+# ============================================================
+# CTI — INTELIGÊNCIA AVANÇADA POR PERÍODO (NÃO CUMULATIVA)
+# ============================================================
+
+@app.get("/analytics/inteligencia-periodo")
+def inteligencia_periodo(ano: int = None, mes: int = None):
+
+    try:
+
+        query = supabase.table("cti_anfir").select("*")
+
+        if ano:
+            query = query.eq("ano", ano)
+
+        if mes:
+            query = query.eq("mes", mes)
+
+        response = query.execute()
+        dados = response.data
+
+        if not dados:
+            return {"mensagem": "sem dados para o período informado"}
+
+        df = pd.DataFrame(dados)
+
+        # ====================================================
+        # BASE DO PERÍODO (SEM ACUMULAR)
+        # ====================================================
+
+        total_valor = df["valor"].sum()
+        total_registros = len(df)
+
+        # ====================================================
+        # AGRUPAMENTOS
+        # ====================================================
+
+        estado = df.groupby("estado")["valor"].sum().reset_index()
+        linha = df.groupby("linha")["valor"].sum().reset_index()
+        oem = df.groupby("implementador")["valor"].sum().reset_index()
+
+        # ====================================================
+        # RANKINGS
+        # ====================================================
+
+        top_estados = estado.sort_values(by="valor", ascending=False).head(5)
+        top_linhas = linha.sort_values(by="valor", ascending=False).head(5)
+        top_oem = oem.sort_values(by="valor", ascending=False).head(5)
+
+        # ====================================================
+        # PARTICIPAÇÃO DE MERCADO (SHARE)
+        # ====================================================
+
+        estado["share"] = (estado["valor"] / total_valor * 100).round(2)
+        linha["share"] = (linha["valor"] / total_valor * 100).round(2)
+        oem["share"] = (oem["valor"] / total_valor * 100).round(2)
+
+        # ====================================================
+        # OPORTUNIDADES (INTELIGENTES)
+        # ====================================================
+
+        oportunidades = []
+
+        for _, row in estado.iterrows():
+            if row["valor"] < (total_valor * 0.05):
+                oportunidades.append({
+                    "tipo": "estado_oportunidade",
+                    "estado": row["estado"],
+                    "motivo": "baixo share no período"
+                })
+
+        for _, row in linha.iterrows():
+            if row["valor"] < (total_valor * 0.05):
+                oportunidades.append({
+                    "tipo": "linha_oportunidade",
+                    "linha": row["linha"],
+                    "motivo": "baixa penetração"
+                })
+
+        # ====================================================
+        # RESULTADO FINAL
+        # ====================================================
+
+        return {
+
+            "periodo": {
+                "ano": ano,
+                "mes": mes
+            },
+
+            "resumo": {
+                "total_valor": float(total_valor),
+                "total_registros": int(total_registros)
+            },
+
+            "top_estados": top_estados.to_dict(orient="records"),
+            "top_linhas": top_linhas.to_dict(orient="records"),
+            "top_oem": top_oem.to_dict(orient="records"),
+
+            "share_por_estado": estado.to_dict(orient="records"),
+            "share_por_linha": linha.to_dict(orient="records"),
+            "share_por_oem": oem.to_dict(orient="records"),
+
+            "oportunidades": oportunidades
+
+        }
+
+    except Exception as e:
+
+        return {
+            "erro": "falha na inteligência por período",
+            "detalhe": str(e)
+        }
+
+
+# ============================================================
+# COMPARAÇÃO ENTRE PERÍODOS (EVOLUÇÃO REAL)
+# ============================================================
+
+@app.get("/analytics/comparativo-periodo")
+def comparativo_periodo(ano1: int, ano2: int):
+
+    try:
+
+        df1 = pd.DataFrame(
+            supabase.table("cti_anfir").select("*").eq("ano", ano1).execute().data
+        )
+
+        df2 = pd.DataFrame(
+            supabase.table("cti_anfir").select("*").eq("ano", ano2).execute().data
+        )
+
+        if df1.empty or df2.empty:
+            return {"mensagem": "dados insuficientes para comparação"}
+
+        total1 = df1["valor"].sum()
+        total2 = df2["valor"].sum()
+
+        crescimento = ((total2 - total1) / total1 * 100) if total1 > 0 else 0
+
+        return {
+
+            "comparacao": {
+                "ano_1": ano1,
+                "ano_2": ano2,
+                "valor_ano_1": float(total1),
+                "valor_ano_2": float(total2),
+                "crescimento_percentual": round(crescimento, 2)
+            }
+
+        }
+
+    except Exception as e:
+
+        return {
+            "erro": "falha na comparação",
+            "detalhe": str(e)
+        }
