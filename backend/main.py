@@ -1609,6 +1609,61 @@ def limpar_periodo_anfir(ano, mes):
 
         print(f"[ANFIR] erro ao limpar período: {str(e)}")
 
+def processar_anfir_mensal(contents, ano):
+
+    df = pd.read_excel(io.BytesIO(contents))
+    df = df.fillna("")
+
+    # normalizar nomes das colunas
+    df.columns = [normalizar_texto(c) for c in df.columns]
+
+    registros = []
+
+    meses_validos = [
+        "JANEIRO","FEVEREIRO","MARCO","MARÇO",
+        "ABRIL","MAIO","JUNHO","JULHO",
+        "AGOSTO","SETEMBRO","OUTUBRO",
+        "NOVEMBRO","DEZEMBRO"
+    ]
+
+    for _, row in df.iterrows():
+
+        for col in df.columns:
+
+            if col not in meses_validos:
+                continue
+
+            valor = row.get(col)
+
+            try:
+                valor_num = float(valor)
+            except:
+                valor_num = 0
+
+            if valor_num <= 0:
+                continue
+
+            registro = {
+                "ano": ano,
+                "mes": col,
+                "estado": normalizar_texto(row.get("ESTADO")),
+                "linha": normalizar_texto(
+                    row.get("LINHA") or 
+                    row.get("PRODUTO") or 
+                    row.get("TIPO")
+                ),
+                "implementador": normalizar_texto(
+                    row.get("IMPLEMENTADOR") or 
+                    row.get("OEM") or 
+                    row.get("FABRICANTE")
+                ),
+                "valor": valor_num
+            }
+
+            registros.append(registro)
+
+    return registros
+
 # ============================================================
 # UPLOAD ANFIR COM CONTROLE DE MÊS
 # ============================================================
