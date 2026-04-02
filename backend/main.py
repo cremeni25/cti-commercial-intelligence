@@ -2695,3 +2695,124 @@ async def debug_anfir(file: UploadFile = File(...)):
         "colunas_numericas_detectadas": colunas_numericas,
         "amostra_dados": amostra
     }
+
+# ============================================================
+# ANFIR ENGINE 100% INTELIGENTE (SEMÂNTICA + ESTRUTURA + ANTI-DUPLICAÇÃO)
+# ============================================================
+
+import unicodedata
+import re
+import pandas as pd
+import io
+import hashlib
+
+def limpar_texto(txt):
+    if not txt:
+        return ""
+
+    txt = str(txt).lower()
+    txt = unicodedata.normalize('NFKD', txt)
+    txt = txt.encode('ASCII', 'ignore').decode('ASCII')
+    txt = re.sub(r'[^a-z0-9 ]', '', txt)
+    txt = re.sub(r'\s+', ' ', txt).strip()
+
+    return txt
+
+
+MAPA_COLUNAS = {
+    "mes": ["mes", "mês", "periodo", "competencia"],
+    "estado": ["estado", "uf"],
+    "municipio": ["municipio", "cidade"],
+    "fabricante": ["fabricante", "fornecedor"],
+    "cliente": ["cliente final", "cliente"],
+    "segmento": ["segmento", "linha"],
+    "valor": ["total", "valor", "qtd", "quantidade"]
+}
+
+
+def identificar_coluna(coluna):
+    col = limpar_texto(coluna)
+
+    for chave, variacoes in MAPA_COLUNAS.items():
+        for termo in variacoes:
+            if termo in col:
+                return chave
+
+    return None
+
+
+def extrair_numero(row):
+    for val in row:
+        try:
+            num = float(str(val).replace(",", "."))
+            if num > 0:
+                return num
+        except:
+            continue
+    return 0
+
+
+def hash_registro(reg):
+    chave = f"{reg['mes']}_{reg['estado']}_{reg['municipio']}_{reg['fabricante']}_{reg['valor']}"
+    return hashlib.md5(chave.encode()).hexdigest()
+
+
+def normalizar_anfir_100(contents):
+
+    df = pd.read_excel(io.BytesIO(contents), header=None)
+    df = df.fillna("")
+
+    registros = []
+    registros_hash = set()
+
+    header_map = {}
+
+    for i in range(len(df)):
+
+        linha = df.iloc[i].tolist()
+        linha_limpa = [limpar_texto(x) for x in linha]
+
+        # 🔍 Detecta cabeçalho em QUALQUER lugar
+        if any("mes" in x for x in linha_limpa) and any("estado" in x for x in linha_limpa):
+
+            header_map = {}
+
+            for idx, col in enumerate(linha):
+                tipo = identificar_coluna(col)
+                if tipo:
+                    header_map[tipo] = idx
+
+            continue
+
+        if not header_map:
+            continue
+
+        row = df.iloc[i].tolist()
+
+        try:
+            registro = {
+                "mes": str(row[header_map.get("mes", -1)]).strip(),
+                "estado": str(row[header_map.get("estado", -1)]).strip(),
+                "municipio": str(row[header_map.get("municipio", -1)]).strip(),
+                "fabricante": str(row[header_map.get("fabricante", -1)]).strip(),
+                "cliente": str(row[header_map.get("cliente", -1)]).strip(),
+                "segmento": str(row[header_map.get("segmento", -1)]).strip(),
+                "valor": extrair_numero(row)
+            }
+
+            # validação mínima
+            if not registro["mes"] or not registro["estado"]:
+                continue
+
+            # 🔒 anti-duplicação
+            h = hash_registro(registro)
+            if h in registros_hash:
+                continue
+
+            registros_hash.add(h)
+            registros.append(registro)
+
+        except:
+            continue
+
+    return registros
