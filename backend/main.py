@@ -2646,16 +2646,16 @@ def gerar_mapa_cidade():
 def reset_cti():
 
     try:
-        response = supabase.table("cti_anfir").delete().neq("id", None).execute()
 
-        print("[RESET] Registros apagados:", response)
+        response = supabase.table("cti_anfir").delete().execute()
 
         return {
-            "status": "reset concluído"
+            "status": "reset concluído",
+            "registros_removidos": len(response.data) if response.data else 0
         }
 
     except Exception as e:
-        print("[RESET ERRO]", str(e))
+
         return {
             "status": "erro",
             "mensagem": str(e)
