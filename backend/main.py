@@ -2974,3 +2974,90 @@ def comparativo_periodo(ano1: int, ano2: int):
             "erro": "falha na comparação",
             "detalhe": str(e)
         }
+
+# ============================================================
+# ANFIR ENGINE DEFINITIVO (SUBSTITUI TODOS OS OUTROS)
+# ============================================================
+
+@app.post("/upload/anfir/full")
+async def upload_anfir_full(file: UploadFile = File(...)):
+
+    try:
+
+        contents = await file.read()
+
+        # 🔥 ENGINE REAL
+        registros = normalizar_anfir_100(contents)
+
+        if not registros:
+            raise Exception("Nenhum registro extraído da planilha")
+
+        # =========================
+        # NORMALIZA CAMPOS
+        # =========================
+
+        mapa_meses = {
+            "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3,
+            "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+            "agosto": 8, "setembro": 9, "outubro": 10,
+            "novembro": 11, "dezembro": 12
+        }
+
+        registros_final = []
+
+        ano_atual = datetime.now().year
+
+        for r in registros:
+
+            mes_txt = limpar_texto(r.get("mes"))
+            mes_num = mapa_meses.get(mes_txt, 0)
+
+            registros_final.append({
+                "ano": ano_atual,
+                "mes": mes_num,
+                "estado": normalizar_texto(r.get("estado")),
+                "cidade": normalizar_texto(r.get("municipio")),
+                "linha": normalizar_texto(r.get("segmento")),
+                "implementador": normalizar_texto(r.get("fabricante")),
+                "cliente": normalizar_texto(r.get("cliente")),
+                "valor": float(r.get("valor", 0))
+            })
+
+        # =========================
+        # INSERT COM CONTROLE
+        # =========================
+
+        total_inserido = 0
+        batch_size = 500
+
+        for i in range(0, len(registros_final), batch_size):
+
+            batch = registros_final[i:i + batch_size]
+
+            response = supabase.table("cti_anfir").insert(batch).execute()
+
+            if response.data:
+                total_inserido += len(response.data)
+
+        if total_inserido == 0:
+            raise Exception("Falha ao inserir dados")
+
+        total_tabela = supabase.table("cti_anfir")\
+            .select("*", count="exact")\
+            .execute().count
+
+        return {
+            "status": "ANFIR processado 100%",
+            "extraidos": len(registros),
+            "inseridos": total_inserido,
+            "total_base": total_tabela
+        }
+
+    except Exception as e:
+
+        print("ERRO ANFIR FULL:", str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
