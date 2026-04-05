@@ -2990,7 +2990,10 @@ async def upload_anfir_full(file: UploadFile = File(...)):
         registros = normalizar_anfir_100(contents)
 
         if not registros:
-            raise Exception("Nenhum registro extraído da planilha")
+        return {
+            "status": "erro",
+            "mensagem": "nenhum registro extraído da planilha"
+        }
 
         # =========================
         # NORMALIZA CAMPOS
@@ -3055,7 +3058,12 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
     except Exception as e:
 
-        print("ERRO ANFIR FULL:", str(e))
+        print("ERRO REAL:", str(e))
+
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }
 
         raise HTTPException(
             status_code=500,
