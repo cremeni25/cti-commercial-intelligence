@@ -3519,3 +3519,117 @@ async def cti_v4_processar_upload(file: UploadFile = File(...), origem: str = "U
         "lidos": len(registros),
         "inseridos": total
     }
+
+    # ============================================================
+# CTI CORE V4.1 — ROBUSTO (ANTI-ERRO TOTAL)
+# ============================================================
+
+import unicodedata
+import hashlib
+
+def safe_read_excel(contents):
+
+    try:
+        return pd.ExcelFile(io.BytesIO(contents))
+    except:
+        try:
+            return pd.ExcelFile(io.BytesIO(contents), engine="openpyxl")
+        except:
+            return None
+
+
+def ler_planilha_inteligente_v4(contents):
+
+    xls = safe_read_excel(contents)
+
+    if not xls:
+        return []
+
+    registros = []
+
+    for aba in xls.sheet_names:
+
+        try:
+            df = pd.read_excel(xls, sheet_name=aba, header=None)
+            df = df.fillna("")
+        except:
+            continue
+
+        for _, row in df.iterrows():
+
+            linha = list(row)
+
+            valor = 0
+            cliente = None
+            cnpj = None
+
+            for celula in linha:
+
+                texto = str(celula)
+
+                # VALOR
+                try:
+                    num = float(str(texto).replace(",", "."))
+                    if num > 0:
+                        valor = num
+                except:
+                    pass
+
+                # CNPJ
+                numeros = re.sub(r"\D", "", texto)
+                if len(numeros) == 14:
+                    cnpj = numeros
+
+                # CLIENTE
+                if len(texto) > 5 and not cliente:
+                    cliente = texto.strip()
+
+            if valor > 0:
+                registros.append({
+                    "cliente": cliente,
+                    "cnpj": cnpj,
+                    "valor": valor
+                })
+
+    return registros
+
+
+@app.post("/cti/v4/processar-upload")
+async def cti_v4_processar_upload(file: UploadFile = File(...), origem: str = "UPLOAD"):
+
+    try:
+
+        contents = await file.read()
+
+        registros = ler_planilha_inteligente_v4(contents)
+
+        if not registros:
+            return {
+                "status": "vazio",
+                "mensagem": "nenhum dado identificado"
+            }
+
+        total = 0
+        batch_size = 500
+
+        for i in range(0, len(registros), batch_size):
+
+            batch = registros[i:i + batch_size]
+
+            response = supabase.table("cti_unificado").insert(batch).execute()
+
+            if response.data:
+                total += len(response.data)
+
+        return {
+            "status": "ok",
+            "lidos": len(registros),
+            "inseridos": total
+        }
+
+    except Exception as e:
+
+        return {
+            "status": "erro_controlado",
+            "mensagem": str(e)
+        }
