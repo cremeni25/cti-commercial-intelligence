@@ -2990,10 +2990,10 @@ async def upload_anfir_full(file: UploadFile = File(...)):
         registros = normalizar_anfir_100(contents)
 
         if not registros:
-        return {
-            "status": "erro",
-            "mensagem": "nenhum registro extraído da planilha"
-        }
+            return {
+                "status": "erro",
+                "mensagem": "nenhum registro extraído da planilha"
+            }
 
         # =========================
         # NORMALIZA CAMPOS
