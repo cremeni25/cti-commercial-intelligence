@@ -3633,3 +3633,184 @@ async def cti_v4_processar_upload(file: UploadFile = File(...), origem: str = "U
             "status": "erro_controlado",
             "mensagem": str(e)
         }
+
+# ============================================================
+# CTI CORE UNIFICADO — CONSOLIDAÇÃO TOTAL DO SISTEMA
+# ============================================================
+
+def normalizar_nome_core(nome):
+    if not nome:
+        return ""
+
+    nome = normalizar_texto(nome)
+
+    remover = [" LTDA", " EIRELI", " SA", " S/A", " ME", " EPP"]
+
+    for r in remover:
+        nome = nome.replace(r, "")
+
+    return nome.strip()
+
+
+def construir_mapa_contatos():
+
+    contatos = select_all("contatos")
+
+    mapa_nome = {}
+    mapa_cnpj = {}
+
+    for c in contatos:
+
+        nome = normalizar_nome_core(c.get("cliente"))
+        cnpj = re.sub(r"\D", "", str(c.get("cnpj")))
+
+        if nome:
+            mapa_nome[nome] = cnpj
+
+        if cnpj:
+            mapa_cnpj[cnpj] = nome
+
+    return mapa_nome, mapa_cnpj
+
+
+def resolver_cnpj_core(cliente, cnpj, mapa_nome):
+
+    if cnpj:
+        return re.sub(r"\D", "", str(cnpj))
+
+    nome = normalizar_nome_core(cliente)
+
+    return mapa_nome.get(nome)
+
+
+def classificar_status(origem):
+
+    if origem == "ANFIR":
+        return "REALIZADO"
+
+    if origem == "ANFIR_SEMANAL":
+        return "PROVISORIO"
+
+    if origem == "NEGOCIACAO":
+        return "NEGOCIACAO"
+
+    if origem == "FUNIL":
+        return "INTENCAO"
+
+    return "DESCONHECIDO"
+
+
+@app.post("/cti/core/unificar")
+def cti_core_unificar():
+
+    mapa_nome, mapa_cnpj = construir_mapa_contatos()
+
+    base_final = []
+
+    # ========================================================
+    # ANFIR FINAL
+    # ========================================================
+
+    anfirs = select_all("cti_anfir")
+
+    for r in anfirs:
+
+        cliente = r.get("cliente")
+        cnpj = resolver_cnpj_core(cliente, r.get("cnpj"), mapa_nome)
+
+        base_final.append({
+            "cliente": cliente,
+            "cnpj": cnpj,
+            "cidade": r.get("cidade"),
+            "uf": r.get("estado"),
+            "ddd": r.get("ddd"),
+            "origem": "ANFIR",
+            "status": "REALIZADO",
+            "valor": r.get("valor"),
+            "ano": r.get("ano"),
+            "mes": r.get("mes"),
+            "linha": r.get("linha"),
+            "oem": r.get("implementador")
+        })
+
+    # ========================================================
+    # NEGOCIAÇÕES
+    # ========================================================
+
+    negociacoes = select_all("negociacoes")
+
+    for n in negociacoes:
+
+        cliente = n.get("cliente")
+        cnpj = resolver_cnpj_core(cliente, n.get("cnpj"), mapa_nome)
+
+        base_final.append({
+            "cliente": cliente,
+            "cnpj": cnpj,
+            "cidade": n.get("cidade"),
+            "uf": n.get("estado"),
+            "ddd": None,
+            "origem": "NEGOCIACAO",
+            "status": "NEGOCIACAO",
+            "valor": n.get("valor"),
+            "ano": None,
+            "mes": None,
+            "linha": n.get("produto"),
+            "oem": None
+        })
+
+    # ========================================================
+    # FUNIL
+    # ========================================================
+
+    funil = select_all("funil")
+
+    for f in funil:
+
+        cliente = f.get("cliente")
+        cnpj = resolver_cnpj_core(cliente, None, mapa_nome)
+
+        base_final.append({
+            "cliente": cliente,
+            "cnpj": cnpj,
+            "cidade": f.get("cidade"),
+            "uf": None,
+            "ddd": None,
+            "origem": "FUNIL",
+            "status": "INTENCAO",
+            "valor": f.get("valor"),
+            "ano": None,
+            "mes": None,
+            "linha": None,
+            "oem": None
+        })
+
+    # ========================================================
+    # LIMPA BASE ANTIGA
+    # ========================================================
+
+    supabase.table("cti_unificado")\
+        .delete()\
+        .gt("created_at", "1900-01-01")\
+        .execute()
+
+    # ========================================================
+    # INSERT FINAL
+    # ========================================================
+
+    total = 0
+    batch_size = 500
+
+    for i in range(0, len(base_final), batch_size):
+
+        batch = base_final[i:i + batch_size]
+
+        response = supabase.table("cti_unificado").insert(batch).execute()
+
+        if response.data:
+            total += len(response.data)
+
+    return {
+        "status": "CTI_UNIFICADO_OK",
+        "registros": total
+    }
