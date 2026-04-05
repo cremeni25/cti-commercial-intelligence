@@ -3201,3 +3201,321 @@ def normalizar_anfir_100(contents):
             j += 1
 
     return registros
+
+    # ============================================================
+# CTI CORE V4 — CONSOLIDADOR UNIVERSAL + TEMPO INTELIGENTE
+# ============================================================
+
+import unicodedata
+import hashlib
+
+# ============================================================
+# NORMALIZAÇÃO FORTE
+# ============================================================
+
+def normalizar_texto_forte(txt):
+    if not txt:
+        return ""
+
+    txt = str(txt).upper().strip()
+    txt = unicodedata.normalize('NFKD', txt)
+    txt = txt.encode('ASCII', 'ignore').decode('ASCII')
+    txt = re.sub(r'[^A-Z0-9 ]', ' ', txt)
+    txt = re.sub(r'\s+', ' ', txt)
+
+    return txt.strip()
+
+
+# ============================================================
+# NÚMERO INTELIGENTE
+# ============================================================
+
+def extrair_numero_inteligente(valor):
+    try:
+        if valor is None:
+            return 0
+
+        txt = str(valor).replace(".", "").replace(",", ".")
+        num = float(txt)
+
+        if num > 0:
+            return num
+    except:
+        pass
+
+    return 0
+
+
+# ============================================================
+# DETECÇÃO DE IDENTIDADE
+# ============================================================
+
+def detectar_tipo_dado(valor):
+
+    if not valor:
+        return None
+
+    texto = str(valor)
+    numeros = re.sub(r"\D", "", texto)
+
+    if len(numeros) == 14:
+        return ("CNPJ", numeros)
+
+    if len(texto) >= 7 and any(c.isalpha() for c in texto):
+        return ("PLACA", normalizar_texto_forte(texto))
+
+    if len(texto) > 3:
+        return ("NOME", normalizar_texto_forte(texto))
+
+    return None
+
+
+# ============================================================
+# MAPA DE MESES UNIVERSAL
+# ============================================================
+
+MAPA_MESES = {
+    "JAN": 1, "JANEIRO": 1,
+    "FEV": 2, "FEVEREIRO": 2,
+    "MAR": 3, "MARCO": 3, "MARÇO": 3,
+    "ABR": 4, "ABRIL": 4,
+    "MAI": 5, "MAIO": 5,
+    "JUN": 6, "JUNHO": 6,
+    "JUL": 7, "JULHO": 7,
+    "AGO": 8, "AGOSTO": 8,
+    "SET": 9, "SETEMBRO": 9,
+    "OUT": 10, "OUTUBRO": 10,
+    "NOV": 11, "NOVEMBRO": 11,
+    "DEZ": 12, "DEZEMBRO": 12
+}
+
+
+# ============================================================
+# DETECÇÃO DE TEMPO EM QUALQUER LUGAR
+# ============================================================
+
+def detectar_tempo_em_texto(texto):
+
+    texto = normalizar_texto_forte(texto)
+
+    ano = None
+    mes = None
+
+    # ANO
+    match_ano = re.search(r"(20\d{2})", texto)
+    if match_ano:
+        ano = int(match_ano.group(1))
+
+    # MÊS
+    for k in MAPA_MESES:
+        if k in texto:
+            mes = MAPA_MESES[k]
+            break
+
+    return ano, mes
+
+
+# ============================================================
+# LEITOR UNIVERSAL MULTI-ABAS
+# ============================================================
+
+def ler_planilha_inteligente_v4(contents):
+
+    xls = pd.ExcelFile(io.BytesIO(contents))
+    registros = []
+
+    ano_global = None
+    mes_global = None
+
+    # =========================
+    # DETECTA TEMPO NO NOME DAS ABAS
+    # =========================
+
+    for aba in xls.sheet_names:
+        a, m = detectar_tempo_em_texto(aba)
+
+        if a:
+            ano_global = a
+        if m:
+            mes_global = m
+
+    # =========================
+    # PROCESSA TODAS AS ABAS
+    # =========================
+
+    for aba in xls.sheet_names:
+
+        df = pd.read_excel(xls, sheet_name=aba, header=None)
+        df = df.fillna("")
+
+        for _, row in df.iterrows():
+
+            linha = list(row)
+
+            valor = 0
+            cliente = None
+            cnpj = None
+            placa = None
+            cidade = None
+            estado = None
+            ano = None
+            mes = None
+
+            for celula in linha:
+
+                texto = normalizar_texto_forte(celula)
+
+                # VALOR
+                num = extrair_numero_inteligente(celula)
+                if num > 0:
+                    valor = num
+
+                # IDENTIFICAÇÃO
+                tipo = detectar_tipo_dado(texto)
+                if tipo:
+                    tipo_id, dado = tipo
+
+                    if tipo_id == "CNPJ":
+                        cnpj = dado
+                    elif tipo_id == "PLACA":
+                        placa = dado
+                    elif tipo_id == "NOME" and not cliente:
+                        cliente = dado
+
+                # ESTADO
+                if len(texto) == 2 and texto.isalpha():
+                    estado = texto
+
+                # CIDADE
+                if len(texto) > 4 and not cidade and not texto.isdigit():
+                    cidade = texto
+
+                # TEMPO LOCAL
+                a, m = detectar_tempo_em_texto(texto)
+
+                if a:
+                    ano = a
+                if m:
+                    mes = m
+
+            if valor <= 0:
+                continue
+
+            registros.append({
+                "cliente": cliente,
+                "cnpj": cnpj,
+                "placa": placa,
+                "cidade": cidade,
+                "estado": estado,
+                "valor": valor,
+                "ano": ano,
+                "mes": mes
+            })
+
+    # =========================
+    # APLICA TEMPO GLOBAL SE NECESSÁRIO
+    # =========================
+
+    for r in registros:
+
+        if not r["ano"]:
+            r["ano"] = ano_global or datetime.now().year
+
+        if not r["mes"]:
+            r["mes"] = mes_global or datetime.now().month
+
+    return registros
+
+
+# ============================================================
+# RESOLUÇÃO INTELIGENTE DE CNPJ
+# ============================================================
+
+def resolver_cnpj_v4(reg):
+
+    if reg.get("cnpj"):
+        return reg.get("cnpj")
+
+    if reg.get("placa"):
+        v = resolver_cliente_por_placa(reg.get("placa"))
+        if v:
+            return v.get("cnpj")
+
+    if reg.get("cliente"):
+        c = resolver_cliente_por_nome(reg.get("cliente"))
+        if c:
+            return c.get("cnpj")
+
+    return None
+
+
+# ============================================================
+# HASH ANTI-DUPLICAÇÃO
+# ============================================================
+
+def gerar_hash_registro(reg):
+
+    chave = f"{reg.get('cliente')}_{reg.get('cidade')}_{reg.get('valor')}_{reg.get('mes')}_{reg.get('ano')}"
+    return hashlib.md5(chave.encode()).hexdigest()
+
+
+# ============================================================
+# ENDPOINT — PROCESSAMENTO UNIVERSAL V4
+# ============================================================
+
+@app.post("/cti/v4/processar-upload")
+async def cti_v4_processar_upload(file: UploadFile = File(...), origem: str = "UPLOAD"):
+
+    contents = await file.read()
+
+    registros = ler_planilha_inteligente_v4(contents)
+
+    if not registros:
+        return {"status": "sem dados"}
+
+    registros_final = []
+    hashes = set()
+
+    for r in registros:
+
+        cnpj = resolver_cnpj_v4(r)
+        ddd = obter_ddd_unificado(r.get("cidade"))
+
+        registro = {
+            "cliente": r.get("cliente"),
+            "cnpj": cnpj,
+            "cidade": r.get("cidade"),
+            "uf": r.get("estado"),
+            "ddd": ddd,
+            "valor": r.get("valor"),
+            "ano": r.get("ano"),
+            "mes": r.get("mes"),
+            "origem": origem,
+            "created_at": datetime.now().isoformat()
+        }
+
+        h = gerar_hash_registro(registro)
+
+        if h in hashes:
+            continue
+
+        hashes.add(h)
+        registros_final.append(registro)
+
+    batch_size = 500
+    total = 0
+
+    for i in range(0, len(registros_final), batch_size):
+
+        batch = registros_final[i:i + batch_size]
+
+        response = supabase.table("cti_unificado").insert(batch).execute()
+
+        if response.data:
+            total += len(response.data)
+
+    return {
+        "status": "CTI_V4_OK",
+        "lidos": len(registros),
+        "inseridos": total
+    }
