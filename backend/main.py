@@ -3068,7 +3068,7 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
         ano = r.get("ano") or datetime.now().year
 
-        for r in registros:
+for r in registros:
 
     try:
 
@@ -3091,7 +3091,7 @@ async def upload_anfir_full(file: UploadFile = File(...)):
     except Exception as e:
 
         print("[ANFIR ERRO REGISTRO]", str(e))
-        continue
+        continue        
 
         # =========================
         # INSERT COM CONTROLE
