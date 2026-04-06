@@ -2759,114 +2759,119 @@ def hash_registro(reg):
 
 def normalizar_anfir_100(contents):
 
-    xls = pd.ExcelFile(io.BytesIO(contents))
+    import pandas as pd
+    import io
+    import re
+    from datetime import datetime
+
+    def limpar(txt):
+        if txt is None:
+            return ""
+        return str(txt).strip().lower()
+
+    def detectar_mes(txt):
+        mapa = {
+            "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3,
+            "abril": 4, "maio": 5, "junho": 6, "julho": 7,
+            "agosto": 8, "setembro": 9, "outubro": 10,
+            "novembro": 11, "dezembro": 12
+        }
+        txt = limpar(txt)
+        for k, v in mapa.items():
+            if k in txt:
+                return v
+        return None
+
+    def detectar_ano(txt):
+        txt = limpar(txt)
+        match = re.search(r'20\d{2}', txt)
+        if match:
+            return int(match.group())
+        return None
+
+    def detectar_estado(txt):
+        estados = ["sp","rj","mg","pr","sc","rs","ba","df","go","mt","ms"]
+        txt = limpar(txt)
+        if txt in estados:
+            return txt.upper()
+        return None
+
+    def detectar_valor(txt):
+        try:
+            v = float(str(txt).replace(",", "."))
+            if v > 0 and v < 10000000:
+                return v
+        except:
+            return None
+        return None
+
     registros = []
     registros_hash = set()
 
+    xls = pd.ExcelFile(io.BytesIO(contents))
+
     for aba in xls.sheet_names:
 
-        df = pd.read_excel(xls, sheet_name=aba, header=None)
+        df = xls.parse(aba, header=None)
         df = df.fillna("")
 
-        # tenta extrair tempo da aba
-        ano_aba, mes_aba = detectar_tempo_em_texto(aba)
+        contexto_mes = detectar_mes(aba)
+        contexto_ano = detectar_ano(aba)
 
-        for _, row in df.iterrows():
+        for i in range(len(df)):
 
-            linha = list(row)
+            linha = df.iloc[i].tolist()
 
-            valor = 0
-            cliente = None
-            cnpj = None
-            placa = None
-            cidade = None
+            mes = contexto_mes
+            ano = contexto_ano or datetime.now().year
             estado = None
-            ano = ano_aba
-            mes = mes_aba
+            valor = None
+            cidade = None
 
             for celula in linha:
 
-                texto_raw = str(celula)
-                texto = limpar_texto(texto_raw)
+                txt = limpar(celula)
 
-                # -------------------------
-                # VALOR (qualquer número)
-                # -------------------------
-                try:
-                    num = float(str(celula).replace(".", "").replace(",", "."))
-                    if num > 0:
-                        valor = num
-                except:
-                    pass
+                if not mes:
+                    mes_detectado = detectar_mes(txt)
+                    if mes_detectado:
+                        mes = mes_detectado
 
-                # -------------------------
-                # IDENTIFICADOR
-                # -------------------------
-                tipo = detectar_tipo_dado(texto_raw)
+                if not ano:
+                    ano_detectado = detectar_ano(txt)
+                    if ano_detectado:
+                        ano = ano_detectado
 
-                if tipo:
-                    tipo_id, dado = tipo
+                if not estado:
+                    estado_detectado = detectar_estado(txt)
+                    if estado_detectado:
+                        estado = estado_detectado
 
-                    if tipo_id == "CNPJ":
-                        cnpj = dado
+                if not valor:
+                    valor_detectado = detectar_valor(txt)
+                    if valor_detectado:
+                        valor = valor_detectado
 
-                    elif tipo_id == "PLACA":
-                        placa = dado
+                # cidade heurística simples
+                if not cidade and len(txt) > 3 and txt.isalpha():
+                    cidade = txt.upper()
 
-                    elif tipo_id == "NOME" and not cliente:
-                        cliente = dado
-
-                # -------------------------
-                # ESTADO (UF)
-                # -------------------------
-                if len(texto) == 2 and texto.isalpha():
-                    estado = texto.upper()
-
-                # -------------------------
-                # CIDADE (heurística)
-                # -------------------------
-                if len(texto) > 4 and not cidade and not texto.isdigit():
-                    cidade = texto.upper()
-
-                # -------------------------
-                # TEMPO NA CÉLULA
-                # -------------------------
-                a, m = detectar_tempo_em_texto(texto_raw)
-
-                if a:
-                    ano = a
-
-                if m:
-                    mes = m
-
-            # -------------------------
-            # FILTRO MÍNIMO
-            # -------------------------
-            if valor <= 0:
-                continue
-
-            if not estado and not cidade:
+            # 🔥 REGRA DE VALIDAÇÃO REAL
+            if not mes or not estado or not valor:
                 continue
 
             registro = {
-                "mes": mes,
                 "ano": ano,
+                "mes": mes,
                 "estado": estado,
-                "municipio": cidade,
-                "fabricante": None,
-                "cliente": cliente,
-                "segmento": None,
-                "valor": valor,
-                "cnpj": cnpj,
-                "placa": placa
+                "cidade": cidade,
+                "cliente": None,
+                "implementador": None,
+                "linha": None,
+                "valor": valor
             }
 
-            # -------------------------
-            # ANTI-DUPLICAÇÃO
-            # -------------------------
-            chave = f"{registro['ano']}_{registro['mes']}_{registro['estado']}_{registro['municipio']}_{registro['valor']}"
-            h = hashlib.md5(str(chave).encode()).hexdigest()
-
+            h = str(registro)
             if h in registros_hash:
                 continue
 
