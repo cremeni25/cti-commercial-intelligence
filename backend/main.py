@@ -2375,49 +2375,121 @@ async def upload_funil(file: UploadFile = File(...)):
 @app.post("/upload/negociacoes")
 async def upload_negociacoes(file: UploadFile = File(...)):
 
-    contents = await file.read()
+    try:
+        contents = await file.read()
 
-    df = pd.read_excel(io.BytesIO(contents))
-    df = df.fillna("")
+        df = pd.read_excel(io.BytesIO(contents))
+        df = df.fillna("")
 
-    df.columns = [str(c).strip().upper() for c in df.columns]
+        # normaliza colunas (padronização total)
+        df.columns = [str(c).strip().upper() for c in df.columns]
 
-    registros = []
+        registros = []
 
-    for _, row in df.iterrows():
+        for _, row in df.iterrows():
 
-        cliente = normalizar_texto(row.get("CLIENTE"))
-        valor = limpar_valor(row.get("VALOR"))
-        vendedor = normalizar_texto(row.get("VENDEDOR"))
-        data = row.get("DATA")
-        condicao = row.get("CONDICAO_COMERCIAL")
+            try:
+                # =========================
+                # EXTRAÇÃO FLEXÍVEL (AGRESSIVA)
+                # =========================
 
-        if not cliente:
-            continue
+                cliente = normalizar_texto(
+                    row.get("CLIENTE")
+                    or row.get("CLIENTE FINAL")
+                    or row.get("RAZAO SOCIAL")
+                    or ""
+                )
 
-        registros.append({
-            "cliente": cliente,
-            "valor": valor,
-            "vendedor": vendedor,
-            "data": data,
-            "condicao_comercial": condicao
-        })
+                valor = limpar_valor(
+                    row.get("VALOR")
+                    or row.get("TOTAL")
+                    or row.get("VALOR TOTAL")
+                    or 0
+                )
 
-    if not registros:
-        return {"status": "sem dados"}
+                vendedor = normalizar_texto(
+                    row.get("VENDEDOR")
+                    or row.get("CONSULTOR")
+                    or row.get("REPRESENTANTE")
+                    or ""
+                )
 
-    batch_size = 500
+                data = (
+                    row.get("DATA")
+                    or row.get("DATA VENDA")
+                    or row.get("FECHAMENTO")
+                    or None
+                )
 
-    for i in range(0, len(registros), batch_size):
+                condicao = (
+                    row.get("CONDICAO_COMERCIAL")
+                    or row.get("CONDICAO")
+                    or row.get("FORMA PAGAMENTO")
+                    or ""
+                )
 
-        batch = registros[i:i + batch_size]
+                # =========================
+                # REGRA MÍNIMA
+                # =========================
 
-        supabase.table("negociacoes").insert(batch).execute()
+                if not cliente and not valor:
+                    continue
 
-    return {
-        "status": "negociacoes carregadas",
-        "registros": len(registros)
-    }
+                registros.append({
+                    "cliente": cliente,
+                    "valor": float(valor or 0),
+                    "vendedor": vendedor,
+                    "data": data,
+                    "condicao_comercial": condicao
+                })
+
+            except Exception as e:
+                print("[NEGOCIACOES ERRO REGISTRO]", str(e))
+                continue
+
+        if not registros:
+            return {
+                "status": "erro",
+                "mensagem": "nenhum registro válido encontrado"
+            }
+
+        # =========================
+        # INSERT CONTROLADO
+        # =========================
+
+        total_inserido = 0
+        batch_size = 500
+
+        for i in range(0, len(registros), batch_size):
+
+            batch = registros[i:i + batch_size]
+
+            response = supabase.table("negociacoes").insert(batch).execute()
+
+            if response.data:
+                total_inserido += len(response.data)
+            else:
+                print("[ERRO INSERT NEGOCIACOES]")
+
+        total_tabela = supabase.table("negociacoes") \
+            .select("*", count="exact") \
+            .execute().count
+
+        return {
+            "status": "NEGOCIACOES processado 100%",
+            "extraidos": len(registros),
+            "inseridos": total_inserido,
+            "total_base": total_tabela
+        }
+
+    except Exception as e:
+
+        print("[ERRO NEGOCIACOES GLOBAL]", str(e))
+
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # ============================================================
 # CTI PROCESSADOR (CNPJ + CONSOLIDAÇÃO INICIAL)
