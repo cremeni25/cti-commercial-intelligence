@@ -2759,61 +2759,119 @@ def hash_registro(reg):
 
 def normalizar_anfir_100(contents):
 
-    df = pd.read_excel(io.BytesIO(contents), header=None)
-    df = df.fillna("")
-
+    xls = pd.ExcelFile(io.BytesIO(contents))
     registros = []
     registros_hash = set()
 
-    header_map = {}
+    for aba in xls.sheet_names:
 
-    for i in range(len(df)):
+        df = pd.read_excel(xls, sheet_name=aba, header=None)
+        df = df.fillna("")
 
-        linha = df.iloc[i].tolist()
-        linha_limpa = [limpar_texto(x) for x in linha]
+        # tenta extrair tempo da aba
+        ano_aba, mes_aba = detectar_tempo_em_texto(aba)
 
-        # 🔍 Detecta cabeçalho em QUALQUER lugar
-        if any("mes" in x for x in linha_limpa) and any("estado" in x for x in linha_limpa):
+        for _, row in df.iterrows():
 
-            header_map = {}
+            linha = list(row)
 
-            for idx, col in enumerate(linha):
-                tipo = identificar_coluna(col)
+            valor = 0
+            cliente = None
+            cnpj = None
+            placa = None
+            cidade = None
+            estado = None
+            ano = ano_aba
+            mes = mes_aba
+
+            for celula in linha:
+
+                texto_raw = str(celula)
+                texto = limpar_texto(texto_raw)
+
+                # -------------------------
+                # VALOR (qualquer número)
+                # -------------------------
+                try:
+                    num = float(str(celula).replace(".", "").replace(",", "."))
+                    if num > 0:
+                        valor = num
+                except:
+                    pass
+
+                # -------------------------
+                # IDENTIFICADOR
+                # -------------------------
+                tipo = detectar_tipo_dado(texto_raw)
+
                 if tipo:
-                    header_map[tipo] = idx
+                    tipo_id, dado = tipo
 
-            continue
+                    if tipo_id == "CNPJ":
+                        cnpj = dado
 
-        if not header_map:
-            continue
+                    elif tipo_id == "PLACA":
+                        placa = dado
 
-        row = df.iloc[i].tolist()
+                    elif tipo_id == "NOME" and not cliente:
+                        cliente = dado
 
-        try:
-            registro = {
-                "mes": str(row[header_map.get("mes", -1)]).strip(),
-                "estado": str(row[header_map.get("estado", -1)]).strip(),
-                "municipio": str(row[header_map.get("municipio", -1)]).strip(),
-                "fabricante": str(row[header_map.get("fabricante", -1)]).strip(),
-                "cliente": str(row[header_map.get("cliente", -1)]).strip(),
-                "segmento": str(row[header_map.get("segmento", -1)]).strip(),
-                "valor": extrair_numero(row)
-            }
+                # -------------------------
+                # ESTADO (UF)
+                # -------------------------
+                if len(texto) == 2 and texto.isalpha():
+                    estado = texto.upper()
 
-            # validação mínima
-            if not registro["mes"] or not registro["estado"]:
+                # -------------------------
+                # CIDADE (heurística)
+                # -------------------------
+                if len(texto) > 4 and not cidade and not texto.isdigit():
+                    cidade = texto.upper()
+
+                # -------------------------
+                # TEMPO NA CÉLULA
+                # -------------------------
+                a, m = detectar_tempo_em_texto(texto_raw)
+
+                if a:
+                    ano = a
+
+                if m:
+                    mes = m
+
+            # -------------------------
+            # FILTRO MÍNIMO
+            # -------------------------
+            if valor <= 0:
                 continue
 
-            # 🔒 anti-duplicação
-            h = hash_registro(registro)
+            if not estado and not cidade:
+                continue
+
+            registro = {
+                "mes": mes,
+                "ano": ano,
+                "estado": estado,
+                "municipio": cidade,
+                "fabricante": None,
+                "cliente": cliente,
+                "segmento": None,
+                "valor": valor,
+                "cnpj": cnpj,
+                "placa": placa
+            }
+
+            # -------------------------
+            # ANTI-DUPLICAÇÃO
+            # -------------------------
+            chave = f"{registro['ano']}_{registro['mes']}_{registro['estado']}_{registro['municipio']}_{registro['valor']}"
+            h = hashlib.md5(str(chave).encode()).hexdigest()
+
             if h in registros_hash:
                 continue
 
             registros_hash.add(h)
             registros.append(registro)
-
-        except:
-            continue
 
     return registros
 
