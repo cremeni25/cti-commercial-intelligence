@@ -3908,8 +3908,8 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
     try:
         contents = await file.read()
 
-        registros = engine_universal_multiaba(contents, origem)
-
+        registros = engine_universal_multiaba_v2(contents, origem)
+        
         if not registros:
             return {
                 "status": "erro",
@@ -4096,7 +4096,7 @@ async def upload_universal_multiaba_v2(file: UploadFile = File(...), origem: str
     try:
         contents = await file.read()
 
-        registros = engine_universal_multiaba(contents, origem)
+        registros = engine_universal_multiaba_v2(contents, origem)
 
         if not registros:
             return {
