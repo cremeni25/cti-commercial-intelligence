@@ -3677,3 +3677,125 @@ def cti_core_unificar():
         "status": "CTI_UNIFICADO_OK",
         "registros": total
     }
+
+# =========================================================
+# CORE UNIFICADO — ENGINE UNIVERSAL (SAFE MODE)
+# =========================================================
+
+def engine_universal_planilha(df, origem="desconhecido"):
+
+    registros = []
+
+    for _, row in df.iterrows():
+
+        try:
+            linha = {str(k).strip().lower(): v for k, v in row.items()}
+
+            cliente = (
+                linha.get("cliente")
+                or linha.get("cliente final")
+                or linha.get("razao social")
+                or linha.get("nome")
+                or ""
+            )
+
+            cnpj = (
+                linha.get("cnpj")
+                or linha.get("cpf/cnpj")
+                or linha.get("documento")
+                or ""
+            )
+
+            valor = (
+                linha.get("valor")
+                or linha.get("total")
+                or linha.get("valor total")
+                or 0
+            )
+
+            data = (
+                linha.get("data")
+                or linha.get("data venda")
+                or linha.get("fechamento")
+                or None
+            )
+
+            cidade = (
+                linha.get("cidade")
+                or linha.get("municipio")
+                or ""
+            )
+
+            estado = (
+                linha.get("estado")
+                or linha.get("uf")
+                or ""
+            )
+
+            registro = {
+                "cliente": normalizar_texto(cliente),
+                "cnpj": limpar_texto(cnpj),
+                "data": data,
+                "valor": float(limpar_valor(valor) or 0),
+                "origem": origem,
+                "cidade": normalizar_texto(cidade),
+                "estado": normalizar_texto(estado),
+                "extra": linha
+            }
+
+            if not registro["cliente"] and not registro["valor"]:
+                continue
+
+            registros.append(registro)
+
+        except Exception as e:
+            print("[ENGINE UNIVERSAL ERRO]", str(e))
+            continue
+
+    return registros
+
+
+# =========================================================
+# ENDPOINT UNIVERSAL
+# =========================================================
+
+@app.post("/upload/universal")
+async def upload_universal(file: UploadFile = File(...), origem: str = "manual"):
+
+    try:
+        contents = await file.read()
+
+        df = pd.read_excel(io.BytesIO(contents))
+        df = df.fillna("")
+
+        registros = engine_universal_planilha(df, origem)
+
+        if not registros:
+            return {"status": "erro", "mensagem": "nenhum dado válido"}
+
+        total_inserido = 0
+        batch_size = 500
+
+        for i in range(0, len(registros), batch_size):
+
+            batch = registros[i:i + batch_size]
+
+            try:
+                response = supabase.table("cti_dados").insert(batch).execute()
+
+                if response.data:
+                    total_inserido += len(response.data)
+
+            except Exception as e:
+                print("[ERRO INSERT UNIVERSAL]", str(e))
+
+        return {
+            "status": "PROCESSADO",
+            "origem": origem,
+            "extraidos": len(registros),
+            "inseridos": total_inserido
+        }
+
+    except Exception as e:
+        print("[ERRO GLOBAL UNIVERSAL]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
