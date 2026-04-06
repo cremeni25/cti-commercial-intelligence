@@ -3070,19 +3070,28 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
         for r in registros:
 
-            mes_txt = limpar_texto(r.get("mes"))
-            mes_num = mapa_meses.get(mes_txt, 0)
+    try:
 
-            registros_final.append({
-                "ano": ano_atual,
-                "mes": mes_num,
-                "estado": normalizar_texto(r.get("estado")),
-                "cidade": normalizar_texto(r.get("municipio")),
-                "linha": normalizar_texto(r.get("segmento")),
-                "implementador": normalizar_texto(r.get("fabricante")),
-                "cliente": normalizar_texto(r.get("cliente")),
-                "valor": float(r.get("valor", 0))
-            })
+        mes_txt = limpar_texto(r.get("mes"))
+        mes_num = mapa_meses.get(mes_txt, 0)
+
+        ano = r.get("ano") or datetime.now().year
+
+        registros_final.append({
+            "ano": ano,
+            "mes": mes_num,
+            "estado": normalizar_texto(r.get("estado")),
+            "cidade": normalizar_texto(r.get("municipio")),
+            "linha": normalizar_texto(r.get("segmento")),
+            "implementador": normalizar_texto(r.get("fabricante")),
+            "cliente": normalizar_texto(r.get("cliente")),
+            "valor": float(r.get("valor", 0))
+        })
+
+    except Exception as e:
+
+        print("[ANFIR ERRO REGISTRO]", str(e))
+        continue
 
         # =========================
         # INSERT COM CONTROLE
