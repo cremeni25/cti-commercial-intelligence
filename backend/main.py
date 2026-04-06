@@ -3066,7 +3066,7 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
         registros_final = []
 
-        ano_atual = datetime.now().year
+        ano = r.get("ano") or datetime.now().year
 
         for r in registros:
 
