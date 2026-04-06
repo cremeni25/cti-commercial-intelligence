@@ -3044,7 +3044,6 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
         contents = await file.read()
 
-        # 🔥 ENGINE REAL
         registros = normalizar_anfir_100(contents)
 
         if not registros:
@@ -3052,10 +3051,6 @@ async def upload_anfir_full(file: UploadFile = File(...)):
                 "status": "erro",
                 "mensagem": "nenhum registro extraído da planilha"
             }
-
-        # =========================
-        # NORMALIZA CAMPOS
-        # =========================
 
         mapa_meses = {
             "janeiro": 1, "fevereiro": 2, "marco": 3, "março": 3,
@@ -3066,36 +3061,29 @@ async def upload_anfir_full(file: UploadFile = File(...)):
 
         registros_final = []
 
-        ano = r.get("ano") or datetime.now().year
+        for r in registros:
 
-for r in registros:
+            try:
 
-    try:
+                mes_txt = limpar_texto(r.get("mes"))
+                mes_num = mapa_meses.get(mes_txt, 0)
 
-        mes_txt = limpar_texto(r.get("mes"))
-        mes_num = mapa_meses.get(mes_txt, 0)
+                ano = r.get("ano") or datetime.now().year
 
-        ano = r.get("ano") or datetime.now().year
+                registros_final.append({
+                    "ano": ano,
+                    "mes": mes_num,
+                    "estado": normalizar_texto(r.get("estado")),
+                    "cidade": normalizar_texto(r.get("municipio")),
+                    "linha": normalizar_texto(r.get("segmento")),
+                    "implementador": normalizar_texto(r.get("fabricante")),
+                    "cliente": normalizar_texto(r.get("cliente")),
+                    "valor": float(r.get("valor", 0))
+                })
 
-        registros_final.append({
-            "ano": ano,
-            "mes": mes_num,
-            "estado": normalizar_texto(r.get("estado")),
-            "cidade": normalizar_texto(r.get("municipio")),
-            "linha": normalizar_texto(r.get("segmento")),
-            "implementador": normalizar_texto(r.get("fabricante")),
-            "cliente": normalizar_texto(r.get("cliente")),
-            "valor": float(r.get("valor", 0))
-        })
-
-    except Exception as e:
-
-        print("[ANFIR ERRO REGISTRO]", str(e))
-        continue        
-
-        # =========================
-        # INSERT COM CONTROLE
-        # =========================
+            except Exception as e:
+                print("[ANFIR ERRO REGISTRO]", str(e))
+                continue
 
         total_inserido = 0
         batch_size = 500
@@ -3131,11 +3119,6 @@ for r in registros:
             "status": "erro",
             "mensagem": str(e)
         }
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
 
 # ============================================================
 # CTI CORE V4 — CONSOLIDADOR UNIVERSAL + TEMPO INTELIGENTE
