@@ -3943,3 +3943,95 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
     except Exception as e:
         print("[ERRO GLOBAL MULTIABA]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# CORE DE CRUZAMENTO INTELIGENTE (CTI)
+# =========================================================
+
+def gerar_chave_cliente(cliente, cnpj):
+    
+    cliente = normalizar_texto(cliente)
+    cnpj = limpar_texto(cnpj)
+
+    if cnpj:
+        return f"CNPJ_{cnpj}"
+
+    return f"NOME_{cliente}"
+
+
+def consolidar_clientes(dados):
+
+    clientes = {}
+
+    for r in dados:
+
+        chave = gerar_chave_cliente(
+            r.get("cliente"),
+            r.get("cnpj")
+        )
+
+        if chave not in clientes:
+            clientes[chave] = {
+                "cliente": r.get("cliente"),
+                "cnpj": r.get("cnpj"),
+                "estado": r.get("estado"),
+                "cidade": r.get("cidade"),
+                "total_valor": 0,
+                "quantidade_registros": 0,
+                "origens": set(),
+                "historico": []
+            }
+
+        clientes[chave]["total_valor"] += r.get("valor", 0)
+        clientes[chave]["quantidade_registros"] += 1
+        clientes[chave]["origens"].add(r.get("origem"))
+
+        clientes[chave]["historico"].append(r)
+
+    # limpa sets para salvar no banco
+    for c in clientes.values():
+        c["origens"] = list(c["origens"])
+
+    return list(clientes.values())
+
+
+# =========================================================
+# ENDPOINT DE CONSOLIDAÇÃO
+# =========================================================
+
+@app.get("/consolidar-clientes")
+async def consolidar_clientes_endpoint():
+
+    try:
+
+        # 🔥 LÊ TODOS OS DADOS BRUTOS
+        response = supabase.table("cti_dados").select("*").execute()
+
+        dados = response.data or []
+
+        if not dados:
+            return {
+                "status": "vazio",
+                "mensagem": "nenhum dado encontrado"
+            }
+
+        clientes = consolidar_clientes(dados)
+
+        # 🔥 SALVA BASE CONSOLIDADA
+        supabase.table("cti_clientes").delete().neq("cliente", "").execute()
+
+        batch_size = 500
+
+        for i in range(0, len(clientes), batch_size):
+            batch = clientes[i:i + batch_size]
+            supabase.table("cti_clientes").insert(batch).execute()
+
+        return {
+            "status": "CONSOLIDADO",
+            "clientes_unicos": len(clientes),
+            "registros_origem": len(dados)
+        }
+
+    except Exception as e:
+        print("[ERRO CONSOLIDACAO]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
