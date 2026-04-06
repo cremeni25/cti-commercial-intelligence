@@ -3799,3 +3799,147 @@ async def upload_universal(file: UploadFile = File(...), origem: str = "manual")
     except Exception as e:
         print("[ERRO GLOBAL UNIVERSAL]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# CORE UNIVERSAL — LEITURA MULTI-ABA (VERSÃO DEFINITIVA)
+# =========================================================
+
+def engine_universal_multiaba(contents, origem="desconhecido"):
+
+    registros_total = []
+
+    try:
+        # 🔥 LÊ TODAS AS ABAS
+        dfs = pd.read_excel(io.BytesIO(contents), sheet_name=None)
+
+        for nome_aba, df in dfs.items():
+
+            try:
+                df = df.fillna("")
+
+                # normaliza colunas
+                df.columns = [str(c).strip().lower() for c in df.columns]
+
+                for _, row in df.iterrows():
+
+                    try:
+                        linha = {str(k).strip().lower(): v for k, v in row.items()}
+
+                        cliente = (
+                            linha.get("cliente")
+                            or linha.get("cliente final")
+                            or linha.get("razao social")
+                            or linha.get("nome")
+                            or ""
+                        )
+
+                        cnpj = (
+                            linha.get("cnpj")
+                            or linha.get("cpf/cnpj")
+                            or linha.get("documento")
+                            or ""
+                        )
+
+                        valor = (
+                            linha.get("valor")
+                            or linha.get("total")
+                            or linha.get("valor total")
+                            or linha.get("qtde")
+                            or linha.get("quantidade")
+                            or 0
+                        )
+
+                        data = (
+                            linha.get("data")
+                            or linha.get("data venda")
+                            or linha.get("fechamento")
+                            or None
+                        )
+
+                        cidade = (
+                            linha.get("cidade")
+                            or linha.get("municipio")
+                            or ""
+                        )
+
+                        estado = (
+                            linha.get("estado")
+                            or linha.get("uf")
+                            or ""
+                        )
+
+                        registro = {
+                            "cliente": normalizar_texto(cliente),
+                            "cnpj": limpar_texto(cnpj),
+                            "data": data,
+                            "valor": float(limpar_valor(valor) or 0),
+                            "origem": f"{origem}_{nome_aba}",
+                            "cidade": normalizar_texto(cidade),
+                            "estado": normalizar_texto(estado),
+                            "extra": linha
+                        }
+
+                        if not registro["cliente"] and not registro["valor"]:
+                            continue
+
+                        registros_total.append(registro)
+
+                    except Exception as e:
+                        print(f"[ERRO LINHA {nome_aba}]", str(e))
+                        continue
+
+            except Exception as e:
+                print(f"[ERRO ABA {nome_aba}]", str(e))
+                continue
+
+    except Exception as e:
+        print("[ERRO LEITURA EXCEL]", str(e))
+
+    return registros_total
+
+
+# =========================================================
+# ENDPOINT UNIVERSAL MULTI-ABA
+# =========================================================
+
+@app.post("/upload/universal-multiaba")
+async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = "manual"):
+
+    try:
+        contents = await file.read()
+
+        registros = engine_universal_multiaba(contents, origem)
+
+        if not registros:
+            return {
+                "status": "erro",
+                "mensagem": "nenhum dado encontrado em nenhuma aba"
+            }
+
+        total_inserido = 0
+        batch_size = 500
+
+        for i in range(0, len(registros), batch_size):
+
+            batch = registros[i:i + batch_size]
+
+            try:
+                response = supabase.table("cti_dados").insert(batch).execute()
+
+                if response.data:
+                    total_inserido += len(response.data)
+
+            except Exception as e:
+                print("[ERRO INSERT MULTIABA]", str(e))
+
+        return {
+            "status": "PROCESSADO MULTI-ABA",
+            "origem": origem,
+            "abas_processadas": len(set([r["origem"] for r in registros])),
+            "extraidos": len(registros),
+            "inseridos": total_inserido
+        }
+
+    except Exception as e:
+        print("[ERRO GLOBAL MULTIABA]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
