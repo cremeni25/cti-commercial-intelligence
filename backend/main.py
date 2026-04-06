@@ -2767,7 +2767,7 @@ def normalizar_anfir_100(contents):
     def limpar(txt):
         if txt is None:
             return ""
-        return str(txt).strip().lower()
+        return str(txt).strip()
 
     def detectar_mes(txt):
         mapa = {
@@ -2776,37 +2776,19 @@ def normalizar_anfir_100(contents):
             "agosto": 8, "setembro": 9, "outubro": 10,
             "novembro": 11, "dezembro": 12
         }
-        txt = limpar(txt)
+        txt = str(txt).lower()
         for k, v in mapa.items():
             if k in txt:
                 return v
         return None
 
     def detectar_ano(txt):
-        txt = limpar(txt)
-        match = re.search(r'20\d{2}', txt)
+        match = re.search(r'20\d{2}', str(txt))
         if match:
             return int(match.group())
         return None
 
-    def detectar_estado(txt):
-        estados = ["sp","rj","mg","pr","sc","rs","ba","df","go","mt","ms"]
-        txt = limpar(txt)
-        if txt in estados:
-            return txt.upper()
-        return None
-
-    def detectar_valor(txt):
-        try:
-            v = float(str(txt).replace(",", "."))
-            if v > 0 and v < 10000000:
-                return v
-        except:
-            return None
-        return None
-
     registros = []
-    registros_hash = set()
 
     xls = pd.ExcelFile(io.BytesIO(contents))
 
@@ -2816,66 +2798,66 @@ def normalizar_anfir_100(contents):
         df = df.fillna("")
 
         contexto_mes = detectar_mes(aba)
-        contexto_ano = detectar_ano(aba)
+        contexto_ano = detectar_ano(aba) or datetime.now().year
 
         for i in range(len(df)):
 
             linha = df.iloc[i].tolist()
 
-            mes = contexto_mes
-            ano = contexto_ano or datetime.now().year
-            estado = None
             valor = None
             cidade = None
+            cliente = None
+            implementador = None
+            linha_tipo = None
+            estado = None
 
             for celula in linha:
 
                 txt = limpar(celula)
 
-                if not mes:
-                    mes_detectado = detectar_mes(txt)
-                    if mes_detectado:
-                        mes = mes_detectado
+                # valor (regra principal)
+                try:
+                    v = float(str(txt).replace(",", "."))
+                    if v > 0:
+                        valor = v
+                except:
+                    pass
 
-                if not ano:
-                    ano_detectado = detectar_ano(txt)
-                    if ano_detectado:
-                        ano = ano_detectado
-
-                if not estado:
-                    estado_detectado = detectar_estado(txt)
-                    if estado_detectado:
-                        estado = estado_detectado
-
-                if not valor:
-                    valor_detectado = detectar_valor(txt)
-                    if valor_detectado:
-                        valor = valor_detectado
-
-                # cidade heurística simples
-                if not cidade and len(txt) > 3 and txt.isalpha():
+                # cidade (texto puro maior)
+                if not cidade and txt.isalpha() and len(txt) > 3:
                     cidade = txt.upper()
 
-            # 🔥 REGRA DE VALIDAÇÃO REAL
-            if not mes or not estado or not valor:
+                # cliente (texto longo)
+                if not cliente and len(txt) > 10:
+                    cliente = txt
+
+                # implementador (palavras comuns OEM)
+                if not implementador and len(txt) > 3 and len(txt) < 20:
+                    implementador = txt
+
+                # segmento
+                if not linha_tipo and any(x in txt.lower() for x in ["truck", "trailer", "drive"]):
+                    linha_tipo = txt
+
+                # estado simples
+                if txt.upper() in ["SP","MG","PR","SC","RS","BA","GO","MT","MS","RJ","DF"]:
+                    estado = txt.upper()
+
+            # 🔥 REGRA AGRESSIVA
+            if not valor:
                 continue
 
             registro = {
-                "ano": ano,
-                "mes": mes,
+                "ano": contexto_ano,
+                "mes": contexto_mes or 0,
                 "estado": estado,
                 "cidade": cidade,
-                "cliente": None,
-                "implementador": None,
-                "linha": None,
+                "cliente": cliente,
+                "implementador": implementador,
+                "linha": linha_tipo,
                 "valor": valor
             }
 
-            h = str(registro)
-            if h in registros_hash:
-                continue
-
-            registros_hash.add(h)
             registros.append(registro)
 
     return registros
