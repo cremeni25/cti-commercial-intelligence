@@ -3909,6 +3909,8 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
         contents = await file.read()
 
         registros = engine_universal_multiaba_v2(contents, origem)
+
+        print(f"[UPLOAD] REGISTROS RECEBIDOS: {len(registros)}")
         
         if not registros:
             return {
@@ -4182,7 +4184,14 @@ def engine_universal_multiaba_v2(contents, origem="desconhecido"):
                         }
 
                         # 🔥 AGORA NÃO DESCARTA TÃO FÁCIL
-                        if not registro["cliente"] and registro["valor"] == 0:
+                        # 🔥 REGRA CORRETA — NÃO DESCARTA DADO
+                        if (
+                            registro["cliente"] == "" and
+                            registro["cnpj"] == "" and
+                            registro["valor"] == 0 and
+                            registro["cidade"] == "" and
+                            registro["estado"] == ""
+                        ):
                             continue
 
                         registros_total.append(registro)
@@ -4197,5 +4206,7 @@ def engine_universal_multiaba_v2(contents, origem="desconhecido"):
 
     except Exception as e:
         print("[ERRO EXCEL FLEX]", str(e))
+
+        print(f"[MULTIABA] TOTAL REGISTROS EXTRAÍDOS: {len(registros_total)}")
 
     return registros_total
