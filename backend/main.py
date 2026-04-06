@@ -4134,3 +4134,68 @@ async def upload_universal_multiaba_v2(file: UploadFile = File(...), origem: str
     except Exception as e:
         print("[ERRO GLOBAL]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# PATCH INTELIGENTE — DETECÇÃO FLEXÍVEL DE COLUNAS
+# =========================================================
+
+def detectar_campo(linha, possiveis_nomes):
+    for nome in linha.keys():
+        for p in possiveis_nomes:
+            if p in nome:
+                return linha.get(nome)
+    return None
+
+
+def engine_universal_multiaba_v2(contents, origem="desconhecido"):
+
+    registros_total = []
+
+    try:
+        dfs = pd.read_excel(io.BytesIO(contents), sheet_name=None)
+
+        for nome_aba, df in dfs.items():
+
+            try:
+                df = df.fillna("")
+                df.columns = [str(c).strip().lower() for c in df.columns]
+
+                for _, row in df.iterrows():
+
+                    try:
+                        linha = {str(k).lower(): v for k, v in row.items()}
+
+                        cliente = detectar_campo(linha, ["cliente", "cliente final", "razao", "nome"])
+                        valor = detectar_campo(linha, ["valor", "total", "qtde", "quantidade"])
+                        cidade = detectar_campo(linha, ["cidade", "municipio"])
+                        estado = detectar_campo(linha, ["estado", "uf"])
+                        cnpj = detectar_campo(linha, ["cnpj", "cpf"])
+
+                        registro = {
+                            "cliente": normalizar_texto(cliente),
+                            "cnpj": limpar_texto(cnpj),
+                            "valor": float(limpar_valor(valor) or 0),
+                            "cidade": normalizar_texto(cidade),
+                            "estado": normalizar_texto(estado),
+                            "origem": f"{origem}_{nome_aba}",
+                            "extra": linha
+                        }
+
+                        # 🔥 AGORA NÃO DESCARTA TÃO FÁCIL
+                        if not registro["cliente"] and registro["valor"] == 0:
+                            continue
+
+                        registros_total.append(registro)
+
+                    except Exception as e:
+                        print("[ERRO LINHA FLEX]", str(e))
+                        continue
+
+            except Exception as e:
+                print("[ERRO ABA FLEX]", str(e))
+                continue
+
+    except Exception as e:
+        print("[ERRO EXCEL FLEX]", str(e))
+
+    return registros_total
