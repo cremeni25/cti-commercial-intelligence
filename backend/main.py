@@ -3965,32 +3965,53 @@ def consolidar_clientes(dados):
 
     clientes = {}
 
+    def gerar_chave_inteligente(r):
+
+        nome = normalizar_chave(r.get("cliente"))
+        cnpj = limpar_texto(r.get("cnpj"))
+
+        if cnpj:
+            return f"CNPJ_{cnpj}"
+
+        return f"NOME_{nome}"
+
     for r in dados:
 
-        chave = gerar_chave_cliente(
-            r.get("cliente"),
-            r.get("cnpj")
-        )
+        try:
 
-        if chave not in clientes:
-            clientes[chave] = {
-                "cliente": r.get("cliente"),
-                "cnpj": r.get("cnpj"),
-                "estado": r.get("estado"),
-                "cidade": r.get("cidade"),
-                "total_valor": 0,
-                "quantidade_registros": 0,
-                "origens": set(),
-                "historico": []
-            }
+            chave = gerar_chave_inteligente(r)
 
-        clientes[chave]["total_valor"] += r.get("valor", 0)
-        clientes[chave]["quantidade_registros"] += 1
-        clientes[chave]["origens"].add(r.get("origem"))
+            if chave not in clientes:
 
-        clientes[chave]["historico"].append(r)
+                clientes[chave] = {
+                    "cliente": normalizar_chave(r.get("cliente")),
+                    "cnpj": limpar_texto(r.get("cnpj")),
+                    "estado": r.get("estado"),
+                    "cidade": r.get("cidade"),
+                    "total_valor": 0,
+                    "quantidade_registros": 0,
+                    "origens": set(),
+                    "historico": []
+                }
 
-    # limpa sets para salvar no banco
+            valor = limpar_valor(r.get("valor"))
+
+            clientes[chave]["total_valor"] += valor
+            clientes[chave]["quantidade_registros"] += 1
+
+            clientes[chave]["origens"].add(r.get("origem"))
+            clientes[chave]["historico"].append(r)
+
+            if not clientes[chave]["cidade"] and r.get("cidade"):
+                clientes[chave]["cidade"] = r.get("cidade")
+
+            if not clientes[chave]["estado"] and r.get("estado"):
+                clientes[chave]["estado"] = r.get("estado")
+
+        except Exception as e:
+            print("[ERRO CONSOLIDACAO]", str(e))
+            continue
+
     for c in clientes.values():
         c["origens"] = list(c["origens"])
 
@@ -4020,8 +4041,8 @@ async def consolidar_clientes_endpoint():
         clientes = consolidar_clientes(dados)
 
         # 🔥 SALVA BASE CONSOLIDADA
-        supabase.table("cti_clientes").delete().neq("cliente", "").execute()
-
+        supabase.table("cti_clientes").delete().gt("total_valor", -1).execute()
+        
         batch_size = 500
 
         for i in range(0, len(clientes), batch_size):
