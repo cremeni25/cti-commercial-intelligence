@@ -4035,3 +4035,102 @@ async def consolidar_clientes_endpoint():
     except Exception as e:
         print("[ERRO CONSOLIDACAO]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# CONTROLE DE DUPLICIDADE (HASH INTELIGENTE)
+# =========================================================
+
+import hashlib
+
+
+def gerar_hash_registro(r):
+
+    base = f"{r.get('cliente','')}_{r.get('cnpj','')}_{r.get('data','')}_{r.get('valor',0)}_{r.get('origem','')}"
+    
+    base = normalizar_texto(base)
+
+    return hashlib.md5(base.encode()).hexdigest()
+
+
+async def filtrar_registros_novos(registros):
+
+    try:
+
+        # 🔥 BUSCA TODOS OS HASHES EXISTENTES
+        response = supabase.table("cti_dados").select("hash_id").execute()
+
+        existentes = set()
+
+        if response.data:
+            existentes = set([r["hash_id"] for r in response.data if r.get("hash_id")])
+
+        novos = []
+
+        for r in registros:
+
+            try:
+                hash_id = gerar_hash_registro(r)
+                r["hash_id"] = hash_id
+
+                if hash_id not in existentes:
+                    novos.append(r)
+
+            except Exception as e:
+                print("[ERRO HASH]", str(e))
+                continue
+
+        return novos
+
+    except Exception as e:
+        print("[ERRO FILTRO DUPLICIDADE]", str(e))
+        return registros  # fallback (não trava o sistema)
+
+
+# =========================================================
+# PATCH DO ENDPOINT MULTI-ABA (SEM QUEBRAR)
+# =========================================================
+
+@app.post("/upload/universal-multiaba-v2")
+async def upload_universal_multiaba_v2(file: UploadFile = File(...), origem: str = "manual"):
+
+    try:
+        contents = await file.read()
+
+        registros = engine_universal_multiaba(contents, origem)
+
+        if not registros:
+            return {
+                "status": "erro",
+                "mensagem": "nenhum dado encontrado"
+            }
+
+        # 🔥 FILTRA DUPLICADOS
+        registros_filtrados = await filtrar_registros_novos(registros)
+
+        total_inserido = 0
+        batch_size = 500
+
+        for i in range(0, len(registros_filtrados), batch_size):
+
+            batch = registros_filtrados[i:i + batch_size]
+
+            try:
+                response = supabase.table("cti_dados").insert(batch).execute()
+
+                if response.data:
+                    total_inserido += len(response.data)
+
+            except Exception as e:
+                print("[ERRO INSERT]", str(e))
+
+        return {
+            "status": "MULTI-ABA COM CONTROLE",
+            "origem": origem,
+            "extraidos": len(registros),
+            "novos": len(registros_filtrados),
+            "inseridos": total_inserido
+        }
+
+    except Exception as e:
+        print("[ERRO GLOBAL]", str(e))
+        raise HTTPException(status_code=500, detail=str(e))
