@@ -4231,3 +4231,136 @@ def engine_universal_multiaba_v2(contents, origem="desconhecido"):
         print(f"[MULTIABA] TOTAL REGISTROS EXTRAÍDOS: {len(registros_total)}")
 
     return registros_total
+
+# =========================================================
+# CORE UNIFICADO — ENGINE UNIVERSAL DEFINITIVO
+# =========================================================
+
+def engine_universal_core(contents, origem="desconhecido"):
+
+    import pandas as pd
+    import io
+    import re
+    from datetime import datetime
+
+    def limpar_texto(txt):
+        if txt is None:
+            return ""
+        return str(txt).strip()
+
+    def normalizar(txt):
+        return normalizar_texto(limpar_texto(txt))
+
+    def extrair_numero(valor):
+        try:
+            txt = str(valor).replace(".", "").replace(",", ".")
+            num = float(txt)
+            if num > 0:
+                return num
+        except:
+            pass
+        return 0
+
+    def detectar_tipo(valor):
+
+        if not valor:
+            return None, None
+
+        texto = str(valor)
+        numeros = re.sub(r"\D", "", texto)
+
+        # CNPJ
+        if len(numeros) == 14:
+            return "cnpj", numeros
+
+        # PLACA
+        if len(texto) >= 7 and any(c.isalpha() for c in texto):
+            return "placa", normalizar(texto)
+
+        # NOME
+        if len(texto) > 3:
+            return "cliente", normalizar(texto)
+
+        return None, None
+
+    registros = []
+
+    try:
+        xls = pd.ExcelFile(io.BytesIO(contents))
+
+        for nome_aba in xls.sheet_names:
+
+            try:
+                df = xls.parse(nome_aba, header=None)
+                df = df.fillna("")
+
+                for _, row in df.iterrows():
+
+                    linha = list(row)
+
+                    valor = 0
+                    cliente = None
+                    cnpj = None
+                    placa = None
+                    cidade = None
+                    estado = None
+
+                    for celula in linha:
+
+                        txt = limpar_texto(celula)
+
+                        # 🔥 VALOR
+                        num = extrair_numero(txt)
+                        if num > 0:
+                            valor = num
+
+                        # 🔥 IDENTIFICAÇÃO
+                        tipo, dado = detectar_tipo(txt)
+
+                        if tipo == "cnpj":
+                            cnpj = dado
+
+                        elif tipo == "placa":
+                            placa = dado
+
+                        elif tipo == "cliente" and not cliente:
+                            cliente = dado
+
+                        # 🔥 ESTADO (UF)
+                        if len(txt) == 2 and txt.isalpha():
+                            estado = txt.upper()
+
+                        # 🔥 CIDADE (heurística simples)
+                        if len(txt) > 4 and not cidade and not txt.isdigit():
+                            cidade = normalizar(txt)
+
+                    # 🔥 REGRA AGRESSIVA (NÃO PERDER DADO)
+                    if (
+                        valor == 0 and
+                        not cliente and
+                        not cnpj and
+                        not placa
+                    ):
+                        continue
+
+                    registros.append({
+                        "cliente": cliente,
+                        "cnpj": cnpj,
+                        "placa": placa,
+                        "cidade": cidade,
+                        "estado": estado,
+                        "valor": valor,
+                        "origem": f"{origem}_{nome_aba}",
+                        "created_at": datetime.now().isoformat()
+                    })
+
+            except Exception as e:
+                print(f"[CORE ERRO ABA] {nome_aba} -> {str(e)}")
+                continue
+
+    except Exception as e:
+        print("[CORE ERRO EXCEL]", str(e))
+
+    print(f"[CORE] TOTAL REGISTROS EXTRAÍDOS: {len(registros)}")
+
+    return registros
