@@ -23,6 +23,127 @@ from engine.win_loss_engine import WinLossEngine
 from core.supabase_client import supabase
 from routers.engine_router import router as engine_router
 
+def normalizar_registro(r):
+
+    # =========================
+    # BASE SEGURA
+    # =========================
+    registro = {
+        "cliente": None,
+        "cnpj": None,
+        "data": None,
+        "valor": None,
+        "origem": r.get("origem"),
+        "cidade": None,
+        "estado": None,
+        "categoria": None,
+        "extra": {}
+    }
+
+    # =========================
+    # 1. FILTRO DE LIXO (HEADERS)
+    # =========================
+    lixo = ["TOTAL", "MUNICIPIO", "UF", "SEGMENTO", "VENDAS", "META"]
+
+    if str(r.get("cliente")).upper() in lixo:
+        return None
+
+    if str(r.get("cidade")).upper() in lixo:
+        return None
+
+    # =========================
+    # 2. CLIENTE
+    # =========================
+    cliente = r.get("cliente")
+
+    if cliente and not str(cliente).replace(".", "").isdigit():
+        registro["cliente"] = str(cliente).strip()
+
+    # =========================
+    # 3. CNPJ OU DATA DISFARÇADA
+    # =========================
+    cnpj = str(r.get("cnpj") or "")
+
+    if len(cnpj) == 14 and cnpj.startswith("202"):
+        # provavelmente é data
+        try:
+            ano = cnpj[0:4]
+            mes = cnpj[4:6]
+            dia = cnpj[6:8]
+            registro["data"] = f"{ano}-{mes}-{dia}"
+        except:
+            pass
+    elif len(cnpj) == 14:
+        registro["cnpj"] = cnpj
+
+    # =========================
+    # 4. VALOR
+    # =========================
+    try:
+        valor = float(r.get("valor") or 0)
+
+        # descarta valores absurdos
+        if valor > 1_000_000_000:
+            valor = None
+
+        registro["valor"] = valor
+
+    except:
+        registro["valor"] = None
+
+    # =========================
+    # 5. CIDADE
+    # =========================
+    cidade = r.get("cidade")
+
+    if cidade and len(str(cidade)) > 2:
+        registro["cidade"] = str(cidade).strip()
+
+    # =========================
+    # 6. ESTADO (UF)
+    # =========================
+    UF_VALIDAS = [
+        "AC","AL","AP","AM","BA","CE","DF","ES","GO","MA",
+        "MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN",
+        "RS","RO","RR","SC","SP","SE","TO"
+    ]
+
+    estado = str(r.get("estado") or "").upper()
+
+    if estado in UF_VALIDAS:
+        registro["estado"] = estado
+
+    # =========================
+    # 7. EXTRA → CATEGORIA
+    # =========================
+    extra = r.get("extra") or {}
+
+    placa = extra.get("placa")
+
+    if placa:
+        texto = str(placa).upper()
+
+        # detectar se é categoria
+        categorias = ["DIESEL", "TRUCK", "TRAILER", "DIRECT", "DRIVE"]
+
+        if any(c in texto for c in categorias):
+            registro["categoria"] = texto
+        else:
+            registro["extra"]["placa"] = placa
+
+    # =========================
+    # 8. LIMPEZA FINAL
+    # =========================
+    if not any([
+        registro["cliente"],
+        registro["cnpj"],
+        registro["valor"],
+        registro["categoria"]
+    ]):
+        return None
+
+    return registro
+
 # ============================================================
 # INICIALIZAÇÃO FASTAPI
 # ============================================================
@@ -3780,8 +3901,15 @@ async def upload_universal(file: UploadFile = File(...), origem: str = "manual")
 
             batch = registros[i:i + batch_size]
 
+            batch_normalizado = []
+
+            for r in batch:
+                r_norm = normalizar_registro(r)
+                if r_norm:
+                    batch_normalizado.append(r_norm)
+
             try:
-                response = supabase.table("cti_dados").insert(batch).execute()
+                response = supabase.table("cti_dados").insert(batch_normalizado).execute()
 
                 print("[SUPABASE RESPONSE]", response)
 
