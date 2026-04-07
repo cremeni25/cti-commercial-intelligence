@@ -3929,9 +3929,15 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
 
             batch = registros[i:i + batch_size]
 
-            try:
-                response = supabase.table("cti_dados").insert(batch).execute()
+            for r in batch:
+                if "placa" in r:
+                    if "extra" not in r:
+                        r["extra"] = {}
+                    r["extra"]["placa"] = r["placa"]
+                    del r["placa"]
 
+        try:
+            response = supabase.table("cti_dados").insert(batch).execute()
                 print("[SUPABASE RESPONSE]", response)
 
                 if response.data:
