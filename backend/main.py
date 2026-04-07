@@ -8,7 +8,7 @@ from routers.vendas_router import router as vendas_router
 from routers.negociacoes_router import router as negociacoes_router
 from routers.analytics_router import router as analytics_router
 from core.config import APP_NAME, APP_VERSION
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 from routers.upload_router import router as upload_router
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
