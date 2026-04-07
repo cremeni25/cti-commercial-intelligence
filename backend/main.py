@@ -3915,7 +3915,7 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
         registros = engine_universal_core(contents, origem)
 
         print(f"[UPLOAD] REGISTROS RECEBIDOS: {len(registros)}")
-        
+
         if not registros:
             return {
                 "status": "erro",
@@ -3925,29 +3925,29 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
         total_inserido = 0
         batch_size = 500
 
-    for i in range(0, len(registros), batch_size):
+        for i in range(0, len(registros), batch_size):
 
-        batch = registros[i:i + batch_size]
+            batch = registros[i:i + batch_size]
 
-    for r in batch:
-        if "placa" in r:
-            if "extra" not in r:
-                r["extra"] = {}
-            r["extra"]["placa"] = r["placa"]
-            del r["placa"]
+            for r in batch:
+                if "placa" in r:
+                    if "extra" not in r:
+                        r["extra"] = {}
+                    r["extra"]["placa"] = r["placa"]
+                    del r["placa"]
 
-    try:
-        response = supabase.table("cti_dados").insert(batch).execute()
-        print("[SUPABASE RESPONSE]", response)
+            try:
+                response = supabase.table("cti_dados").insert(batch).execute()
+                print("[SUPABASE RESPONSE]", response)
 
-        if response.data:
-            total_inserido += len(response.data)
-        else:
-            print("[ERRO INSERT DETECTADO]", response)
+                if response.data:
+                    total_inserido += len(response.data)
+                else:
+                    print("[ERRO INSERT DETECTADO]", response)
 
-    except Exception as e:
-        print("[ERRO INSERT MULTIABA]", str(e))
-        
+            except Exception as e:
+                print("[ERRO INSERT MULTIABA]", str(e))
+
         return {
             "status": "PROCESSADO MULTI-ABA",
             "origem": origem,
