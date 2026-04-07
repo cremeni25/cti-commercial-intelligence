@@ -3938,12 +3938,12 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
 
         try:
             response = supabase.table("cti_dados").insert(batch).execute()
-                print("[SUPABASE RESPONSE]", response)
+            print("[SUPABASE RESPONSE]", response)
 
-                if response.data:
-                    total_inserido += len(response.data)
-                else:
-                    print("[ERRO INSERT DETECTADO]", response)
+            if response.data:
+                total_inserido += len(response.data)
+            else:
+                print("[ERRO INSERT DETECTADO]", response)
 
             except Exception as e:
                 print("[ERRO INSERT MULTIABA]", str(e))
