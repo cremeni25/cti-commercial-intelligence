@@ -4128,7 +4128,7 @@ async def upload_universal_multiaba_v2(file: UploadFile = File(...), origem: str
             }
 
         # 🔥 FILTRA DUPLICADOS
-        registros_filtrados = await filtrar_registros_novos(registros)
+        registros_filtrados = registros
 
         total_inserido = 0
         batch_size = 500
