@@ -4510,3 +4510,155 @@ def engine_universal_core(contents, origem="desconhecido"):
     print(f"[CORE] TOTAL REGISTROS EXTRAÍDOS: {len(registros)}")
 
     return registros
+
+# =========================================================
+# CONSOLIDADOR ENTERPRISE (OVERRIDE TOTAL - SAFE MODE)
+# =========================================================
+
+def consolidar_clientes_v2(dados):
+
+    clientes = {}
+
+    def safe_str(v):
+        if v is None:
+            return ""
+        return str(v).strip()
+
+    def gerar_chave(r):
+
+        try:
+            cliente = normalizar_chave(safe_str(r.get("cliente")))
+            cnpj = limpar_texto(safe_str(r.get("cnpj")))
+
+            if cnpj:
+                return f"CNPJ_{cnpj}"
+
+            if cliente:
+                return f"NOME_{cliente}"
+
+            return None
+
+        except:
+            return None
+
+    for r in dados:
+
+        try:
+
+            # 🔥 BLINDAGEM TOTAL
+            if not isinstance(r, dict):
+                continue
+
+            if not any([
+                r.get("cliente"),
+                r.get("cnpj"),
+                r.get("valor"),
+                r.get("cidade"),
+                r.get("estado")
+            ]):
+                continue
+
+            chave = gerar_chave(r)
+
+            if not chave:
+                continue
+
+            if chave not in clientes:
+
+                clientes[chave] = {
+                    "cliente": normalizar_chave(safe_str(r.get("cliente"))),
+                    "cnpj": limpar_texto(safe_str(r.get("cnpj"))),
+                    "estado": safe_str(r.get("estado")),
+                    "cidade": safe_str(r.get("cidade")),
+                    "total_valor": 0,
+                    "quantidade_registros": 0,
+                    "origens": set(),
+                    "historico": []
+                }
+
+            valor = limpar_valor(r.get("valor") or 0)
+
+            clientes[chave]["total_valor"] += valor
+            clientes[chave]["quantidade_registros"] += 1
+
+            origem = safe_str(r.get("origem"))
+            if origem:
+                clientes[chave]["origens"].add(origem)
+
+            clientes[chave]["historico"].append(r)
+
+            # 🔥 ENRIQUECIMENTO INTELIGENTE
+            if not clientes[chave]["cidade"] and r.get("cidade"):
+                clientes[chave]["cidade"] = safe_str(r.get("cidade"))
+
+            if not clientes[chave]["estado"] and r.get("estado"):
+                clientes[chave]["estado"] = safe_str(r.get("estado"))
+
+        except Exception as e:
+            print("[ERRO CONSOLIDACAO V2]", str(e))
+            continue
+
+    # 🔥 FINALIZAÇÃO
+    resultado = []
+
+    for c in clientes.values():
+
+        c["origens"] = list(c["origens"])
+
+        # opcional: reduzir histórico (performance)
+        if len(c["historico"]) > 50:
+            c["historico"] = c["historico"][:50]
+
+        resultado.append(c)
+
+    return resultado
+
+
+# =========================================================
+# ENDPOINT CONSOLIDAÇÃO V2 (SUBSTITUI ANTIGO)
+# =========================================================
+
+@app.get("/consolidar-clientes-v2")
+async def consolidar_clientes_v2_endpoint():
+
+    try:
+
+        response = supabase.table("cti_dados").select("*").execute()
+
+        dados = response.data or []
+
+        if not dados:
+            return {
+                "status": "vazio",
+                "mensagem": "nenhum dado encontrado"
+            }
+
+        clientes = consolidar_clientes_v2(dados)
+
+        # 🔥 LIMPA BASE ANTIGA COM SEGURANÇA
+        supabase.table("cti_clientes").delete().gt("total_valor", -1).execute()
+
+        batch_size = 500
+        total = 0
+
+        for i in range(0, len(clientes), batch_size):
+
+            batch = clientes[i:i + batch_size]
+
+            response_insert = supabase.table("cti_clientes").insert(batch).execute()
+
+            if response_insert.data:
+                total += len(response_insert.data)
+
+        return {
+            "status": "CONSOLIDADO_V2",
+            "clientes_unicos": len(clientes),
+            "registros_origem": len(dados),
+            "inseridos": total
+        }
+
+    except Exception as e:
+
+        print("[ERRO CONSOLIDACAO V2]", str(e))
+
+        raise HTTPException(status_code=500, detail=str(e))
