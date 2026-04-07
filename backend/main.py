@@ -3908,7 +3908,7 @@ async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = 
     try:
         contents = await file.read()
 
-        registros = engine_universal_multiaba_v2(contents, origem)
+        registros = engine_universal_core(contents, origem)
 
         print(f"[UPLOAD] REGISTROS RECEBIDOS: {len(registros)}")
         
