@@ -108,10 +108,12 @@ def normalizar_registro(r):
         "RS","RO","RR","SC","SP","SE","TO"
     ]
 
-    estado = str(r.get("estado") or "").upper()
+    estado = str(r.get("estado") or "").upper().strip()
 
     if estado in UF_VALIDAS:
         registro["estado"] = estado
+    else:
+        registro["estado"] = None
 
     # =========================
     # 7. EXTRA → CATEGORIA
