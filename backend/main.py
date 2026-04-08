@@ -4662,3 +4662,101 @@ async def consolidar_clientes_v2_endpoint():
         print("[ERRO CONSOLIDACAO V2]", str(e))
 
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# GEO INTELIGÊNCIA V1 — CTI
+# =========================================================
+
+@app.get("/geo/visao-geral")
+def geo_visao_geral():
+
+    dados = select_all("cti_clientes")
+
+    estados = {}
+    cidades = {}
+
+    for r in dados:
+
+        estado = normalizar_texto(r.get("estado"))
+        cidade = normalizar_texto(r.get("cidade"))
+        valor = limpar_valor(r.get("total_valor"))
+
+        # -------------------------
+        # ESTADOS
+        # -------------------------
+        if estado not in estados:
+            estados[estado] = {
+                "estado": estado,
+                "clientes": 0,
+                "faturamento": 0
+            }
+
+        estados[estado]["clientes"] += 1
+        estados[estado]["faturamento"] += valor
+
+        # -------------------------
+        # CIDADES
+        # -------------------------
+        if cidade not in cidades:
+            cidades[cidade] = {
+                "cidade": cidade,
+                "clientes": 0,
+                "faturamento": 0
+            }
+
+        cidades[cidade]["clientes"] += 1
+        cidades[cidade]["faturamento"] += valor
+
+    return {
+        "por_estado": sorted(estados.values(), key=lambda x: x["faturamento"], reverse=True),
+        "top_cidades": sorted(cidades.values(), key=lambda x: x["faturamento"], reverse=True)[:20]
+    }
+
+
+# =========================================================
+# GEO INTELIGÊNCIA — FOCO VIENA (DDD)
+# =========================================================
+
+DDD_VIENA = ["011","012","013","014","015","018"]
+
+@app.get("/geo/radar-ddd")
+def geo_radar_ddd():
+
+    dados = select_all("cti_clientes")
+
+    radar = {}
+
+    for r in dados:
+
+        cidade = r.get("cidade")
+        valor = limpar_valor(r.get("total_valor"))
+
+        ddd = obter_ddd_unificado(cidade)
+
+        if not ddd:
+            continue
+
+        if ddd not in radar:
+            radar[ddd] = {
+                "ddd": ddd,
+                "clientes": 0,
+                "faturamento": 0
+            }
+
+        radar[ddd]["clientes"] += 1
+        radar[ddd]["faturamento"] += valor
+
+    oportunidades = []
+
+    for d in radar.values():
+
+        if d["clientes"] <= 2:
+            oportunidades.append({
+                "ddd": d["ddd"],
+                "motivo": "baixa penetração"
+            })
+
+    return {
+        "radar": sorted(radar.values(), key=lambda x: x["faturamento"], reverse=True),
+        "oportunidades": oportunidades
+    }
