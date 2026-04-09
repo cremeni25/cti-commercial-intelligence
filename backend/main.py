@@ -125,13 +125,34 @@ def normalizar_registro(r):
     if placa:
         texto = str(placa).upper()
 
-        # detectar se é categoria
-        categorias = ["DIESEL", "TRUCK", "TRAILER", "DIRECT", "DRIVE"]
+    # =========================
+    # CATEGORIAS (PADRÃO OFICIAL)
+    # =========================
+    if "TRAILER" in texto:
+        registro["categoria"] = "TRAILER"
 
-        if any(c in texto for c in categorias):
-            registro["categoria"] = texto
-        else:
-            registro["extra"]["placa"] = placa
+    elif "DIESEL" in texto and "TRUCK" in texto:
+        registro["categoria"] = "DIESEL TRUCK"
+
+    elif "DIRECT" in texto or "DRIVE" in texto:
+        registro["categoria"] = "DIRECT DRIVE"
+
+    # =========================
+    # CONCORRENTES
+    # =========================
+    elif any(c in texto for c in [
+        "THERMO KING", "TK",
+        "RODOFRIO",
+        "THERMOSTAR",
+        "FRIGOKING"
+    ]):
+        registro["extra"]["concorrente"] = texto
+
+    # =========================
+    # OUTROS
+    # =========================
+    else:
+        registro["extra"]["concorrente"] = "OUTROS"
 
     # =========================
     # 8. LIMPEZA FINAL
