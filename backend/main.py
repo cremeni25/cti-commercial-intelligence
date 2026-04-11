@@ -4865,3 +4865,203 @@ def processar_dataframe_inteligente(df, origem):
             registros.append(interpretado)
 
     return registros
+
+# ============================================================
+# 🧠 CTI PIPELINE UNIVERSAL DEFINITIVO (AUTO-APRENDIZADO)
+# ============================================================
+
+import pandas as pd
+import io
+import re
+import hashlib
+from datetime import datetime
+from fastapi import UploadFile, File, HTTPException
+
+# ============================================================
+# 🧠 MEMÓRIA DE APRENDIZADO (SIMPLES - EXPANSÍVEL)
+# ============================================================
+
+MEMORIA_COLUNAS = {
+    "placa": set(),
+    "valor": set(),
+    "data": set()
+}
+
+
+# ============================================================
+# 🔐 HASH (ANTI-DUPLICIDADE REAL)
+# ============================================================
+
+def gerar_hash(r):
+    base = f"{r.get('placa')}_{r.get('data')}_{r.get('valor')}"
+    return hashlib.md5(base.encode()).hexdigest()
+
+
+# ============================================================
+# 🔍 DETECÇÃO INTELIGENTE + APRENDIZADO
+# ============================================================
+
+def detectar_colunas(df):
+
+    mapa = {"placa": None, "valor": None, "data": None}
+
+    for col in df.columns:
+        col_lower = str(col).lower()
+
+        # APRENDIZADO
+        for tipo in MEMORIA_COLUNAS:
+            if col in MEMORIA_COLUNAS[tipo]:
+                mapa[tipo] = col
+
+        # HEURÍSTICA
+        if not mapa["placa"] and any(k in col_lower for k in ["placa", "veiculo", "carro"]):
+            mapa["placa"] = col
+
+        if not mapa["valor"] and any(k in col_lower for k in ["valor", "total", "preco"]):
+            mapa["valor"] = col
+
+        if not mapa["data"] and any(k in col_lower for k in ["data", "dt"]):
+            mapa["data"] = col
+
+    return mapa
+
+
+# ============================================================
+# 🧠 INTERPRETAÇÃO INTELIGENTE
+# ============================================================
+
+def extrair_placa(texto):
+    if not texto:
+        return None
+
+    texto = str(texto).upper()
+    match = re.search(r'[A-Z]{3}[0-9][A-Z0-9][0-9]{2}', texto)
+    return match.group(0) if match else None
+
+
+def interpretar_linha(row, mapa):
+
+    try:
+        placa = extrair_placa(row.get(mapa["placa"])) if mapa["placa"] else None
+        valor = float(row.get(mapa["valor"]) or 0) if mapa["valor"] else 0
+        data = str(row.get(mapa["data"]) or "") if mapa["data"] else ""
+
+        return {
+            "placa": placa,
+            "valor": valor,
+            "data": data,
+            "extra": dict(row)
+        }
+
+    except:
+        return None
+
+
+# ============================================================
+# 📚 APRENDIZADO AUTOMÁTICO
+# ============================================================
+
+def aprender_mapeamento(mapa):
+    for tipo, col in mapa.items():
+        if col:
+            MEMORIA_COLUNAS[tipo].add(col)
+
+
+# ============================================================
+# 🔍 DEDUPLICAÇÃO
+# ============================================================
+
+def deduplicar(registros):
+    vistos = set()
+    novos = []
+
+    for r in registros:
+        h = gerar_hash(r)
+        if h not in vistos:
+            vistos.add(h)
+            r["hash"] = h
+            novos.append(r)
+
+    return novos
+
+
+# ============================================================
+# 🧠 PIPELINE PRINCIPAL
+# ============================================================
+
+async def pipeline_cti(contents, origem):
+
+    print("[CTI] [INFO] Iniciando pipeline")
+
+    try:
+        xls = pd.ExcelFile(io.BytesIO(contents))
+    except:
+        raise HTTPException(status_code=400, detail="Arquivo inválido")
+
+    todos_registros = []
+
+    for aba in xls.sheet_names:
+        df = xls.parse(aba).fillna("")
+
+        mapa = detectar_colunas(df)
+        aprender_mapeamento(mapa)
+
+        for _, row in df.iterrows():
+            r = interpretar_linha(row, mapa)
+
+            if r:
+                r["origem"] = origem
+                r["aba"] = aba
+                r["criado_em"] = datetime.utcnow().isoformat()
+                todos_registros.append(r)
+
+    print(f"[CTI] [INFO] Registros interpretados: {len(todos_registros)}")
+
+    if not todos_registros:
+        raise HTTPException(status_code=400, detail="Nenhum dado válido")
+
+    registros_unicos = deduplicar(todos_registros)
+
+    print(f"[CTI] [INFO] Após deduplicação: {len(registros_unicos)}")
+
+    # INSERT EM LOTE
+    batch_size = 500
+    total_inserido = 0
+
+    for i in range(0, len(registros_unicos), batch_size):
+        batch = registros_unicos[i:i + batch_size]
+
+        try:
+            response = supabase.table("cti_dados").insert(batch).execute()
+
+            if response.data:
+                total_inserido += len(response.data)
+
+        except Exception as e:
+            print(f"[CTI] [ERROR] Insert falhou: {str(e)}")
+
+    print(f"[CTI] [SUCCESS] Inseridos: {total_inserido}")
+
+    return {
+        "status": "OK",
+        "origem": origem,
+        "total_lidos": len(todos_registros),
+        "total_unicos": len(registros_unicos),
+        "total_inseridos": total_inserido
+    }
+
+
+# ============================================================
+# 🌐 ENDPOINT ÚNICO OFICIAL
+# ============================================================
+
+@app.post("/upload/universal")
+async def upload_universal(file: UploadFile = File(...), origem: str = "manual"):
+
+    try:
+        contents = await file.read()
+        return await pipeline_cti(contents, origem)
+
+    except Exception as e:
+        print(f"[CTI] [FATAL] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
