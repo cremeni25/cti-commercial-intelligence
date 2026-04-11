@@ -709,25 +709,6 @@ def processar_planilha_universal(contents):
     return registros
 
 # ============================================================
-# UPLOAD UNIVERSAL DE PLANILHAS
-# ============================================================
-
-@app.post("/upload/universal")
-async def upload_universal(file: UploadFile = File(...)):
-
-    contents = await file.read()
-
-    registros = processar_planilha_universal(contents)
-
-    return {
-
-        "status": "processado",
-        "registros_lidos": len(registros),
-        "amostra": registros[:5]
-
-    }
-
-# ============================================================
 # MONITORAMENTO ANFIR
 # ============================================================
 
@@ -3898,63 +3879,6 @@ def engine_universal_planilha(df, origem="desconhecido"):
 
     return registros
 
-
-# =========================================================
-# ENDPOINT UNIVERSAL
-# =========================================================
-
-@app.post("/upload/universal")
-async def upload_universal(file: UploadFile = File(...), origem: str = "manual"):
-
-    try:
-        contents = await file.read()
-
-        df = pd.read_excel(io.BytesIO(contents))
-        df = df.fillna("")
-
-        registros = engine_universal_planilha(df, origem)
-
-        if not registros:
-            return {"status": "erro", "mensagem": "nenhum dado válido"}
-
-        total_inserido = 0
-        batch_size = 500
-
-        for i in range(0, len(registros), batch_size):
-
-            batch = registros[i:i + batch_size]
-
-            batch_normalizado = []
-
-            for r in batch:
-                r_norm = normalizar_registro(r)
-                if r_norm:
-                    batch_normalizado.append(r_norm)
-
-            try:
-                response = supabase.table("cti_dados").insert(batch_normalizado).execute()
-
-                print("[SUPABASE RESPONSE]", response)
-
-                if response.data:
-                    total_inserido += len(response.data)
-                else:
-                    print("[ERRO INSERT DETECTADO]", response)
-
-            except Exception as e:
-                print("[ERRO INSERT UNIVERSAL]", str(e))
-
-        return {
-            "status": "PROCESSADO",
-            "origem": origem,
-            "extraidos": len(registros),
-            "inseridos": total_inserido
-        }
-
-    except Exception as e:
-        print("[ERRO GLOBAL UNIVERSAL]", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
-
 # =========================================================
 # CORE UNIVERSAL — LEITURA MULTI-ABA (VERSÃO DEFINITIVA)
 # =========================================================
@@ -4051,65 +3975,6 @@ def engine_universal_multiaba(contents, origem="desconhecido"):
         print("[ERRO LEITURA EXCEL]", str(e))
 
     return registros_total
-
-
-# =========================================================
-# ENDPOINT UNIVERSAL MULTI-ABA
-# =========================================================
-
-@app.post("/upload/universal-multiaba")
-async def upload_universal_multiaba(file: UploadFile = File(...), origem: str = "manual"):
-
-    try:
-        contents = await file.read()
-
-        registros = engine_universal_core(contents, origem)
-
-        print(f"[UPLOAD] REGISTROS RECEBIDOS: {len(registros)}")
-
-        if not registros:
-            return {
-                "status": "erro",
-                "mensagem": "nenhum dado encontrado em nenhuma aba"
-            }
-
-        total_inserido = 0
-        batch_size = 500
-
-        for i in range(0, len(registros), batch_size):
-
-            batch = registros[i:i + batch_size]
-
-            for r in batch:
-                if "placa" in r:
-                    if "extra" not in r:
-                        r["extra"] = {}
-                    r["extra"]["placa"] = r["placa"]
-                    del r["placa"]
-
-            try:
-                response = supabase.table("cti_dados").insert(batch).execute()
-                print("[SUPABASE RESPONSE]", response)
-
-                if response.data:
-                    total_inserido += len(response.data)
-                else:
-                    print("[ERRO INSERT DETECTADO]", response)
-
-            except Exception as e:
-                print("[ERRO INSERT MULTIABA]", str(e))
-
-        return {
-            "status": "PROCESSADO MULTI-ABA",
-            "origem": origem,
-            "abas_processadas": len(set([r["origem"] for r in registros])),
-            "extraidos": len(registros),
-            "inseridos": total_inserido
-        }
-
-    except Exception as e:
-        print("[ERRO GLOBAL MULTIABA]", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 # =========================================================
 # CORE DE CRUZAMENTO INTELIGENTE (CTI)
@@ -4272,60 +4137,6 @@ async def filtrar_registros_novos(registros):
     except Exception as e:
         print("[ERRO FILTRO DUPLICIDADE]", str(e))
         return registros  # fallback (não trava o sistema)
-
-
-# =========================================================
-# PATCH DO ENDPOINT MULTI-ABA (SEM QUEBRAR)
-# =========================================================
-
-@app.post("/upload/universal-multiaba-v2")
-async def upload_universal_multiaba_v2(file: UploadFile = File(...), origem: str = "manual"):
-
-    try:
-        contents = await file.read()
-
-        registros = engine_universal_multiaba_v2(contents, origem)
-
-        if not registros:
-            return {
-                "status": "erro",
-                "mensagem": "nenhum dado encontrado"
-            }
-
-        # 🔥 FILTRA DUPLICADOS
-        registros_filtrados = registros
-
-        total_inserido = 0
-        batch_size = 500
-
-        for i in range(0, len(registros_filtrados), batch_size):
-
-            batch = registros_filtrados[i:i + batch_size]
-
-            try:
-                response = supabase.table("cti_dados").insert(batch).execute()
-
-                print("[SUPABASE RESPONSE]", response)
-
-                if response.data:
-                    total_inserido += len(response.data)
-                else:
-                    print("[ERRO INSERT DETECTADO]", response)
-
-            except Exception as e:
-                print("[ERRO INSERT]", str(e))
-
-        return {
-            "status": "MULTI-ABA COM CONTROLE",
-            "origem": origem,
-            "extraidos": len(registros),
-            "novos": len(registros_filtrados),
-            "inseridos": total_inserido
-        }
-
-    except Exception as e:
-        print("[ERRO GLOBAL]", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
 
 # =========================================================
 # PATCH INTELIGENTE — DETECÇÃO FLEXÍVEL DE COLUNAS
