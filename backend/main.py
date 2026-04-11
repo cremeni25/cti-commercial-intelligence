@@ -4783,3 +4783,85 @@ def geo_radar_ddd():
         "radar": sorted(radar.values(), key=lambda x: x["faturamento"], reverse=True),
         "oportunidades": oportunidades
     }
+
+# ============================================================
+# 🧠 CTI - PIPELINE UNIVERSAL ADAPTATIVO (ANTI-CAOS)
+# ============================================================
+
+import re
+
+# ============================================================
+# 🔍 DETECÇÃO INTELIGENTE DE COLUNAS
+# ============================================================
+
+def detectar_colunas(df):
+
+    mapa = {
+        "placa": None,
+        "valor": None,
+        "data": None
+    }
+
+    for col in df.columns:
+        col_lower = str(col).lower()
+
+        if any(k in col_lower for k in ["placa", "veiculo", "carro", "frota"]):
+            mapa["placa"] = col
+
+        elif any(k in col_lower for k in ["valor", "preco", "total", "vlr"]):
+            mapa["valor"] = col
+
+        elif any(k in col_lower for k in ["data", "dt", "emissao"]):
+            mapa["data"] = col
+
+    return mapa
+
+
+# ============================================================
+# 🔎 EXTRATOR INTELIGENTE DE LINHA
+# ============================================================
+
+def interpretar_linha(row, mapa):
+
+    def extrair_placa(valor):
+        if not valor:
+            return None
+
+        texto = str(valor).upper()
+        match = re.search(r'[A-Z]{3}[0-9][A-Z0-9][0-9]{2}', texto)
+        return match.group(0) if match else None
+
+    try:
+        placa_raw = row.get(mapa["placa"]) if mapa["placa"] else None
+        valor_raw = row.get(mapa["valor"]) if mapa["valor"] else 0
+        data_raw = row.get(mapa["data"]) if mapa["data"] else None
+
+        return {
+            "placa": extrair_placa(placa_raw),
+            "valor": float(valor_raw or 0),
+            "data": str(data_raw or ""),
+            "extra": dict(row)
+        }
+
+    except:
+        return None
+
+
+# ============================================================
+# 🧠 PROCESSADOR UNIVERSAL REAL
+# ============================================================
+
+def processar_dataframe_inteligente(df, origem):
+
+    mapa = detectar_colunas(df)
+
+    registros = []
+
+    for _, row in df.iterrows():
+        interpretado = interpretar_linha(row, mapa)
+
+        if interpretado:
+            interpretado["origem"] = origem
+            registros.append(interpretado)
+
+    return registros
