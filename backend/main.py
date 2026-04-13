@@ -4876,3 +4876,242 @@ async def upload_universal(file: UploadFile = File(...), origem: str = "manual")
     except Exception as e:
         print(f"[CTI] [FATAL] {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# =========================================================
+# 🧠 CTI — CÉREBRO DE IDENTIDADE INTELIGENTE (CLIENTE_ID)
+# =========================================================
+
+import uuid
+import re
+
+# =========================================================
+# NORMALIZAÇÃO FORTE DE NOME
+# =========================================================
+
+def normalizar_nome_inteligente(nome):
+
+    if not nome:
+        return ""
+
+    nome = str(nome).upper().strip()
+
+    # remove caracteres especiais
+    nome = re.sub(r"[^A-Z0-9 ]", " ", nome)
+
+    # remove sufixos comuns
+    remover = [
+        " LTDA", " EIRELI", " SA", " S A", " S/A",
+        " ME", " EPP", " MEI", " INDUSTRIA", " COMERCIO"
+    ]
+
+    for r in remover:
+        nome = nome.replace(r, "")
+
+    # remove espaços duplicados
+    nome = re.sub(r"\s+", " ", nome).strip()
+
+    return nome
+
+
+# =========================================================
+# LIMPEZA CNPJ
+# =========================================================
+
+def limpar_cnpj_inteligente(cnpj):
+
+    if not cnpj:
+        return None
+
+    cnpj = re.sub(r"\D", "", str(cnpj))
+
+    if len(cnpj) == 14:
+        return cnpj
+
+    return None
+
+
+# =========================================================
+# BUSCA CLIENTE EXISTENTE (INTELIGENTE)
+# =========================================================
+
+def buscar_cliente_existente(nome_norm, cnpj):
+
+    try:
+
+        clientes = supabase.table("cti_clientes")\
+            .select("*")\
+            .execute().data or []
+
+        for c in clientes:
+
+            # match por CNPJ
+            if cnpj and c.get("cnpjs"):
+                if cnpj in c.get("cnpjs"):
+                    return c
+
+            # match por nome parecido
+            nomes = c.get("nomes") or []
+
+            for n in nomes:
+                if nome_norm == n:
+                    return c
+
+        return None
+
+    except Exception as e:
+        print("[ERRO BUSCA CLIENTE]", str(e))
+        return None
+
+
+# =========================================================
+# CRIA NOVO CLIENTE_ID
+# =========================================================
+
+def criar_cliente_id():
+
+    return f"CLI_{str(uuid.uuid4())[:8].upper()}"
+
+
+# =========================================================
+# ATUALIZA / CRIA CLIENTE
+# =========================================================
+
+def resolver_cliente_inteligente(registro):
+
+    nome = registro.get("cliente")
+    cnpj = registro.get("cnpj")
+
+    nome_norm = normalizar_nome_inteligente(nome)
+    cnpj_limpo = limpar_cnpj_inteligente(cnpj)
+
+    cliente_existente = buscar_cliente_existente(nome_norm, cnpj_limpo)
+
+    # =====================================================
+    # SE EXISTE → ATUALIZA
+    # =====================================================
+
+    if cliente_existente:
+
+        cliente_id = cliente_existente["cliente_id"]
+
+        nomes = set(cliente_existente.get("nomes") or [])
+        cnpjs = set(cliente_existente.get("cnpjs") or [])
+
+        if nome_norm:
+            nomes.add(nome_norm)
+
+        if cnpj_limpo:
+            cnpjs.add(cnpj_limpo)
+
+        try:
+            supabase.table("cti_clientes")\
+                .update({
+                    "nomes": list(nomes),
+                    "cnpjs": list(cnpjs)
+                })\
+                .eq("cliente_id", cliente_id)\
+                .execute()
+        except Exception as e:
+            print("[ERRO UPDATE CLIENTE]", str(e))
+
+        return cliente_id
+
+    # =====================================================
+    # SE NÃO EXISTE → CRIA NOVO
+    # =====================================================
+
+    cliente_id = criar_cliente_id()
+
+    novo_cliente = {
+        "cliente_id": cliente_id,
+        "nomes": [nome_norm] if nome_norm else [],
+        "cnpjs": [cnpj_limpo] if cnpj_limpo else [],
+        "created_at": datetime.now().isoformat()
+    }
+
+    try:
+        supabase.table("cti_clientes").insert(novo_cliente).execute()
+    except Exception as e:
+        print("[ERRO INSERT CLIENTE]", str(e))
+
+    return cliente_id
+
+
+# =========================================================
+# VINCULA CLIENTE_ID NOS DADOS
+# =========================================================
+
+def aplicar_cliente_id(registros):
+
+    resultado = []
+
+    for r in registros:
+
+        try:
+
+            cliente_id = resolver_cliente_inteligente(r)
+
+            r["cliente_id"] = cliente_id
+
+            resultado.append(r)
+
+        except Exception as e:
+            print("[ERRO VINCULO CLIENTE_ID]", str(e))
+            continue
+
+    return resultado
+
+
+# =========================================================
+# ENDPOINT — PROCESSAMENTO COM INTELIGÊNCIA DE CLIENTE
+# =========================================================
+
+@app.post("/cti/inteligencia-clientes")
+async def inteligencia_clientes():
+
+    try:
+
+        response = supabase.table("cti_dados").select("*").execute()
+
+        dados = response.data or []
+
+        if not dados:
+            return {
+                "status": "vazio",
+                "mensagem": "nenhum dado encontrado"
+            }
+
+        processados = aplicar_cliente_id(dados)
+
+        # limpa base final
+        supabase.table("cti_clientes_vinculo")\
+            .delete()\
+            .gt("cliente_id", "")\
+            .execute()
+
+        # insere com cliente_id
+        batch_size = 500
+        total = 0
+
+        for i in range(0, len(processados), batch_size):
+
+            batch = processados[i:i + batch_size]
+
+            response_insert = supabase.table("cti_clientes_vinculo")\
+                .insert(batch)\
+                .execute()
+
+            if response_insert.data:
+                total += len(response_insert.data)
+
+        return {
+            "status": "CLIENTES_PROCESSADOS",
+            "total_registros": len(processados),
+            "total_vinculados": total
+        }
+
+    except Exception as e:
+
+        print("[ERRO INTELIGENCIA CLIENTES]", str(e))
+
+        raise HTTPException(status_code=500, detail=str(e))
