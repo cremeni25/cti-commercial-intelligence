@@ -5115,3 +5115,162 @@ async def inteligencia_clientes():
         print("[ERRO INTELIGENCIA CLIENTES]", str(e))
 
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# 🧠 CTI - CÉREBRO COMERCIAL INTELIGENTE (ENTERPRISE)
+# ============================================================
+
+from datetime import datetime, timedelta
+from collections import defaultdict
+
+@app.post("/cti/cerebro")
+async def cerebro_cti():
+
+    try:
+        print("[CTI] [INFO] Iniciando cérebro comercial")
+
+        # ======================================================
+        # 1. BUSCA BASE DE CLIENTES
+        # ======================================================
+        response = supabase.table("cti_clientes_vinculo").select("*").execute()
+        dados = response.data
+
+        if not dados:
+            return {"status": "erro", "mensagem": "Sem dados no CTI"}
+
+        print(f"[CTI] [INFO] Total registros carregados: {len(dados)}")
+
+        # ======================================================
+        # 2. ORGANIZAÇÃO POR CLIENTE
+        # ======================================================
+        clientes = defaultdict(list)
+
+        for row in dados:
+            cliente = row.get("cliente_id") or "desconhecido"
+            clientes[cliente].append(row)
+
+        # ======================================================
+        # 3. ANÁLISE POR CLIENTE
+        # ======================================================
+        analise_clientes = []
+
+        agora = datetime.utcnow()
+
+        for cliente_id, registros in clientes.items():
+
+            total = len(registros)
+
+            datas = []
+            valores = []
+
+            for r in registros:
+                if r.get("data"):
+                    try:
+                        datas.append(datetime.fromisoformat(r["data"]))
+                    except:
+                        pass
+
+                if r.get("valor"):
+                    try:
+                        valores.append(float(r["valor"]))
+                    except:
+                        pass
+
+            ultima_data = max(datas) if datas else None
+            dias_sem_compra = (agora - ultima_data).days if ultima_data else 999
+
+            valor_total = sum(valores) if valores else 0
+
+            # ==================================================
+            # SCORE INTELIGENTE
+            # ==================================================
+            score = 0
+
+            if total > 10:
+                score += 2
+            if valor_total > 50000:
+                score += 2
+            if dias_sem_compra < 30:
+                score += 2
+            elif dias_sem_compra > 90:
+                score -= 2
+
+            # ==================================================
+            # CLASSIFICAÇÃO
+            # ==================================================
+            if dias_sem_compra > 120:
+                status = "PERDIDO"
+            elif dias_sem_compra > 60:
+                status = "EM_RISCO"
+            elif dias_sem_compra <= 30:
+                status = "ATIVO"
+            else:
+                status = "ESTAVEL"
+
+            analise_clientes.append({
+                "cliente_id": cliente_id,
+                "total_compras": total,
+                "valor_total": valor_total,
+                "dias_sem_compra": dias_sem_compra,
+                "score": score,
+                "status": status
+            })
+
+        # ======================================================
+        # 4. RANKINGS
+        # ======================================================
+        top_clientes = sorted(analise_clientes, key=lambda x: x["valor_total"], reverse=True)[:10]
+        risco = [c for c in analise_clientes if c["status"] == "EM_RISCO"]
+        perdidos = [c for c in analise_clientes if c["status"] == "PERDIDO"]
+        oportunidades = [c for c in analise_clientes if c["score"] >= 3]
+
+        # ======================================================
+        # 5. RECOMENDAÇÕES INTELIGENTES
+        # ======================================================
+        recomendacoes = []
+
+        if risco:
+            recomendacoes.append(f"Recuperar {len(risco)} clientes em risco")
+
+        if perdidos:
+            recomendacoes.append(f"Reativar {len(perdidos)} clientes perdidos")
+
+        if top_clientes:
+            recomendacoes.append("Focar nos principais clientes para expansão")
+
+        if oportunidades:
+            recomendacoes.append(f"Aproveitar {len(oportunidades)} oportunidades com alto potencial")
+
+        # ======================================================
+        # 6. ALERTAS
+        # ======================================================
+        alertas = []
+
+        if len(perdidos) > 20:
+            alertas.append("Alto número de clientes perdidos")
+
+        if len(risco) > 30:
+            alertas.append("Muitos clientes entrando em risco")
+
+        # ======================================================
+        # 7. RESPOSTA FINAL
+        # ======================================================
+        return {
+            "status": "CTI_CEREBRO_ATIVO",
+            "resumo": {
+                "total_clientes": len(analise_clientes),
+                "clientes_risco": len(risco),
+                "clientes_perdidos": len(perdidos),
+                "oportunidades": len(oportunidades)
+            },
+            "top_clientes": top_clientes,
+            "clientes_em_risco": risco[:10],
+            "clientes_perdidos": perdidos[:10],
+            "oportunidades": oportunidades[:10],
+            "recomendacoes": recomendacoes,
+            "alertas": alertas
+        }
+
+    except Exception as e:
+        print(f"[CTI] [FATAL] {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
