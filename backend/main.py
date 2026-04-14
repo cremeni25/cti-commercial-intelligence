@@ -5166,18 +5166,37 @@ async def cerebro_cti():
 
             for r in registros:
 
-                # =========================
-                # DATA
-                # =========================
-                if r.get("data"):
-                    try:
-                        d = parser.parse(str(r["data"]))
+                # =====================
+                # DATA (FORÇADA)
+                # =====================
+                try:
 
-                        if 2000 <= d.year <= datetime.utcnow().year:
-                            datas.append(d)
+                    d = None
 
-                    except Exception as e:
-                        print(f"[DATA][ERRO] {e}")
+                    # 1. Data direta
+                    if r.get("data"):
+                        try:
+                            d = parser.parse(str(r["data"]))
+                        except:
+                            pass
+
+                    # 2. ANFIR (ano + mes)
+                    if not d and r.get("ano") and r.get("mes"):
+                        try:
+                            d = datetime(int(r["ano"]), int(r["mes"]), 1)
+                        except:
+                            pass
+
+                    # 3. fallback (NUNCA deixa vazio)
+                    if not d:
+                        d = datetime.utcnow()
+
+                    # validação final
+                    if 2000 <= d.year <= datetime.utcnow().year:
+                        datas.append(d)
+
+                except Exception as e:
+                    0print(f"[DATA][ERRO] {e}")
 
                 # =========================
                 # VALOR
