@@ -5169,16 +5169,30 @@ async def cerebro_cti():
 
                 if r.get("data"):
                     try:
-                        datas.append(parser.parse(str(r["data"])))
+                        d = parser.parse(str(r["data"]))
+
+                        # trava de segurança
+                        if d.year < 2020:
+                            continue
+
+                        datas.append(d)
                     except:
                         pass
 
-                if r.get("valor"):
-                    try:
-                        v = str(r["valor"]).replace(".", "").replace(",", ".")
-                        valores.append(float(v))
-                    except:
-                        pass
+            if r.get("valor"):
+                try:
+                    v = str(r["valor"]).replace(".", "").replace(",", ".")
+                    v = float(v)
+
+                        # trava de segurança
+                        if v > 1_000_000:
+                            continue
+
+                        valores.append(v)
+                except:
+                    pass
+
+               
 
                 
 
