@@ -5165,35 +5165,33 @@ async def cerebro_cti():
             valores = []
 
             for r in registros:
-                from dateutil import parser
 
-        # =========================
-        # DATA
-        # =========================
-        if r.get("data"):
-            try:
-                d = parser.parse(str(r["data"]))
+                # =========================
+                # DATA
+                # =========================
+                if r.get("data"):
+                    try:
+                        d = parser.parse(str(r["data"]))
 
-                if d.year >= 2010:
-                    datas.append(d)
+                        if 2000 <= d.year <= datetime.utcnow().year:
+                            datas.append(d)
 
-            except:
-                pass
+                    except Exception as e:
+                        print(f"[DATA][ERRO] {e}")
 
+                # =========================
+                # VALOR
+                # =========================
+                if r.get("valor"):
+                    try:
+                        v = str(r["valor"]).replace(".", "").replace(",", ".")
+                        v = float(v)
 
-        # =========================
-        # VALOR
-        # =========================
-        if r.get("valor"):
-            try:
-                v = str(r["valor"]).replace(".", "").replace(",", ".")
-                v = float(v)
+                        if 0 < v <= 100_000_000:
+                            valores.append(v)
 
-                if v <= 20_000_000:
-                    valores.append(v)
-
-            except:
-                pass
+                    except Exception as e:
+                        print(f"[VALOR][ERRO] {e}")
 
             ultima_data = max(datas) if datas else None
             dias_sem_compra = (agora - ultima_data).days if ultima_data else 999
