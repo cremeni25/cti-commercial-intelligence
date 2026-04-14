@@ -5196,7 +5196,7 @@ async def cerebro_cti():
                         datas.append(d)
 
                 except Exception as e:
-                    0print(f"[DATA][ERRO] {e}")
+                    print(f"[DATA][ERRO] {e}")
 
                 # =========================
                 # VALOR
