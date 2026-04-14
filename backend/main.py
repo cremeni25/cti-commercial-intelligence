@@ -5174,7 +5174,7 @@ async def cerebro_cti():
             try:
                 d = parser.parse(str(r["data"]))
 
-                if d.year >= 2020:
+                if d.year >= 2010:
                     datas.append(d)
 
             except:
@@ -5189,7 +5189,7 @@ async def cerebro_cti():
                 v = str(r["valor"]).replace(".", "").replace(",", ".")
                 v = float(v)
 
-                if v <= 1_000_000:
+                if v <= 20_000_000:
                     valores.append(v)
 
             except:
