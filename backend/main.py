@@ -22,6 +22,7 @@ from engine.market_engine import MarketEngine
 from engine.win_loss_engine import WinLossEngine
 from core.supabase_client import supabase
 from routers.engine_router import router as engine_router
+from dateutil import parser
 
 def normalizar_registro(r):
 
@@ -5164,17 +5165,22 @@ async def cerebro_cti():
             valores = []
 
             for r in registros:
+                from dateutil import parser
+
                 if r.get("data"):
                     try:
-                        datas.append(datetime.fromisoformat(r["data"]))
+                        datas.append(parser.parse(str(r["data"])))
                     except:
                         pass
 
                 if r.get("valor"):
                     try:
-                        valores.append(float(r["valor"]))
+                        v = str(r["valor"]).replace(".", "").replace(",", ".")
+                        valores.append(float(v))
                     except:
                         pass
+
+                
 
             ultima_data = max(datas) if datas else None
             dias_sem_compra = (agora - ultima_data).days if ultima_data else 999
