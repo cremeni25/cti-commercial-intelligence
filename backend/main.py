@@ -4862,7 +4862,6 @@ async def pipeline_cti(contents, origem):
         "total_inseridos": total_inserido
     }
 
-
 # ============================================================
 # 🌐 ENDPOINT ÚNICO OFICIAL
 # ============================================================
@@ -4871,8 +4870,33 @@ async def pipeline_cti(contents, origem):
 async def upload_universal(file: UploadFile = File(...), origem: str = "manual"):
 
     try:
-        contents = await file.read()
-        return await pipeline_cti(contents, origem)
+    # =====================================================
+    # 1. LER ARQUIVO
+    # =====================================================
+    contents = await file.read()
+
+    # =====================================================
+    # 2. SALVAR RAW (NOVO - ENTERPRISE)
+    # =====================================================
+    try:
+        supabase.table("cti_raw_data").insert({
+            "origem": origem,
+            "arquivo_nome": file.filename,
+            "conteudo": contents.decode("latin1"),
+            "status": "novo"
+        }).execute()
+
+        print("[CTI] [RAW] Arquivo salvo com sucesso")
+
+    except Exception as e:
+        print(f"[CTI] [RAW][ERRO] {str(e)}")
+
+    # =====================================================
+    # 3. PROCESSAMENTO NORMAL (NÃO MUDA)
+    # =====================================================
+    resultado = await pipeline_cti(contents, origem)
+
+    return resultado
 
     except Exception as e:
         print(f"[CTI] [FATAL] {str(e)}")
