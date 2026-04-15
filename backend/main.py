@@ -4876,20 +4876,21 @@ async def upload_universal(file: UploadFile = File(...), origem: str = "manual")
         contents = await file.read()
 
         # =====================================================
-        # 2. SALVAR RAW (NOVO - ENTERPRISE)
+        # 2. CONVERTER PARA STRING
         # =====================================================
-        try:
-            supabase.table("cti_raw_data").insert({
-                "origem": origem,
-                "arquivo_nome": file.filename,
-                "conteudo": contents.decode("latin1"),
-                "status": "novo"
-            }).execute()
+        conteudo_str = contents.decode("utf-8", errors="ignore")
 
-            print("[CTI] [RAW] Arquivo salvo com sucesso")
+        # =====================================================
+        # 2. SALVAR RAW NO BANCO
+        # =====================================================
+        supabase.table("cti_raw_data").insert({
+            "origem": origem,
+            "arquivo_nome": file.filename,
+            "conteudo": conteudo_str,
+            "status": "raw"
+        }).execute()
 
-        except Exception as e:
-            print(f"[CTI] [RAW][ERRO] {str(e)}")
+        print("[CTI] [RAW] Arquivo salvo com sucesso")
 
         # =====================================================
         # 3. PROCESSAMENTO NORMAL (NÃO MUDA)
