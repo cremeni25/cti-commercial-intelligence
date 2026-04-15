@@ -17,6 +17,7 @@ import pandas as pd
 import os
 import io
 import re
+import base64
 from datetime import datetime
 from engine.market_engine import MarketEngine
 from engine.win_loss_engine import WinLossEngine
@@ -4878,7 +4879,7 @@ async def upload_universal(file: UploadFile = File(...), origem: str = "manual")
         # =====================================================
         # 2. CONVERTER PARA STRING
         # =====================================================
-        conteudo_str = contents.decode("utf-8", errors="ignore")
+        conteudo_str = base64.b64encode(contents).decode("utf-8")
 
         # =====================================================
         # 2. SALVAR RAW NO BANCO
