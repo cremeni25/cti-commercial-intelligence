@@ -5405,6 +5405,21 @@ async def cti_processar(file: UploadFile = File(...)):
         # 1. Ler Excel
         df = pd.read_excel(file.file)
 
+        # ===== DEBUG OBRIGATÓRIO =====
+        print("======== DEBUG CTI INTELIGENTE ========")
+        print("COLUNAS DO DF:", df.columns.tolist())
+        print("TIPOS:", df.dtypes)
+
+        print("AMOSTRA:")
+        print(df.head(5))
+
+        from engine.cti_inteligente import mapear_colunas
+        mapeamento = mapear_colunas(df)
+
+        print("MAPEAMENTO GERADO:", mapeamento)
+        print("=======================================")
+        # ========================================
+
         # 2. Converter para lista
         dados_brutos = df.to_dict(orient="records")
 
