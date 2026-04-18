@@ -37,12 +37,18 @@ def mapear_colunas(df):
 
             for s in sinonimos:
 
-                if s in col_norm:
+                # MELHORIA AQUI
+                if s in col_norm or col_norm in s:
                     mapeamento[col] = campo
                     break
 
-    return mapeamento
+            if col in mapeamento:
+                break
 
+    print("COLUNAS IDENTIFICADAS:", df.columns.tolist())
+    print("MAPEAMENTO GERADO:", mapeamento)
+
+    return mapeamento
 
 # ================================
 # NORMALIZADOR FINAL
