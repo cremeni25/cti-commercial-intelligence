@@ -3873,7 +3873,12 @@ def engine_universal_planilha(df, origem="desconhecido"):
                 "extra": linha
             }
 
-            if not registro["cliente"] and not registro["valor"]:
+            if (
+                not registro.get("cliente")
+                and not registro.get("cnpj")
+                and not registro.get("produto")
+                and registro.get("valor", 0) == 0
+            ):
                 continue
 
             registros.append(registro)
