@@ -5336,3 +5336,25 @@ async def cerebro_cti():
     except Exception as e:
         print(f"[CTI] [FATAL] {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# ============================================================
+# CTI CHAT ENDPOINT
+# ============================================================
+
+from fastapi import Body
+from cti_ai_engine import gerar_resposta
+
+@app.post("/cti/chat")
+def cti_chat(payload: dict = Body(...)):
+
+    pergunta = payload.get("pergunta")
+
+    if not pergunta:
+        return {"erro": "Pergunta não enviada"}
+
+    resposta = gerar_resposta(pergunta)
+
+    return {
+        "pergunta": pergunta,
+        "resposta": resposta
+    }
