@@ -5408,8 +5408,16 @@ async def cti_processar(file: UploadFile = File(...)):
 
     try:
         # 1. Ler Excel
-        df = pd.read_excel(file.file)
+        df = pd.read_excel(file.file, header=None)
 
+        # encontrar linha real de cabeçalho
+        for i in range(len(df)):
+        linha = df.iloc[i].astype(str).str.lower()
+
+        if any("cliente" in x or "cnpj" in x or "valor" in x for x in linha):
+        df.columns = df.iloc[i]
+        df = df[i+1:]
+        break
         # ===== DEBUG OBRIGATÓRIO =====
         print("======== DEBUG CTI INTELIGENTE ========")
         print("COLUNAS DO DF:", df.columns.tolist())
