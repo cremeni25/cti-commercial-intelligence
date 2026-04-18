@@ -5425,3 +5425,34 @@ async def cti_processar(file: UploadFile = File(...)):
             "status": "erro",
             "mensagem": str(e)
         }
+
+@app.post("/cti/upload-inteligente")
+async def upload_inteligente(file: UploadFile = File(...), origem: str = "manual"):
+
+    contents = await file.read()
+
+    df = pd.read_excel(io.BytesIO(contents))
+    df = df.fillna("")
+
+    registros = normalizar_dataframe(df, origem)
+
+    if not registros:
+        return {"erro": "nenhum dado válido identificado"}
+
+    batch_size = 500
+    total = 0
+
+    for i in range(0, len(registros), batch_size):
+
+        batch = registros[i:i + batch_size]
+
+        response = supabase.table("cti_dados").insert(batch).execute()
+
+        if response.data:
+            total += len(response.data)
+
+    return {
+        "status": "OK",
+        "lidos": len(df),
+        "inseridos": total
+    }
