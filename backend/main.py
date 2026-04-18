@@ -26,6 +26,7 @@ from routers.engine_router import router as engine_router
 from dateutil import parser
 from engine.cti_normalizador import normalizar_planilha
 from engine.cti_consolidacao import consolidar_dados
+from engine.cti_inteligente import normalizar_dataframe
 
 def normalizar_registro(r):
 
