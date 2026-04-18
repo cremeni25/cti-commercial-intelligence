@@ -25,6 +25,7 @@ from core.supabase_client import supabase
 from routers.engine_router import router as engine_router
 from dateutil import parser
 from engine.cti_normalizador import normalizar_planilha
+from engine.cti_consolidacao import consolidar_dados
 
 def normalizar_registro(r):
 
@@ -5391,3 +5392,35 @@ async def upload_normalizado(file: UploadFile = File(...)):
         "registros": len(registros),
         "inseridos": total
     }
+
+# ============================================================
+# CTI PROCESSAMENTO COMPLETO (OFICIAL)
+# ============================================================
+
+@app.post("/cti/processar")
+async def cti_processar(file: UploadFile = File(...)):
+
+    try:
+        # 1. Ler Excel
+        df = pd.read_excel(file.file)
+
+        # 2. Converter para lista
+        dados_brutos = df.to_dict(orient="records")
+
+        # 3. NORMALIZAR
+        dados_normalizados = normalizar_planilha(dados_brutos)
+
+        # 4. CONSOLIDAR
+        dados_consolidados = consolidar_dados(dados_normalizados)
+
+        return {
+            "status": "ok",
+            "linhas": len(dados_normalizados),
+            "resultado": dados_consolidados
+        }
+
+    except Exception as e:
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }
