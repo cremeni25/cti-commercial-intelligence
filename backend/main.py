@@ -24,6 +24,7 @@ from engine.win_loss_engine import WinLossEngine
 from core.supabase_client import supabase
 from routers.engine_router import router as engine_router
 from dateutil import parser
+from engine.cti_normalizador import normalizar_planilha
 
 def normalizar_registro(r):
 
@@ -5357,4 +5358,36 @@ def cti_chat(payload: dict = Body(...)):
     return {
         "pergunta": pergunta,
         "resposta": resposta
+    }
+
+# ============================================================
+# UPLOAD NORMALIZADO CTI
+# ============================================================
+
+@app.post("/cti/upload-normalizado")
+async def upload_normalizado(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    registros = normalizar_planilha(contents)
+
+    if not registros:
+        return {"status": "sem dados"}
+
+    batch_size = 500
+    total = 0
+
+    for i in range(0, len(registros), batch_size):
+
+        batch = registros[i:i + batch_size]
+
+        response = supabase.table("cti_dados").insert(batch).execute()
+
+        if response.data:
+            total += len(response.data)
+
+    return {
+        "status": "NORMALIZADO",
+        "registros": len(registros),
+        "inseridos": total
     }
