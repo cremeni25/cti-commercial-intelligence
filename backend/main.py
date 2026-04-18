@@ -5342,7 +5342,7 @@ async def cerebro_cti():
 # ============================================================
 
 from fastapi import Body
-from cti_ai_engine import gerar_resposta
+from engine.cti_ai_engine import gerar_resposta
 
 @app.post("/cti/chat")
 def cti_chat(payload: dict = Body(...)):
