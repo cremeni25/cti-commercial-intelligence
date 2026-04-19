@@ -5470,7 +5470,7 @@ async def cti_processar(file: UploadFile = File(...)):
         return {
             "status": "erro",
             "mensagem": str(e)
-        
+        }
 
 @app.post("/cti/upload-inteligente")
 async def upload_inteligente(file: UploadFile = File(...), origem: str = "manual"):
