@@ -5541,3 +5541,87 @@ async def upload_inteligente(file: UploadFile = File(...), origem: str = "manual
     }
 
     
+# ============================================================
+# CTI — INTERPRETADOR UNIVERSAL (EXCEL + IA + WEB)
+# ============================================================
+
+from openai import OpenAI
+import os
+import json
+import pandas as pd
+import io
+from fastapi import UploadFile, File
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+def excel_para_texto(contents: bytes):
+
+    try:
+        df = pd.read_excel(io.BytesIO(contents), sheet_name=None)
+
+        texto_total = ""
+
+        for nome_aba, tabela in df.items():
+            texto_total += f"\n--- ABA: {nome_aba} ---\n"
+            texto_total += tabela.to_string()
+
+        return texto_total
+
+    except Exception as e:
+        return f"erro_excel: {str(e)}"
+
+
+def interpretar_com_ia(texto: str):
+
+    prompt = f"""
+Você é uma IA comercial avançada.
+
+1. Entenda os dados
+2. Extraia informações relevantes
+3. Identifique padrões
+4. Gere insights comerciais
+
+Se necessário, indique termos que precisam de busca externa.
+
+Retorne JSON com:
+- dados_extraidos
+- insights
+- necessidades_de_busca (opcional)
+
+Texto:
+\"\"\"
+{texto[:8000]}
+\"\"\"
+"""
+
+    response = client.chat.completions.create(
+        model="gpt-4.1",
+        messages=[
+            {"role": "system", "content": "Responda apenas JSON válido."},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.2
+    )
+
+    try:
+        return json.loads(response.choices[0].message.content)
+    except:
+        return {"erro": "falha_parse", "raw": response.choices[0].message.content}
+
+
+@app.post("/cti/ia-completa")
+async def interpretar_excel_ia(file: UploadFile = File(...)):
+
+    contents = await file.read()
+
+    # 🔥 1. CONVERTE EXCEL → TEXTO
+    texto = excel_para_texto(contents)
+
+    # 🔥 2. IA INTERPRETA
+    resultado = interpretar_com_ia(texto)
+
+    return {
+        "status": "ok",
+        "resultado": resultado
+    }
