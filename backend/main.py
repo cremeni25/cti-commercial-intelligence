@@ -5552,8 +5552,7 @@ import pandas as pd
 import io
 from fastapi import UploadFile, File
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
+client = OpenAI()
 
 def excel_para_texto(contents: bytes):
 
