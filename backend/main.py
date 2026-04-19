@@ -2,7 +2,6 @@
 # CTI BACKEND V2
 # CORE SYSTEM
 # ============================================================
-
 from routers.clientes_router import router as clientes_router
 from routers.vendas_router import router as vendas_router
 from routers.negociacoes_router import router as negociacoes_router
@@ -5476,7 +5475,7 @@ async def cti_processar(file: UploadFile = File(...)):
 @app.post("/cti/upload-inteligente")
 async def upload_inteligente(file: UploadFile = File(...), origem: str = "manual"):
 
-    from backend.engine.cti_conteudo import processar_conteudo
+    import pandas as pd
     import io
 
     contents = await file.read()
@@ -5484,7 +5483,39 @@ async def upload_inteligente(file: UploadFile = File(...), origem: str = "manual
     df = pd.read_excel(io.BytesIO(contents), header=None)
     df = df.fillna("")
 
-    dados = processar_conteudo(df, origem)
+    registros = []
+
+    for _, row in df.iterrows():
+        texto = " ".join([str(x).strip() for x in row.tolist() if str(x).strip()])
+
+        if texto:
+            registros.append({
+                "conteudo": texto,
+                "origem": origem
+            })
+
+    # DEBUG (mantém isso por enquanto)
+    print("TOTAL LINHAS:", len(registros))
+    print("AMOSTRA:", registros[:5])
+
+    # INSERT
+    batch_size = 500
+    total = 0
+
+    for i in range(0, len(registros), batch_size):
+
+        batch = registros[i:i + batch_size]
+
+        response = supabase.table("cti_dados").insert(batch).execute()
+
+        if response.data:
+            total += len(response.data)
+
+    return {
+        "status": "OK",
+        "linhas_processadas": len(registros),
+        "inseridos": total
+    }
 
     # DEBUG TEMPORÁRIO (IMPORTANTE)
     print("TOTAL LINHAS INTERPRETADAS:", len(dados))
