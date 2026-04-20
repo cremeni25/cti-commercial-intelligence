@@ -1,18 +1,28 @@
 # ============================================================
-# CTI BACKEND V3 — CORE LIMPO
+# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL
 # ============================================================
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 import os
+import pandas as pd
+import io
+import re
+import hashlib
+import uuid
+from datetime import datetime
+from io import BytesIO
+
+# ============================================================
+# CONFIG
+# ============================================================
 
 APP_NAME = "CTI — Commercial Tactical Intelligence"
-APP_VERSION = "3.0"
+APP_VERSION = "3.1"
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
-# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,7 +31,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ============================================================
 # SUPABASE
+# ============================================================
+
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
@@ -30,21 +43,17 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-import pandas as pd
-import io
-import re
-import hashlib
-from datetime import datetime
+# ============================================================
+# UTILS
+# ============================================================
 
 def log(msg):
-    print(f"[CTI] {datetime.now()} | {msg}")
+    print(f"[CTI] [{datetime.utcnow()}] {msg}")
 
 def normalizar_texto(txt):
     if not txt:
         return ""
-    txt = str(txt).upper().strip()
-    txt = re.sub(r"\s+", " ", txt)
-    return txt
+    return re.sub(r"\s+", " ", str(txt).upper().strip())
 
 def limpar_cnpj(cnpj):
     if not cnpj:
@@ -56,87 +65,63 @@ def limpar_valor(v):
     try:
         return float(str(v).replace(",", "."))
     except:
-        return 0
+        return 0.0
 
-def gerar_hash(reg):
+def gerar_hash_dict(reg):
     base = f"{reg.get('cliente')}_{reg.get('cnpj')}_{reg.get('valor')}_{reg.get('data')}"
     return hashlib.md5(base.encode()).hexdigest()
 
-from pydantic import BaseModel
+def gerar_hash_linha(linha):
+    return hashlib.sha256(linha.encode()).hexdigest()
 
-class UploadResponse(BaseModel):
-    status: str
-    total_lidos: int
-    total_inseridos: int
+def gerar_cliente_id():
+    return f"CLI_{uuid.uuid4().hex[:8].upper()}"
 
-def insert_batch(table, data, batch_size=500):
-
-    total = 0
-
-    for i in range(0, len(data), batch_size):
-
-        batch = data[i:i+batch_size]
-
-        response = supabase.table(table).insert(batch).execute()
-
-        if response.data:
-            total += len(response.data)
-
-    return total
-
-
-def get_existing_hashes():
-
-    response = supabase.table("cti_dados").select("hash").execute()
-
-    if not response.data:
-        return set()
-
-    return set([r["hash"] for r in response.data if r.get("hash")])
+# ============================================================
+# DETECÇÃO DE COLUNAS
+# ============================================================
 
 def detectar_colunas(df):
-
     mapa = {}
 
     for col in df.columns:
-        col_lower = col.lower()
+        c = col.lower()
 
-        if "cliente" in col_lower:
+        if "cliente" in c:
             mapa["cliente"] = col
-
-        elif "cnpj" in col_lower:
+        elif "cnpj" in c:
             mapa["cnpj"] = col
-
-        elif "valor" in col_lower or "total" in col_lower:
+        elif "valor" in c or "total" in c:
             mapa["valor"] = col
-
-        elif "data" in col_lower:
+        elif "data" in c:
             mapa["data"] = col
-
-        elif "cidade" in col_lower:
+        elif "cidade" in c:
             mapa["cidade"] = col
-
-        elif "estado" in col_lower or "uf" in col_lower:
+        elif "estado" in c or "uf" in c:
             mapa["estado"] = col
 
     return mapa
 
+# ============================================================
+# PROCESSAMENTO ESTRUTURADO
+# ============================================================
 
 def processar_dataframe(df):
 
+    df = df.fillna("")
     mapa = detectar_colunas(df)
 
     registros = []
 
     for _, row in df.iterrows():
 
-        cliente = normalizar_texto(row.get(mapa.get("cliente")))
-        cnpj = limpar_cnpj(row.get(mapa.get("cnpj")))
-        valor = limpar_valor(row.get(mapa.get("valor")))
-        data = row.get(mapa.get("data"))
+        cliente = normalizar_texto(row.get(mapa.get("cliente", ""), ""))
+        cnpj = limpar_cnpj(row.get(mapa.get("cnpj", ""), ""))
+        valor = limpar_valor(row.get(mapa.get("valor", ""), 0))
+        data = str(row.get(mapa.get("data", ""), ""))
 
-        cidade = normalizar_texto(row.get(mapa.get("cidade")))
-        estado = normalizar_texto(row.get(mapa.get("estado")))
+        cidade = normalizar_texto(row.get(mapa.get("cidade", ""), ""))
+        estado = normalizar_texto(row.get(mapa.get("estado", ""), ""))
 
         if not cliente and valor == 0:
             continue
@@ -145,71 +130,143 @@ def processar_dataframe(df):
             "cliente": cliente,
             "cnpj": cnpj,
             "valor": valor,
-            "data": str(data),
+            "data": data,
             "cidade": cidade,
             "estado": estado,
+            "cliente_id": gerar_cliente_id(),
             "created_at": datetime.utcnow().isoformat()
         }
 
-        reg["hash"] = gerar_hash(reg)
+        reg["hash"] = gerar_hash_dict(reg)
 
         registros.append(reg)
 
     return registros
 
+# ============================================================
+# PROCESSAMENTO TEXTO (UNIVERSAL)
+# ============================================================
 
-def pipeline_upload(contents):
+async def extrair_linhas(file: UploadFile):
 
-    df = pd.read_excel(io.BytesIO(contents))
-    df = df.fillna("")
+    conteudo = await file.read()
+    nome = file.filename.lower()
 
-    registros = processar_dataframe(df)
+    linhas = []
 
-    if not registros:
-        raise HTTPException(400, "Nenhum dado válido")
+    if nome.endswith(".xlsx") or nome.endswith(".xls"):
+        df = pd.read_excel(BytesIO(conteudo), dtype=str)
+        for _, row in df.iterrows():
+            linha = " | ".join([str(v) for v in row.values if str(v) != "nan"])
+            if linha.strip():
+                linhas.append(normalizar_texto(linha))
+    else:
+        texto = conteudo.decode("utf-8", errors="ignore")
+        linhas = [normalizar_texto(l) for l in texto.split("\n") if l.strip()]
 
-    hashes_existentes = get_existing_hashes()
+    return linhas
 
-    novos = [r for r in registros if r["hash"] not in hashes_existentes]
+# ============================================================
+# BANCO
+# ============================================================
 
-    return registros, novos
+def get_hashes_existentes(tabela):
 
-import uuid
+    response = supabase.table(tabela).select("hash").execute()
 
-def gerar_cliente_id():
-    return f"CLI_{uuid.uuid4().hex[:8].upper()}"
+    if not response.data:
+        return set()
 
-def aplicar_cliente_id(registros):
+    return set([r["hash"] for r in response.data if r.get("hash")])
 
-    for r in registros:
-        if not r.get("cliente_id"):
-            r["cliente_id"] = gerar_cliente_id()
+def insert_lote(tabela, dados, batch=500):
 
-    return registros
+    total = 0
 
-@app.post("/upload/universal")
-async def upload_universal(file: UploadFile = File(...)):
+    for i in range(0, len(dados), batch):
+        parte = dados[i:i+batch]
+        res = supabase.table(tabela).insert(parte).execute()
+        if res.data:
+            total += len(res.data)
 
-    contents = await file.read()
+    return total
 
-    registros, novos = pipeline_upload(contents)
+# ============================================================
+# ENDPOINT PRINCIPAL
+# ============================================================
 
-    novos = aplicar_cliente_id(novos)
+@app.post("/upload")
+async def upload(file: UploadFile = File(...)):
 
-    total = insert_batch("cti_dados", novos)
+    log(f"Upload recebido: {file.filename}")
 
-    log(f"Upload: {len(registros)} lidos | {total} inseridos")
+    try:
 
-    return {
-        "status": "OK",
-        "total_lidos": len(registros),
-        "total_inseridos": total
-    }
+        conteudo = await file.read()
+
+        # tentativa estruturada
+        try:
+            df = pd.read_excel(io.BytesIO(conteudo))
+            registros = processar_dataframe(df)
+
+            hashes_existentes = get_hashes_existentes("cti_dados")
+            novos = [r for r in registros if r["hash"] not in hashes_existentes]
+
+            inseridos = insert_lote("cti_dados", novos)
+
+            return {
+                "status": "estruturado",
+                "lidos": len(registros),
+                "inseridos": inseridos
+            }
+
+        except:
+            pass
+
+        # fallback texto
+        linhas = await extrair_linhas(file)
+
+        hashes_existentes = get_hashes_existentes("cti_linhas")
+
+        novos = []
+        for l in linhas:
+            h = gerar_hash_linha(l)
+            if h not in hashes_existentes:
+                novos.append({
+                    "hash": h,
+                    "conteudo": l,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
+        inseridos = insert_lote("cti_linhas", novos)
+
+        return {
+            "status": "texto",
+            "lidos": len(linhas),
+            "inseridos": inseridos
+        }
+
+    except Exception as e:
+        import traceback
+        erro = traceback.format_exc()
+
+        print("[CTI] [ERRO]")
+        print(erro)
+
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": erro
+        }
+
+# ============================================================
+# ANALYTICS
+# ============================================================
 
 @app.get("/analytics/resumo")
 def resumo():
 
-    data = supabase.table("cti_dados").select("*").execute().data
+    data = supabase.table("cti_dados").select("*").execute().data or []
 
     total = len(data)
     faturamento = sum([limpar_valor(d.get("valor")) for d in data])
@@ -219,10 +276,13 @@ def resumo():
         "faturamento": faturamento
     }
 
-@app.get("/")
-def status():
-    return {
+# ============================================================
+# STATUS
+# ============================================================
 
+@app.get("/")
+def root():
+    return {
         "sistema": APP_NAME,
         "versao": APP_VERSION,
         "status": "ativo"
@@ -231,151 +291,3 @@ def status():
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-# ============================================================
-# CTI - BLOCO 1
-# INGESTÃO UNIVERSAL + DEDUPLICAÇÃO INTELIGENTE
-# ============================================================
-
-import hashlib
-import pandas as pd
-from fastapi import UploadFile, File
-from datetime import datetime
-
-# ============================================================
-# UTIL: GERAR HASH ÚNICO POR LINHA
-# ============================================================
-
-def gerar_hash_linha(linha: str) -> str:
-    return hashlib.sha256(linha.encode("utf-8")).hexdigest()
-
-
-# ============================================================
-# UTIL: NORMALIZAR TEXTO
-# ============================================================
-
-def normalizar_texto(texto: str) -> str:
-    if not texto:
-        return ""
-    return (
-        str(texto)
-        .strip()
-        .lower()
-        .replace("\n", " ")
-        .replace("\r", " ")
-    )
-
-
-# ============================================================
-# CORE: QUEBRAR QUALQUER ARQUIVO EM TEXTO E LINHAS
-# ============================================================
-
-from io import BytesIO
-
-async def extrair_linhas_arquivo(file: UploadFile):
-    conteudo = await file.read()
-    nome = file.filename.lower()
-
-    linhas = []
-
-    try:
-
-        if nome.endswith(".csv") or nome.endswith(".txt"):
-            texto = conteudo.decode("utf-8", errors="ignore")
-            linhas = texto.split("\n")
-
-        elif nome.endswith(".xlsx") or nome.endswith(".xls"):
-            df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
-
-            print(f"[CTI] [DEBUG] DataFrame shape: {df.shape}")
-            print(f"[CTI] [DEBUG] Colunas: {list(df.columns)}")
-
-            for _, row in df.iterrows():
-                valores = [str(v) for v in row.values if str(v) != 'nan']
-                linha = " | ".join(valores)
-
-                if linha.strip():
-                    linhas.append(linha)
-
-        elif nome.endswith(".pdf"):
-            texto = conteudo.decode("utf-8", errors="ignore")
-            linhas = texto.split("\n")
-
-        else:
-            texto = conteudo.decode("utf-8", errors="ignore")
-            linhas = texto.split("\n")
-
-    except Exception as e:
-        print(f"[CTI] [ERRO] Falha ao ler arquivo: {e}")
-        return []
-
-    linhas = [normalizar_texto(l) for l in linhas if l.strip() != ""]
-
-    return linhas
-
-# ============================================================
-# CORE: DEDUPLICAÇÃO
-# ============================================================
-
-async def processar_linhas_unicas(linhas, supabase):
-
-    novas = 0
-    duplicadas = 0
-
-    registros_para_inserir = []
-
-    for linha in linhas:
-        hash_linha = gerar_hash_linha(linha)
-
-        # verifica se já existe
-        existente = supabase.table("cti_linhas").select("id").eq("hash", hash_linha).execute()
-
-        if existente.data:
-            duplicadas += 1
-            continue
-
-        registros_para_inserir.append({
-            "hash": hash_linha,
-            "conteudo": linha,
-            "criado_em": datetime.utcnow().isoformat()
-        })
-
-        novas += 1
-
-    # inserção em lote
-    if registros_para_inserir:
-        supabase.table("cti_linhas").insert(registros_para_inserir).execute()
-
-    print(f"[CTI] [INFO] Novas: {novas} | Duplicadas: {duplicadas}")
-
-    return {
-        "novas": novas,
-        "duplicadas": duplicadas,
-        "total_recebido": len(linhas)
-    }
-
-
-# ============================================================
-# ENDPOINT: UPLOAD UNIVERSAL
-# ============================================================
-
-@app.post("/upload")
-async def upload_arquivo(file: UploadFile = File(...)):
-
-    print(f"[CTI] [UPLOAD] Arquivo recebido: {file.filename}")
-
-    linhas = await extrair_linhas_arquivo(file)
-
-    if not linhas:
-        return {
-            "status": "erro",
-            "mensagem": "arquivo vazio ou não processado"
-        }
-
-    resultado = await processar_linhas_unicas(linhas, supabase)
-
-    return {
-        "status": "ok",
-        "arquivo": file.filename,
-        "resultado": resultado
-    }
