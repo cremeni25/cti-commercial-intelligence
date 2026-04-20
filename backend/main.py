@@ -1,8 +1,8 @@
 # ============================================================
-# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL
+# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL (CORRIGIDO)
 # ============================================================
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 import os
@@ -19,7 +19,7 @@ from io import BytesIO
 # ============================================================
 
 APP_NAME = "CTI — Commercial Tactical Intelligence"
-APP_VERSION = "3.1"
+APP_VERSION = "3.2"
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
@@ -144,22 +144,22 @@ def processar_dataframe(df):
     return registros
 
 # ============================================================
-# PROCESSAMENTO TEXTO (UNIVERSAL)
+# PROCESSAMENTO TEXTO (CORRIGIDO)
 # ============================================================
 
-async def extrair_linhas(file: UploadFile):
+def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
 
-    conteudo = await file.read()
-    nome = file.filename.lower()
-
+    nome = filename.lower()
     linhas = []
 
     if nome.endswith(".xlsx") or nome.endswith(".xls"):
-        df = pd.read_excel(BytesIO(conteudo), dtype=str)
+        df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
+
         for _, row in df.iterrows():
             linha = " | ".join([str(v) for v in row.values if str(v) != "nan"])
             if linha.strip():
                 linhas.append(normalizar_texto(linha))
+
     else:
         texto = conteudo.decode("utf-8", errors="ignore")
         linhas = [normalizar_texto(l) for l in texto.split("\n") if l.strip()]
@@ -192,7 +192,7 @@ def insert_lote(tabela, dados, batch=500):
     return total
 
 # ============================================================
-# ENDPOINT PRINCIPAL
+# ENDPOINT PRINCIPAL (CORRIGIDO)
 # ============================================================
 
 @app.post("/upload")
@@ -204,9 +204,11 @@ async def upload(file: UploadFile = File(...)):
 
         conteudo = await file.read()
 
-        # tentativa estruturada
+        # ====================================================
+        # TENTATIVA ESTRUTURADA
+        # ====================================================
         try:
-            df = pd.read_excel(io.BytesIO(conteudo), engine="openpyxl")
+            df = pd.read_excel(BytesIO(conteudo), engine="openpyxl")
             registros = processar_dataframe(df)
 
             hashes_existentes = get_hashes_existentes("cti_dados")
@@ -220,11 +222,13 @@ async def upload(file: UploadFile = File(...)):
                 "inseridos": inseridos
             }
 
-        except:
-            pass
+        except Exception as e:
+            log(f"Falha estruturada, fallback texto: {e}")
 
-        # fallback texto
-        linhas = await extrair_linhas(file)
+        # ====================================================
+        # FALLBACK TEXTO
+        # ====================================================
+        linhas = extrair_linhas_from_bytes(conteudo, file.filename)
 
         hashes_existentes = get_hashes_existentes("cti_linhas")
 
