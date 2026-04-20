@@ -1,5 +1,5 @@
 # ============================================================
-# CTI BACKEND V3.3 — INGESTÃO PROFISSIONAL (UPSERT + SEM GARGALO)
+# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL (CORRIGIDO)
 # ============================================================
 
 from fastapi import FastAPI, UploadFile, File
@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from supabase import create_client
 import os
 import pandas as pd
+import io
 import re
 import hashlib
 import uuid
@@ -18,7 +19,7 @@ from io import BytesIO
 # ============================================================
 
 APP_NAME = "CTI — Commercial Tactical Intelligence"
-APP_VERSION = "3.3"
+APP_VERSION = "3.2"
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
@@ -54,6 +55,12 @@ def normalizar_texto(txt):
         return ""
     return re.sub(r"\s+", " ", str(txt).upper().strip())
 
+def limpar_cnpj(cnpj):
+    if not cnpj:
+        return None
+    cnpj = re.sub(r"\D", "", str(cnpj))
+    return cnpj if len(cnpj) == 14 else None
+
 def limpar_valor(v):
     try:
         return float(str(v).replace(",", "."))
@@ -61,7 +68,7 @@ def limpar_valor(v):
         return 0.0
 
 def gerar_hash_dict(reg):
-    base = f"{reg.get('cliente')}_{reg.get('valor')}_{reg.get('data')}"
+    base = f"{reg.get('cliente')}_{reg.get('cnpj')}_{reg.get('valor')}_{reg.get('data')}"
     return hashlib.md5(base.encode()).hexdigest()
 
 def gerar_hash_linha(linha):
@@ -82,10 +89,16 @@ def detectar_colunas(df):
 
         if "cliente" in c:
             mapa["cliente"] = col
+        elif "cnpj" in c:
+            mapa["cnpj"] = col
         elif "valor" in c or "total" in c:
             mapa["valor"] = col
         elif "data" in c:
             mapa["data"] = col
+        elif "cidade" in c:
+            mapa["cidade"] = col
+        elif "estado" in c or "uf" in c:
+            mapa["estado"] = col
 
     return mapa
 
@@ -103,16 +116,23 @@ def processar_dataframe(df):
     for _, row in df.iterrows():
 
         cliente = normalizar_texto(row.get(mapa.get("cliente", ""), ""))
+        cnpj = limpar_cnpj(row.get(mapa.get("cnpj", ""), ""))
         valor = limpar_valor(row.get(mapa.get("valor", ""), 0))
         data = str(row.get(mapa.get("data", ""), ""))
+
+        cidade = normalizar_texto(row.get(mapa.get("cidade", ""), ""))
+        estado = normalizar_texto(row.get(mapa.get("estado", ""), ""))
 
         if not cliente and valor == 0:
             continue
 
         reg = {
             "cliente": cliente,
+            "cnpj": cnpj,
             "valor": valor,
             "data": data,
+            "cidade": cidade,
+            "estado": estado,
             "cliente_id": gerar_cliente_id(),
             "created_at": datetime.utcnow().isoformat()
         }
@@ -124,74 +144,77 @@ def processar_dataframe(df):
     return registros
 
 # ============================================================
-# EXTRAÇÃO UNIVERSAL
+# PROCESSAMENTO TEXTO (CORRIGIDO)
 # ============================================================
 
-def extrair_linhas(conteudo: bytes, filename: str):
+def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
 
     nome = filename.lower()
+    linhas = []
 
-    try:
-        if nome.endswith(".xlsx") or nome.endswith(".xls"):
-            df = pd.read_excel(BytesIO(conteudo), engine="openpyxl", dtype=str)
+    if nome.endswith(".xlsx") or nome.endswith(".xls"):
+        df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
 
-            linhas = []
-            for _, row in df.iterrows():
-                linha = " | ".join([str(v) for v in row.values if str(v) != "nan"])
-                if linha.strip():
-                    linhas.append(normalizar_texto(linha))
+        for _, row in df.iterrows():
+            linha = " | ".join([str(v) for v in row.values if str(v) != "nan"])
+            if linha.strip():
+                linhas.append(normalizar_texto(linha))
 
-            return linhas
+    else:
+        texto = conteudo.decode("utf-8", errors="ignore")
+        linhas = [normalizar_texto(l) for l in texto.split("\n") if l.strip()]
 
-        else:
-            texto = conteudo.decode("utf-8", errors="ignore")
-            return [normalizar_texto(l) for l in texto.split("\n") if l.strip()]
-
-    except Exception as e:
-        log(f"Erro extração: {e}")
-        return []
+    return linhas
 
 # ============================================================
-# UPSERT (CORREÇÃO DEFINITIVA)
+# BANCO
 # ============================================================
 
-def upsert_lote(tabela, dados, batch=500):
+def get_hashes_existentes(tabela):
+
+    response = supabase.table(tabela).select("hash").execute()
+
+    if not response.data:
+        return set()
+
+    return set([r["hash"] for r in response.data if r.get("hash")])
+
+def insert_lote(tabela, dados, batch=500):
 
     total = 0
 
     for i in range(0, len(dados), batch):
         parte = dados[i:i+batch]
-
-        res = supabase.table(tabela)\
-            .upsert(parte, on_conflict="hash")\
-            .execute()
-
+        res = supabase.table(tabela).insert(parte).execute()
         if res.data:
             total += len(res.data)
 
     return total
 
 # ============================================================
-# ENDPOINT PRINCIPAL
+# ENDPOINT PRINCIPAL (CORRIGIDO)
 # ============================================================
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
 
-    log(f"Upload: {file.filename}")
+    log(f"Upload recebido: {file.filename}")
 
     try:
 
         conteudo = await file.read()
 
-        # ===============================
-        # ESTRUTURADO
-        # ===============================
+        # ====================================================
+        # TENTATIVA ESTRUTURADA
+        # ====================================================
         try:
             df = pd.read_excel(BytesIO(conteudo), engine="openpyxl")
-
             registros = processar_dataframe(df)
-            inseridos = upsert_lote("cti_dados", registros)
+
+            hashes_existentes = get_hashes_existentes("cti_dados")
+            novos = [r for r in registros if r["hash"] not in hashes_existentes]
+
+            inseridos = insert_lote("cti_dados", novos)
 
             return {
                 "status": "estruturado",
@@ -200,20 +223,26 @@ async def upload(file: UploadFile = File(...)):
             }
 
         except Exception as e:
-            log(f"Fallback texto: {e}")
+            log(f"Falha estruturada, fallback texto: {e}")
 
-        # ===============================
-        # TEXTO
-        # ===============================
-        linhas = extrair_linhas(conteudo, file.filename)
+        # ====================================================
+        # FALLBACK TEXTO
+        # ====================================================
+        linhas = extrair_linhas_from_bytes(conteudo, file.filename)
 
-        registros = [{
-            "hash": gerar_hash_linha(l),
-            "conteudo": l,
-            "created_at": datetime.utcnow().isoformat()
-        } for l in linhas]
+        hashes_existentes = get_hashes_existentes("cti_linhas")
 
-        inseridos = upsert_lote("cti_linhas", registros)
+        novos = []
+        for l in linhas:
+            h = gerar_hash_linha(l)
+            if h not in hashes_existentes:
+                novos.append({
+                    "hash": h,
+                    "conteudo": l,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
+        inseridos = insert_lote("cti_linhas", novos)
 
         return {
             "status": "texto",
@@ -225,14 +254,31 @@ async def upload(file: UploadFile = File(...)):
         import traceback
         erro = traceback.format_exc()
 
-        log("ERRO CRÍTICO")
-        log(erro)
+        print("[CTI] [ERRO]")
+        print(erro)
 
         return {
             "status": "erro",
             "mensagem": str(e),
             "trace": erro
         }
+
+# ============================================================
+# ANALYTICS
+# ============================================================
+
+@app.get("/analytics/resumo")
+def resumo():
+
+    data = supabase.table("cti_dados").select("*").execute().data or []
+
+    total = len(data)
+    faturamento = sum([limpar_valor(d.get("valor")) for d in data])
+
+    return {
+        "total_registros": total,
+        "faturamento": faturamento
+    }
 
 # ============================================================
 # STATUS
