@@ -222,6 +222,7 @@ def resumo():
 @app.get("/")
 def status():
     return {
+
         "sistema": APP_NAME,
         "versao": APP_VERSION,
         "status": "ativo"
@@ -231,3 +232,144 @@ def status():
 def health():
     return {"status": "ok"}
 
+# ============================================================
+# CTI - BLOCO 1
+# INGESTÃO UNIVERSAL + DEDUPLICAÇÃO INTELIGENTE
+# ============================================================
+
+import hashlib
+import pandas as pd
+from fastapi import UploadFile, File
+from datetime import datetime
+
+# ============================================================
+# UTIL: GERAR HASH ÚNICO POR LINHA
+# ============================================================
+
+def gerar_hash_linha(linha: str) -> str:
+    return hashlib.sha256(linha.encode("utf-8")).hexdigest()
+
+
+# ============================================================
+# UTIL: NORMALIZAR TEXTO
+# ============================================================
+
+def normalizar_texto(texto: str) -> str:
+    if not texto:
+        return ""
+    return (
+        str(texto)
+        .strip()
+        .lower()
+        .replace("\n", " ")
+        .replace("\r", " ")
+    )
+
+
+# ============================================================
+# CORE: QUEBRAR QUALQUER ARQUIVO EM TEXTO E LINHAS
+# ============================================================
+
+async def extrair_linhas_arquivo(file: UploadFile):
+    conteudo = await file.read()
+
+    nome = file.filename.lower()
+
+    linhas = []
+
+    try:
+        # CSV / TXT
+        if nome.endswith(".csv") or nome.endswith(".txt"):
+            texto = conteudo.decode("utf-8", errors="ignore")
+            linhas = texto.split("\n")
+
+        # EXCEL
+        elif nome.endswith(".xlsx") or nome.endswith(".xls"):
+            df = pd.read_excel(conteudo)
+            linhas = df.astype(str).apply(lambda row: " | ".join(row), axis=1).tolist()
+
+        # PDF (fallback simples)
+        elif nome.endswith(".pdf"):
+            texto = conteudo.decode("utf-8", errors="ignore")
+            linhas = texto.split("\n")
+
+        else:
+            texto = conteudo.decode("utf-8", errors="ignore")
+            linhas = texto.split("\n")
+
+    except Exception as e:
+        print(f"[CTI] [ERRO] Falha ao ler arquivo: {e}")
+        return []
+
+    # limpeza básica
+    linhas = [normalizar_texto(l) for l in linhas if l.strip() != ""]
+
+    return linhas
+
+
+# ============================================================
+# CORE: DEDUPLICAÇÃO
+# ============================================================
+
+async def processar_linhas_unicas(linhas, supabase):
+
+    novas = 0
+    duplicadas = 0
+
+    registros_para_inserir = []
+
+    for linha in linhas:
+        hash_linha = gerar_hash_linha(linha)
+
+        # verifica se já existe
+        existente = supabase.table("cti_linhas").select("id").eq("hash", hash_linha).execute()
+
+        if existente.data:
+            duplicadas += 1
+            continue
+
+        registros_para_inserir.append({
+            "hash": hash_linha,
+            "conteudo": linha,
+            "criado_em": datetime.utcnow().isoformat()
+        })
+
+        novas += 1
+
+    # inserção em lote
+    if registros_para_inserir:
+        supabase.table("cti_linhas").insert(registros_para_inserir).execute()
+
+    print(f"[CTI] [INFO] Novas: {novas} | Duplicadas: {duplicadas}")
+
+    return {
+        "novas": novas,
+        "duplicadas": duplicadas,
+        "total_recebido": len(linhas)
+    }
+
+
+# ============================================================
+# ENDPOINT: UPLOAD UNIVERSAL
+# ============================================================
+
+@app.post("/upload")
+async def upload_arquivo(file: UploadFile = File(...)):
+
+    print(f"[CTI] [UPLOAD] Arquivo recebido: {file.filename}")
+
+    linhas = await extrair_linhas_arquivo(file)
+
+    if not linhas:
+        return {
+            "status": "erro",
+            "mensagem": "arquivo vazio ou não processado"
+        }
+
+    resultado = await processar_linhas_unicas(linhas, supabase)
+
+    return {
+        "status": "ok",
+        "arquivo": file.filename,
+        "resultado": resultado
+    }
