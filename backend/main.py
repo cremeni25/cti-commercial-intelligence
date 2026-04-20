@@ -285,8 +285,24 @@ async def extrair_linhas_arquivo(file: UploadFile):
 
         # EXCEL
         elif nome.endswith(".xlsx") or nome.endswith(".xls"):
-            df = pd.read_excel(BytesIO(conteudo))
-            linhas = df.astype(str).apply(lambda row: " | ".join(row), axis=1).tolist()
+            try:
+                df = pd.read_excel(BytesIO(conteudo), dtype=str)
+
+                print(f"[CTI] [DEBUG] DataFrame shape: {df.shape}")
+                print(f"[CTI] [DEBUG] Colunas: {list(df.columns)}")
+
+                linhas = []
+
+                for _, row in df.iterrows():
+                    valores = [str(v) for v in row.values if str(v) != 'nan']
+                    linha = " | ".join(valores)
+
+                    if linha.strip():
+                        linhas.append(linha)
+
+        except Exception as e:
+            print(f"[CTI] [ERRO] Excel falhou: {e}")
+            return []
 
         # PDF (fallback simples)
         elif nome.endswith(".pdf"):
