@@ -185,9 +185,15 @@ def insert_lote(tabela, dados, batch=500):
 
     for i in range(0, len(dados), batch):
         parte = dados[i:i+batch]
-        res = supabase.table(tabela).insert(parte).execute()
-        if res.data:
-            total += len(res.data)
+
+        for item in parte:
+            try:
+                res = supabase.table(tabela).insert(item).execute()
+                if res.data:
+                    total += 1
+            except Exception:
+                # duplicado ou erro → ignora
+                continue
 
     return total
 
