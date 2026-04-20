@@ -285,7 +285,7 @@ async def extrair_linhas_arquivo(file: UploadFile):
             linhas = texto.split("\n")
 
         elif nome.endswith(".xlsx") or nome.endswith(".xls"):
-            df = pd.read_excel(BytesIO(conteudo), dtype=str)
+            df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
 
             print(f"[CTI] [DEBUG] DataFrame shape: {df.shape}")
             print(f"[CTI] [DEBUG] Colunas: {list(df.columns)}")
