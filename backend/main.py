@@ -270,41 +270,33 @@ def normalizar_texto(texto: str) -> str:
 # CORE: QUEBRAR QUALQUER ARQUIVO EM TEXTO E LINHAS
 # ============================================================
 
+from io import BytesIO
+
 async def extrair_linhas_arquivo(file: UploadFile):
     conteudo = await file.read()
-
     nome = file.filename.lower()
 
     linhas = []
 
     try:
-        # CSV / TXT
+
         if nome.endswith(".csv") or nome.endswith(".txt"):
             texto = conteudo.decode("utf-8", errors="ignore")
             linhas = texto.split("\n")
 
-        # EXCEL
         elif nome.endswith(".xlsx") or nome.endswith(".xls"):
-            try:
-                df = pd.read_excel(BytesIO(conteudo), dtype=str)
+            df = pd.read_excel(BytesIO(conteudo), dtype=str)
 
-                print(f"[CTI] [DEBUG] DataFrame shape: {df.shape}")
-                print(f"[CTI] [DEBUG] Colunas: {list(df.columns)}")
+            print(f"[CTI] [DEBUG] DataFrame shape: {df.shape}")
+            print(f"[CTI] [DEBUG] Colunas: {list(df.columns)}")
 
-                linhas = []
+            for _, row in df.iterrows():
+                valores = [str(v) for v in row.values if str(v) != 'nan']
+                linha = " | ".join(valores)
 
-                for _, row in df.iterrows():
-                    valores = [str(v) for v in row.values if str(v) != 'nan']
-                    linha = " | ".join(valores)
+                if linha.strip():
+                    linhas.append(linha)
 
-                    if linha.strip():
-                        linhas.append(linha)
-
-        except Exception as e:
-            print(f"[CTI] [ERRO] Excel falhou: {e}")
-            return []
-
-        # PDF (fallback simples)
         elif nome.endswith(".pdf"):
             texto = conteudo.decode("utf-8", errors="ignore")
             linhas = texto.split("\n")
@@ -317,11 +309,9 @@ async def extrair_linhas_arquivo(file: UploadFile):
         print(f"[CTI] [ERRO] Falha ao ler arquivo: {e}")
         return []
 
-    # limpeza básica
     linhas = [normalizar_texto(l) for l in linhas if l.strip() != ""]
 
     return linhas
-
 
 # ============================================================
 # CORE: DEDUPLICAÇÃO
