@@ -206,7 +206,7 @@ async def upload(file: UploadFile = File(...)):
 
         # tentativa estruturada
         try:
-            df = pd.read_excel(io.BytesIO(conteudo))
+            df = pd.read_excel(io.BytesIO(conteudo), engine="openpyxl")
             registros = processar_dataframe(df)
 
             hashes_existentes = get_hashes_existentes("cti_dados")
