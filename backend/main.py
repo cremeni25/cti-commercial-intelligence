@@ -285,7 +285,7 @@ async def extrair_linhas_arquivo(file: UploadFile):
 
         # EXCEL
         elif nome.endswith(".xlsx") or nome.endswith(".xls"):
-            df = pd.read_excel(conteudo)
+            df = pd.read_excel(BytesIO(conteudo))
             linhas = df.astype(str).apply(lambda row: " | ".join(row), axis=1).tolist()
 
         # PDF (fallback simples)
