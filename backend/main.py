@@ -468,40 +468,64 @@ async def upload_v4(file: UploadFile = File(...)):
 
     print(f"[CTI V4] Upload REAL: {file.filename}")
 
-    conteudo = await file.read()
+    try:
 
-    linhas = cti_extrair_multiplas_abas(conteudo)
+        conteudo = await file.read()
 
-    if not linhas:
+        linhas = cti_extrair_multiplas_abas(conteudo)
+
+        if not linhas:
+            return {
+                "status": "erro",
+                "mensagem": "nenhuma linha extraída"
+            }
+
+        hashes_existentes = set(
+            [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
+        )
+
+        novos = []
+
+        for l in linhas:
+            h = cti_hash(l)
+            if h not in hashes_existentes:
+                novos.append({
+                    "hash": h,
+                    "conteudo": l,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
+        inseridos = 0
+
+        if novos:
+            try:
+                res = supabase.table("cti_linhas").insert(novos).execute()
+                if res.data:
+                    inseridos = len(res.data)
+            except Exception as e:
+                print(f"[CTI V4] ERRO INSERT: {e}")
+                return {
+                    "status": "erro_insert",
+                    "mensagem": str(e),
+                    "novos_detectados": len(novos)
+                }
+
         return {
-            "status": "erro",
-            "mensagem": "nenhuma linha extraída"
+            "status": "ok",
+            "linhas_extraidas": len(linhas),
+            "novos_detectados": len(novos),
+            "novos_inseridos": inseridos
         }
 
-    hashes_existentes = set(
-        [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
-    )
+    except Exception as e:
+        import traceback
+        erro = traceback.format_exc()
 
-    novos = []
+        print("[CTI V4] ERRO GERAL")
+        print(erro)
 
-    for l in linhas:
-        h = cti_hash(l)
-        if h not in hashes_existentes:
-            novos.append({
-                "hash": h,
-                "conteudo": l,
-                "created_at": datetime.utcnow().isoformat()
-            })
-
-    inseridos = 0
-
-    if novos:
-        res = supabase.table("cti_linhas").insert(novos).execute()
-        if res.data:
-            inseridos = len(res.data)
-
-    return {
-        "status": "ok",
-        "linhas_extraidas": len(linhas),
-        "novos_inseridos": inseridos
-    }
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": erro
+        }
