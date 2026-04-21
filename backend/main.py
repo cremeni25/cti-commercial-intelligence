@@ -210,27 +210,52 @@ async def upload(file: UploadFile = File(...)):
 
         conteudo = await file.read()
 
-        # ====================================================
-        # TENTATIVA ESTRUTURADA
-        # ====================================================
-        try:
-            df = pd.read_excel(BytesIO(conteudo), engine="openpyxl")
-            registros = processar_dataframe(df)
+# ====================================================
+# LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
+# ====================================================
 
-            hashes_existentes = get_hashes_existentes("cti_dados")
-            novos = [r for r in registros if r["hash"] not in hashes_existentes]
+try:
+    xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-            inseridos = insert_lote("cti_dados", novos)
+    linhas = []
 
-            return {
-                "status": "estruturado",
-                "lidos": len(registros),
-                "inseridos": inseridos
-            }
+    for aba in xls.sheet_names:
+        df = xls.parse(aba, dtype=str)
+        df = df.fillna("")
 
-        except Exception as e:
-            log(f"Falha estruturada, fallback texto: {e}")
+        for _, row in df.iterrows():
+            linha = " | ".join([str(v) for v in row.values if str(v).strip()])
 
+            if linha:
+                linhas.append(linha.upper().strip())
+
+    print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
+    print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
+
+    hashes_existentes = get_hashes_existentes("cti_linhas")
+
+    novos = []
+    for l in linhas:
+        h = gerar_hash_linha(l)
+        if h not in hashes_existentes:
+            novos.append({
+                "hash": h,
+                "conteudo": l,
+                "created_at": datetime.utcnow().isoformat()
+            })
+
+    inseridos = insert_lote("cti_linhas", novos)
+
+    return {
+        "status": "multi_aba_texto",
+        "abas_lidas": len(xls.sheet_names),
+        "lidos": len(linhas),
+        "inseridos": inseridos
+    }
+
+except Exception as e:
+    log(f"Falha Excel multi-aba, fallback texto: {e}")
+    
         # ====================================================
         # FALLBACK TEXTO
         # ====================================================
