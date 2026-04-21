@@ -529,3 +529,136 @@ async def upload_v4(file: UploadFile = File(...)):
             "mensagem": str(e),
             "trace": erro
         }
+
+# ============================================================
+# V4 — SCORE INTELIGENTE (SEM DESCARTE DE DADOS)
+# ============================================================
+
+import math
+
+def cti_tokenizar(texto: str):
+    return [t for t in re.split(r"\W+", texto.upper()) if t]
+
+
+def cti_score_linha(linha: str):
+
+    tokens = cti_tokenizar(linha)
+
+    tamanho = len(tokens)
+
+    # diversidade (quantidade de tokens únicos)
+    diversidade = len(set(tokens))
+
+    # proporção diversidade
+    diversidade_ratio = diversidade / tamanho if tamanho > 0 else 0
+
+    # densidade numérica
+    numeros = sum(1 for t in tokens if t.isdigit())
+    densidade_numerica = numeros / tamanho if tamanho > 0 else 0
+
+    # score base (ajustável)
+    score = (
+        (tamanho * 0.2) +
+        (diversidade_ratio * 2) +
+        (densidade_numerica * 1.5)
+    )
+
+    return {
+        "tokens": tokens,
+        "tamanho": tamanho,
+        "diversidade": diversidade,
+        "diversidade_ratio": round(diversidade_ratio, 3),
+        "densidade_numerica": round(densidade_numerica, 3),
+        "score": round(score, 3)
+    }
+
+
+@app.post("/upload-v4-score")
+async def upload_v4_score(file: UploadFile = File(...)):
+
+    print(f"[CTI V4 SCORE] Upload: {file.filename}")
+
+    try:
+
+        conteudo = await file.read()
+
+        linhas = cti_extrair_multiplas_abas(conteudo)
+
+        if not linhas:
+            return {
+                "status": "erro",
+                "mensagem": "nenhuma linha encontrada"
+            }
+
+        enriquecidos = []
+
+        for l in linhas:
+
+            if not l or len(l.strip()) < 3:
+                continue
+
+            base = l.strip()
+
+            meta = cti_score_linha(base)
+
+            registro = {
+                "hash": cti_hash(base),
+                "conteudo": base,
+                "tokens": meta["tokens"][:20],  # limita tamanho
+                "tamanho": meta["tamanho"],
+                "diversidade": meta["diversidade"],
+                "score": meta["score"],
+                "densidade_numerica": meta["densidade_numerica"],
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            enriquecidos.append(registro)
+
+        # evita duplicados
+        hashes_existentes = set(
+            [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
+        )
+
+        novos = [r for r in enriquecidos if r["hash"] not in hashes_existentes]
+
+        inseridos = 0
+
+        if novos:
+            try:
+                # INSERT EM LOTE PARA EVITAR ERRO DE TAMANHO
+                batch = 500
+                for i in range(0, len(novos), batch):
+                    parte = novos[i:i+batch]
+                    res = supabase.table("cti_linhas").insert(parte).execute()
+                    if res.data:
+                        inseridos += len(res.data)
+
+            except Exception as e:
+                print("[CTI V4 SCORE] ERRO INSERT:", e)
+                return {
+                    "status": "erro_insert",
+                    "mensagem": str(e),
+                    "novos_detectados": len(novos)
+                }
+
+        return {
+            "status": "ok",
+            "linhas_originais": len(linhas),
+            "linhas_processadas": len(enriquecidos),
+            "novos_detectados": len(novos),
+            "inseridos": inseridos,
+            "preview": enriquecidos[:10]
+        }
+
+    except Exception as e:
+        import traceback
+        erro = traceback.format_exc()
+
+        print("[CTI V4 SCORE] ERRO GERAL")
+        print(erro)
+
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": erro
+        }
