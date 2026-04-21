@@ -207,69 +207,97 @@ async def upload(file: UploadFile = File(...)):
     log(f"Upload recebido: {file.filename}")
 
     try:
-
         conteudo = await file.read()
+        
+        # ====================================================
+        # LEITURA MULTI-ABAS (SEM ESTRUTURA)
+        # ====================================================
 
-# ====================================================
-# LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
-# ====================================================
+        try:
+            xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-try:
-    xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
+            linhas = []
+            registros = []
 
-    linhas = []
+            for aba in xls.sheet_names:
+                df = xls.parse(aba, dtype=str)
+                df = df.fillna("")
 
-    for aba in xls.sheet_names:
-        df = xls.parse(aba, dtype=str)
-        df = df.fillna("")
+                for _, row in df.iterrows():
+                    linha = " | ".join([str(v) for v in row.values if str(v).strip()])
 
-        for _, row in df.iterrows():
-            linha = " | ".join([str(v) for v in row.values if str(v).strip()])
+                    if not linha:
+                        continue
 
-            if linha:
-                linhas.append(linha.upper().strip())
+                    linha = linha.upper().strip()
 
-    print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
-    print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
+                    # filtros mínimos (evita lixo)
+                    if len(linha) < 5:
+                        continue
 
-    hashes_existentes = get_hashes_existentes("cti_linhas")
+                    if len(linha.split("|")) < 2:
+                        continue
 
-    novos = []
-    for l in linhas:
-        h = gerar_hash_linha(l)
-        if h not in hashes_existentes:
-            novos.append({
-                "hash": h,
-                "conteudo": l,
-                "created_at": datetime.utcnow().isoformat()
-            })
+                    linhas.append(linha)
 
-    inseridos = insert_lote("cti_linhas", novos)
+                    registros.append({
+                        "linha": linha,
+                        "aba": aba
+                    })
 
-    return {
-        "status": "multi_aba_texto",
-        "abas_lidas": len(xls.sheet_names),
-        "lidos": len(linhas),
-        "inseridos": inseridos
-    }
+            print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
+            print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
 
-except Exception as e:
-    log(f"Falha Excel multi-aba, fallback texto: {e}")
-    
+            hashes_existentes = set()
+
+            if len(linhas) < 50000:
+                hashes_existentes = get_hashes_existentes("cti_linhas")
+
+            novos = []
+
+            for r in registros:
+                h = gerar_hash_linha(r["linha"])
+
+                if h not in hashes_existentes:
+                    novos.append({
+                        "hash": h,
+                        "conteudo": r["linha"],
+                        "arquivo": file.filename,
+                        "aba": r["aba"],
+                        "created_at": datetime.utcnow().isoformat()
+                    })
+
+            inseridos = insert_lote("cti_linhas", novos)
+
+            return {
+                "status": "multi_aba_texto",
+                "abas_lidas": len(xls.sheet_names),
+                "lidos": len(linhas),
+                "inseridos": inseridos
+            }
+
+        except Exception as e:
+            log(f"Falha Excel multi-aba, fallback texto: {e}")
+
         # ====================================================
         # FALLBACK TEXTO
         # ====================================================
+
         linhas = extrair_linhas_from_bytes(conteudo, file.filename)
 
         hashes_existentes = get_hashes_existentes("cti_linhas")
 
         novos = []
+
         for l in linhas:
             h = gerar_hash_linha(l)
+
             if h not in hashes_existentes:
                 novos.append({
                     "hash": h,
                     "conteudo": l,
+                    "arquivo": file.filename,
+                    "aba": "TEXTO",
                     "created_at": datetime.utcnow().isoformat()
                 })
 
