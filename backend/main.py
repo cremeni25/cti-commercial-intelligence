@@ -342,3 +342,166 @@ def inteligencia_resumo():
         "soma_valores_detectados": total_valor,
         "quantidade_valores": len(valores)
     }
+
+# ============================================================
+# CTI V4 — MULTI-ABAS + FILTRO INTELIGENTE (SAFE ADD-ON)
+# NÃO SUBSTITUI NADA — APENAS EXPANDE
+# ============================================================
+
+import re
+import hashlib
+from datetime import datetime
+from io import BytesIO
+import pandas as pd
+
+# ============================================================
+# CONFIG DE ATIVAÇÃO
+# ============================================================
+
+CTI_MULTI_ABAS_ATIVO = False  # 🔴 começa desligado (SAFE)
+
+# ============================================================
+# UTILIDADES
+# ============================================================
+
+def cti_normalizar_texto(txt):
+    return re.sub(r"\s+", " ", str(txt).upper().strip())
+
+def cti_hash(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+# ============================================================
+# DETECÇÃO DE RELEVÂNCIA DE ABA
+# ============================================================
+
+def cti_aba_relevante(linhas):
+
+    if not linhas:
+        return False
+
+    score = 0
+
+    for l in linhas[:50]:
+
+        if any(char.isdigit() for char in l):
+            score += 1
+
+        if len(l.split()) > 3:
+            score += 1
+
+    return score > 10
+
+# ============================================================
+# EXTRAÇÃO MULTI-ABAS
+# ============================================================
+
+def cti_extrair_multiplas_abas(conteudo: bytes):
+
+    todas_linhas = []
+
+    try:
+        xls = pd.ExcelFile(BytesIO(conteudo))
+
+        print(f"[CTI V4] Abas detectadas: {xls.sheet_names}")
+
+        for aba in xls.sheet_names:
+
+            try:
+                df = pd.read_excel(xls, sheet_name=aba, dtype=str)
+                df = df.fillna("")
+
+                linhas = []
+
+                for _, row in df.iterrows():
+                    linha = " | ".join([str(v) for v in row.values if str(v).strip()])
+                    if linha:
+                        linhas.append(cti_normalizar_texto(linha))
+
+                if cti_aba_relevante(linhas):
+                    print(f"[CTI V4] Aba relevante: {aba} ({len(linhas)} linhas)")
+                    todas_linhas.extend(linhas)
+                else:
+                    print(f"[CTI V4] Aba ignorada: {aba}")
+
+            except Exception as e:
+                print(f"[CTI V4] Erro na aba {aba}: {e}")
+
+    except Exception as e:
+        print(f"[CTI V4] Falha geral leitura Excel: {e}")
+
+    return todas_linhas
+
+# ============================================================
+# ENDPOINT DE TESTE SEGURO (NÃO INTERFERE NO /upload)
+# ============================================================
+
+@app.post("/upload-v4-teste")
+async def upload_v4_teste(file: UploadFile = File(...)):
+
+    print(f"[CTI V4] Upload teste: {file.filename}")
+
+    conteudo = await file.read()
+
+    linhas = cti_extrair_multiplas_abas(conteudo)
+
+    if not linhas:
+        return {
+            "status": "erro",
+            "mensagem": "nenhuma linha extraída"
+        }
+
+    # NÃO grava no banco — apenas analisa
+    preview = linhas[:20]
+
+    return {
+        "status": "ok",
+        "total_linhas_extraidas": len(linhas),
+        "preview": preview
+    }
+
+# ============================================================
+# ENDPOINT REAL (OPCIONAL FUTURO)
+# ============================================================
+
+@app.post("/upload-v4")
+async def upload_v4(file: UploadFile = File(...)):
+
+    print(f"[CTI V4] Upload REAL: {file.filename}")
+
+    conteudo = await file.read()
+
+    linhas = cti_extrair_multiplas_abas(conteudo)
+
+    if not linhas:
+        return {
+            "status": "erro",
+            "mensagem": "nenhuma linha extraída"
+        }
+
+    hashes_existentes = set(
+        [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
+    )
+
+    novos = []
+
+    for l in linhas:
+        h = cti_hash(l)
+        if h not in hashes_existentes:
+            novos.append({
+                "hash": h,
+                "conteudo": l,
+                "created_at": datetime.utcnow().isoformat()
+            })
+
+    inseridos = 0
+
+    if novos:
+        res = supabase.table("cti_linhas").insert(novos).execute()
+        if res.data:
+            inseridos = len(res.data)
+
+    return {
+        "status": "ok",
+        "linhas_extraidas": len(linhas),
+        "novos_inseridos": inseridos
+    }
