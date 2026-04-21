@@ -207,74 +207,86 @@ async def upload(file: UploadFile = File(...)):
     log(f"Upload recebido: {file.filename}")
 
     try:
+
         conteudo = await file.read()
 
-# ====================================================
-# LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
-# ====================================================
+        # ====================================================
+        # LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
+        # ====================================================
 
-xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
+        xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-linhas = []
-registros = []
+        linhas = []
+        registros = []
 
-for aba in xls.sheet_names:
-    df = xls.parse(aba, dtype=str)
-    df = df.fillna("")
+        for aba in xls.sheet_names:
+            df = xls.parse(aba, dtype=str)
+            df = df.fillna("")
 
-    for _, row in df.iterrows():
-        linha = " | ".join([str(v) for v in row.values if str(v).strip()])
+            for _, row in df.iterrows():
+                linha = " | ".join([str(v) for v in row.values if str(v).strip()])
 
-        if not linha:
-            continue
+                if not linha:
+                    continue
 
-        linha = linha.upper().strip()
+                linha = linha.upper().strip()
 
-        if len(linha) < 5:
-            continue
+                if len(linha) < 5:
+                    continue
 
-        if len(linha.split("|")) < 2:
-            continue
+                if len(linha.split("|")) < 2:
+                    continue
 
-        linhas.append(linha)
+                linhas.append(linha)
 
-        registros.append({
-            "linha": linha,
-            "aba": aba
-        })
+                registros.append({
+                    "linha": linha,
+                    "aba": aba
+                })
 
-print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
-print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
+        print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
+        print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
 
-hashes_existentes = set()
+        hashes_existentes = set()
 
-if len(linhas) < 50000:
-    hashes_existentes = get_hashes_existentes("cti_linhas")
+        if len(linhas) < 50000:
+            hashes_existentes = get_hashes_existentes("cti_linhas")
 
-novos = []
+        novos = []
 
-for r in registros:
-    h = gerar_hash_linha(r["linha"])
+        for r in registros:
+            h = gerar_hash_linha(r["linha"])
 
-    if h not in hashes_existentes:
-        novos.append({
-            "hash": h,
-            "conteudo": r["linha"],
-            "arquivo": file.filename,
-            "aba": r["aba"],
-            "created_at": datetime.utcnow().isoformat()
-        })
+            if h not in hashes_existentes:
+                novos.append({
+                    "hash": h,
+                    "conteudo": r["linha"],
+                    "arquivo": file.filename,
+                    "aba": r["aba"],
+                    "created_at": datetime.utcnow().isoformat()
+                })
 
-inseridos = insert_lote("cti_linhas", novos)
+        inseridos = insert_lote("cti_linhas", novos)
 
-return {
-    "status": "multi_aba_texto",
-    "abas_lidas": len(xls.sheet_names),
-    "lidos": len(linhas),
-    "inseridos": inseridos
-}
-        
-        
+        return {
+            "status": "multi_aba_texto",
+            "abas_lidas": len(xls.sheet_names),
+            "lidos": len(linhas),
+            "inseridos": inseridos
+        }
+
+    except Exception as e:
+        import traceback
+        erro = traceback.format_exc()
+
+        print("[CTI] ERRO")
+        print(erro)
+
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": erro
+        }       
         
         # ====================================================
         # FALLBACK TEXTO
