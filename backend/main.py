@@ -301,3 +301,44 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/inteligencia/resumo")
+def inteligencia_resumo():
+
+    data = supabase.table("cti_linhas").select("conteudo").limit(5000).execute().data or []
+
+    total_linhas = len(data)
+
+    palavras = {}
+    valores = []
+
+    for item in data:
+
+        texto = item.get("conteudo", "")
+
+        partes = texto.split("|")
+
+        for p in partes:
+            p = p.strip()
+
+            # contagem de palavras
+            if len(p) > 3:
+                palavras[p] = palavras.get(p, 0) + 1
+
+            # tentativa de valor
+            try:
+                v = float(p.replace(",", "."))
+                valores.append(v)
+            except:
+                pass
+
+    top_palavras = sorted(palavras.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    total_valor = sum(valores)
+
+    return {
+        "linhas_analisadas": total_linhas,
+        "top_termos": top_palavras,
+        "soma_valores_detectados": total_valor,
+        "quantidade_valores": len(valores)
+    }
