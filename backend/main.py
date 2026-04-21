@@ -208,57 +208,55 @@ async def upload(file: UploadFile = File(...)):
 
     try:
         conteudo = await file.read()
-        
-        # ====================================================
-        # LEITURA MULTI-ABAS (SEM ESTRUTURA)
-        # ====================================================
-try:
-    xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-    linhas = []
-    registros = []
+# ====================================================
+# LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
+# ====================================================
 
-    for aba in xls.sheet_names:
-        df = xls.parse(aba, dtype=str)
-        df = df.fillna("")
+xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-        # 🔥 LIMITADOR DE SEGURANÇA (EVITA QUEDA DO SERVIDOR)
-        if len(df) > 20000:
-            df = df.head(20000)
+linhas = []
+registros = []
 
-        for row in df.itertuples(index=False):
+for aba in xls.sheet_names:
+    df = xls.parse(aba, dtype=str)
+    df = df.fillna("")
 
-            valores = [str(v).strip() for v in row if str(v).strip()]
+    for _, row in df.iterrows():
+        linha = " | ".join([str(v) for v in row.values if str(v).strip()])
 
-            if not valores:
-                continue
+        if not linha:
+            continue
 
-            linha = " | ".join(valores).upper()
+        linha = linha.upper().strip()
 
-            if len(linha) < 5:
-                continue
+        if len(linha) < 5:
+            continue
 
-            if len(valores) < 2:
-                continue
+        if len(linha.split("|")) < 2:
+            continue
 
-            linhas.append(linha)
+        linhas.append(linha)
 
-            registros.append({
-                "linha": linha,
-                "aba": aba
-            })
+        registros.append({
+            "linha": linha,
+            "aba": aba
+        })
 
-    print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
-    print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
+print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
+print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
 
-    # 🔥 NÃO PUXA TODOS OS HASHES (EVITA ESTOURO)
-    hashes_existentes = set()
+hashes_existentes = set()
 
-    novos = []
+if len(linhas) < 50000:
+    hashes_existentes = get_hashes_existentes("cti_linhas")
 
-    for r in registros:
-        h = gerar_hash_linha(r["linha"])
+novos = []
 
+for r in registros:
+    h = gerar_hash_linha(r["linha"])
+
+    if h not in hashes_existentes:
         novos.append({
             "hash": h,
             "conteudo": r["linha"],
@@ -267,17 +265,16 @@ try:
             "created_at": datetime.utcnow().isoformat()
         })
 
-    inseridos = insert_lote("cti_linhas", novos)
+inseridos = insert_lote("cti_linhas", novos)
 
-    return {
-        "status": "multi_aba_texto",
-        "abas_lidas": len(xls.sheet_names),
-        "lidos": len(linhas),
-        "inseridos": inseridos
-    }
-
-except Exception as e:
-    log(f"Falha Excel multi-aba, fallback texto: {e}")
+return {
+    "status": "multi_aba_texto",
+    "abas_lidas": len(xls.sheet_names),
+    "lidos": len(linhas),
+    "inseridos": inseridos
+}
+        
+        
         
         # ====================================================
         # FALLBACK TEXTO
