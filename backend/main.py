@@ -724,3 +724,88 @@ async def upload_v4_score(file: UploadFile = File(...)):
             "mensagem": str(e),
             "trace": erro
         }
+
+# ============================================================
+# CTI V5 — INGESTÃO LIMPA (PIPELINE PARALELO)
+# NÃO INTERFERE NO SISTEMA ATUAL
+# ============================================================
+
+@app.post("/upload-v5")
+async def upload_v5(file: UploadFile = File(...)):
+
+    print(f"[CTI V5] Upload: {file.filename}")
+
+    try:
+        conteudo = await file.read()
+
+        xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
+
+        total_abas = len(xls.sheet_names)
+        total_linhas = 0
+
+        registros = []
+
+        for aba in xls.sheet_names:
+            df = xls.parse(aba, dtype=str)
+            df = df.fillna("")
+
+            for row in df.itertuples(index=False):
+
+                valores = [str(v).strip() for v in row if str(v).strip()]
+
+                if not valores:
+                    continue
+
+                linha = " | ".join(valores).upper()
+
+                total_linhas += 1
+
+                # HASH COM CONTEXTO (NÃO COLIDE)
+                base_hash = f"{file.filename}|{aba}|{linha}"
+                h = hashlib.sha256(base_hash.encode()).hexdigest()
+
+                registros.append({
+                    "hash": h,
+                    "conteudo": linha,
+                    "arquivo": file.filename,
+                    "aba": aba,
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
+        print(f"[CTI V5] Abas: {total_abas}")
+        print(f"[CTI V5] Linhas: {total_linhas}")
+
+        # INSERT DIRETO (SEM CONSULTAR HASHES)
+        inseridos = 0
+        batch = 500
+
+        for i in range(0, len(registros), batch):
+            parte = registros[i:i+batch]
+
+            try:
+                res = supabase.table("cti_linhas").insert(parte).execute()
+                if res.data:
+                    inseridos += len(res.data)
+
+            except Exception as e:
+                print("[CTI V5] ERRO INSERT:", e)
+
+        return {
+            "status": "v5_ok",
+            "abas_lidas": total_abas,
+            "linhas_processadas": total_linhas,
+            "linhas_inseridas": inseridos
+        }
+
+    except Exception as e:
+        import traceback
+        erro = traceback.format_exc()
+
+        print("[CTI V5] ERRO GERAL")
+        print(erro)
+
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": erro
+        }
