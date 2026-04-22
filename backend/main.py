@@ -1120,7 +1120,7 @@ def inteligencia_decisoes():
 @app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
-    data = supabase.table("cti_linhas").select("conteudo").limit(20000).execute().data or []
+    data = supabase.table("cti_linhas").select("*").execute().data or []
 
     from collections import Counter
 
@@ -1128,7 +1128,8 @@ def inteligencia_clientes():
     faturamento = {}
 
     for row in data:
-        d = extrair_campos(row["conteudo"])
+        texto_base = row.get("conteudo") or str(row)
+        d = extrair_campos(texto_base)
 
         cliente = d["cliente"]
 
