@@ -1036,6 +1036,40 @@ def inteligencia_decisoes():
         densidade = nums / len(tokens) if tokens else 0
         densidades.append(densidade)
 
+    @app.get("/inteligencia/clientes")
+def inteligencia_clientes():
+
+    data = supabase.table("cti_linhas").select("conteudo").limit(20000).execute().data or []
+
+    from collections import Counter
+
+    compras = Counter()
+    faturamento = {}
+
+    for row in data:
+        d = extrair_campos(row["conteudo"])
+
+        cliente = d["cliente"]
+
+        compras[cliente] += 1
+        faturamento[cliente] = faturamento.get(cliente, 0) + d["valor"]
+
+    ranking = []
+
+    for cliente in compras:
+        ranking.append({
+            "cliente": cliente,
+            "compras": compras[cliente],
+            "faturamento": round(faturamento.get(cliente, 0), 2)
+        })
+
+    ranking.sort(key=lambda x: x["compras"], reverse=True)
+
+    return {
+        "status": "ok",
+        "ranking": ranking[:10]
+    }
+
     # =========================
     # MÉTRICAS
     # =========================
