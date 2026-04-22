@@ -255,7 +255,8 @@ async def upload(file: UploadFile = File(...)):
         novos = []
 
         for r in registros:
-            h = gerar_hash_linha(r["linha"])
+            base_hash = f"{r['linha']}|{r['aba']}|{datetime.utcnow().isoformat()}"
+            h = gerar_hash_linha(base_hash)
 
             if h not in hashes_existentes:
                 novos.append({
