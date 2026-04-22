@@ -1118,6 +1118,10 @@ def inteligencia_decisoes():
         densidade = nums / len(tokens) if tokens else 0
         densidades.append(densidade)
 
+    return {
+            "status": "ok"
+        }
+
 @app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
