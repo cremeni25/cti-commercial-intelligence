@@ -155,13 +155,15 @@ def processar_dataframe(df):
         if not cliente and valor == 0:
             continue
 
+        dados_extraidos = extrair_campos(str(row))
         reg = {
-            "cliente": cliente,
+            "cliente": cliente or dados_extraidos["cliente"],
             "cnpj": cnpj,
-            "valor": valor,
+            "valor": valor if valor > 0 else dados_extraidos["valor"],
             "data": data,
             "cidade": cidade,
-            "estado": estado,
+            "estado": estado or dados_extraidos["estado"],
+            "produto": dados_extraidos["produto"],
             "cliente_id": gerar_cliente_id(),
             "created_at": datetime.utcnow().isoformat()
         }
