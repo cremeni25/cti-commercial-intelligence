@@ -1121,21 +1121,22 @@ def inteligencia_decisoes():
 @app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
-    data = supabase.table("cti_linhas").select("*").execute().data or []
-
+    data = supabase.table("cti_processado").select("*").execute().data or []
     from collections import Counter
 
     compras = Counter()
     faturamento = {}
 
     for row in data:
-        texto_base = row.get("conteudo") or str(row)
-        d = extrair_campos(texto_base)
+        cliente = row.get("cliente")
 
-        cliente = d["cliente"]
+        if not cliente or cliente == "nao_identificado":
+            continue
+
+        valor = float(row.get("valor") or 0)
 
         compras[cliente] += 1
-        faturamento[cliente] = faturamento.get(cliente, 0) + d["valor"]
+        faturamento[cliente] = faturamento.get(cliente, 0) + valor
 
     ranking = []
 
@@ -1150,9 +1151,9 @@ def inteligencia_clientes():
 
     return {
         "status": "ok",
-        "ranking": ranking[:10]
+        "ranking": ranking
     }
-
+  
     # =========================
     # MÉTRICAS
     # =========================
