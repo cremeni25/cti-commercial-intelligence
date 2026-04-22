@@ -78,27 +78,108 @@ def gerar_cliente_id():
     return f"CLI_{uuid.uuid4().hex[:8].upper()}"
 
 def extrair_campos(texto: str):
-
     import re
 
-    texto = texto.lower()
+    if not texto:
+        return {
+            "cliente": "nao_identificado",
+            "produto": "nao_identificado",
+            "estado": "nao_identificado",
+            "valor": 0
+        }
 
-    # CLIENTE
-    cliente_match = re.search(r"(cliente|empresa)[:\- ]+([a-z0-9\s]+)", texto)
-    cliente = cliente_match.group(2).strip() if cliente_match else "nao_identificado"
+    # =========================
+    # LIMPEZA BASE
+    # =========================
+    texto = texto.lower().strip()
+    texto = re.sub(r"\s+", " ", texto)
 
-    # PRODUTO (placeholder para próxima fase)
-    produto_match = re.search(r"(produto|equipamento)[:\- ]+([a-z0-9\s]+)", texto)
-    produto = produto_match.group(2).strip() if produto_match else "nao_identificado"
+    # remove caracteres estranhos
+    texto = re.sub(r"[^a-z0-9\s\.\,\-\/]", " ", texto)
 
-    # ESTADO / REGIÃO
-    estado_match = re.search(r"\b(sp|rj|mg|pr|rs|sc|ba|go|mt|ms|df)\b", texto)
-    estado = estado_match.group(1) if estado_match else "nao_identificado"
+    # =========================
+    # LISTAS DE CONTROLE
+    # =========================
+    palavras_lixo = [
+        "telefone", "email", "contato", "visitar", "visita",
+        "fenatran", "obrigado", "att", "segue", "prezado",
+        "cotacao", "orcamento"
+    ]
 
+    estados_validos = [
+        "sp","rj","mg","pr","rs","sc","ba","go","mt","ms","df",
+        "es","pe","ce","pa","am","ma","pb","rn","al","pi","se","to","ro","ac","ap","rr"
+    ]
+
+    # =========================
+    # CLIENTE (MULTI-ESTRATÉGIA)
+    # =========================
+
+    cliente = "nao_identificado"
+
+    # padrão 1: cliente: nome
+    match = re.search(r"(cliente|empresa)\s*[:\-]\s*([a-z0-9\s]{3,50})", texto)
+    if match:
+        cliente = match.group(2).strip()
+
+    # padrão 2: linha começa com nome (ex: "empresa x comprou...")
+    if cliente == "nao_identificado":
+        match = re.match(r"^([a-z0-9\s]{3,40})\s+(comprou|adquiriu|fez|realizou)", texto)
+        if match:
+            cliente = match.group(1).strip()
+
+    # =========================
+    # LIMPEZA DO CLIENTE
+    # =========================
+    cliente = cliente.strip()
+
+    # remove múltiplos espaços
+    cliente = re.sub(r"\s+", " ", cliente)
+
+    # filtros de qualidade
+    if len(cliente) < 3:
+        cliente = "nao_identificado"
+
+    if any(p in cliente for p in palavras_lixo):
+        cliente = "nao_identificado"
+
+    # remove clientes inválidos tipo "n", "j", "ok"
+    if re.fullmatch(r"[a-z]{1,2}", cliente):
+        cliente = "nao_identificado"
+
+    # =========================
+    # PRODUTO (placeholder inteligente)
+    # =========================
+    produto = "nao_identificado"
+
+    match = re.search(r"(produto|equipamento)\s*[:\-]\s*([a-z0-9\s\-]{3,40})", texto)
+    if match:
+        produto = match.group(2).strip()
+
+    # =========================
+    # ESTADO
+    # =========================
+    estado = "nao_identificado"
+
+    match = re.search(r"\b(" + "|".join(estados_validos) + r")\b", texto)
+    if match:
+        estado = match.group(1)
+
+    # =========================
     # VALOR
-    valor_match = re.search(r"(\d+[.,]\d+)", texto)
-    valor = float(valor_match.group(1).replace(",", ".")) if valor_match else 0
+    # =========================
+    valor = 0
 
+    match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
+    if match:
+        try:
+            valor = float(match.group(1).replace(".", "").replace(",", "."))
+        except:
+            valor = 0
+
+    # =========================
+    # RESULTADO FINAL
+    # =========================
     return {
         "cliente": cliente,
         "produto": produto,
