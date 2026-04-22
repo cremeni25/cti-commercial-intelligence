@@ -77,6 +77,35 @@ def gerar_hash_linha(linha):
 def gerar_cliente_id():
     return f"CLI_{uuid.uuid4().hex[:8].upper()}"
 
+def extrair_campos(texto: str):
+
+    import re
+
+    texto = texto.lower()
+
+    # CLIENTE
+    cliente_match = re.search(r"(cliente|empresa)[:\- ]+([a-z0-9\s]+)", texto)
+    cliente = cliente_match.group(2).strip() if cliente_match else "nao_identificado"
+
+    # PRODUTO (placeholder para próxima fase)
+    produto_match = re.search(r"(produto|equipamento)[:\- ]+([a-z0-9\s]+)", texto)
+    produto = produto_match.group(2).strip() if produto_match else "nao_identificado"
+
+    # ESTADO / REGIÃO
+    estado_match = re.search(r"\b(sp|rj|mg|pr|rs|sc|ba|go|mt|ms|df)\b", texto)
+    estado = estado_match.group(1) if estado_match else "nao_identificado"
+
+    # VALOR
+    valor_match = re.search(r"(\d+[.,]\d+)", texto)
+    valor = float(valor_match.group(1).replace(",", ".")) if valor_match else 0
+
+    return {
+        "cliente": cliente,
+        "produto": produto,
+        "estado": estado,
+        "valor": valor
+    }
+
 # ============================================================
 # DETECÇÃO DE COLUNAS
 # ============================================================
