@@ -1036,7 +1036,7 @@ def inteligencia_decisoes():
         densidade = nums / len(tokens) if tokens else 0
         densidades.append(densidade)
 
-    @app.get("/inteligencia/clientes")
+@app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
     data = supabase.table("cti_linhas").select("conteudo").limit(20000).execute().data or []
