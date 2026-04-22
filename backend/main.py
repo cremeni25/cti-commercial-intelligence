@@ -810,3 +810,144 @@ async def upload_v5(file: UploadFile = File(...)):
             "mensagem": str(e),
             "trace": erro
         }
+
+# ============================================================
+# CTI V6 — INTELIGÊNCIA DE PADRÕES (ENTERPRISE)
+# ============================================================
+
+from collections import Counter
+import re
+
+def extrair_valores(texto):
+    valores = []
+    partes = texto.split("|")
+
+    for p in partes:
+        p = p.strip().replace(",", ".")
+
+        try:
+            v = float(p)
+            if v > 0:
+                valores.append(v)
+        except:
+            continue
+
+    return valores
+
+
+def classificar_valor(v):
+    if v < 1000:
+        return "baixo"
+    elif v < 5000:
+        return "medio"
+    elif v < 20000:
+        return "alto"
+    else:
+        return "muito_alto"
+
+
+def extrair_tokens_relevantes(texto):
+    tokens = re.split(r"\W+", texto.upper())
+    return [t for t in tokens if len(t) > 3 and not t.isdigit()]
+
+
+@app.get("/inteligencia/padroes")
+def inteligencia_padroes():
+
+    data = supabase.table("cti_linhas").select("conteudo").limit(10000).execute().data or []
+
+    total_linhas = len(data)
+
+    contador_clientes = Counter()
+    contador_cidades = Counter()
+    contador_estados = Counter()
+    contador_faixa_valor = Counter()
+
+    todos_valores = []
+    densidade_numerica = []
+
+    for item in data:
+
+        texto = item.get("conteudo", "")
+
+        if not texto:
+            continue
+
+        partes = [p.strip() for p in texto.split("|") if p.strip()]
+
+        # ===============================
+        # VALORES
+        # ===============================
+        valores = extrair_valores(texto)
+
+        if valores:
+            todos_valores.extend(valores)
+
+            for v in valores:
+                faixa = classificar_valor(v)
+                contador_faixa_valor[faixa] += 1
+
+        # ===============================
+        # DENSIDADE NUMÉRICA
+        # ===============================
+        tokens = texto.split()
+        nums = sum(1 for t in tokens if re.search(r"\d", t))
+        densidade = nums / len(tokens) if tokens else 0
+        densidade_numerica.append(densidade)
+
+        # ===============================
+        # HEURÍSTICAS SIMPLES (PRÁTICAS)
+        # ===============================
+        for p in partes:
+
+            p_upper = p.upper()
+
+            # Cliente (strings grandes)
+            if len(p_upper) > 8 and not re.search(r"\d", p_upper):
+                contador_clientes[p_upper] += 1
+
+            # Estado (UF)
+            if len(p_upper) == 2:
+                contador_estados[p_upper] += 1
+
+            # Cidade (texto médio)
+            if 4 <= len(p_upper) <= 20 and not re.search(r"\d", p_upper):
+                contador_cidades[p_upper] += 1
+
+    # ===============================
+    # MÉTRICAS
+    # ===============================
+
+    ticket_medio = sum(todos_valores) / len(todos_valores) if todos_valores else 0
+
+    concentracao_top5 = 0
+    if contador_clientes:
+        total_clientes = sum(contador_clientes.values())
+        top5 = contador_clientes.most_common(5)
+        top5_total = sum([c[1] for c in top5])
+        concentracao_top5 = round(top5_total / total_clientes, 3)
+
+    densidade_media = sum(densidade_numerica) / len(densidade_numerica) if densidade_numerica else 0
+
+    return {
+        "resumo_geral": {
+            "total_linhas_analisadas": total_linhas,
+            "ticket_medio": round(ticket_medio, 2),
+            "total_valores_detectados": len(todos_valores),
+            "densidade_numerica_media": round(densidade_media, 3)
+        },
+
+        "top_clientes": contador_clientes.most_common(10),
+
+        "top_cidades": contador_cidades.most_common(10),
+
+        "top_estados": contador_estados.most_common(10),
+
+        "distribuicao_valores": dict(contador_faixa_valor),
+
+        "insights": {
+            "concentracao_top5_clientes": concentracao_top5,
+            "base_concentrada": concentracao_top5 > 0.5,
+            "alto_volume_dados": total_linhas > 5000
+        }
+    }
