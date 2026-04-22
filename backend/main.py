@@ -236,7 +236,8 @@ def processar_dataframe(df):
         if not cliente and valor == 0:
             continue
 
-        dados_extraidos = extrair_campos(str(row))
+        texto_base = row.get("conteudo") or ""
+        dados_extraidos = extrair_campos(texto_base)
         reg = {
             "cliente": cliente or dados_extraidos["cliente"],
             "cnpj": cnpj,
