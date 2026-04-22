@@ -951,3 +951,129 @@ def inteligencia_padroes():
             "alto_volume_dados": total_linhas > 5000
         }
     }
+
+# ============================================================
+# CTI V7 — MOTOR DE DECISÃO COMERCIAL
+# ============================================================
+
+@app.get("/inteligencia/decisoes")
+def inteligencia_decisoes():
+
+    data = supabase.table("cti_linhas").select("conteudo").limit(10000).execute().data or []
+
+    if not data:
+        return {
+            "status": "sem_dados",
+            "mensagem": "Nenhum dado disponível para análise"
+        }
+
+    from collections import Counter
+    import re
+
+    contador_clientes = Counter()
+    contador_cidades = Counter()
+    valores = []
+    densidades = []
+
+    for item in data:
+
+        texto = item.get("conteudo", "")
+        partes = [p.strip() for p in texto.split("|") if p.strip()]
+
+        # valores
+        for p in partes:
+            try:
+                v = float(p.replace(",", "."))
+                if v > 0:
+                    valores.append(v)
+            except:
+                pass
+
+        # clientes / cidades
+        for p in partes:
+            p_upper = p.upper()
+
+            if len(p_upper) > 8 and not re.search(r"\d", p_upper):
+                contador_clientes[p_upper] += 1
+
+            if 4 <= len(p_upper) <= 20 and not re.search(r"\d", p_upper):
+                contador_cidades[p_upper] += 1
+
+        # densidade numérica
+        tokens = texto.split()
+        nums = sum(1 for t in tokens if re.search(r"\d", t))
+        densidade = nums / len(tokens) if tokens else 0
+        densidades.append(densidade)
+
+    # =========================
+    # MÉTRICAS
+    # =========================
+
+    total_clientes = sum(contador_clientes.values())
+    top5 = contador_clientes.most_common(5)
+    top5_total = sum([c[1] for c in top5]) if top5 else 0
+    concentracao = (top5_total / total_clientes) if total_clientes else 0
+
+    ticket_medio = sum(valores) / len(valores) if valores else 0
+    densidade_media = sum(densidades) / len(densidades) if densidades else 0
+
+    cidades_unicas = len(contador_cidades)
+
+    # =========================
+    # DECISÕES
+    # =========================
+
+    alertas = []
+    oportunidades = []
+    acoes = []
+
+    # 🔴 CONCENTRAÇÃO
+    if concentracao > 0.6:
+        alertas.append("Alta dependência de poucos clientes")
+        acoes.append("Expandir base ativa de clientes imediatamente")
+    elif concentracao > 0.4:
+        oportunidades.append("Base moderadamente concentrada")
+        acoes.append("Aumentar penetração em novos clientes")
+
+    # 💰 TICKET
+    if ticket_medio < 1000:
+        alertas.append("Ticket médio baixo")
+        acoes.append("Revisar estratégia de precificação ou mix de produtos")
+    elif ticket_medio > 10000:
+        oportunidades.append("Alto valor por transação")
+        acoes.append("Focar retenção e relacionamento com grandes contas")
+
+    # 🌎 DISPERSÃO
+    if cidades_unicas < 5:
+        alertas.append("Baixa presença geográfica")
+        acoes.append("Expandir atuação regional")
+    elif cidades_unicas > 20:
+        oportunidades.append("Boa capilaridade geográfica")
+        acoes.append("Otimizar logística e segmentação regional")
+
+    # 📊 QUALIDADE DE DADOS
+    if densidade_media < 0.1:
+        alertas.append("Baixa densidade de informação nas linhas")
+        acoes.append("Melhorar qualidade dos dados de origem")
+    else:
+        oportunidades.append("Boa qualidade de dados disponíveis")
+
+    # =========================
+    # RESULTADO FINAL
+    # =========================
+
+    return {
+        "resumo": {
+            "ticket_medio": round(ticket_medio, 2),
+            "concentracao_clientes": round(concentracao, 3),
+            "cidades_ativas": cidades_unicas,
+            "densidade_dados": round(densidade_media, 3)
+        },
+
+        "top_clientes": top5,
+        "top_cidades": contador_cidades.most_common(5),
+
+        "alertas": alertas,
+        "oportunidades": oportunidades,
+        "acoes_recomendadas": list(set(acoes))  # remove duplicadas
+    }
