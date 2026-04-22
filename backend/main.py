@@ -1125,7 +1125,7 @@ def inteligencia_decisoes():
 @app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
-    data = supabase.table("cti_processado").select("*").execute().data or []
+    data = supabase.table("cti_linhas").select("conteudo").execute().data or []
     from collections import Counter
 
     compras = Counter()
