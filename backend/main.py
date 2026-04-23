@@ -452,7 +452,7 @@ async def upload(file: UploadFile = File(...)):
 @app.get("/analytics/resumo")
 def resumo():
 
-    data = supabase.table("cti_dados").select("*").execute().data or []
+    data = supabase.table("cti_linhas").select("conteudo").execute().data or []
 
     total = len(data)
     faturamento = sum([limpar_valor(d.get("valor")) for d in data])
@@ -1126,18 +1126,27 @@ def inteligencia_decisoes():
 def inteligencia_clientes():
 
     data = supabase.table("cti_linhas").select("conteudo").execute().data or []
+
     from collections import Counter
 
     compras = Counter()
     faturamento = {}
 
     for row in data:
-        cliente = row.get("cliente")
+
+        texto = row.get("conteudo", "")
+
+        if not texto:
+            continue
+
+        d = extrair_campos(texto)
+
+        cliente = d.get("cliente")
 
         if not cliente or cliente == "nao_identificado":
             continue
 
-        valor = float(row.get("valor") or 0)
+        valor = float(d.get("valor") or 0)
 
         compras[cliente] += 1
         faturamento[cliente] = faturamento.get(cliente, 0) + valor
