@@ -1,5 +1,5 @@
 # ============================================================
-# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL (CORRIGIDO)
+# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL (FINAL INTEGRADO)
 # ============================================================
 
 from fastapi import FastAPI, UploadFile, File
@@ -13,13 +13,15 @@ import hashlib
 import uuid
 from datetime import datetime
 from io import BytesIO
+from collections import Counter
+import math
 
 # ============================================================
 # CONFIG
 # ============================================================
 
 APP_NAME = "CTI — Commercial Tactical Intelligence"
-APP_VERSION = "3.2"
+APP_VERSION = "4.0"
 
 app = FastAPI(title=APP_NAME, version=APP_VERSION)
 
@@ -65,7 +67,7 @@ def limpar_valor(v):
     try:
         return float(str(v).replace(",", "."))
     except:
-        return 0.0
+        return None
 
 def gerar_hash_dict(reg):
     base = f"{reg.get('cliente')}_{reg.get('cnpj')}_{reg.get('valor')}_{reg.get('data')}"
@@ -77,88 +79,148 @@ def gerar_hash_linha(linha):
 def gerar_cliente_id():
     return f"CLI_{uuid.uuid4().hex[:8].upper()}"
 
+# ============================================================
+# INTELIGÊNCIA COMERCIAL
+# ============================================================
+
+OEMS = ["FACCHINI","RANDON","GUERRA","NOMA"]
+LOCADORAS = ["LOCALIZA","UNIDAS","MOVIDA"]
+
+def detectar_oem(texto):
+    texto = texto.upper()
+    for o in OEMS:
+        if o in texto:
+            return o
+    return None
+
+def detectar_locadora(texto):
+    texto = texto.upper()
+    for l in LOCADORAS:
+        if l in texto:
+            return l
+    return None
+
+def classificar_produto(texto):
+    if not texto:
+        return None
+    t = texto.upper()
+    if "SEMI" in t or "CARRETA" in t:
+        return "TR"
+    if "TRUCK" in t or "TOCO" in t:
+        return "DT"
+    if "DIRECT" in t:
+        return "DD"
+    return None
+
+def classificar_canal(oem, locadora):
+    if locadora:
+        return "LOCADORA"
+    if oem:
+        return "OEM"
+    return "DIRETO"
+
+# ============================================================
+# PARSER
+# ============================================================
+
 def extrair_campos(texto: str):
 
     if not texto:
         return {}
 
     texto_original = texto
-    texto = texto.lower().strip()
-    texto = re.sub(r"\s+", " ", texto)
+    texto = normalizar_texto(texto)
 
-    # =========================
-    # BASE
-    # =========================
+    partes = [p.strip() for p in texto.split("|") if p.strip()]
 
+    d = {
+        "cliente": None,
+        "produto": None,
+        "modelo": None,
+        "vendedor": None,
+        "cidade": None,
+        "estado": None,
+        "ddd": None,
+        "cnpj": None,
+        "valor": None,
+        "oem": None,
+        "locadora": None,
+        "concorrente": None,
+        "zona": None,
+        "data": None,
+        "observacoes": texto_original
+    }
+
+    # POSICIONAL
+    if len(partes) >= 3:
+        if len(partes[2]) == 2:
+            d["estado"] = partes[2]
+
+    if len(partes) >= 4:
+        d["cidade"] = partes[3]
+
+    if len(partes) >= 5:
+        d["oem"] = detectar_oem(partes[4]) or partes[4]
+
+    if len(partes) >= 6:
+        d["produto"] = partes[5]
+
+    if len(partes) >= 7:
+        d["modelo"] = partes[6]
+
+    # REGEX
     def find(pattern):
         m = re.search(pattern, texto)
-        return m.group(1).strip() if m else None
+        return m.group(2).strip() if m else None
 
-    # =========================
-    # EXTRAÇÕES
-    # =========================
+    d["cliente"] = find(r"(CLIENTE|EMPRESA)\s*[:\-]\s*([A-Z0-9\s]{3,60})")
+    d["vendedor"] = find(r"(VENDEDOR|CONSULTOR)\s*[:\-]\s*([A-Z\s]{3,40})")
+    d["locadora"] = find(r"(LOCADORA)\s*[:\-]\s*([A-Z0-9\s]{3,40})")
+    d["concorrente"] = find(r"(CONCORRENTE)\s*[:\-]\s*([A-Z0-9\s]{3,40})")
 
-    cliente = find(r"(cliente|empresa)\s*[:\-]\s*([a-z0-9\s]{3,60})")
-    produto = find(r"(produto|equipamento)\s*[:\-]\s*([a-z0-9\s\-]{3,60})")
-    vendedor = find(r"(vendedor|consultor)\s*[:\-]\s*([a-z\s]{3,40})")
-    cidade = find(r"(cidade)\s*[:\-]\s*([a-z\s]{3,40})")
+    # CNPJ
+    cnpj_match = re.search(r"\d{2}\.?\d{3}\.?\d{3}\/?\d{4}\-?\d{2}", texto)
+    if cnpj_match:
+        d["cnpj"] = limpar_cnpj(cnpj_match.group(0))
 
-    cnpj = find(r"(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}\-?\d{2})")
-
-    # estado (UF)
-    estados = r"\b(sp|rj|mg|pr|rs|sc|ba|go|mt|ms|df|es|pe|ce|pa|am)\b"
-    estado_match = re.search(estados, texto)
-    estado = estado_match.group(1) if estado_match else None
+    # VALOR
+    valor_match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
+    if valor_match:
+        d["valor"] = limpar_valor(valor_match.group(1))
 
     # DDD
     ddd_match = re.search(r"\b(\d{2})\b", texto)
-    ddd = ddd_match.group(1) if ddd_match else None
+    if ddd_match:
+        d["ddd"] = ddd_match.group(1)
 
-    # valor
-    valor = 0
-    valor_match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
-    if valor_match:
-        try:
-            valor = float(valor_match.group(1).replace(".", "").replace(",", "."))
-        except:
-            valor = 0
+    # ZONA
+    if "ZONA LESTE" in texto:
+        d["zona"] = "ZL"
+    elif "ZONA OESTE" in texto:
+        d["zona"] = "ZO"
+    elif "ZONA SUL" in texto:
+        d["zona"] = "ZS"
+    elif "ZONA NORTE" in texto:
+        d["zona"] = "ZN"
 
-    # OEM / concorrente / locadora (heurístico simples)
-    oem = find(r"(oem|implementador)\s*[:\-]\s*([a-z0-9\s]{3,40})")
-    locadora = find(r"(locadora)\s*[:\-]\s*([a-z0-9\s]{3,40})")
-    concorrente = find(r"(concorrente)\s*[:\-]\s*([a-z0-9\s]{3,40})")
+    # DATA
+    data_match = re.search(r"\d{2}/\d{2}/\d{4}", texto)
+    if data_match:
+        d["data"] = data_match.group(0)
 
-    # zona (heurística SP)
-    zona = None
-    if "zona leste" in texto:
-        zona = "ZL"
-    elif "zona oeste" in texto:
-        zona = "ZO"
-    elif "zona sul" in texto:
-        zona = "ZS"
-    elif "zona norte" in texto:
-        zona = "ZN"
+    # REGRAS CRÍTICAS
+    if d["cliente"] and d["cliente"] in OEMS:
+        d["cliente"] = None
 
-    # data
-    data_match = re.search(r"(\d{2}/\d{2}/\d{4})", texto)
-    data = data_match.group(1) if data_match else None
+    if d["produto"] and "BAU" in d["produto"]:
+        d["produto"] = None
 
-    return {
-        "cliente": cliente,
-        "produto": produto,
-        "vendedor": vendedor,
-        "cidade": cidade,
-        "estado": estado,
-        "ddd": ddd,
-        "cnpj": cnpj,
-        "valor": valor,
-        "oem": oem,
-        "locadora": locadora,
-        "concorrente": concorrente,
-        "zona": zona,
-        "data": data,
-        "observacoes": texto_original
-    }
+    d["produto"] = classificar_produto(texto)
+    d["oem"] = d["oem"] or detectar_oem(texto)
+    d["locadora"] = d["locadora"] or detectar_locadora(texto)
+    d["canal"] = classificar_canal(d["oem"], d["locadora"])
+
+    return d
 
 # ============================================================
 # DETECÇÃO DE COLUNAS
@@ -182,6 +244,8 @@ def detectar_colunas(df):
             mapa["cidade"] = col
         elif "estado" in c or "uf" in c:
             mapa["estado"] = col
+        elif "vendedor" in c:
+            mapa["vendedor"] = col
 
     return mapa
 
@@ -205,20 +269,29 @@ def processar_dataframe(df):
 
         cidade = normalizar_texto(row.get(mapa.get("cidade", ""), ""))
         estado = normalizar_texto(row.get(mapa.get("estado", ""), ""))
+        vendedor = normalizar_texto(row.get(mapa.get("vendedor", ""), ""))
 
-        if not cliente and valor == 0:
+        if not cliente and not valor:
             continue
 
-        texto_base = row.get("conteudo") or ""
+        texto_base = " | ".join([str(v) for v in row.values if str(v).strip()])
         dados_extraidos = extrair_campos(texto_base)
+
         reg = {
-            "cliente": cliente or dados_extraidos["cliente"],
-            "cnpj": cnpj,
-            "valor": valor if valor > 0 else dados_extraidos["valor"],
-            "data": data,
-            "cidade": cidade,
-            "estado": estado or dados_extraidos["estado"],
-            "produto": dados_extraidos["produto"],
+            "cliente": cliente or dados_extraidos.get("cliente"),
+            "cnpj": cnpj or dados_extraidos.get("cnpj"),
+            "valor": valor or dados_extraidos.get("valor"),
+            "data": data or dados_extraidos.get("data"),
+            "cidade": cidade or dados_extraidos.get("cidade"),
+            "estado": estado or dados_extraidos.get("estado"),
+            "vendedor": vendedor or dados_extraidos.get("vendedor"),
+            "produto": dados_extraidos.get("produto"),
+            "modelo": dados_extraidos.get("modelo"),
+            "oem": dados_extraidos.get("oem"),
+            "locadora": dados_extraidos.get("locadora"),
+            "canal": dados_extraidos.get("canal"),
+            "zona": dados_extraidos.get("zona"),
+            "observacoes": dados_extraidos.get("observacoes"),
             "cliente_id": gerar_cliente_id(),
             "created_at": datetime.utcnow().isoformat()
         }
@@ -230,7 +303,7 @@ def processar_dataframe(df):
     return registros
 
 # ============================================================
-# PROCESSAMENTO TEXTO (CORRIGIDO)
+# PROCESSAMENTO TEXTO
 # ============================================================
 
 def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
@@ -239,6 +312,7 @@ def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
     linhas = []
 
     if nome.endswith(".xlsx") or nome.endswith(".xls"):
+
         df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
 
         for _, row in df.iterrows():
@@ -258,12 +332,13 @@ def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
 
 def get_hashes_existentes(tabela):
 
-    response = supabase.table(tabela).select("hash").execute()
-
-    if not response.data:
+    try:
+        response = supabase.table(tabela).select("hash").execute()
+        if not response.data:
+            return set()
+        return set([r["hash"] for r in response.data if r.get("hash")])
+    except:
         return set()
-
-    return set([r["hash"] for r in response.data if r.get("hash")])
 
 def insert_lote(tabela, dados, batch=500):
 
@@ -272,19 +347,18 @@ def insert_lote(tabela, dados, batch=500):
     for i in range(0, len(dados), batch):
         parte = dados[i:i+batch]
 
-        for item in parte:
-            try:
-                res = supabase.table(tabela).insert(item).execute()
-                if res.data:
-                    total += 1
-            except Exception:
-                # duplicado ou erro → ignora
-                continue
+        try:
+            res = supabase.table(tabela).insert(parte).execute()
+            if res.data:
+                total += len(res.data)
+        except Exception as e:
+            print("[ERRO INSERT]", e)
+            continue
 
     return total
 
 # ============================================================
-# ENDPOINT PRINCIPAL (CORRIGIDO)
+# UPLOAD PRINCIPAL
 # ============================================================
 
 @app.post("/upload")
@@ -296,13 +370,8 @@ async def upload(file: UploadFile = File(...)):
 
         conteudo = await file.read()
 
-        # ====================================================
-        # LEITURA MULTI-ABAS (SEM ESTRUTURA — DEFINITIVO)
-        # ====================================================
-
         xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
 
-        linhas = []
         registros = []
 
         for aba in xls.sheet_names:
@@ -310,12 +379,13 @@ async def upload(file: UploadFile = File(...)):
             df = df.fillna("")
 
             for _, row in df.iterrows():
+
                 linha = " | ".join([str(v) for v in row.values if str(v).strip()])
 
                 if not linha:
                     continue
 
-                linha = linha.upper().strip()
+                linha = normalizar_texto(linha)
 
                 if len(linha) < 5:
                     continue
@@ -323,572 +393,27 @@ async def upload(file: UploadFile = File(...)):
                 if len(linha.split("|")) < 2:
                     continue
 
-                linhas.append(linha)
-
                 registros.append({
-                    "linha": linha,
-                    "aba": aba
-                })
-
-        print(f"[UPLOAD] Abas lidas: {len(xls.sheet_names)}")
-        print(f"[UPLOAD] Linhas extraídas: {len(linhas)}")
-
-        hashes_existentes = set()
-
-        if len(linhas) < 50000:
-            hashes_existentes = get_hashes_existentes("cti_linhas")
-
-        novos = []
-
-        for r in registros:
-            base_hash = f"{r['linha']}|{r['aba']}|{datetime.utcnow().isoformat()}"
-            h = gerar_hash_linha(base_hash)
-
-            if h not in hashes_existentes:
-                novos.append({
-                    "hash": h,
-                    "conteudo": r["linha"],
-                    "arquivo": file.filename,
-                    "aba": r["aba"],
-                    "created_at": datetime.utcnow().isoformat()
-                })
-
-        inseridos = insert_lote("cti_linhas", novos)
-
-        return {
-            "status": "multi_aba_texto",
-            "abas_lidas": len(xls.sheet_names),
-            "lidos": len(linhas),
-            "inseridos": inseridos
-        }
-
-    except Exception as e:
-        import traceback
-        erro = traceback.format_exc()
-
-        print("[CTI] ERRO")
-        print(erro)
-
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": erro
-        }       
-        
-        # ====================================================
-        # FALLBACK TEXTO
-        # ====================================================
-
-        linhas = extrair_linhas_from_bytes(conteudo, file.filename)
-
-        hashes_existentes = get_hashes_existentes("cti_linhas")
-
-        novos = []
-
-        for l in linhas:
-            h = gerar_hash_linha(l)
-
-            if h not in hashes_existentes:
-                novos.append({
-                    "hash": h,
-                    "conteudo": l,
-                    "arquivo": file.filename,
-                    "aba": "TEXTO",
-                    "created_at": datetime.utcnow().isoformat()
-                })
-
-        inseridos = insert_lote("cti_linhas", novos)
-
-        return {
-            "status": "texto",
-            "lidos": len(linhas),
-            "inseridos": inseridos
-        }
-
-    except Exception as e:
-        import traceback
-        erro = traceback.format_exc()
-
-        print("[CTI] [ERRO]")
-        print(erro)
-
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": erro
-        }
-
-# ============================================================
-# ANALYTICS
-# ============================================================
-
-@app.get("/analytics/resumo")
-def resumo():
-
-    data = supabase.table("cti_linhas").select("conteudo").execute().data or []
-
-    total = len(data)
-    faturamento = sum([limpar_valor(d.get("valor")) for d in data])
-
-    return {
-        "total_registros": total,
-        "faturamento": faturamento
-    }
-
-# ============================================================
-# STATUS
-# ============================================================
-
-@app.get("/")
-def root():
-    return {
-        "sistema": APP_NAME,
-        "versao": APP_VERSION,
-        "status": "ativo"
-    }
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.get("/inteligencia/resumo")
-def inteligencia_resumo():
-
-    data = supabase.table("cti_linhas").select("conteudo").limit(5000).execute().data or []
-
-    total_linhas = len(data)
-
-    palavras = {}
-    valores = []
-
-    for item in data:
-
-        texto = item.get("conteudo", "")
-
-        partes = texto.split("|")
-
-        for p in partes:
-            p = p.strip()
-
-            # contagem de palavras
-            if len(p) > 3:
-                palavras[p] = palavras.get(p, 0) + 1
-
-            # tentativa de valor
-            try:
-                v = float(p.replace(",", "."))
-                valores.append(v)
-            except:
-                pass
-
-    top_palavras = sorted(palavras.items(), key=lambda x: x[1], reverse=True)[:10]
-
-    total_valor = sum(valores)
-
-    return {
-        "linhas_analisadas": total_linhas,
-        "top_termos": top_palavras,
-        "soma_valores_detectados": total_valor,
-        "quantidade_valores": len(valores)
-    }
-
-# ============================================================
-# CTI V4 — MULTI-ABAS + FILTRO INTELIGENTE (SAFE ADD-ON)
-# NÃO SUBSTITUI NADA — APENAS EXPANDE
-# ============================================================
-
-import re
-import hashlib
-from datetime import datetime
-from io import BytesIO
-import pandas as pd
-
-# ============================================================
-# CONFIG DE ATIVAÇÃO
-# ============================================================
-
-CTI_MULTI_ABAS_ATIVO = False  # 🔴 começa desligado (SAFE)
-
-# ============================================================
-# UTILIDADES
-# ============================================================
-
-def cti_normalizar_texto(txt):
-    return re.sub(r"\s+", " ", str(txt).upper().strip())
-
-def cti_hash(texto):
-    return hashlib.sha256(texto.encode()).hexdigest()
-
-# ============================================================
-# DETECÇÃO DE RELEVÂNCIA DE ABA
-# ============================================================
-
-def cti_aba_relevante(linhas):
-
-    if not linhas:
-        return False
-
-    score = 0
-
-    for l in linhas[:50]:
-
-        if any(char.isdigit() for char in l):
-            score += 1
-
-        if len(l.split()) > 3:
-            score += 1
-
-    return score > 10
-
-# ============================================================
-# EXTRAÇÃO MULTI-ABAS
-# ============================================================
-
-def cti_extrair_multiplas_abas(conteudo: bytes):
-
-    todas_linhas = []
-
-    try:
-        xls = pd.ExcelFile(BytesIO(conteudo))
-
-        print(f"[CTI V4] Abas detectadas: {xls.sheet_names}")
-
-        for aba in xls.sheet_names:
-
-            try:
-                df = pd.read_excel(xls, sheet_name=aba, dtype=str)
-                df = df.fillna("")
-
-                linhas = []
-
-                for _, row in df.iterrows():
-                    linha = " | ".join([str(v) for v in row.values if str(v).strip()])
-                    if linha:
-                        linhas.append(cti_normalizar_texto(linha))
-
-                if cti_aba_relevante(linhas):
-                    print(f"[CTI V4] Aba relevante: {aba} ({len(linhas)} linhas)")
-                    todas_linhas.extend(linhas)
-                else:
-                    print(f"[CTI V4] Aba ignorada: {aba}")
-
-            except Exception as e:
-                print(f"[CTI V4] Erro na aba {aba}: {e}")
-
-    except Exception as e:
-        print(f"[CTI V4] Falha geral leitura Excel: {e}")
-
-    return todas_linhas
-
-# ============================================================
-# ENDPOINT DE TESTE SEGURO (NÃO INTERFERE NO /upload)
-# ============================================================
-
-@app.post("/upload-v4-teste")
-async def upload_v4_teste(file: UploadFile = File(...)):
-
-    print(f"[CTI V4] Upload teste: {file.filename}")
-
-    conteudo = await file.read()
-
-    linhas = cti_extrair_multiplas_abas(conteudo)
-
-    if not linhas:
-        return {
-            "status": "erro",
-            "mensagem": "nenhuma linha extraída"
-        }
-
-    # NÃO grava no banco — apenas analisa
-    preview = linhas[:20]
-
-    return {
-        "status": "ok",
-        "total_linhas_extraidas": len(linhas),
-        "preview": preview
-    }
-
-# ============================================================
-# ENDPOINT REAL (OPCIONAL FUTURO)
-# ============================================================
-
-@app.post("/upload-v4")
-async def upload_v4(file: UploadFile = File(...)):
-
-    print(f"[CTI V4] Upload REAL: {file.filename}")
-
-    try:
-
-        conteudo = await file.read()
-
-        linhas = cti_extrair_multiplas_abas(conteudo)
-
-        if not linhas:
-            return {
-                "status": "erro",
-                "mensagem": "nenhuma linha extraída"
-            }
-
-        hashes_existentes = set(
-            [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
-        )
-
-        novos = []
-
-        for l in linhas:
-            h = cti_hash(l)
-            if h not in hashes_existentes:
-                novos.append({
-                    "hash": h,
-                    "conteudo": l,
-                    "created_at": datetime.utcnow().isoformat()
-                })
-
-        inseridos = 0
-
-        if novos:
-            try:
-                res = supabase.table("cti_linhas").insert(novos).execute()
-                if res.data:
-                    inseridos = len(res.data)
-            except Exception as e:
-                print(f"[CTI V4] ERRO INSERT: {e}")
-                return {
-                    "status": "erro_insert",
-                    "mensagem": str(e),
-                    "novos_detectados": len(novos)
-                }
-
-        return {
-            "status": "ok",
-            "linhas_extraidas": len(linhas),
-            "novos_detectados": len(novos),
-            "novos_inseridos": inseridos
-        }
-
-    except Exception as e:
-        import traceback
-        erro = traceback.format_exc()
-
-        print("[CTI V4] ERRO GERAL")
-        print(erro)
-
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": erro
-        }
-
-# ============================================================
-# V4 — SCORE INTELIGENTE (SEM DESCARTE DE DADOS)
-# ============================================================
-
-import math
-
-def cti_tokenizar(texto: str):
-    return [t for t in re.split(r"\W+", texto.upper()) if t]
-
-
-def cti_score_linha(linha: str):
-
-    tokens = cti_tokenizar(linha)
-
-    tamanho = len(tokens)
-
-    # diversidade (quantidade de tokens únicos)
-    diversidade = len(set(tokens))
-
-    # proporção diversidade
-    diversidade_ratio = diversidade / tamanho if tamanho > 0 else 0
-
-    # densidade numérica
-    numeros = sum(1 for t in tokens if t.isdigit())
-    densidade_numerica = numeros / tamanho if tamanho > 0 else 0
-
-    # score base (ajustável)
-    score = (
-        (tamanho * 0.2) +
-        (diversidade_ratio * 2) +
-        (densidade_numerica * 1.5)
-    )
-
-    return {
-        "tokens": tokens,
-        "tamanho": tamanho,
-        "diversidade": diversidade,
-        "diversidade_ratio": round(diversidade_ratio, 3),
-        "densidade_numerica": round(densidade_numerica, 3),
-        "score": round(score, 3)
-    }
-
-
-@app.post("/upload-v4-score")
-async def upload_v4_score(file: UploadFile = File(...)):
-
-    print(f"[CTI V4 SCORE] Upload: {file.filename}")
-
-    try:
-
-        conteudo = await file.read()
-
-        linhas = cti_extrair_multiplas_abas(conteudo)
-
-        if not linhas:
-            return {
-                "status": "erro",
-                "mensagem": "nenhuma linha encontrada"
-            }
-
-        enriquecidos = []
-
-        for l in linhas:
-
-            if not l or len(l.strip()) < 3:
-                continue
-
-            base = l.strip()
-
-            meta = cti_score_linha(base)
-
-            registro = {
-                "hash": cti_hash(base),
-                "conteudo": base,
-                "tokens": meta["tokens"][:20],  # limita tamanho
-                "tamanho": meta["tamanho"],
-                "diversidade": meta["diversidade"],
-                "score": meta["score"],
-                "densidade_numerica": meta["densidade_numerica"],
-                "created_at": datetime.utcnow().isoformat()
-            }
-
-            enriquecidos.append(registro)
-
-        # evita duplicados
-        hashes_existentes = set(
-            [r["hash"] for r in supabase.table("cti_linhas").select("hash").execute().data or []]
-        )
-
-        novos = [r for r in enriquecidos if r["hash"] not in hashes_existentes]
-
-        inseridos = 0
-
-        if novos:
-            try:
-                # INSERT EM LOTE PARA EVITAR ERRO DE TAMANHO
-                batch = 500
-                for i in range(0, len(novos), batch):
-                    parte = novos[i:i+batch]
-                    res = supabase.table("cti_linhas").insert(parte).execute()
-                    if res.data:
-                        inseridos += len(res.data)
-
-            except Exception as e:
-                print("[CTI V4 SCORE] ERRO INSERT:", e)
-                return {
-                    "status": "erro_insert",
-                    "mensagem": str(e),
-                    "novos_detectados": len(novos)
-                }
-
-        return {
-            "status": "ok",
-            "linhas_originais": len(linhas),
-            "linhas_processadas": len(enriquecidos),
-            "novos_detectados": len(novos),
-            "inseridos": inseridos,
-            "preview": enriquecidos[:10]
-        }
-
-    except Exception as e:
-        import traceback
-        erro = traceback.format_exc()
-
-        print("[CTI V4 SCORE] ERRO GERAL")
-        print(erro)
-
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": erro
-        }
-
-# ============================================================
-# CTI V5 — INGESTÃO LIMPA (PIPELINE PARALELO)
-# NÃO INTERFERE NO SISTEMA ATUAL
-# ============================================================
-
-@app.post("/upload-v5")
-async def upload_v5(file: UploadFile = File(...)):
-
-    print(f"[CTI V5] Upload: {file.filename}")
-
-    try:
-        conteudo = await file.read()
-
-        xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
-
-        total_abas = len(xls.sheet_names)
-        total_linhas = 0
-
-        registros = []
-
-        for aba in xls.sheet_names:
-            df = xls.parse(aba, dtype=str)
-            df = df.fillna("")
-
-            for row in df.itertuples(index=False):
-
-                valores = [str(v).strip() for v in row if str(v).strip()]
-
-                if not valores:
-                    continue
-
-                linha = " | ".join(valores).upper()
-
-                total_linhas += 1
-
-                # HASH COM CONTEXTO (NÃO COLIDE)
-                base_hash = f"{file.filename}|{aba}|{linha}"
-                h = hashlib.sha256(base_hash.encode()).hexdigest()
-
-                registros.append({
-                    "hash": h,
+                    "hash": gerar_hash_linha(linha),
                     "conteudo": linha,
                     "arquivo": file.filename,
                     "aba": aba,
                     "created_at": datetime.utcnow().isoformat()
                 })
 
-        print(f"[CTI V5] Abas: {total_abas}")
-        print(f"[CTI V5] Linhas: {total_linhas}")
-
-        # INSERT DIRETO (SEM CONSULTAR HASHES)
-        inseridos = 0
-        batch = 500
-
-        for i in range(0, len(registros), batch):
-            parte = registros[i:i+batch]
-
-            try:
-                res = supabase.table("cti_linhas").insert(parte).execute()
-                if res.data:
-                    inseridos += len(res.data)
-
-            except Exception as e:
-                print("[CTI V5] ERRO INSERT:", e)
+        inseridos = insert_lote("cti_linhas", registros)
 
         return {
-            "status": "v5_ok",
-            "abas_lidas": total_abas,
-            "linhas_processadas": total_linhas,
-            "linhas_inseridas": inseridos
+            "status": "ok",
+            "linhas_processadas": len(registros),
+            "inseridos": inseridos
         }
 
     except Exception as e:
         import traceback
         erro = traceback.format_exc()
 
-        print("[CTI V5] ERRO GERAL")
+        print("[ERRO UPLOAD]")
         print(erro)
 
         return {
@@ -898,228 +423,98 @@ async def upload_v5(file: UploadFile = File(...)):
         }
 
 # ============================================================
-# CTI V6 — INTELIGÊNCIA DE PADRÕES (ENTERPRISE)
+# PROCESSAMENTO BASE (PIPELINE PRINCIPAL)
 # ============================================================
 
-from collections import Counter
-import re
+@app.post("/processar-base")
+def processar_base():
 
-def extrair_valores(texto):
-    valores = []
-    partes = texto.split("|")
+    data = supabase.table("cti_linhas").select("*").execute().data or []
 
-    for p in partes:
-        p = p.strip().replace(",", ".")
+    # evita erro caso coluna hash não exista
+    try:
+        existentes = supabase.table("cti_processado").select("hash").execute().data or []
+        hashes_existentes = set([e.get("hash") for e in existentes if e.get("hash")])
+    except:
+        hashes_existentes = set()
 
-        try:
-            v = float(p)
-            if v > 0:
-                valores.append(v)
-        except:
-            continue
+    novos = []
 
-    return valores
+    for row in data:
 
-
-def classificar_valor(v):
-    if v < 1000:
-        return "baixo"
-    elif v < 5000:
-        return "medio"
-    elif v < 20000:
-        return "alto"
-    else:
-        return "muito_alto"
-
-
-def extrair_tokens_relevantes(texto):
-    tokens = re.split(r"\W+", texto.upper())
-    return [t for t in tokens if len(t) > 3 and not t.isdigit()]
-
-
-@app.get("/inteligencia/padroes")
-def inteligencia_padroes():
-
-    data = supabase.table("cti_linhas").select("conteudo").limit(10000).execute().data or []
-
-    total_linhas = len(data)
-
-    contador_clientes = Counter()
-    contador_cidades = Counter()
-    contador_estados = Counter()
-    contador_faixa_valor = Counter()
-
-    todos_valores = []
-    densidade_numerica = []
-
-    for item in data:
-
-        texto = item.get("conteudo", "")
+        texto = row.get("conteudo", "")
+        h = row.get("hash")
 
         if not texto:
             continue
 
-        partes = [p.strip() for p in texto.split("|") if p.strip()]
+        # fallback de hash
+        if not h:
+            h = gerar_hash_linha(texto)
 
-        # ===============================
-        # VALORES
-        # ===============================
-        valores = extrair_valores(texto)
+        if h in hashes_existentes:
+            continue
 
-        if valores:
-            todos_valores.extend(valores)
+        d = extrair_campos(texto)
 
-            for v in valores:
-                faixa = classificar_valor(v)
-                contador_faixa_valor[faixa] += 1
+        reg = {
+            "hash": h,
+            "controle_id": None,
+            "data": d.get("data"),
+            "vendedor": d.get("vendedor"),
+            "cliente": d.get("cliente"),
+            "cnpj": d.get("cnpj"),
+            "produto": d.get("produto"),
+            "modelo": d.get("modelo"),
+            "cidade": d.get("cidade"),
+            "estado": d.get("estado"),
+            "ddd": d.get("ddd"),
+            "zona": d.get("zona"),
+            "valor": d.get("valor"),
+            "oem": d.get("oem"),
+            "locadora": d.get("locadora"),
+            "canal": d.get("canal"),
+            "concorrente": d.get("concorrente"),
+            "observacoes": d.get("observacoes"),
+            "origem_arquivo": row.get("arquivo"),
+            "aba_origem": row.get("aba"),
+            "conteudo_original": texto,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": None
+        }
 
-        # ===============================
-        # DENSIDADE NUMÉRICA
-        # ===============================
-        tokens = texto.split()
-        nums = sum(1 for t in tokens if re.search(r"\d", t))
-        densidade = nums / len(tokens) if tokens else 0
-        densidade_numerica.append(densidade)
+        novos.append(reg)
 
-        # ===============================
-        # HEURÍSTICAS SIMPLES (PRÁTICAS)
-        # ===============================
-        for p in partes:
-
-            p_upper = p.upper()
-
-            # Cliente (strings grandes)
-            if len(p_upper) > 8 and not re.search(r"\d", p_upper):
-                contador_clientes[p_upper] += 1
-
-            # Estado (UF)
-            if len(p_upper) == 2:
-                contador_estados[p_upper] += 1
-
-            # Cidade (texto médio)
-            if 4 <= len(p_upper) <= 20 and not re.search(r"\d", p_upper):
-                contador_cidades[p_upper] += 1
-
-    # ===============================
-    # MÉTRICAS
-    # ===============================
-
-    ticket_medio = sum(todos_valores) / len(todos_valores) if todos_valores else 0
-
-    concentracao_top5 = 0
-    if contador_clientes:
-        total_clientes = sum(contador_clientes.values())
-        top5 = contador_clientes.most_common(5)
-        top5_total = sum([c[1] for c in top5])
-        concentracao_top5 = round(top5_total / total_clientes, 3)
-
-    densidade_media = sum(densidade_numerica) / len(densidade_numerica) if densidade_numerica else 0
+    inseridos = insert_lote("cti_processado", novos)
 
     return {
-        "resumo_geral": {
-            "total_linhas_analisadas": total_linhas,
-            "ticket_medio": round(ticket_medio, 2),
-            "total_valores_detectados": len(todos_valores),
-            "densidade_numerica_media": round(densidade_media, 3)
-        },
-
-        "top_clientes": contador_clientes.most_common(10),
-
-        "top_cidades": contador_cidades.most_common(10),
-
-        "top_estados": contador_estados.most_common(10),
-
-        "distribuicao_valores": dict(contador_faixa_valor),
-
-        "insights": {
-            "concentracao_top5_clientes": concentracao_top5,
-            "base_concentrada": concentracao_top5 > 0.5,
-            "alto_volume_dados": total_linhas > 5000
-        }
+        "status": "ok",
+        "linhas_lidas": len(data),
+        "novos_processados": len(novos),
+        "inseridos": inseridos
     }
 
+
 # ============================================================
-# CTI V7 — MOTOR DE DECISÃO COMERCIAL
+# INTELIGÊNCIA — CLIENTES
 # ============================================================
-
-@app.get("/inteligencia/decisoes")
-def inteligencia_decisoes():
-
-    data = supabase.table("cti_linhas").select("conteudo").limit(10000).execute().data or []
-
-    if not data:
-        return {
-            "status": "sem_dados",
-            "mensagem": "Nenhum dado disponível para análise"
-        }
-
-    from collections import Counter
-    import re
-
-    contador_clientes = Counter()
-    contador_cidades = Counter()
-    valores = []
-    densidades = []
-
-    for item in data:
-
-        texto = item.get("conteudo", "")
-        partes = [p.strip() for p in texto.split("|") if p.strip()]
-
-        # valores
-        for p in partes:
-            try:
-                v = float(p.replace(",", "."))
-                if v > 0:
-                    valores.append(v)
-            except:
-                pass
-
-        # clientes / cidades
-        for p in partes:
-            p_upper = p.upper()
-
-            if len(p_upper) > 8 and not re.search(r"\d", p_upper):
-                contador_clientes[p_upper] += 1
-
-            if 4 <= len(p_upper) <= 20 and not re.search(r"\d", p_upper):
-                contador_cidades[p_upper] += 1
-
-        # densidade numérica
-        tokens = texto.split()
-        nums = sum(1 for t in tokens if re.search(r"\d", t))
-        densidade = nums / len(tokens) if tokens else 0
-        densidades.append(densidade)
-
-    return {
-            "status": "ok"
-        }
 
 @app.get("/inteligencia/clientes")
 def inteligencia_clientes():
 
-    data = supabase.table("cti_linhas").select("conteudo").execute().data or []
-
-    from collections import Counter
+    data = supabase.table("cti_processado").select("*").execute().data or []
 
     compras = Counter()
     faturamento = {}
 
     for row in data:
 
-        texto = row.get("conteudo", "")
+        cliente = row.get("cliente")
 
-        if not texto:
+        if not cliente:
             continue
 
-        d = extrair_campos(texto)
-
-        cliente = d.get("cliente")
-
-        if not cliente or cliente == "nao_identificado":
-            continue
-
-        valor = float(d.get("valor") or 0)
+        valor = float(row.get("valor") or 0)
 
         compras[cliente] += 1
         faturamento[cliente] = faturamento.get(cliente, 0) + valor
@@ -1140,140 +535,305 @@ def inteligencia_clientes():
         "ranking": ranking
     }
 
-@app.post("/processar-base")
-def processar_base():
 
-    data = supabase.table("cti_linhas").select("*").execute().data or []
+# ============================================================
+# INTELIGÊNCIA — PRODUTOS
+# ============================================================
 
-    existentes = supabase.table("cti_processado").select("hash").execute().data or []
-    hashes_existentes = set([e["hash"] for e in existentes if e.get("hash")])
+@app.get("/inteligencia/produtos")
+def inteligencia_produtos():
 
-    novos = []
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    contador = Counter()
 
     for row in data:
-
-        texto = row.get("conteudo", "")
-        h = row.get("hash")
-
-        if not texto or not h or h in hashes_existentes:
-            continue
-
-        d = extrair_campos(texto)
-
-        reg = {
-            "hash": h,
-            "controle_id": None,
-            "data": d.get("data"),
-            "vendedor": d.get("vendedor"),
-            "cliente": d.get("cliente"),
-            "cnpj": d.get("cnpj"),
-            "produto": d.get("produto"),
-            "cidade": d.get("cidade"),
-            "estado": d.get("estado"),
-            "ddd": d.get("ddd"),
-            "zona": d.get("zona"),
-            "valor": d.get("valor"),
-            "oem": d.get("oem"),
-            "locadora": d.get("locadora"),
-            "concorrente": d.get("concorrente"),
-            "observacoes": d.get("observacoes"),
-            "origem_arquivo": row.get("arquivo"),
-            "aba_origem": row.get("aba"),
-            "conteudo_original": texto,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": None
-        }
-
-        novos.append(reg)
-
-    inseridos = 0
-    batch = 500
-
-    for i in range(0, len(novos), batch):
-        parte = novos[i:i+batch]
-        try:
-            res = supabase.table("cti_processado").insert(parte).execute()
-            if res.data:
-                inseridos += len(res.data)
-        except Exception as e:
-            print("[ERRO PROCESSAMENTO]", e)
+        produto = row.get("produto")
+        if produto:
+            contador[produto] += 1
 
     return {
         "status": "ok",
-        "novos_processados": len(novos),
-        "inseridos": inseridos
+        "ranking_produtos": contador.most_common(10)
     }
-    
-    
-    # =========================
-    # MÉTRICAS
-    # =========================
 
-    total_clientes = sum(contador_clientes.values())
-    top5 = contador_clientes.most_common(5)
+
+# ============================================================
+# INTELIGÊNCIA — REGIÃO
+# ============================================================
+
+@app.get("/inteligencia/regiao")
+def inteligencia_regiao():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    cidades = Counter()
+    estados = Counter()
+
+    for row in data:
+
+        cidade = row.get("cidade")
+        estado = row.get("estado")
+
+        if cidade:
+            cidades[cidade] += 1
+
+        if estado:
+            estados[estado] += 1
+
+    return {
+        "status": "ok",
+        "top_cidades": cidades.most_common(10),
+        "top_estados": estados.most_common(10)
+    }
+
+
+# ============================================================
+# INTELIGÊNCIA — CANAL
+# ============================================================
+
+@app.get("/inteligencia/canais")
+def inteligencia_canais():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    canais = Counter()
+
+    for row in data:
+        canal = row.get("canal")
+        if canal:
+            canais[canal] += 1
+
+    return {
+        "status": "ok",
+        "canais": canais
+    }
+
+
+# ============================================================
+# INTELIGÊNCIA — OEM / CONCORRÊNCIA
+# ============================================================
+
+@app.get("/inteligencia/oem")
+def inteligencia_oem():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    oems = Counter()
+    concorrentes = Counter()
+
+    for row in data:
+
+        oem = row.get("oem")
+        concorrente = row.get("concorrente")
+
+        if oem:
+            oems[oem] += 1
+
+        if concorrente:
+            concorrentes[concorrente] += 1
+
+    return {
+        "status": "ok",
+        "oem": oems.most_common(10),
+        "concorrentes": concorrentes.most_common(10)
+    }
+
+# ============================================================
+# INTELIGÊNCIA — MÉTRICAS GERAIS
+# ============================================================
+
+@app.get("/inteligencia/resumo")
+def inteligencia_resumo():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    total = len(data)
+
+    valores = []
+    clientes = set()
+
+    for row in data:
+        v = row.get("valor")
+        if v:
+            valores.append(float(v))
+
+        c = row.get("cliente")
+        if c:
+            clientes.add(c)
+
+    faturamento = sum(valores) if valores else 0
+    ticket_medio = faturamento / len(valores) if valores else 0
+
+    return {
+        "status": "ok",
+        "total_registros": total,
+        "clientes_unicos": len(clientes),
+        "faturamento_total": round(faturamento, 2),
+        "ticket_medio": round(ticket_medio, 2)
+    }
+
+
+# ============================================================
+# INTELIGÊNCIA — DECISÕES
+# ============================================================
+
+@app.get("/inteligencia/decisoes")
+def inteligencia_decisoes():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    if not data:
+        return {"status": "sem_dados"}
+
+    clientes = Counter()
+    cidades = Counter()
+    valores = []
+
+    for row in data:
+
+        if row.get("cliente"):
+            clientes[row["cliente"]] += 1
+
+        if row.get("cidade"):
+            cidades[row["cidade"]] += 1
+
+        if row.get("valor"):
+            valores.append(float(row["valor"]))
+
+    total_clientes = sum(clientes.values())
+    top5 = clientes.most_common(5)
     top5_total = sum([c[1] for c in top5]) if top5 else 0
+
     concentracao = (top5_total / total_clientes) if total_clientes else 0
 
     ticket_medio = sum(valores) / len(valores) if valores else 0
-    densidade_media = sum(densidades) / len(densidades) if densidades else 0
-
-    cidades_unicas = len(contador_cidades)
-
-    # =========================
-    # DECISÕES
-    # =========================
 
     alertas = []
     oportunidades = []
     acoes = []
 
-    # 🔴 CONCENTRAÇÃO
+    # concentração
     if concentracao > 0.6:
         alertas.append("Alta dependência de poucos clientes")
-        acoes.append("Expandir base ativa de clientes imediatamente")
+        acoes.append("Expandir base de clientes")
+
     elif concentracao > 0.4:
         oportunidades.append("Base moderadamente concentrada")
         acoes.append("Aumentar penetração em novos clientes")
 
-    # 💰 TICKET
+    # ticket
     if ticket_medio < 1000:
         alertas.append("Ticket médio baixo")
-        acoes.append("Revisar estratégia de precificação ou mix de produtos")
+        acoes.append("Revisar estratégia comercial")
+
     elif ticket_medio > 10000:
-        oportunidades.append("Alto valor por transação")
-        acoes.append("Focar retenção e relacionamento com grandes contas")
+        oportunidades.append("Alto valor por venda")
+        acoes.append("Focar grandes contas")
 
-    # 🌎 DISPERSÃO
-    if cidades_unicas < 5:
+    # geografia
+    if len(cidades) < 5:
         alertas.append("Baixa presença geográfica")
-        acoes.append("Expandir atuação regional")
-    elif cidades_unicas > 20:
-        oportunidades.append("Boa capilaridade geográfica")
-        acoes.append("Otimizar logística e segmentação regional")
-
-    # 📊 QUALIDADE DE DADOS
-    if densidade_media < 0.1:
-        alertas.append("Baixa densidade de informação nas linhas")
-        acoes.append("Melhorar qualidade dos dados de origem")
-    else:
-        oportunidades.append("Boa qualidade de dados disponíveis")
-
-    # =========================
-    # RESULTADO FINAL
-    # =========================
+        acoes.append("Expandir regiões")
 
     return {
+        "status": "ok",
         "resumo": {
             "ticket_medio": round(ticket_medio, 2),
             "concentracao_clientes": round(concentracao, 3),
-            "cidades_ativas": cidades_unicas,
-            "densidade_dados": round(densidade_media, 3)
+            "cidades_ativas": len(cidades)
         },
-
         "top_clientes": top5,
-        "top_cidades": contador_cidades.most_common(5),
-
+        "top_cidades": cidades.most_common(5),
         "alertas": alertas,
         "oportunidades": oportunidades,
-        "acoes_recomendadas": list(set(acoes))  # remove duplicadas
+        "acoes": list(set(acoes))
     }
+
+
+# ============================================================
+# ANALYTICS SIMPLES
+# ============================================================
+
+@app.get("/analytics/resumo")
+def analytics():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    return {
+        "total_linhas": len(data)
+    }
+
+
+# ============================================================
+# ENDPOINT DE DEBUG (IMPORTANTE)
+# ============================================================
+
+@app.get("/debug/linhas")
+def debug_linhas():
+
+    data = supabase.table("cti_linhas").select("*").limit(20).execute().data or []
+
+    return data
+
+
+@app.get("/debug/processado")
+def debug_processado():
+
+    data = supabase.table("cti_processado").select("*").limit(20).execute().data or []
+
+    return data
+
+
+# ============================================================
+# ENDPOINT DE REPROCESSAMENTO
+# ============================================================
+
+@app.post("/reprocessar")
+def reprocessar():
+
+    try:
+        supabase.table("cti_processado").delete().neq("id", 0).execute()
+    except:
+        pass
+
+    return processar_base()
+
+
+# ============================================================
+# STATUS
+# ============================================================
+
+@app.get("/")
+def root():
+    return {
+        "sistema": APP_NAME,
+        "versao": APP_VERSION,
+        "status": "ativo"
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# ============================================================
+# SEGURANÇA FINAL
+# ============================================================
+
+@app.get("/check")
+def check():
+
+    try:
+        supabase.table("cti_linhas").select("id").limit(1).execute()
+        return {"db": "ok"}
+    except:
+        return {"db": "erro"}
+
+
+# ============================================================
+# FIM DO SISTEMA
+# ============================================================
+
+    
