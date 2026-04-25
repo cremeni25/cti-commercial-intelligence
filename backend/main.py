@@ -78,113 +78,86 @@ def gerar_cliente_id():
     return f"CLI_{uuid.uuid4().hex[:8].upper()}"
 
 def extrair_campos(texto: str):
-    import re
 
     if not texto:
-        return {
-            "cliente": "nao_identificado",
-            "produto": "nao_identificado",
-            "estado": "nao_identificado",
-            "valor": 0
-        }
+        return {}
 
-    # =========================
-    # LIMPEZA BASE
-    # =========================
+    texto_original = texto
     texto = texto.lower().strip()
     texto = re.sub(r"\s+", " ", texto)
 
-    # remove caracteres estranhos
-    texto = re.sub(r"[^a-z0-9\s\.\,\-\/]", " ", texto)
-
     # =========================
-    # LISTAS DE CONTROLE
-    # =========================
-    palavras_lixo = [
-        "telefone", "email", "contato", "visitar", "visita",
-        "fenatran", "obrigado", "att", "segue", "prezado",
-        "cotacao", "orcamento"
-    ]
-
-    estados_validos = [
-        "sp","rj","mg","pr","rs","sc","ba","go","mt","ms","df",
-        "es","pe","ce","pa","am","ma","pb","rn","al","pi","se","to","ro","ac","ap","rr"
-    ]
-
-    # =========================
-    # CLIENTE (MULTI-ESTRATÉGIA)
+    # BASE
     # =========================
 
-    cliente = "nao_identificado"
-
-    # padrão 1: cliente: nome
-    match = re.search(r"(cliente|empresa)\s*[:\-]\s*([a-z0-9\s]{3,50})", texto)
-    if match:
-        cliente = match.group(2).strip()
-
-    # padrão 2: linha começa com nome (ex: "empresa x comprou...")
-    if cliente == "nao_identificado":
-        match = re.match(r"^([a-z0-9\s]{3,40})\s+(comprou|adquiriu|fez|realizou)", texto)
-        if match:
-            cliente = match.group(1).strip()
+    def find(pattern):
+        m = re.search(pattern, texto)
+        return m.group(1).strip() if m else None
 
     # =========================
-    # LIMPEZA DO CLIENTE
+    # EXTRAÇÕES
     # =========================
-    cliente = cliente.strip()
 
-    # remove múltiplos espaços
-    cliente = re.sub(r"\s+", " ", cliente)
+    cliente = find(r"(cliente|empresa)\s*[:\-]\s*([a-z0-9\s]{3,60})")
+    produto = find(r"(produto|equipamento)\s*[:\-]\s*([a-z0-9\s\-]{3,60})")
+    vendedor = find(r"(vendedor|consultor)\s*[:\-]\s*([a-z\s]{3,40})")
+    cidade = find(r"(cidade)\s*[:\-]\s*([a-z\s]{3,40})")
 
-    # filtros de qualidade
-    if len(cliente) < 3:
-        cliente = "nao_identificado"
+    cnpj = find(r"(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}\-?\d{2})")
 
-    if any(p in cliente for p in palavras_lixo):
-        cliente = "nao_identificado"
+    # estado (UF)
+    estados = r"\b(sp|rj|mg|pr|rs|sc|ba|go|mt|ms|df|es|pe|ce|pa|am)\b"
+    estado_match = re.search(estados, texto)
+    estado = estado_match.group(1) if estado_match else None
 
-    # remove clientes inválidos tipo "n", "j", "ok"
-    if re.fullmatch(r"[a-z]{1,2}", cliente):
-        cliente = "nao_identificado"
+    # DDD
+    ddd_match = re.search(r"\b(\d{2})\b", texto)
+    ddd = ddd_match.group(1) if ddd_match else None
 
-    # =========================
-    # PRODUTO (placeholder inteligente)
-    # =========================
-    produto = "nao_identificado"
-
-    match = re.search(r"(produto|equipamento)\s*[:\-]\s*([a-z0-9\s\-]{3,40})", texto)
-    if match:
-        produto = match.group(2).strip()
-
-    # =========================
-    # ESTADO
-    # =========================
-    estado = "nao_identificado"
-
-    match = re.search(r"\b(" + "|".join(estados_validos) + r")\b", texto)
-    if match:
-        estado = match.group(1)
-
-    # =========================
-    # VALOR
-    # =========================
+    # valor
     valor = 0
-
-    match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
-    if match:
+    valor_match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
+    if valor_match:
         try:
-            valor = float(match.group(1).replace(".", "").replace(",", "."))
+            valor = float(valor_match.group(1).replace(".", "").replace(",", "."))
         except:
             valor = 0
 
-    # =========================
-    # RESULTADO FINAL
-    # =========================
+    # OEM / concorrente / locadora (heurístico simples)
+    oem = find(r"(oem|implementador)\s*[:\-]\s*([a-z0-9\s]{3,40})")
+    locadora = find(r"(locadora)\s*[:\-]\s*([a-z0-9\s]{3,40})")
+    concorrente = find(r"(concorrente)\s*[:\-]\s*([a-z0-9\s]{3,40})")
+
+    # zona (heurística SP)
+    zona = None
+    if "zona leste" in texto:
+        zona = "ZL"
+    elif "zona oeste" in texto:
+        zona = "ZO"
+    elif "zona sul" in texto:
+        zona = "ZS"
+    elif "zona norte" in texto:
+        zona = "ZN"
+
+    # data
+    data_match = re.search(r"(\d{2}/\d{2}/\d{4})", texto)
+    data = data_match.group(1) if data_match else None
+
     return {
         "cliente": cliente,
         "produto": produto,
+        "vendedor": vendedor,
+        "cidade": cidade,
         "estado": estado,
-        "valor": valor
+        "ddd": ddd,
+        "cnpj": cnpj,
+        "valor": valor,
+        "oem": oem,
+        "locadora": locadora,
+        "concorrente": concorrente,
+        "zona": zona,
+        "data": data,
+        "observacoes": texto_original
     }
 
 # ============================================================
@@ -1166,7 +1139,72 @@ def inteligencia_clientes():
         "status": "ok",
         "ranking": ranking
     }
-  
+
+@app.post("/processar-base")
+def processar_base():
+
+    data = supabase.table("cti_linhas").select("*").execute().data or []
+
+    existentes = supabase.table("cti_processado").select("hash").execute().data or []
+    hashes_existentes = set([e["hash"] for e in existentes if e.get("hash")])
+
+    novos = []
+
+    for row in data:
+
+        texto = row.get("conteudo", "")
+        h = row.get("hash")
+
+        if not texto or not h or h in hashes_existentes:
+            continue
+
+        d = extrair_campos(texto)
+
+        reg = {
+            "hash": h,
+            "controle_id": None,
+            "data": d.get("data"),
+            "vendedor": d.get("vendedor"),
+            "cliente": d.get("cliente"),
+            "cnpj": d.get("cnpj"),
+            "produto": d.get("produto"),
+            "cidade": d.get("cidade"),
+            "estado": d.get("estado"),
+            "ddd": d.get("ddd"),
+            "zona": d.get("zona"),
+            "valor": d.get("valor"),
+            "oem": d.get("oem"),
+            "locadora": d.get("locadora"),
+            "concorrente": d.get("concorrente"),
+            "observacoes": d.get("observacoes"),
+            "origem_arquivo": row.get("arquivo"),
+            "aba_origem": row.get("aba"),
+            "conteudo_original": texto,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": None
+        }
+
+        novos.append(reg)
+
+    inseridos = 0
+    batch = 500
+
+    for i in range(0, len(novos), batch):
+        parte = novos[i:i+batch]
+        try:
+            res = supabase.table("cti_processado").insert(parte).execute()
+            if res.data:
+                inseridos += len(res.data)
+        except Exception as e:
+            print("[ERRO PROCESSAMENTO]", e)
+
+    return {
+        "status": "ok",
+        "novos_processados": len(novos),
+        "inseridos": inseridos
+    }
+    
+    
     # =========================
     # MÉTRICAS
     # =========================
