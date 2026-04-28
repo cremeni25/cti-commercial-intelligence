@@ -324,7 +324,7 @@ def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
         df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
 
         for _, row in df.iterrows():
-            linha = " | ".join([str(v) for v in row.values if str(v) != "nan"])
+            linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
             if linha.strip():
                 linhas.append(normalizar_texto(linha))
 
@@ -388,7 +388,7 @@ async def upload(file: UploadFile = File(...)):
 
             for _, row in df.iterrows():
 
-                linha = " | ".join([str(v) for v in row.values if str(v).strip()])
+                linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
 
                 if not linha:
                     continue
