@@ -120,7 +120,7 @@ def classificar_canal(oem, locadora):
     return "DIRETO"
 
 # ============================================================
-# PARSER
+# CTI — PARSER ESTRUTURADO POR POSIÇÃO (OFICIAL)
 # ============================================================
 
 def extrair_campos(texto: str):
@@ -128,99 +128,111 @@ def extrair_campos(texto: str):
     if not texto:
         return {}
 
-    texto_original = texto
-    texto = normalizar_texto(texto)
+    try:
+        partes = [p.strip().upper() for p in texto.split("|")]
 
-    partes = [p.strip() for p in texto.split("|") if p.strip()]
+        # Garante tamanho mínimo (evita quebra)
+        while len(partes) < 20:
+            partes.append(None)
 
-    d = {
-        "cliente": None,
-        "produto": None,
-        "modelo": None,
-        "vendedor": None,
-        "cidade": None,
-        "estado": None,
-        "ddd": None,
-        "cnpj": None,
-        "valor": None,
-        "oem": None,
-        "locadora": None,
-        "concorrente": None,
-        "zona": None,
-        "data": None,
-        "observacoes": texto_original
-    }
+        # =========================
+        # MAPEAMENTO FIXO (BASE REAL)
+        # =========================
 
-    # POSICIONAL
-    if len(partes) >= 3:
-        if len(partes[2]) == 2:
-            d["estado"] = partes[2]
+        data = partes[0]
+        regiao = partes[1]
+        estado = partes[2]
+        cidade = partes[3]
 
-    if len(partes) >= 4:
-        d["cidade"] = partes[3]
+        oem = partes[4]  # FACCHINI etc
 
-    if len(partes) >= 5:
-        d["oem"] = detectar_oem(partes[4]) or partes[4]
+        implemento = partes[5]  # BAU FRIGORIFICO (IGNORAR COMO PRODUTO)
 
-    if len(partes) >= 6:
-        d["produto"] = partes[5]
+        # tipo veículo → vira PRODUTO
+        tipo_veiculo = partes[9]  # TRAILER / TRUCK / etc
 
-    if len(partes) >= 7:
-        d["modelo"] = partes[6]
+        cliente = partes[10]  # cliente real
+        vendedor = partes[11]  # REP
 
-    # REGEX
-    def find(pattern):
-        m = re.search(pattern, texto)
-        return m.group(2).strip() if m else None
+        valor = partes[7]  # TOTAL
 
-    d["cliente"] = find(r"(CLIENTE|EMPRESA)\s*[:\-]\s*([A-Z0-9\s]{3,60})")
-    d["vendedor"] = find(r"(VENDEDOR|CONSULTOR)\s*[:\-]\s*([A-Z\s]{3,40})")
-    d["locadora"] = find(r"(LOCADORA)\s*[:\-]\s*([A-Z0-9\s]{3,40})")
-    d["concorrente"] = find(r"(CONCORRENTE)\s*[:\-]\s*([A-Z0-9\s]{3,40})")
+        locadora = partes[8]  # se existir
+        concorrente = partes[12]
 
-    # CNPJ
-    cnpj_match = re.search(r"\d{2}\.?\d{3}\.?\d{3}\/?\d{4}\-?\d{2}", texto)
-    if cnpj_match:
-        d["cnpj"] = limpar_cnpj(cnpj_match.group(0))
+        # =========================
+        # NORMALIZAÇÕES
+        # =========================
 
-    # VALOR
-    valor_match = re.search(r"(\d{1,3}(?:[\.\,]\d{3})*(?:[\.\,]\d{2}))", texto)
-    if valor_match:
-        d["valor"] = limpar_valor(valor_match.group(1))
+        def limpar(v):
+            if not v or v in ["", "NONE", "NULL"]:
+                return None
+            return v.strip()
 
-    # DDD
-    ddd_match = re.search(r"\b(\d{2})\b", texto)
-    if ddd_match:
-        d["ddd"] = ddd_match.group(1)
+        def normalizar_valor(v):
+            try:
+                return float(str(v).replace(",", "."))
+            except:
+                return 0
 
-    # ZONA
-    if "ZONA LESTE" in texto:
-        d["zona"] = "ZL"
-    elif "ZONA OESTE" in texto:
-        d["zona"] = "ZO"
-    elif "ZONA SUL" in texto:
-        d["zona"] = "ZS"
-    elif "ZONA NORTE" in texto:
-        d["zona"] = "ZN"
+        # =========================
+        # PRODUTO (CORRETO)
+        # =========================
 
-    # DATA
-    data_match = re.search(r"\d{2}/\d{2}/\d{4}", texto)
-    if data_match:
-        d["data"] = data_match.group(0)
+        produto = None
 
-    # REGRAS CRÍTICAS
-    if d["cliente"] and d["cliente"] in OEMS:
-        d["cliente"] = None
+        if tipo_veiculo:
+            tv = tipo_veiculo.upper()
 
-    if d["produto"] and "BAU" in d["produto"]:
-        d["produto"] = None
+            if "TRAILER" in tv:
+                produto = "TR"
+            elif "TRUCK" in tv:
+                produto = "DT"
+            elif "VAN" in tv or "DIRECT" in tv:
+                produto = "DD"
 
-    d["produto"] = classificar_produto(texto)
-    d["oem"] = d["oem"] or detectar_oem(texto)
-    d["locadora"] = d["locadora"] or detectar_locadora(texto)
-    d["canal"] = classificar_canal(d["oem"], d["locadora"])
+        # =========================
+        # CANAL
+        # =========================
 
-    return d
+        canal = None
+
+        if locadora and locadora not in ["0", "-", ""]:
+            canal = "LOCADORA"
+        elif oem:
+            canal = "OEM"
+        else:
+            canal = "DIRETO"
+
+        # =========================
+        # RESULTADO FINAL
+        # =========================
+
+        return {
+            "data": limpar(data),
+            "regiao": limpar(regiao),
+            "estado": limpar(estado),
+            "cidade": limpar(cidade),
+
+            "oem": limpar(oem),
+
+            "produto": produto,
+            "implemento": limpar(implemento),
+
+            "cliente": limpar(cliente),
+            "vendedor": limpar(vendedor),
+
+            "valor": normalizar_valor(valor),
+
+            "locadora": limpar(locadora),
+            "canal": canal,
+            "concorrente": limpar(concorrente),
+
+            "observacoes": texto
+        }
+
+    except Exception as e:
+        print("[ERRO PARSER]", e)
+        return {}
 
 # ============================================================
 # DETECÇÃO DE COLUNAS
