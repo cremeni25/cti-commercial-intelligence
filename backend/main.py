@@ -131,11 +131,7 @@ def extrair_campos(texto: str):
     texto_original = texto
     texto = normalizar_texto(texto)
 
-    partes = [p.strip() for p in texto.split("|") if p.strip()]
-
-    # =========================
-    # ESTRUTURA REAL (BASEADO NA SUA LINHA)
-    # =========================
+    partes = [p.strip() for p in texto.split("|")]
 
     def get(idx):
         return partes[idx] if idx < len(partes) else None
@@ -147,24 +143,14 @@ def extrair_campos(texto: str):
     oem = get(4)
     produto_raw = get(5)
     tipo_veiculo = get(6)
-    modelo = get(16)  # AJUSTÁVEL se necessário
     cliente = get(10)
     vendedor = get(11)
     valor = get(8)
 
-    # =========================
-    # TRATAMENTOS INTELIGENTES
-    # =========================
-
-    # Produto (não pode ser BAÚ)
-    if produto_raw and "BAU" in produto_raw:
-        produto = None
-    else:
-        produto = produto_raw
-
-    # Classificação produto real
     texto_full = " ".join(partes)
 
+    # Produto real
+    produto = None
     if "TRAILER" in texto_full:
         produto = "TR"
     elif "DIESEL TRUCK" in texto_full:
@@ -173,9 +159,7 @@ def extrair_campos(texto: str):
         produto = "DD"
 
     # Canal
-    locadora = None
-    if "LOCACOES" in texto_full or "LOCADORA" in texto_full:
-        locadora = "SIM"
+    locadora = "SIM" if "LOCAC" in texto_full else None
 
     if locadora:
         canal = "LOCADORA"
@@ -197,7 +181,6 @@ def extrair_campos(texto: str):
         "cidade": cidade,
         "oem": oem,
         "produto": produto,
-        "modelo": modelo,
         "cliente": cliente,
         "vendedor": vendedor,
         "valor": valor,
@@ -205,10 +188,6 @@ def extrair_campos(texto: str):
         "canal": canal,
         "observacoes": texto_original
     }
-
-    except Exception as e:
-        print("[ERRO PARSER]", e)
-        return {}
 
 # ============================================================
 # DETECÇÃO DE COLUNAS
