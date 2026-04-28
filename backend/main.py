@@ -128,107 +128,83 @@ def extrair_campos(texto: str):
     if not texto:
         return {}
 
-    try:
-        partes = [p.strip().upper() for p in texto.split("|")]
+    texto_original = texto
+    texto = normalizar_texto(texto)
 
-        # Garante tamanho mínimo (evita quebra)
-        while len(partes) < 20:
-            partes.append(None)
+    partes = [p.strip() for p in texto.split("|") if p.strip()]
 
-        # =========================
-        # MAPEAMENTO FIXO (BASE REAL)
-        # =========================
+    # =========================
+    # ESTRUTURA REAL (BASEADO NA SUA LINHA)
+    # =========================
 
-        data = partes[0]
-        regiao = partes[1]
-        estado = partes[2]
-        cidade = partes[3]
+    def get(idx):
+        return partes[idx] if idx < len(partes) else None
 
-        oem = partes[4]  # FACCHINI etc
+    data = get(0)
+    regiao = get(1)
+    estado = get(2)
+    cidade = get(3)
+    oem = get(4)
+    produto_raw = get(5)
+    tipo_veiculo = get(6)
+    modelo = get(16)  # AJUSTÁVEL se necessário
+    cliente = get(10)
+    vendedor = get(11)
+    valor = get(8)
 
-        implemento = partes[5]  # BAU FRIGORIFICO (IGNORAR COMO PRODUTO)
+    # =========================
+    # TRATAMENTOS INTELIGENTES
+    # =========================
 
-        # tipo veículo → vira PRODUTO
-        tipo_veiculo = partes[9]  # TRAILER / TRUCK / etc
-
-        cliente = partes[10]  # cliente real
-        vendedor = partes[11]  # REP
-
-        valor = partes[7]  # TOTAL
-
-        locadora = partes[8]  # se existir
-        concorrente = partes[12]
-
-        # =========================
-        # NORMALIZAÇÕES
-        # =========================
-
-        def limpar(v):
-            if not v or v in ["", "NONE", "NULL"]:
-                return None
-            return v.strip()
-
-        def normalizar_valor(v):
-            try:
-                return float(str(v).replace(",", "."))
-            except:
-                return 0
-
-        # =========================
-        # PRODUTO (CORRETO)
-        # =========================
-
+    # Produto (não pode ser BAÚ)
+    if produto_raw and "BAU" in produto_raw:
         produto = None
+    else:
+        produto = produto_raw
 
-        if tipo_veiculo:
-            tv = tipo_veiculo.upper()
+    # Classificação produto real
+    texto_full = " ".join(partes)
 
-            if "TRAILER" in tv:
-                produto = "TR"
-            elif "TRUCK" in tv:
-                produto = "DT"
-            elif "VAN" in tv or "DIRECT" in tv:
-                produto = "DD"
+    if "TRAILER" in texto_full:
+        produto = "TR"
+    elif "DIESEL TRUCK" in texto_full:
+        produto = "DT"
+    elif "DIRECT DRIVE" in texto_full:
+        produto = "DD"
 
-        # =========================
-        # CANAL
-        # =========================
+    # Canal
+    locadora = None
+    if "LOCACOES" in texto_full or "LOCADORA" in texto_full:
+        locadora = "SIM"
 
-        canal = None
+    if locadora:
+        canal = "LOCADORA"
+    elif oem:
+        canal = "OEM"
+    else:
+        canal = "DIRETO"
 
-        if locadora and locadora not in ["0", "-", ""]:
-            canal = "LOCADORA"
-        elif oem:
-            canal = "OEM"
-        else:
-            canal = "DIRETO"
+    # Valor
+    try:
+        valor = float(str(valor).replace(",", "."))
+    except:
+        valor = None
 
-        # =========================
-        # RESULTADO FINAL
-        # =========================
-
-        return {
-            "data": limpar(data),
-            "regiao": limpar(regiao),
-            "estado": limpar(estado),
-            "cidade": limpar(cidade),
-
-            "oem": limpar(oem),
-
-            "produto": produto,
-            "implemento": limpar(implemento),
-
-            "cliente": limpar(cliente),
-            "vendedor": limpar(vendedor),
-
-            "valor": normalizar_valor(valor),
-
-            "locadora": limpar(locadora),
-            "canal": canal,
-            "concorrente": limpar(concorrente),
-
-            "observacoes": texto
-        }
+    return {
+        "data": data,
+        "regiao": regiao,
+        "estado": estado,
+        "cidade": cidade,
+        "oem": oem,
+        "produto": produto,
+        "modelo": modelo,
+        "cliente": cliente,
+        "vendedor": vendedor,
+        "valor": valor,
+        "locadora": locadora,
+        "canal": canal,
+        "observacoes": texto_original
+    }
 
     except Exception as e:
         print("[ERRO PARSER]", e)
