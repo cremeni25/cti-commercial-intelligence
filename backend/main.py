@@ -131,59 +131,100 @@ def extrair_campos(texto: str):
     texto_original = texto
     texto = normalizar_texto(texto)
 
-    partes = [p.strip() for p in texto.split("|")]
-
-    def get(idx):
-        return partes[idx] if idx < len(partes) else None
-
-    data = get(0)
-    regiao = get(1)
-    estado = get(2)
-    cidade = get(3)
-    oem = get(4)
-    produto_raw = get(5)
-    tipo_veiculo = get(6)
-    cliente = get(10)
-    vendedor = get(11)
-    valor = get(8)
-
+    partes = [p.strip() for p in texto.split("|") if p.strip()]
     texto_full = " ".join(partes)
 
-    # Produto real
-    produto = None
-    if "TRAILER" in texto_full:
-        produto = "TR"
-    elif "DIESEL TRUCK" in texto_full:
-        produto = "DT"
-    elif "DIRECT DRIVE" in texto_full:
-        produto = "DD"
+    # =========================
+    # DATA
+    # =========================
+    data = None
+    for p in partes:
+        if re.search(r"\d{4}-\d{2}-\d{2}", p):
+            data = p
+            break
+        if re.search(r"\d{2}/\d{2}/\d{4}", p):
+            data = p
+            break
 
-    # Canal
-    locadora = "SIM" if "LOCAC" in texto_full else None
+    # =========================
+    # VALOR
+    # =========================
+    valor = None
+    for p in partes:
+        if re.search(r"\d+[.,]\d{2}", p):
+            try:
+                valor = float(p.replace(".", "").replace(",", "."))
+                break
+            except:
+                pass
 
-    if locadora:
-        canal = "LOCADORA"
-    elif oem:
-        canal = "OEM"
-    else:
-        canal = "DIRETO"
+    # =========================
+    # ESTADO (UF)
+    # =========================
+    estado = None
+    for p in partes:
+        if len(p) == 2 and p.isalpha():
+            estado = p
+            break
 
-    # Valor
-    try:
-        valor = float(str(valor).replace(",", "."))
-    except:
-        valor = None
+    # =========================
+    # CIDADE
+    # =========================
+    cidade = None
+    if estado:
+        for i, p in enumerate(partes):
+            if p == estado and i > 0:
+                cidade = partes[i-1]
+                break
+
+    # =========================
+    # OEM
+    # =========================
+    oem = detectar_oem(texto_full)
+
+    # =========================
+    # LOCADORA
+    # =========================
+    locadora = detectar_locadora(texto_full)
+
+    # =========================
+    # PRODUTO
+    # =========================
+    produto = classificar_produto(texto_full)
+
+    # =========================
+    # CLIENTE (heurística)
+    # =========================
+    cliente = None
+    for p in partes[::-1]:
+        if len(p) > 5 and not re.search(r"\d", p):
+            cliente = p
+            break
+
+    # =========================
+    # VENDEDOR (heurística simples)
+    # =========================
+    vendedor = None
+    if cliente:
+        for p in partes:
+            if p != cliente and len(p.split()) <= 3:
+                vendedor = p
+                break
+
+    # =========================
+    # CANAL
+    # =========================
+    canal = classificar_canal(oem, locadora)
 
     return {
         "data": data,
-        "regiao": regiao,
         "estado": estado,
         "cidade": cidade,
-        "oem": oem,
-        "produto": produto,
         "cliente": cliente,
         "vendedor": vendedor,
         "valor": valor,
+        "produto": produto,
+        "oem": oem,
         "locadora": locadora,
         "canal": canal,
         "observacoes": texto_original
