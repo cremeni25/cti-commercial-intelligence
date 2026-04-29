@@ -395,34 +395,33 @@ async def upload(file: UploadFile = File(...)):
 
            for _, row in df.iterrows():
 
-                linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
+               linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
 
-                if not linha:
-                    continue
+               if not linha:
+                   continue
 
-                linha = normalizar_texto(linha)
+               linha = normalizar_texto(linha)
 
-                # 🔴 FILTRO DE LIXO (NOVO)
-                if "PERÍODO" in linha or "REGIAO" in linha:
-                    continue
+               # FILTRO DE LIXO
+               if "PERIODO" in linha.upper() or "REGIAO" in linha.upper():
+                   continue
 
-                if linha.count("|") < 5:
-                    continue
+               if linha.count("|") < 5:
+                   continue
 
-                # 🔵 FILTROS QUE VOCÊ JÁ TEM
-                if len(linha) < 5:
-                    continue
+               if len(linha) < 5:
+                   continue
 
-                if len(linha.split("|")) < 2:
-                    continue
+               if len(linha.split("|")) < 2:
+                   continue
 
-                registros.append({
-                    "hash": gerar_hash_linha(linha),
-                    "conteudo": linha,
-                    "arquivo": file.filename,
-                    "aba": aba,
-                    "created_at": datetime.utcnow().isoformat()
-                })
+               registros.append({
+                   "hash": gerar_hash_linha(linha),
+                   "conteudo": linha,
+                   "arquivo": file.filename,
+                   "aba": aba,
+                   "created_at": datetime.utcnow().isoformat()
+               })
 
         inseridos = insert_lote("cti_linhas", registros)
 
