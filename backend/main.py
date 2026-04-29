@@ -503,6 +503,15 @@ def processar_base():
             print("[ERRO LINHA]", str(e))
             continue
 
+    inseridos = insert_lote("cti_processado", novos)
+
+    return {
+        "status": "ok",
+        "linhas_lidas": len(data),
+        "novos_processados": len(novos),
+        "inseridos": inseridos
+    }
+   
 # ============================================================
 # INTELIGÊNCIA — CLIENTES
 # ============================================================
@@ -1014,7 +1023,7 @@ def status_avancado():
 
 def extrair_campos_seguro(texto):
     try:
-        d = extrair_campos_seguro(texto)
+        d = extrair_campos(texto)  # CORRETO
         if not isinstance(d, dict):
             return {}
         return d
