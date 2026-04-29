@@ -471,7 +471,8 @@ def processar_base():
 
             d = extrair_campos_seguro(texto)
             d = enriquecer_classificacao(d, texto)
-
+            d = sanitizar_campos(d, texto)
+            
             reg = {
                 "hash": h,
                 "controle_id": None,
@@ -1058,6 +1059,45 @@ def enriquecer_classificacao(d, texto):
             "TRAILER", "TR", "DT", "DD", "DIESEL", "DIRECT"
         ]:
             cliente = None
+
+        d["cliente"] = cliente
+        d["produto"] = produto
+
+        return d
+
+    except:
+        return d
+
+# =========================================
+# EXTENSÃO CTI — SANITIZAÇÃO DE ENTIDADES
+# =========================================
+
+def sanitizar_campos(d, texto):
+    try:
+        cliente = d.get("cliente")
+        produto = d.get("produto")
+
+        texto_upper = texto.upper()
+
+        # LISTA REAL DE PRODUTOS (Carrier)
+        produtos_validos = [
+            "TRAILER", "TR",
+            "DIESEL", "DT",
+            "DIRECT", "DD"
+        ]
+
+        # 🔴 REGRA 1 — cliente não pode ser produto
+        if cliente and any(p == cliente.upper() for p in produtos_validos):
+            cliente = None
+
+        # 🔴 REGRA 2 — se produto não está definido, tenta identificar
+        if not produto:
+            if "TRAILER" in texto_upper or " BAU " in texto_upper:
+                produto = "TRAILER"
+            elif "DIESEL" in texto_upper or " 4X2" in texto_upper or "6X2" in texto_upper:
+                produto = "DIESEL TRUCK"
+            elif "DIRECT" in texto_upper:
+                produto = "DIRECT DRIVE"
 
         d["cliente"] = cliente
         d["produto"] = produto
