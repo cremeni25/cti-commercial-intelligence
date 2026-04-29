@@ -355,13 +355,20 @@ def insert_lote(tabela, dados, batch=500):
     for i in range(0, len(dados), batch):
         parte = dados[i:i+batch]
 
-        try:
-            res = supabase.table(tabela).insert(parte).execute()
-            if res.data:
-                total += len(res.data)
-        except Exception as e:
-            print("[ERRO INSERT]", e)
-            continue
+        print("\n==============================")
+        print("ENVIANDO REGISTRO:")
+        print(parte)
+
+        res = supabase.table(tabela).insert(parte).execute()
+
+        print("RESPOSTA SUPABASE:")
+        print(res)
+
+        # SE NÃO INSERIU, QUEBRA NA HORA
+        if not hasattr(res, "data") or not res.data:
+            raise Exception(f"ERRO REAL DE INSERT: {res}")
+
+        total += len(res.data)
 
     return total
 
