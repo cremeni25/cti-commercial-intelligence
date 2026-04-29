@@ -851,4 +851,166 @@ def check():
 # FIM DO SISTEMA
 # ============================================================
 
-    
+# ============================================================
+# EXTENSÃO CTI — UPLOAD AVANÇADO (ZIP + MULTI)
+# NÃO SUBSTITUI O /upload ORIGINAL
+# ============================================================
+
+import zipfile
+
+@app.post("/upload-avancado")
+async def upload_avancado(file: UploadFile = File(...)):
+
+    log(f"[AVANCADO] Upload recebido: {file.filename}")
+
+    try:
+
+        conteudo = await file.read()
+        registros = []
+
+        arquivos = []
+
+        # ====================================================
+        # SUPORTE A ZIP
+        # ====================================================
+        if file.filename.lower().endswith(".zip"):
+
+            with zipfile.ZipFile(BytesIO(conteudo)) as z:
+
+                for nome in z.namelist():
+                    if nome.endswith(".xlsx") or nome.endswith(".xls"):
+                        arquivos.append((nome, z.read(nome)))
+
+        else:
+            arquivos.append((file.filename, conteudo))
+
+        # ====================================================
+        # PROCESSAMENTO
+        # ====================================================
+        for nome_arquivo, conteudo_arquivo in arquivos:
+
+            linhas = extrair_linhas_from_bytes(conteudo_arquivo, nome_arquivo)
+
+            for linha in linhas:
+
+                if len(linha) < 5:
+                    continue
+
+                if linha.count("|") < 2:
+                    continue
+
+                registros.append({
+                    "hash": gerar_hash_linha(linha),
+                    "conteudo": linha,
+                    "arquivo": nome_arquivo,
+                    "aba": "AUTO",
+                    "created_at": datetime.utcnow().isoformat()
+                })
+
+        # ====================================================
+        # UPSERT (NÃO QUEBRA O SISTEMA ATUAL)
+        # ====================================================
+        total = 0
+
+        for i in range(0, len(registros), 500):
+            parte = registros[i:i+500]
+
+            res = supabase.table("cti_linhas") \
+                .upsert(parte, on_conflict="hash") \
+                .execute()
+
+            if hasattr(res, "data") and res.data:
+                total += len(res.data)
+
+        return {
+            "status": "ok",
+            "arquivos_processados": len(arquivos),
+            "linhas": len(registros),
+            "inseridos": total
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": traceback.format_exc()
+        }
+
+
+# ============================================================
+# EXTENSÃO CTI — INSIGHTS (LEITURA HUMANA)
+# ============================================================
+
+@app.get("/insights-avancado")
+def insights_avancado():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    if not data:
+        return {"status": "sem_dados"}
+
+    clientes = Counter()
+    estados = Counter()
+    oems = Counter()
+    valores = []
+
+    for row in data:
+
+        if row.get("cliente"):
+            clientes[row["cliente"]] += 1
+
+        if row.get("estado"):
+            estados[row["estado"]] += 1
+
+        if row.get("oem"):
+            oems[row["oem"]] += 1
+
+        if row.get("valor"):
+            valores.append(float(row["valor"]))
+
+    top_cliente = clientes.most_common(1)
+    top_estado = estados.most_common(1)
+    top_oem = oems.most_common(1)
+
+    ticket = sum(valores)/len(valores) if valores else 0
+
+    return {
+        "status": "ok",
+        "insight": {
+            "cliente_dominante": top_cliente[0][0] if top_cliente else None,
+            "regiao_forte": top_estado[0][0] if top_estado else None,
+            "oem_dominante": top_oem[0][0] if top_oem else None,
+            "ticket_medio": round(ticket, 2),
+            "leitura": f"""
+O CTI identificou concentração no cliente {top_cliente[0][0] if top_cliente else 'N/A'},
+com forte atuação na região {top_estado[0][0] if top_estado else 'N/A'}.
+
+O OEM predominante é {top_oem[0][0] if top_oem else 'N/A'}.
+
+Ticket médio aproximado de {round(ticket,2)}.
+
+Ação recomendada:
+- Avaliar dependência de cliente
+- Expandir atuação geográfica
+- Mapear concorrência direta
+"""
+        }
+    }
+
+
+# ============================================================
+# EXTENSÃO CTI — STATUS AVANÇADO
+# ============================================================
+
+@app.get("/status-avancado")
+def status_avancado():
+
+    linhas = supabase.table("cti_linhas").select("id").execute().data or []
+    processado = supabase.table("cti_processado").select("id").execute().data or []
+
+    return {
+        "linhas_brutas": len(linhas),
+        "linhas_processadas": len(processado),
+        "pipeline": "ativo"
+    }
