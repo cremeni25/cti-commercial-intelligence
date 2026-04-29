@@ -393,7 +393,7 @@ async def upload(file: UploadFile = File(...)):
             df = xls.parse(aba, dtype=str)
             df = df.fillna("")
 
-            for _, row in df.iterrows():
+           for _, row in df.iterrows():
 
                 linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
 
@@ -402,6 +402,14 @@ async def upload(file: UploadFile = File(...)):
 
                 linha = normalizar_texto(linha)
 
+                # 🔴 FILTRO DE LIXO (NOVO)
+                if "PERÍODO" in linha or "REGIAO" in linha:
+                    continue
+
+                if linha.count("|") < 5:
+                    continue
+
+                # 🔵 FILTROS QUE VOCÊ JÁ TEM
                 if len(linha) < 5:
                     continue
 
