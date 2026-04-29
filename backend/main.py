@@ -456,59 +456,52 @@ def processar_base():
     novos = []
 
     for row in data:
+        try:
+            texto = row.get("conteudo", "")
+            h = row.get("hash")
 
-        texto = row.get("conteudo", "")
-        h = row.get("hash")
+            if not texto:
+                continue
 
-        if not texto:
+            if not h:
+                h = gerar_hash_linha(texto)
+
+            if h in hashes_existentes:
+                continue
+
+            d = extrair_campos_seguro(texto)
+
+            reg = {
+                "hash": h,
+                "controle_id": None,
+                "data": d.get("data"),
+                "vendedor": d.get("vendedor"),
+                "cliente": d.get("cliente"),
+                "cnpj": d.get("cnpj"),
+                "produto": d.get("produto"),
+                "modelo": d.get("modelo"),
+                "cidade": d.get("cidade"),
+                "estado": d.get("estado"),
+                "ddd": d.get("ddd"),
+                "zona": d.get("zona"),
+                "valor": d.get("valor"),
+                "oem": d.get("oem"),
+                "locadora": d.get("locadora"),
+                "canal": d.get("canal"),
+                "concorrente": d.get("concorrente"),
+                "observacoes": d.get("observacoes"),
+                "origem_arquivo": row.get("arquivo"),
+                "aba_origem": row.get("aba"),
+                "conteudo_original": texto,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": None
+            }
+
+            novos.append(reg)
+
+        except Exception as e:
+            print("[ERRO LINHA]", str(e))
             continue
-
-        # fallback de hash
-        if not h:
-            h = gerar_hash_linha(texto)
-
-        if h in hashes_existentes:
-            continue
-
-        d = extrair_campos(texto)
-
-        reg = {
-            "hash": h,
-            "controle_id": None,
-            "data": d.get("data"),
-            "vendedor": d.get("vendedor"),
-            "cliente": d.get("cliente"),
-            "cnpj": d.get("cnpj"),
-            "produto": d.get("produto"),
-            "modelo": d.get("modelo"),
-            "cidade": d.get("cidade"),
-            "estado": d.get("estado"),
-            "ddd": d.get("ddd"),
-            "zona": d.get("zona"),
-            "valor": d.get("valor"),
-            "oem": d.get("oem"),
-            "locadora": d.get("locadora"),
-            "canal": d.get("canal"),
-            "concorrente": d.get("concorrente"),
-            "observacoes": d.get("observacoes"),
-            "origem_arquivo": row.get("arquivo"),
-            "aba_origem": row.get("aba"),
-            "conteudo_original": texto,
-            "created_at": datetime.utcnow().isoformat(),
-            "updated_at": None
-        }
-
-        novos.append(reg)
-
-    inseridos = insert_lote("cti_processado", novos)
-
-    return {
-        "status": "ok",
-        "linhas_lidas": len(data),
-        "novos_processados": len(novos),
-        "inseridos": inseridos
-    }
-
 
 # ============================================================
 # INTELIGÊNCIA — CLIENTES
@@ -1014,3 +1007,17 @@ def status_avancado():
         "linhas_processadas": len(processado),
         "pipeline": "ativo"
     }
+
+# ==========================================
+# PATCH BLINDAGEM PROCESSAMENTO
+# ==========================================
+
+def extrair_campos_seguro(texto):
+    try:
+        d = extrair_campos_seguro(texto)
+        if not isinstance(d, dict):
+            return {}
+        return d
+    except Exception as e:
+        print("[ERRO extrair_campos]", str(e))
+        return {}
