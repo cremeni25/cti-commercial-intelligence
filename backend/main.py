@@ -444,8 +444,8 @@ async def upload(file: UploadFile = File(...)):
 @app.post("/processar-base")
 def processar_base():
 
-    data = supabase.table("cti_linhas").select("*").execute().data or []
-
+    data = buscar_todas_linhas("cti_linhas")
+    
     # evita erro caso coluna hash não exista
     try:
         existentes = supabase.table("cti_processado").select("hash").execute().data or []
@@ -1106,3 +1106,37 @@ def sanitizar_campos(d, texto):
 
     except:
         return d
+
+# =========================================
+# EXTENSÃO CTI — PAGINAÇÃO COMPLETA
+# =========================================
+
+def buscar_todas_linhas(nome_tabela):
+    try:
+        tudo = []
+        offset = 0
+        limite = 1000
+
+        while True:
+            res = supabase.table(nome_tabela) \
+                .select("*") \
+                .range(offset, offset + limite - 1) \
+                .execute()
+
+            dados = res.data or []
+
+            if not dados:
+                break
+
+            tudo.extend(dados)
+
+            if len(dados) < limite:
+                break
+
+            offset += limite
+
+        return tudo
+
+    except Exception as e:
+        print("ERRO PAGINAÇÃO:", e)
+        return []
