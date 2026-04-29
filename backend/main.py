@@ -69,7 +69,7 @@ def insert_lote(tabela, dados, batch=500):
     for i in range(0, len(dados), batch):
         parte = dados[i:i+batch]
 
-        res = supabase.table(tabela).insert(parte).execute()
+        res = supabase.table(tabela).upsert(parte, on_conflict="hash").execute()
 
         if not hasattr(res, "data") or not res.data:
             raise Exception(f"ERRO REAL DE INSERT: {res}")
