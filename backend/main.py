@@ -470,6 +470,7 @@ def processar_base():
                 continue
 
             d = extrair_campos_seguro(texto)
+            d = enriquecer_classificacao(d, texto)
 
             reg = {
                 "hash": h,
@@ -1030,3 +1031,38 @@ def extrair_campos_seguro(texto):
     except Exception as e:
         print("[ERRO extrair_campos]", str(e))
         return {}
+
+# =========================================
+# EXTENSÃO CTI — CLASSIFICAÇÃO SEMÂNTICA
+# =========================================
+
+def enriquecer_classificacao(d, texto):
+    try:
+        texto_upper = texto.upper()
+
+        cliente = d.get("cliente")
+        produto = d.get("produto")
+
+        # CLASSIFICAÇÃO DE PRODUTO (CARRIER)
+        if any(p in texto_upper for p in ["TRAILER", " TR "]):
+            produto = "TRAILER"
+
+        elif any(p in texto_upper for p in ["DIESEL", "DT"]):
+            produto = "DIESEL TRUCK"
+
+        elif any(p in texto_upper for p in ["DIRECT", "DD"]):
+            produto = "DIRECT DRIVE"
+
+        # PROTEÇÃO CONTRA ERRO DE CLIENTE
+        if cliente and cliente.upper() in [
+            "TRAILER", "TR", "DT", "DD", "DIESEL", "DIRECT"
+        ]:
+            cliente = None
+
+        d["cliente"] = cliente
+        d["produto"] = produto
+
+        return d
+
+    except:
+        return d
