@@ -1160,32 +1160,31 @@ def buscar_todas_linhas(nome_tabela):
 PRODUTOS_VALIDOS = ["TR", "DT", "DD", "TRAILER", "DIESEL", "DIRECT"]
 
 def classificar_linha_cti(row):
-    texto = (row.get("conteudo_original") or "").upper()
+    try:
+        texto = (row.get("conteudo_original") or "").upper()
 
-    partes = [p.strip() for p in texto.split("|") if p.strip()]
+        partes = [p.strip() for p in texto.split("|") if p.strip()]
 
-    resultado = {
-        "cliente": None,
-        "produto": None
-    }
+        resultado = {
+            "cliente": None,
+            "produto": None
+        }
 
-    for p in partes:
-        # identifica produto
-        if any(x in p for x in ["TR", "TRAILER"]):
-            resultado["produto"] = "TR"
-        elif any(x in p for x in ["DT", "DIESEL"]):
-            resultado["produto"] = "DT"
-        elif any(x in p for x in ["DD", "DIRECT"]):
-            resultado["produto"] = "DD"
+        for p in partes:
+            if any(x in p for x in ["TR", "TRAILER"]):
+                resultado["produto"] = "TR"
+            elif any(x in p for x in ["DT", "DIESEL"]):
+                resultado["produto"] = "DT"
+            elif any(x in p for x in ["DD", "DIRECT"]):
+                resultado["produto"] = "DD"
 
-    # cliente = marca conhecida (fallback simples)
-    for p in partes:
-        if p in ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]:
-            resultado["cliente"] = p
-            break
+        for p in partes:
+            if p in ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]:
+                resultado["cliente"] = p
+                break
 
-    return resultado
+        return resultado
 
     except Exception as e:
-        print("ERRO PAGINAÇÃO:", e)
-        return []
+        print("ERRO classificar_linha_cti:", e)
+        return {}
