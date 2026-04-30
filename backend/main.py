@@ -1189,6 +1189,53 @@ def classificar_linha_cti(row):
 
         return resultado
 
+    # ============================================================
+# DIAGNÓSTICO CTI — NÃO ALTERA NADA EXISTENTE
+# ============================================================
+
+@app.get("/debug-cti")
+def debug_cti():
+
+    try:
+        linhas = supabase.table("cti_linhas").select("id, hash").execute().data or []
+        processados = supabase.table("cti_processado").select("id").execute().data or []
+
+        total_linhas = len(linhas)
+        total_processados = len(processados)
+
+        # contar hashes únicos
+        hashes = [l.get("hash") for l in linhas if l.get("hash")]
+        hashes_unicos = len(set(hashes))
+
+        return {
+            "status": "ok",
+            "diagnostico": {
+                "linhas_total": total_linhas,
+                "linhas_processadas": total_processados,
+                "hashes_unicos": hashes_unicos,
+                "possivel_sobrescrita": total_linhas != hashes_unicos
+            },
+            "leitura": f"""
+Total de linhas no banco: {total_linhas}
+Total processado: {total_processados}
+Hashes únicos: {hashes_unicos}
+
+Se linhas_total for igual a hashes_unicos:
+→ O sistema está sobrescrevendo dados (perda de histórico)
+
+Se linhas_total for maior que hashes_unicos:
+→ Existe repetição estrutural (OK)
+
+Diferença entre upload e banco indica perda no upload.
+"""
+        }
+
+    except Exception as e:
+        return {
+            "status": "erro",
+            "mensagem": str(e)
+        }
+
     except Exception as e:
         print("ERRO classificar_linha_cti:", e)
         return {}
