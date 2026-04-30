@@ -1314,3 +1314,68 @@ def cti_safe_diagnostico():
         "montadoras": montadoras,
         "implementadores": implementadores
     }
+
+@app.get("/cti-safe-diagnostico-full")
+def cti_safe_diagnostico_full():
+    try:
+        all_data = []
+        page = 0
+        page_size = 1000
+
+        while True:
+            res = supabase.table("cti_linhas") \
+                .select("*") \
+                .range(page * page_size, (page + 1) * page_size - 1) \
+                .execute()
+
+            data = res.data or []
+
+            if not data:
+                break
+
+            all_data.extend(data)
+
+            if len(data) < page_size:
+                break
+
+            page += 1
+
+        from collections import Counter
+
+        produtos = Counter()
+        montadoras = Counter()
+        implementadores = Counter()
+
+        for row in all_data:
+            texto = (row.get("conteudo_original") or "").upper()
+
+            if "TR" in texto:
+                produtos["TR"] += 1
+            elif "DT" in texto:
+                produtos["DT"] += 1
+            elif "DD" in texto:
+                produtos["DD"] += 1
+
+            for m in ["VOLVO", "SCANIA", "VW", "IVECO"]:
+                if m in texto:
+                    montadoras[m] += 1
+
+            for i in ["RANDON", "FACCHINI", "GUERRA"]:
+                if i in texto:
+                    implementadores[i] += 1
+
+        return {
+            "status": "ok",
+            "total_linhas": len(all_data),
+            "produtos": dict(produtos),
+            "montadoras": dict(montadoras),
+            "implementadores": dict(implementadores)
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "status": "erro",
+            "mensagem": str(e),
+            "trace": traceback.format_exc()
+        }
