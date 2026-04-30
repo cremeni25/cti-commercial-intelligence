@@ -1153,6 +1153,10 @@ def buscar_todas_linhas(nome_tabela):
 
         return tudo
 
+    except Exception as e:
+        print("ERRO PAGINACAO:", e)
+        return []
+
 # =========================================
 # CTI — NORMALIZAÇÃO INTELIGENTE DE CAMPOS
 # =========================================
