@@ -359,7 +359,7 @@ def insert_lote(tabela, dados, batch=500):
         print("ENVIANDO REGISTRO:")
         print(parte)
 
-        res = supabase.table(tabela).insert(parte).execute()
+        res = supabase.table(tabela).upsert(parte, on_conflict="hash").execute()
 
         print("RESPOSTA SUPABASE:")
         print(res)
@@ -1243,3 +1243,71 @@ Diferença entre upload e banco indica perda no upload.
     except Exception as e:
         print("ERRO classificar_linha_cti:", e)
         return {}
+
+# ============================================================
+# CTI SAFE MODE — NORMALIZAÇÃO FINAL (NÃO ALTERA O CORE)
+# ============================================================
+
+import hashlib
+
+MONTADORAS = ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]
+IMPLEMENTADORES = ["RANDON", "FACCHINI", "GUERRA"]
+
+def normalizar_linha_cti_safe(row):
+    texto = (row.get("conteudo_original") or "").upper()
+
+    partes = [p.strip() for p in texto.split("|") if p.strip()]
+
+    resultado = {
+        "produto": None,
+        "montadora": None,
+        "implementador": None,
+        "hash_safe": hashlib.md5(texto.encode()).hexdigest()
+    }
+
+    for p in partes:
+        if any(x in p for x in ["TR", "TRAILER"]):
+            resultado["produto"] = "TR"
+        elif any(x in p for x in ["DT", "DIESEL"]):
+            resultado["produto"] = "DT"
+        elif any(x in p for x in ["DD", "DIRECT"]):
+            resultado["produto"] = "DD"
+
+        if p in MONTADORAS:
+            resultado["montadora"] = p
+
+        if p in IMPLEMENTADORES:
+            resultado["implementador"] = p
+
+    return resultado
+
+
+@app.get("/cti-safe-diagnostico")
+def cti_safe_diagnostico():
+    data = supabase.table("cti_linhas").select("*").execute().data or []
+
+    total = len(data)
+
+    produtos = {}
+    montadoras = {}
+    implementadores = {}
+
+    for row in data:
+        info = normalizar_linha_cti_safe(row)
+
+        if info["produto"]:
+            produtos[info["produto"]] = produtos.get(info["produto"], 0) + 1
+
+        if info["montadora"]:
+            montadoras[info["montadora"]] = montadoras.get(info["montadora"], 0) + 1
+
+        if info["implementador"]:
+            implementadores[info["implementador"]] = implementadores.get(info["implementador"], 0) + 1
+
+    return {
+        "status": "ok",
+        "total_linhas": total,
+        "produtos": produtos,
+        "montadoras": montadoras,
+        "implementadores": implementadores
+    }
