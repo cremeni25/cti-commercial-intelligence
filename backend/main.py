@@ -458,7 +458,8 @@ def processar_base():
     for row in data:
         try:
             texto = row.get("conteudo", "")
-            h = row.get("hash")
+            texto = row.get("conteudo", "")
+            h = gerar_hash_linha_real(texto)
 
             if not texto:
                 continue
@@ -1037,6 +1038,16 @@ def extrair_campos_seguro(texto):
     except Exception as e:
         print("[ERRO extrair_campos]", str(e))
         return {}
+
+# =========================================
+# CTI — HASH REAL (SEM PERDA DE DADOS)
+# =========================================
+
+def gerar_hash_linha_real(texto_original):
+    if not texto_original:
+        return None
+    
+    return hashlib.md5(texto_original.encode()).hexdigest()
 
 # =========================================
 # EXTENSÃO CTI — CLASSIFICAÇÃO SEMÂNTICA
