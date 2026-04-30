@@ -470,9 +470,7 @@ def processar_base():
             if h in hashes_existentes:
                 continue
 
-            d = extrair_campos_seguro(texto)
-            d = enriquecer_classificacao(d, texto)
-            d = sanitizar_campos(d, texto)
+            d = interpretar_linha_com_ia(texto)
             
             reg = {
                 "hash": h,
@@ -1038,6 +1036,75 @@ def extrair_campos_seguro(texto):
     except Exception as e:
         print("[ERRO extrair_campos]", str(e))
         return {}
+
+import requests
+import os
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+
+def interpretar_linha_com_ia(texto):
+
+    try:
+        prompt = f"""
+        Você é um especialista em inteligência comercial.
+
+        Analise a linha abaixo e classifique corretamente:
+
+        TEXTO:
+        {texto}
+
+        Regras IMPORTANTES:
+        - Cliente = empresa que compra (ex: JBS, transportadoras, frigoríficos)
+        - Produto = apenas:
+            - Trailer (TR)
+            - Diesel Truck (DT)
+            - Direct Drive (DD)
+        - Montadora = fabricante do caminhão (VOLVO, SCANIA, VW, IVECO, etc)
+        - Implementador = fabricante do baú (FACCHINI, RANDON, GUERRA, etc)
+
+        NÃO confundir:
+        - Produto ≠ cliente
+        - Montadora ≠ cliente
+        - Implementador ≠ cliente
+
+        Responda APENAS em JSON:
+
+        {{
+            "cliente": "...",
+            "produto": "...",
+            "montadora": "...",
+            "implementador": "..."
+        }}
+        """
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {OPENAI_API_KEY}",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0
+            }
+        )
+
+        result = response.json()
+
+        content = result["choices"][0]["message"]["content"]
+
+        import json
+        return json.loads(content)
+
+    except Exception as e:
+        print("[ERRO IA]", str(e))
+        return {
+            "cliente": None,
+            "produto": None,
+            "montadora": None,
+            "implementador": None
+        }
 
 # =========================================
 # CTI — HASH REAL (SEM PERDA DE DADOS)
