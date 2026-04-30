@@ -961,14 +961,19 @@ def insights_avancado():
 
     for row in data:
 
-        if row.get("cliente"):
-            clientes[row["cliente"]] += 1
+        info = classificar_linha_cti(row)
+
+        if info["cliente"]:
+            clientes[info["cliente"]] += 1
 
         if row.get("estado"):
             estados[row["estado"]] += 1
 
         if row.get("oem"):
             oems[row["oem"]] += 1
+
+        if info["produto"]:
+            produtos[info["produto"]] += 1
 
         if row.get("valor"):
             valores.append(float(row["valor"]))
@@ -1136,6 +1141,39 @@ def buscar_todas_linhas(nome_tabela):
             offset += limite
 
         return tudo
+
+# =========================================
+# CTI — NORMALIZAÇÃO INTELIGENTE DE CAMPOS
+# =========================================
+
+PRODUTOS_VALIDOS = ["TR", "DT", "DD", "TRAILER", "DIESEL", "DIRECT"]
+
+def classificar_linha_cti(row):
+    texto = (row.get("conteudo_original") or "").upper()
+
+    partes = [p.strip() for p in texto.split("|") if p.strip()]
+
+    resultado = {
+        "cliente": None,
+        "produto": None
+    }
+
+    for p in partes:
+        # identifica produto
+        if any(x in p for x in ["TR", "TRAILER"]):
+            resultado["produto"] = "TR"
+        elif any(x in p for x in ["DT", "DIESEL"]):
+            resultado["produto"] = "DT"
+        elif any(x in p for x in ["DD", "DIRECT"]):
+            resultado["produto"] = "DD"
+
+    # cliente = marca conhecida (fallback simples)
+    for p in partes:
+        if p in ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]:
+            resultado["cliente"] = p
+            break
+
+    return resultado
 
     except Exception as e:
         print("ERRO PAGINAÇÃO:", e)
