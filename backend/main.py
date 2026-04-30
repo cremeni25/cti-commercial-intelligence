@@ -1266,21 +1266,24 @@ def normalizar_linha_cti_safe(row):
     }
 
     for p in partes:
-        if any(x in p for x in ["TR", "TRAILER"]):
+        if "TR" in p or "TRAILER" in texto:
             resultado["produto"] = "TR"
-        elif any(x in p for x in ["DT", "DIESEL"]):
+
+        elif "DT" in p or "DIESEL TRUCK" in texto:
             resultado["produto"] = "DT"
-        elif any(x in p for x in ["DD", "DIRECT"]):
+
+        elif "DD" in p or "DIRECT DRIVE" in texto:
             resultado["produto"] = "DD"
 
-        if p in MONTADORAS:
-            resultado["montadora"] = p
+        for marca in MONTADORAS:
+            if marca in p:
+                resultado["montadora"] = marca
 
-        if p in IMPLEMENTADORES:
-            resultado["implementador"] = p
+        for imp in IMPLEMENTADORES:
+            if imp in p:
+                resultado["implementador"] = imp
 
     return resultado
-
 
 @app.get("/cti-safe-diagnostico")
 def cti_safe_diagnostico():
