@@ -1189,7 +1189,11 @@ def classificar_linha_cti(row):
 
         return resultado
 
-    # ============================================================
+    except Exception as e:
+        print("[ERRO classificar_linha_cti]", str(e))
+        return {"cliente": None, "produto": None}
+
+# ============================================================
 # DIAGNÓSTICO CTI — NÃO ALTERA NADA EXISTENTE
 # ============================================================
 
