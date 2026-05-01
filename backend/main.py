@@ -411,8 +411,7 @@ def inserir_linhas_brutas(registros):
                 .upsert(lote, on_conflict="hash") \
                 .execute()
 
-            if hasattr(res, "data") and res.data:
-                inseridos += len(res.data)
+            inseridos += len(lote)
 
         except Exception as e:
             log("DB", "ERRO UPSERT", str(e))
@@ -460,7 +459,7 @@ def processar_linhas_cti():
         if not texto:
             continue
 
-        hash_linha = gerar_hash_unico(texto)
+        hash_linha = row.get("hash")
 
         try:
 
@@ -497,12 +496,14 @@ def processar_linhas_cti():
                 .upsert(lote, on_conflict="hash") \
                 .execute()
 
-            if hasattr(res, "data") and res.data:
-                inseridos += len(res.data)
+            inseridos += len(lote)
 
         except Exception as e:
             log("DB", "ERRO PROCESSADO", str(e))
 
+    log("PIPELINE", "INFO", f"{len(novos)} registros processados")
+    log("DB", "INFO", f"{inseridos} inseridos no processado")
+    
     return {
         "linhas_lidas": len(dados),
         "linhas_processadas": len(novos),
@@ -536,6 +537,9 @@ async def upload(file: UploadFile = File(...)):
 
         inseridos = inserir_linhas_brutas(registros)
 
+        log("UPLOAD", "INFO", f"{len(registros)} enviados ao banco")
+        log("DB", "INFO", f"{inseridos} inseridos")
+        
         return {
             "status": "ok",
             "linhas_extraidas": len(linhas),
