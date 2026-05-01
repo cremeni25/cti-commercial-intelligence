@@ -1637,3 +1637,14 @@ def inteligencia_completa():
         "top_clientes": ranking_clientes,
         "mix_produtos": produtos
     }
+
+# ============================================================
+# INTEGRAÇÃO CNPJ (BASE INICIAL)
+# ============================================================
+
+def buscar_cnpj(nome):
+    try:
+        url = f"https://brasilapi.com.br/api/cnpj/v1/{nome}"
+        return requests.get(url).json()
+    except:
+        return None
