@@ -456,18 +456,18 @@ def processar_base():
     novos = []
 
     for row in data:
-        try:
-            texto = row.get("conteudo", "")
-            h = gerar_hash_linha_real(texto)
+    try:
+        texto = row.get("conteudo", "")
+        h = gerar_hash_linha_real(texto)
 
-            if not texto:
-                continue
+        if not texto:
+            continue
 
-            if not h:
-                h = gerar_hash_linha(texto)
+        if not h:
+            h = gerar_hash_linha(texto)
 
-            if h in hashes_existentes:
-                continue
+        if h in hashes_existentes:
+            continue
 
         texto_limpo = limpar_texto_para_ia(texto)
         d = interpretar_linha_com_ia(texto_limpo)
@@ -475,72 +475,69 @@ def processar_base():
         if not isinstance(d, dict):
             continue
 
-# =========================
-# LIMPEZA INTELIGENTE
-# =========================
+        # =========================
+        # LIMPEZA INTELIGENTE
+        # =========================
 
-# 🔹 CLIENTE
-cliente = d.get("cliente")
-if cliente:
-    cliente = cliente.upper()
+        cliente = d.get("cliente")
+        if cliente:
+            cliente = cliente.upper()
 
-    if cliente in [
-        "UNIDADES", "SUDESTE", "SP", "BRASIL",
-        "TRAILER", "DT", "DD", "DIRECT DRIVE",
-        "DIESEL TRUCK"
-    ]:
-        cliente = None
+            if cliente in [
+                "UNIDADES", "SUDESTE", "SP", "BRASIL",
+                "TRAILER", "DT", "DD", "DIRECT DRIVE",
+                "DIESEL TRUCK"
+            ]:
+                cliente = None
 
-d["cliente"] = cliente
+        d["cliente"] = cliente
 
+        produto = (d.get("produto") or "").upper()
 
-# 🔹 PRODUTO (PADRÃO OFICIAL)
-produto = (d.get("produto") or "").upper()
+        if "TRAILER" in produto or produto == "TR":
+            produto = "TR"
+        elif "DIESEL" in produto or produto == "DT":
+            produto = "DT"
+        elif "DIRECT" in produto or produto == "DD":
+            produto = "DD"
+        else:
+            produto = None
 
-if "TRAILER" in produto or produto == "TR":
-    produto = "TR"
-elif "DIESEL" in produto or produto == "DT":
-    produto = "DT"
-elif "DIRECT" in produto or produto == "DD":
-    produto = "DD"
-else:
-    produto = None
+        d["produto"] = produto
 
-d["produto"] = produto
+        reg = {
+            "hash": h,
+            "controle_id": None,
+            "data": d.get("data"),
+            "vendedor": d.get("vendedor"),
+            "cliente": d.get("cliente"),
+            "cnpj": d.get("cnpj"),
+            "produto": d.get("produto"),
+            "modelo": d.get("modelo"),
+            "cidade": d.get("cidade"),
+            "estado": d.get("estado"),
+            "ddd": d.get("ddd"),
+            "zona": d.get("zona"),
+            "valor": d.get("valor"),
+            "montadora": d.get("montadora"),
+            "oem": d.get("implementador"),
+            "implementador": d.get("implementador"),
+            "locadora": d.get("locadora"),
+            "canal": d.get("canal"),
+            "concorrente": d.get("concorrente"),
+            "observacoes": d.get("observacoes"),
+            "origem_arquivo": row.get("arquivo"),
+            "aba_origem": row.get("aba"),
+            "conteudo_original": texto,
+            "created_at": datetime.utcnow().isoformat(),
+            "updated_at": None
+        }
 
-            reg = {
-                "hash": h,
-                "controle_id": None,
-                "data": d.get("data"),
-                "vendedor": d.get("vendedor"),
-                "cliente": d.get("cliente"),
-                "cnpj": d.get("cnpj"),
-                "produto": d.get("produto"),
-                "modelo": d.get("modelo"),
-                "cidade": d.get("cidade"),
-                "estado": d.get("estado"),
-                "ddd": d.get("ddd"),
-                "zona": d.get("zona"),
-                "valor": d.get("valor"),
-                "montadora": d.get("montadora"),
-                "oem": d.get("implementador"),
-                "implementador": d.get("implementador"),
-                "locadora": d.get("locadora"),
-                "canal": d.get("canal"),
-                "concorrente": d.get("concorrente"),
-                "observacoes": d.get("observacoes"),
-                "origem_arquivo": row.get("arquivo"),
-                "aba_origem": row.get("aba"),
-                "conteudo_original": texto,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": None
-            }
+        novos.append(reg)
 
-            novos.append(reg)
-
-        except Exception as e:
-            print("[ERRO LINHA]", str(e))
-            continue
+    except Exception as e:
+        print("[ERRO LINHA]", str(e))
+        continue
 
     inseridos = insert_lote("cti_processado", novos)
 
