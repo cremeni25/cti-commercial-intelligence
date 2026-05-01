@@ -407,16 +407,16 @@ def inserir_linhas_brutas(registros):
         lote = registros[i:i+500]
 
         try:
-    res = supabase.table("cti_linhas") \
-        .insert(lote) \
-        .execute()
+            res = supabase.table("cti_linhas") \
+                .insert(lote) \
+                .execute()
 
-    print("SUPABASE RESPONSE:", res)
+            print("SUPABASE RESPONSE:", res)
 
-    if hasattr(res, "data") and res.data:
-        inseridos += len(res.data)
-    else:
-        log("DB", "ERRO RESPONSE", str(res))
+            if hasattr(res, "data") and res.data:
+                inseridos += len(res.data)
+            else:
+                log("DB", "ERRO RESPONSE", str(res))
 
         except Exception as e:
             log("DB", "ERRO INSERT", str(e))
@@ -433,7 +433,9 @@ def processar_linhas_cti():
     pagina = 0
     limite = 1000
 
+    # ========================
     # PAGINAÇÃO REAL
+    # ========================
     while True:
 
         res = supabase.table("cti_linhas") \
@@ -457,6 +459,9 @@ def processar_linhas_cti():
 
     novos = []
 
+    # ========================
+    # PROCESSAMENTO IA
+    # ========================
     for row in dados:
 
         texto = row.get("conteudo")
@@ -491,34 +496,37 @@ def processar_linhas_cti():
             log("PIPELINE", "ERRO LINHA", str(e))
             continue
 
+    # ========================
+    # INSERT PROCESSADO
+    # ========================
     inseridos = 0
 
-    for i in range(0, len(registros), 500):
-    lote = registros[i:i+500]
+    for i in range(0, len(novos), 500):
+        lote = novos[i:i+500]
 
         try:
-            res = supabase.table("cti_linhas") \
+            res = supabase.table("cti_processado") \
                 .insert(lote) \
                 .execute()
 
-            print("SUPABASE RESPONSE:", res)
+            print("PROCESSADO RESPONSE:", res)
 
             if hasattr(res, "data") and res.data:
                 inseridos += len(res.data)
             else:
-                log("DB", "ERRO RESPONSE", str(res))
+                log("DB", "ERRO RESPONSE PROCESSADO", str(res))
 
-    except Exception as e:
-        log("DB", "ERRO INSERT", str(e))
-        log("PIPELINE", "INFO", f"{len(novos)} registros processados")
-        log("DB", "INFO", f"{inseridos} inseridos no processado")
-    
+        except Exception as e:
+            log("DB", "ERRO INSERT PROCESSADO", str(e))
+
+    log("PIPELINE", "INFO", f"{len(novos)} registros processados")
+    log("DB", "INFO", f"{inseridos} inseridos no processado")
+
     return {
         "linhas_lidas": len(dados),
         "linhas_processadas": len(novos),
         "inseridos": inseridos
     }
-
 # ============================================================
 # ENDPOINT — UPLOAD
 # ============================================================
