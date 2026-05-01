@@ -82,7 +82,18 @@ STOPWORDS_CLIENTE = [
     "COTAÇÃO", "REGIAO", "FILIAL"
 ]
 
+MARCAS_EQUIPAMENTO = [
+    "CARRIER",
+    "THERMO KING",
+    "THERMOKING",
+    "FRIGOKING",
+    "THERMOSTAR",
+    "RODOFRIO",
+    "THERMOFLEX"
+]
+
 def validar_cliente(cliente):
+
     if not cliente:
         return None
 
@@ -91,18 +102,22 @@ def validar_cliente(cliente):
     if not c:
         return None
 
+    # tamanho mínimo
     if len(c) < 4:
         return None
 
-    if c in STOPWORDS_CLIENTE:
+    # marcas de equipamento (CRÍTICO)
+    if any(marca in c for marca in MARCAS_EQUIPAMENTO):
         return None
 
+    # lixo comum
     if any(x in c for x in [
-        "PREÇO", "VALOR", "SOLUÇÃO",
-        "COTAÇÃO", "VENDA"
+        "PREÇO", "VALOR", "VENDA", "COTAÇÃO",
+        "SOLUÇÃO", "PROBLEMA", "SEM", "NÃO"
     ]):
         return None
 
+    # produto disfarçado
     if any(p in c for p in [
         "TR", "DT", "DD",
         "TRAILER", "DIESEL", "DIRECT"
