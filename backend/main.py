@@ -1,29 +1,22 @@
 # ============================================================
-# CTI BACKEND V3 — CORE CONSOLIDADO E ESTÁVEL (FINAL INTEGRADO)
+# CTI BACKEND - BLOCO 1 (CORE)
+# Arquitetura base estável
 # ============================================================
 
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from supabase import create_client
-import os
-import pandas as pd
-import io
-import re
-import hashlib
-import uuid
 from datetime import datetime
-from io import BytesIO
-from collections import Counter
-import math
+import hashlib
+import os
+import json
+import re
+import requests
 
 # ============================================================
-# CONFIG
+# APP
 # ============================================================
 
-APP_NAME = "CTI — Commercial Tactical Intelligence"
-APP_VERSION = "4.0"
-
-app = FastAPI(title=APP_NAME, version=APP_VERSION)
+app = FastAPI(title="CTI Comercial Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -34,721 +27,656 @@ app.add_middleware(
 )
 
 # ============================================================
-# SUPABASE
+# ENV / CONFIG
 # ============================================================
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise Exception("SUPABASE não configurado")
+    raise Exception("Supabase não configurado")
+
+# ============================================================
+# SUPABASE CLIENT
+# ============================================================
+
+from supabase import create_client
 
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# ============================================================
+# LOG PADRÃO
+# ============================================================
+
+def log(origem, nivel, mensagem):
+    print(f"[{origem}] [{nivel}] {mensagem}")
 
 # ============================================================
 # UTILS
 # ============================================================
 
-def log(msg):
-    print(f"[CTI] [{datetime.utcnow()}] {msg}")
+def gerar_hash(texto):
+    return hashlib.md5(texto.encode()).hexdigest()
 
-def normalizar_texto(txt):
-    if not txt:
+def limpar_texto(texto):
+    if not texto:
         return ""
-    return re.sub(r"\s+", " ", str(txt).upper().strip())
+    texto = str(texto)
+    texto = re.sub(r"\s+", " ", texto)
+    return texto.strip()
 
-def limpar_cnpj(cnpj):
-    if not cnpj:
+def safe_upper(valor):
+    if not valor:
         return None
-    cnpj = re.sub(r"\D", "", str(cnpj))
-    return cnpj if len(cnpj) == 14 else None
-
-def limpar_valor(v):
-    try:
-        return float(str(v).replace(",", "."))
-    except:
-        return None
-
-def gerar_hash_dict(reg):
-    base = f"{reg.get('cliente')}_{reg.get('cnpj')}_{reg.get('valor')}_{reg.get('data')}"
-    return hashlib.md5(base.encode()).hexdigest()
-
-def gerar_hash_linha(linha):
-    return hashlib.sha256(linha.encode()).hexdigest()
-
-def gerar_cliente_id():
-    return f"CLI_{uuid.uuid4().hex[:8].upper()}"
+    return str(valor).upper().strip()
 
 # ============================================================
-# INTELIGÊNCIA COMERCIAL
+# NORMALIZAÇÃO BASE
 # ============================================================
 
-OEMS = ["FACCHINI","RANDON","GUERRA","NOMA"]
-LOCADORAS = ["LOCALIZA","UNIDAS","MOVIDA"]
+STOPWORDS_CLIENTE = [
+    "UNIDADES", "SUDESTE", "SP", "BRASIL",
+    "TRAILER", "DT", "DD", "DIRECT DRIVE",
+    "DIESEL TRUCK", "VALOR", "PREÇO", "VENDA",
+    "COTAÇÃO", "REGIAO", "FILIAL"
+]
 
-def detectar_oem(texto):
-    texto = texto.upper()
-    for o in OEMS:
-        if o in texto:
-            return o
-    return None
-
-def detectar_locadora(texto):
-    texto = texto.upper()
-    for l in LOCADORAS:
-        if l in texto:
-            return l
-    return None
-
-def classificar_produto(texto):
-    if not texto:
+def validar_cliente(cliente):
+    if not cliente:
         return None
-    t = texto.upper()
-    if "SEMI" in t or "CARRETA" in t:
+
+    c = safe_upper(cliente)
+
+    if not c:
+        return None
+
+    if len(c) < 4:
+        return None
+
+    if c in STOPWORDS_CLIENTE:
+        return None
+
+    if any(x in c for x in [
+        "PREÇO", "VALOR", "SOLUÇÃO",
+        "COTAÇÃO", "VENDA"
+    ]):
+        return None
+
+    if any(p in c for p in [
+        "TR", "DT", "DD",
+        "TRAILER", "DIESEL", "DIRECT"
+    ]):
+        return None
+
+    return c
+
+# ============================================================
+# PRODUTO PADRÃO
+# ============================================================
+
+def normalizar_produto(produto):
+    if not produto:
+        return None
+
+    p = safe_upper(produto)
+
+    if "TRAILER" in p or p == "TR":
         return "TR"
-    if "TRUCK" in t or "TOCO" in t:
+
+    if "DIESEL" in p or p == "DT":
         return "DT"
-    if "DIRECT" in t:
+
+    if "DIRECT" in p or p == "DD":
         return "DD"
+
     return None
-
-def classificar_canal(oem, locadora):
-    if locadora:
-        return "LOCADORA"
-    if oem:
-        return "OEM"
-    return "DIRETO"
-
-# ============================================================
-# CTI — PARSER ESTRUTURADO POR POSIÇÃO (OFICIAL)
-# ============================================================
-
-def extrair_campos(texto: str):
-
-    if not texto:
-        return {}
-
-    texto_original = texto
-    texto = normalizar_texto(texto)
-
-    partes = [p.strip() for p in texto.split("|") if p.strip()]
-    texto_full = " ".join(partes)
-
-    # =========================
-    # DATA
-    # =========================
-    data = None
-    for p in partes:
-        if re.search(r"\d{4}-\d{2}-\d{2}", p):
-            data = p
-            break
-        if re.search(r"\d{2}/\d{2}/\d{4}", p):
-            data = p
-            break
-
-    # =========================
-    # VALOR
-    # =========================
-    valor = None
-    for p in partes:
-        if re.search(r"\d+[.,]\d{2}", p):
-            try:
-                valor = float(p.replace(".", "").replace(",", "."))
-                break
-            except:
-                pass
-
-    # =========================
-    # ESTADO (UF)
-    # =========================
-    estado = None
-    for p in partes:
-        if len(p) == 2 and p.isalpha():
-            estado = p
-            break
-
-    # =========================
-    # CIDADE
-    # =========================
-    cidade = None
-    if estado:
-        for i, p in enumerate(partes):
-            if p == estado and i > 0:
-                cidade = partes[i-1]
-                break
-
-    # =========================
-    # OEM
-    # =========================
-    oem = detectar_oem(texto_full)
-
-    # =========================
-    # LOCADORA
-    # =========================
-    locadora = detectar_locadora(texto_full)
-
-    # =========================
-    # PRODUTO
-    # =========================
-    produto = classificar_produto(texto_full)
-
-    # =========================
-    # CLIENTE (heurística)
-    # =========================
-    cliente = None
-    for p in partes[::-1]:
-        if len(p) > 5 and not re.search(r"\d", p):
-            cliente = p
-            break
-
-    # =========================
-    # VENDEDOR (heurística simples)
-    # =========================
-    vendedor = None
-    if cliente:
-        for p in partes:
-            if p != cliente and len(p.split()) <= 3:
-                vendedor = p
-                break
-
-    # =========================
-    # CANAL
-    # =========================
-    canal = classificar_canal(oem, locadora)
-
-    return {
-        "data": data,
-        "estado": estado,
-        "cidade": cidade,
-        "cliente": cliente,
-        "vendedor": vendedor,
-        "valor": valor,
-        "produto": produto,
-        "oem": oem,
-        "locadora": locadora,
-        "canal": canal,
-        "observacoes": texto_original
-    }
-
-# ============================================================
-# DETECÇÃO DE COLUNAS
-# ============================================================
-
-def detectar_colunas(df):
-    mapa = {}
-
-    for col in df.columns:
-        c = col.lower()
-
-        if "cliente" in c:
-            mapa["cliente"] = col
-        elif "cnpj" in c:
-            mapa["cnpj"] = col
-        elif "valor" in c or "total" in c:
-            mapa["valor"] = col
-        elif "data" in c:
-            mapa["data"] = col
-        elif "cidade" in c:
-            mapa["cidade"] = col
-        elif "estado" in c or "uf" in c:
-            mapa["estado"] = col
-        elif "vendedor" in c:
-            mapa["vendedor"] = col
-
-    return mapa
-
-# ============================================================
-# PROCESSAMENTO ESTRUTURADO
-# ============================================================
-
-def processar_dataframe(df):
-
-    df = df.fillna("")
-    mapa = detectar_colunas(df)
-
-    registros = []
-
-    for _, row in df.iterrows():
-
-        cliente = normalizar_texto(row.get(mapa.get("cliente", ""), ""))
-        cnpj = limpar_cnpj(row.get(mapa.get("cnpj", ""), ""))
-        valor = limpar_valor(row.get(mapa.get("valor", ""), 0))
-        data = str(row.get(mapa.get("data", ""), ""))
-
-        cidade = normalizar_texto(row.get(mapa.get("cidade", ""), ""))
-        estado = normalizar_texto(row.get(mapa.get("estado", ""), ""))
-        vendedor = normalizar_texto(row.get(mapa.get("vendedor", ""), ""))
-
-        if not cliente and not valor:
-            continue
-
-        texto_base = " | ".join([str(v) for v in row.values if str(v).strip()])
-        dados_extraidos = extrair_campos(texto_base)
-
-        reg = {
-            "cliente": cliente or dados_extraidos.get("cliente"),
-            "cnpj": cnpj or dados_extraidos.get("cnpj"),
-            "valor": valor or dados_extraidos.get("valor"),
-            "data": data or dados_extraidos.get("data"),
-            "cidade": cidade or dados_extraidos.get("cidade"),
-            "estado": estado or dados_extraidos.get("estado"),
-            "vendedor": vendedor or dados_extraidos.get("vendedor"),
-            "produto": dados_extraidos.get("produto"),
-            "modelo": dados_extraidos.get("modelo"),
-            "oem": dados_extraidos.get("oem"),
-            "locadora": dados_extraidos.get("locadora"),
-            "canal": dados_extraidos.get("canal"),
-            "zona": dados_extraidos.get("zona"),
-            "observacoes": dados_extraidos.get("observacoes"),
-            "cliente_id": gerar_cliente_id(),
-            "created_at": datetime.utcnow().isoformat()
-        }
-
-        reg["hash"] = gerar_hash_dict(reg)
-
-        registros.append(reg)
-
-    return registros
-
-# ============================================================
-# PROCESSAMENTO TEXTO
-# ============================================================
-
-def extrair_linhas_from_bytes(conteudo: bytes, filename: str):
-
-    nome = filename.lower()
-    linhas = []
-
-    if nome.endswith(".xlsx") or nome.endswith(".xls"):
-
-        df = pd.read_excel(BytesIO(conteudo), dtype=str, engine="openpyxl")
-
-        for _, row in df.iterrows():
-            linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
-            if linha.strip():
-                linhas.append(normalizar_texto(linha))
-
-    else:
-        texto = conteudo.decode("utf-8", errors="ignore")
-        linhas = [normalizar_texto(l) for l in texto.split("\n") if l.strip()]
-
-    return linhas
 
 # ============================================================
 # BANCO
 # ============================================================
 
-def get_hashes_existentes(tabela):
+def buscar_tabela(nome):
+    try:
+        return supabase.table(nome).select("*").execute().data or []
+    except Exception as e:
+        log("DB", "ERRO", str(e))
+        return []
+
+def inserir_lote(tabela, dados):
+    if not dados:
+        return 0
 
     try:
-        response = supabase.table(tabela).select("hash").execute()
-        if not response.data:
-            return set()
-        return set([r["hash"] for r in response.data if r.get("hash")])
-    except:
-        return set()
-
-def insert_lote(tabela, dados, batch=500):
-
-    total = 0
-
-    for i in range(0, len(dados), batch):
-        parte = dados[i:i+batch]
-
-        print("\n==============================")
-        print("ENVIANDO REGISTRO:")
-        print(parte)
-
-        res = supabase.table(tabela).upsert(parte, on_conflict="hash").execute()
-
-        print("RESPOSTA SUPABASE:")
-        print(res)
-
-        # SE NÃO INSERIU, QUEBRA NA HORA
-        if not hasattr(res, "data") or not res.data:
-            raise Exception(f"ERRO REAL DE INSERT: {res}")
-
-        total += len(res.data)
-
-    return total
+        supabase.table(tabela).insert(dados).execute()
+        return len(dados)
+    except Exception as e:
+        log("DB", "ERRO INSERT", str(e))
+        return 0
 
 # ============================================================
-# UPLOAD PRINCIPAL
+# HEALTH CHECK
+# ============================================================
+
+@app.get("/")
+def root():
+    return {
+        "status": "ok",
+        "sistema": "CTI Comercial Intelligence",
+        "versao": "3.0"
+    }
+
+# ============================================================
+# STATUS
+# ============================================================
+
+@app.get("/status")
+def status():
+    return {
+        "status": "ok",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# ============================================================
+# CTI BACKEND - BLOCO 2 (IA + INTERPRETAÇÃO)
+# Cérebro do sistema
+# ============================================================
+
+from openai import OpenAI
+
+client = OpenAI(api_key=OPENAI_API_KEY)
+
+# ============================================================
+# IA — INTERPRETAÇÃO CONTROLADA
+# ============================================================
+
+def interpretar_linha_com_ia(texto):
+
+    if not texto:
+        return {}
+
+    try:
+
+        prompt = f"""
+Você é um sistema de inteligência comercial B2B do setor de transporte refrigerado.
+
+Seu trabalho é extrair dados estruturados de uma linha de texto desorganizada.
+
+REGRAS CRÍTICAS:
+
+- CLIENTE deve ser EMPRESA REAL (transportadora, operador logístico, frigorífico)
+- NÃO pode ser:
+  - produto (TR, DT, DD, TRAILER, DIESEL, DIRECT)
+  - observação (ex: preço alto, sem solução)
+  - região (SP, SUDESTE, BRASIL)
+  - palavras genéricas
+
+- PRODUTO deve ser:
+  - TR (Trailer)
+  - DT (Diesel Truck)
+  - DD (Direct Drive)
+
+- MONTADORA:
+  Ex: VOLVO, SCANIA, IVECO, VW
+
+- IMPLEMENTADOR (OEM REAL):
+  Ex: RANDON, FACCHINI, GUERRA
+
+- Se não tiver certeza → retornar null
+
+Retorne JSON válido:
+
+{{
+  "cliente": null,
+  "produto": null,
+  "montadora": null,
+  "implementador": null,
+  "cidade": null,
+  "estado": null,
+  "valor": null,
+  "concorrente": null,
+  "observacoes": null
+}}
+
+Texto:
+{texto}
+"""
+
+        response = client.chat.completions.create(
+            model="gpt-5.3-mini",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0
+        )
+
+        conteudo = response.choices[0].message.content
+
+        try:
+            dados = json.loads(conteudo)
+            return dados if isinstance(dados, dict) else {}
+        except:
+            return {}
+
+    except Exception as e:
+        log("IA", "ERRO", str(e))
+        return {}
+
+# ============================================================
+# LIMPEZA INTELIGENTE
+# ============================================================
+
+def sanitizar_dados_ia(d):
+
+    if not isinstance(d, dict):
+        return {}
+
+    # CLIENTE
+    cliente = validar_cliente(d.get("cliente"))
+
+    # PRODUTO
+    produto = normalizar_produto(d.get("produto"))
+
+    # MONTADORA
+    montadora = safe_upper(d.get("montadora"))
+
+    # IMPLEMENTADOR (OEM)
+    implementador = safe_upper(d.get("implementador"))
+
+    # VALOR
+    valor = d.get("valor")
+    try:
+        valor = float(valor)
+    except:
+        valor = 0
+
+    # CIDADE / ESTADO
+    cidade = safe_upper(d.get("cidade"))
+    estado = safe_upper(d.get("estado"))
+
+    # CONCORRENTE
+    concorrente = safe_upper(d.get("concorrente"))
+
+    return {
+        "cliente": cliente,
+        "produto": produto,
+        "montadora": montadora,
+        "implementador": implementador,
+        "cidade": cidade,
+        "estado": estado,
+        "valor": valor,
+        "concorrente": concorrente,
+        "observacoes": d.get("observacoes")
+    }
+
+# ============================================================
+# PIPELINE IA
+# ============================================================
+
+def processar_texto_com_ia(texto):
+
+    texto_limpo = limpar_texto(texto)
+
+    bruto = interpretar_linha_com_ia(texto_limpo)
+
+    tratado = sanitizar_dados_ia(bruto)
+
+    return tratado
+
+# ============================================================
+# CTI BACKEND - BLOCO 3 (PIPELINE OPERACIONAL)
+# Upload + Processamento real
+# ============================================================
+
+import pandas as pd
+from io import BytesIO
+
+# ============================================================
+# EXTRAÇÃO UNIVERSAL DE LINHAS
+# ============================================================
+
+def extrair_linhas_arquivo(conteudo: bytes, nome_arquivo: str):
+
+    linhas = []
+
+    try:
+
+        if nome_arquivo.lower().endswith((".xlsx", ".xls")):
+
+            xls = pd.ExcelFile(BytesIO(conteudo))
+
+            for aba in xls.sheet_names:
+
+                df = xls.parse(aba, dtype=str)
+                df = df.fillna("")
+
+                for _, row in df.iterrows():
+
+                    linha = " | ".join([
+                        str(v) for v in row.values if str(v).strip()
+                    ])
+
+                    if linha and len(linha) > 5:
+                        linhas.append(linha)
+
+        else:
+
+            texto = conteudo.decode("utf-8", errors="ignore")
+
+            for l in texto.split("\n"):
+                if l.strip():
+                    linhas.append(l.strip())
+
+    except Exception as e:
+        log("UPLOAD", "ERRO EXTRAÇÃO", str(e))
+
+    return linhas
+
+# ============================================================
+# HASH REAL (SEM PERDA)
+# ============================================================
+
+def gerar_hash_unico(texto):
+    return hashlib.sha256(texto.encode()).hexdigest()
+
+# ============================================================
+# INSERT SEGURO (SEM DESCARTE BURRO)
+# ============================================================
+
+def inserir_linhas_brutas(registros):
+
+    if not registros:
+        return 0
+
+    inseridos = 0
+
+    for i in range(0, len(registros), 500):
+        lote = registros[i:i+500]
+
+        try:
+            res = supabase.table("cti_linhas") \
+                .upsert(lote, on_conflict="hash") \
+                .execute()
+
+            if hasattr(res, "data") and res.data:
+                inseridos += len(res.data)
+
+        except Exception as e:
+            log("DB", "ERRO UPSERT", str(e))
+
+    return inseridos
+
+# ============================================================
+# PROCESSAMENTO COMPLETO
+# ============================================================
+
+def processar_linhas_cti():
+
+    dados = []
+    pagina = 0
+    limite = 1000
+
+    # PAGINAÇÃO REAL
+    while True:
+
+        res = supabase.table("cti_linhas") \
+            .select("*") \
+            .range(pagina * limite, (pagina + 1) * limite - 1) \
+            .execute()
+
+        linhas = res.data or []
+
+        if not linhas:
+            break
+
+        dados.extend(linhas)
+
+        if len(linhas) < limite:
+            break
+
+        pagina += 1
+
+    log("PIPELINE", "INFO", f"{len(dados)} linhas carregadas")
+
+    novos = []
+
+    for row in dados:
+
+        texto = row.get("conteudo")
+
+        if not texto:
+            continue
+
+        hash_linha = gerar_hash_unico(texto)
+
+        try:
+
+            d = processar_texto_com_ia(texto)
+
+            registro = {
+                "hash": hash_linha,
+                "cliente": d.get("cliente"),
+                "produto": d.get("produto"),
+                "montadora": d.get("montadora"),
+                "implementador": d.get("implementador"),
+                "cidade": d.get("cidade"),
+                "estado": d.get("estado"),
+                "valor": d.get("valor") or 0,
+                "concorrente": d.get("concorrente"),
+                "observacoes": d.get("observacoes"),
+                "conteudo_original": texto,
+                "created_at": datetime.utcnow().isoformat()
+            }
+
+            novos.append(registro)
+
+        except Exception as e:
+            log("PIPELINE", "ERRO LINHA", str(e))
+            continue
+
+    inseridos = 0
+
+    for i in range(0, len(novos), 500):
+        lote = novos[i:i+500]
+
+        try:
+            res = supabase.table("cti_processado") \
+                .upsert(lote, on_conflict="hash") \
+                .execute()
+
+            if hasattr(res, "data") and res.data:
+                inseridos += len(res.data)
+
+        except Exception as e:
+            log("DB", "ERRO PROCESSADO", str(e))
+
+    return {
+        "linhas_lidas": len(dados),
+        "linhas_processadas": len(novos),
+        "inseridos": inseridos
+    }
+
+# ============================================================
+# ENDPOINT — UPLOAD
 # ============================================================
 
 @app.post("/upload")
 async def upload(file: UploadFile = File(...)):
 
-    log(f"Upload recebido: {file.filename}")
-
     try:
 
         conteudo = await file.read()
 
-        xls = pd.ExcelFile(BytesIO(conteudo), engine="openpyxl")
+        linhas = extrair_linhas_arquivo(conteudo, file.filename)
 
         registros = []
 
-        for aba in xls.sheet_names:
-            df = xls.parse(aba, dtype=str)
-            df = df.fillna("")
+        for linha in linhas:
 
-            for _, row in df.iterrows():
+            registros.append({
+                "hash": gerar_hash_unico(linha),
+                "conteudo": linha,
+                "arquivo": file.filename,
+                "created_at": datetime.utcnow().isoformat()
+            })
 
-                linha = " | ".join([str(v) if str(v) != "nan" else "" for v in row.values])
-
-                if not linha:
-                    continue
-
-                linha = normalizar_texto(linha)
-
-                if len(linha) < 5:
-                    continue
-
-                if len(linha.split("|")) < 2:
-                    continue
-
-                registros.append({
-                    "hash": gerar_hash_linha(linha),
-                    "conteudo": linha,
-                    "arquivo": file.filename,
-                    "aba": aba,
-                    "created_at": datetime.utcnow().isoformat()
-                })
-
-        inseridos = insert_lote("cti_linhas", registros)
+        inseridos = inserir_linhas_brutas(registros)
 
         return {
             "status": "ok",
-            "linhas_processadas": len(registros),
+            "linhas_extraidas": len(linhas),
             "inseridos": inseridos
         }
 
     except Exception as e:
-        import traceback
-        erro = traceback.format_exc()
-
-        print("[ERRO UPLOAD]")
-        print(erro)
-
         return {
             "status": "erro",
-            "mensagem": str(e),
-            "trace": erro
+            "mensagem": str(e)
         }
 
 # ============================================================
-# PROCESSAMENTO BASE (PIPELINE PRINCIPAL)
+# ENDPOINT — PROCESSAR
 # ============================================================
 
-@app.post("/processar-base")
-def processar_base():
+@app.post("/processar")
+def processar():
 
-    data = buscar_todas_linhas("cti_linhas")
-
-    # evita erro caso coluna hash não exista
-    try:
-        existentes = supabase.table("cti_processado").select("hash").execute().data or []
-        hashes_existentes = set([e.get("hash") for e in existentes if e.get("hash")])
-    except:
-        hashes_existentes = set()
-
-    novos = []
-
-    for row in data:
-        try:
-            texto = row.get("conteudo", "")
-
-            if not texto:
-                continue
-
-            h = gerar_hash_linha_real(texto)
-
-            if not h:
-                h = gerar_hash_linha(texto)
-
-            if h in hashes_existentes:
-                continue
-
-            texto_limpo = limpar_texto_para_ia(texto)
-            d = interpretar_linha_com_ia(texto_limpo)
-            d = inteligencia_cti_pipeline(d)
-
-            if not isinstance(d, dict):
-                continue
-
-            # =========================
-            # LIMPEZA INTELIGENTE
-            # =========================
-
-            # CLIENTE
-            cliente = d.get("cliente")
-            if cliente:
-                cliente = cliente.upper()
-
-                if cliente in [
-                    "UNIDADES", "SUDESTE", "SP", "BRASIL",
-                    "TRAILER", "DT", "DD", "DIRECT DRIVE",
-                    "DIESEL TRUCK"
-                ]:
-                    cliente = None
-
-            d["cliente"] = cliente
-
-            # PRODUTO PADRÃO
-            produto = (d.get("produto") or "").upper()
-
-            if "TRAILER" in produto or produto == "TR":
-                produto = "TR"
-            elif "DIESEL" in produto or produto == "DT":
-                produto = "DT"
-            elif "DIRECT" in produto or produto == "DD":
-                produto = "DD"
-            else:
-                produto = None
-
-            d["produto"] = produto
-
-            # =========================
-            # REGISTRO FINAL
-            # =========================
-
-            reg = {
-                "hash": h,
-                "controle_id": None,
-                "data": d.get("data"),
-                "vendedor": d.get("vendedor"),
-                "cliente": d.get("cliente"),
-                "cnpj": d.get("cnpj"),
-                "produto": d.get("produto"),
-                "modelo": d.get("modelo"),
-                "cidade": d.get("cidade"),
-                "estado": d.get("estado"),
-                "ddd": d.get("ddd"),
-                "zona": d.get("zona"),
-                "valor": d.get("valor"),
-                "montadora": d.get("montadora"),
-                "oem": d.get("implementador"),
-                "implementador": d.get("implementador"),
-                "locadora": d.get("locadora"),
-                "canal": d.get("canal"),
-                "concorrente": d.get("concorrente"),
-                "observacoes": d.get("observacoes"),
-                "origem_arquivo": row.get("arquivo"),
-                "aba_origem": row.get("aba"),
-                "conteudo_original": texto,
-                "created_at": datetime.utcnow().isoformat(),
-                "updated_at": None
-            }
-
-            novos.append(reg)
-
-        except Exception as e:
-            print("[ERRO LINHA]", str(e))
-            continue
-
-    inseridos = insert_lote("cti_processado", novos)
+    resultado = processar_linhas_cti()
 
     return {
         "status": "ok",
-        "linhas_lidas": len(data),
-        "novos_processados": len(novos),
-        "inseridos": inseridos
+        "resultado": resultado
     }
-   
+
 # ============================================================
-# INTELIGÊNCIA — CLIENTES
+# CTI BACKEND - BLOCO 4 (INTELIGÊNCIA + EXECUTIVO)
+# Visualização e leitura estratégica
 # ============================================================
 
-@app.get("/inteligencia/clientes")
-def inteligencia_clientes():
+from collections import Counter
 
-    data = supabase.table("cti_processado").select("*").execute().data or []
+# ============================================================
+# BUSCA BASE PROCESSADA
+# ============================================================
 
-    compras = Counter()
-    faturamento = {}
+def carregar_base_processada():
+
+    dados = []
+    pagina = 0
+    limite = 1000
+
+    while True:
+
+        res = supabase.table("cti_processado") \
+            .select("*") \
+            .range(pagina * limite, (pagina + 1) * limite - 1) \
+            .execute()
+
+        parte = res.data or []
+
+        if not parte:
+            break
+
+        dados.extend(parte)
+
+        if len(parte) < limite:
+            break
+
+        pagina += 1
+
+    return dados
+
+# ============================================================
+# DASHBOARD EXECUTIVO
+# ============================================================
+
+@app.get("/dashboard/executivo")
+def dashboard_executivo():
+
+    data = carregar_base_processada()
+
+    total = len(data)
+
+    clientes = Counter()
+    produtos = Counter()
+    estados = Counter()
+    montadoras = Counter()
+    implementadores = Counter()
+    concorrentes = Counter()
+
+    faturamento_total = 0
 
     for row in data:
 
         cliente = row.get("cliente")
-
-        if not cliente:
-            continue
-
-        valor = float(row.get("valor") or 0)
-
-        compras[cliente] += 1
-        faturamento[cliente] = faturamento.get(cliente, 0) + valor
-
-    ranking = []
-
-    for cliente in compras:
-        ranking.append({
-            "cliente": cliente,
-            "compras": compras[cliente],
-            "faturamento": round(faturamento.get(cliente, 0), 2)
-        })
-
-    ranking.sort(key=lambda x: x["compras"], reverse=True)
-
-    return {
-        "status": "ok",
-        "ranking": ranking
-    }
-
-
-# ============================================================
-# INTELIGÊNCIA — PRODUTOS
-# ============================================================
-
-@app.get("/inteligencia/produtos")
-def inteligencia_produtos():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    contador = Counter()
-
-    for row in data:
         produto = row.get("produto")
-        if produto:
-            contador[produto] += 1
-
-    return {
-        "status": "ok",
-        "ranking_produtos": contador.most_common(10)
-    }
-
-
-# ============================================================
-# INTELIGÊNCIA — REGIÃO
-# ============================================================
-
-@app.get("/inteligencia/regiao")
-def inteligencia_regiao():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    cidades = Counter()
-    estados = Counter()
-
-    for row in data:
-
-        cidade = row.get("cidade")
         estado = row.get("estado")
+        montadora = row.get("montadora")
+        implementador = row.get("implementador")
+        concorrente = row.get("concorrente")
+        valor = row.get("valor") or 0
 
-        if cidade:
-            cidades[cidade] += 1
+        if cliente:
+            clientes[cliente] += 1
+
+        if produto:
+            produtos[produto] += 1
 
         if estado:
             estados[estado] += 1
 
-    return {
-        "status": "ok",
-        "top_cidades": cidades.most_common(10),
-        "top_estados": estados.most_common(10)
-    }
+        if montadora:
+            montadoras[montadora] += 1
 
-
-# ============================================================
-# INTELIGÊNCIA — CANAL
-# ============================================================
-
-@app.get("/inteligencia/canais")
-def inteligencia_canais():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    canais = Counter()
-
-    for row in data:
-        canal = row.get("canal")
-        if canal:
-            canais[canal] += 1
-
-    return {
-        "status": "ok",
-        "canais": canais
-    }
-
-
-# ============================================================
-# INTELIGÊNCIA — OEM / CONCORRÊNCIA
-# ============================================================
-
-@app.get("/inteligencia/oem")
-def inteligencia_oem():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    oems = Counter()
-    concorrentes = Counter()
-
-    for row in data:
-
-        oem = row.get("oem")
-        concorrente = row.get("concorrente")
-
-        if oem:
-            oems[oem] += 1
+        if implementador:
+            implementadores[implementador] += 1
 
         if concorrente:
             concorrentes[concorrente] += 1
 
-    return {
-        "status": "ok",
-        "oem": oems.most_common(10),
-        "concorrentes": concorrentes.most_common(10)
-    }
+        try:
+            faturamento_total += float(valor)
+        except:
+            pass
 
-# ============================================================
-# INTELIGÊNCIA — MÉTRICAS GERAIS
-# ============================================================
+    # TOPS
+    top_clientes = clientes.most_common(10)
+    top_produtos = produtos.most_common(5)
+    top_estados = estados.most_common(10)
+    top_montadoras = montadoras.most_common(10)
+    top_implementadores = implementadores.most_common(10)
+    top_concorrentes = concorrentes.most_common(10)
 
-@app.get("/inteligencia/resumo")
-def inteligencia_resumo():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    total = len(data)
-
-    valores = []
-    clientes = set()
-
-    for row in data:
-        v = row.get("valor")
-        if v:
-            valores.append(float(v))
-
-        c = row.get("cliente")
-        if c:
-            clientes.add(c)
-
-    faturamento = sum(valores) if valores else 0
-    ticket_medio = faturamento / len(valores) if valores else 0
+    # TICKET MÉDIO
+    ticket_medio = faturamento_total / total if total > 0 else 0
 
     return {
         "status": "ok",
-        "total_registros": total,
-        "clientes_unicos": len(clientes),
-        "faturamento_total": round(faturamento, 2),
-        "ticket_medio": round(ticket_medio, 2)
+        "resumo": {
+            "total_registros": total,
+            "faturamento_total": round(faturamento_total, 2),
+            "ticket_medio": round(ticket_medio, 2)
+        },
+        "clientes": top_clientes,
+        "produtos": top_produtos,
+        "estados": top_estados,
+        "montadoras": top_montadoras,
+        "implementadores": top_implementadores,
+        "concorrentes": top_concorrentes
     }
 
-
 # ============================================================
-# INTELIGÊNCIA — DECISÕES
+# INSIGHTS AUTOMÁTICOS
 # ============================================================
 
-@app.get("/inteligencia/decisoes")
-def inteligencia_decisoes():
+@app.get("/dashboard/insights")
+def insights():
 
-    data = supabase.table("cti_processado").select("*").execute().data or []
+    data = carregar_base_processada()
 
     if not data:
         return {"status": "sem_dados"}
 
     clientes = Counter()
-    cidades = Counter()
+    estados = Counter()
     valores = []
 
     for row in data:
@@ -756,306 +684,54 @@ def inteligencia_decisoes():
         if row.get("cliente"):
             clientes[row["cliente"]] += 1
 
-        if row.get("cidade"):
-            cidades[row["cidade"]] += 1
-
-        if row.get("valor"):
-            valores.append(float(row["valor"]))
-
-    total_clientes = sum(clientes.values())
-    top5 = clientes.most_common(5)
-    top5_total = sum([c[1] for c in top5]) if top5 else 0
-
-    concentracao = (top5_total / total_clientes) if total_clientes else 0
-
-    ticket_medio = sum(valores) / len(valores) if valores else 0
-
-    alertas = []
-    oportunidades = []
-    acoes = []
-
-    # concentração
-    if concentracao > 0.6:
-        alertas.append("Alta dependência de poucos clientes")
-        acoes.append("Expandir base de clientes")
-
-    elif concentracao > 0.4:
-        oportunidades.append("Base moderadamente concentrada")
-        acoes.append("Aumentar penetração em novos clientes")
-
-    # ticket
-    if ticket_medio < 1000:
-        alertas.append("Ticket médio baixo")
-        acoes.append("Revisar estratégia comercial")
-
-    elif ticket_medio > 10000:
-        oportunidades.append("Alto valor por venda")
-        acoes.append("Focar grandes contas")
-
-    # geografia
-    if len(cidades) < 5:
-        alertas.append("Baixa presença geográfica")
-        acoes.append("Expandir regiões")
-
-    return {
-        "status": "ok",
-        "resumo": {
-            "ticket_medio": round(ticket_medio, 2),
-            "concentracao_clientes": round(concentracao, 3),
-            "cidades_ativas": len(cidades)
-        },
-        "top_clientes": top5,
-        "top_cidades": cidades.most_common(5),
-        "alertas": alertas,
-        "oportunidades": oportunidades,
-        "acoes": list(set(acoes))
-    }
-
-
-# ============================================================
-# ANALYTICS SIMPLES
-# ============================================================
-
-@app.get("/analytics/resumo")
-def analytics():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    return {
-        "total_linhas": len(data)
-    }
-
-
-# ============================================================
-# ENDPOINT DE DEBUG (IMPORTANTE)
-# ============================================================
-
-@app.get("/debug/linhas")
-def debug_linhas():
-
-    data = supabase.table("cti_linhas").select("*").limit(20).execute().data or []
-
-    return data
-
-
-@app.get("/debug/processado")
-def debug_processado():
-
-    data = supabase.table("cti_processado").select("*").limit(20).execute().data or []
-
-    return data
-
-
-# ============================================================
-# ENDPOINT DE REPROCESSAMENTO
-# ============================================================
-
-@app.post("/reprocessar")
-def reprocessar():
-
-    try:
-        supabase.table("cti_processado").delete().neq("id", 0).execute()
-    except:
-        pass
-
-    return processar_base()
-
-
-# ============================================================
-# STATUS
-# ============================================================
-
-@app.get("/")
-def root():
-    return {
-        "sistema": APP_NAME,
-        "versao": APP_VERSION,
-        "status": "ativo"
-    }
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-
-# ============================================================
-# SEGURANÇA FINAL
-# ============================================================
-
-@app.get("/check")
-def check():
-
-    try:
-        supabase.table("cti_linhas").select("id").limit(1).execute()
-        return {"db": "ok"}
-    except:
-        return {"db": "erro"}
-
-
-# ============================================================
-# FIM DO SISTEMA
-# ============================================================
-
-# ============================================================
-# EXTENSÃO CTI — UPLOAD AVANÇADO (ZIP + MULTI)
-# NÃO SUBSTITUI O /upload ORIGINAL
-# ============================================================
-
-import zipfile
-
-@app.post("/upload-avancado")
-async def upload_avancado(file: UploadFile = File(...)):
-
-    log(f"[AVANCADO] Upload recebido: {file.filename}")
-
-    try:
-
-        conteudo = await file.read()
-        registros = []
-
-        arquivos = []
-
-        # ====================================================
-        # SUPORTE A ZIP
-        # ====================================================
-        if file.filename.lower().endswith(".zip"):
-
-            with zipfile.ZipFile(BytesIO(conteudo)) as z:
-
-                for nome in z.namelist():
-                    if nome.endswith(".xlsx") or nome.endswith(".xls"):
-                        arquivos.append((nome, z.read(nome)))
-
-        else:
-            arquivos.append((file.filename, conteudo))
-
-        # ====================================================
-        # PROCESSAMENTO
-        # ====================================================
-        for nome_arquivo, conteudo_arquivo in arquivos:
-
-            linhas = extrair_linhas_from_bytes(conteudo_arquivo, nome_arquivo)
-
-            for linha in linhas:
-
-                if len(linha) < 5:
-                    continue
-
-                if linha.count("|") < 2:
-                    continue
-
-                registros.append({
-                    "hash": gerar_hash_linha(linha),
-                    "conteudo": linha,
-                    "arquivo": nome_arquivo,
-                    "aba": "AUTO",
-                    "created_at": datetime.utcnow().isoformat()
-                })
-
-        # ====================================================
-        # UPSERT (NÃO QUEBRA O SISTEMA ATUAL)
-        # ====================================================
-        total = 0
-
-        for i in range(0, len(registros), 500):
-            parte = registros[i:i+500]
-
-            res = supabase.table("cti_linhas") \
-                .upsert(parte, on_conflict="hash") \
-                .execute()
-
-            if hasattr(res, "data") and res.data:
-                total += len(res.data)
-
-        return {
-            "status": "ok",
-            "arquivos_processados": len(arquivos),
-            "linhas": len(registros),
-            "inseridos": total
-        }
-
-    except Exception as e:
-        import traceback
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": traceback.format_exc()
-        }
-
-
-# ============================================================
-# EXTENSÃO CTI — INSIGHTS (LEITURA HUMANA)
-# ============================================================
-
-@app.get("/insights-avancado")
-def insights_avancado():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    if not data:
-        return {"status": "sem_dados"}
-
-    clientes = Counter()
-    estados = Counter()
-    oems = Counter()
-    valores = []
-
-    for row in data:
-
-        info = classificar_linha_cti(row)
-
-        if info["cliente"]:
-            clientes[info["cliente"]] += 1
-
         if row.get("estado"):
             estados[row["estado"]] += 1
 
-        if row.get("oem"):
-            oems[row["oem"]] += 1
-
-        if info["produto"]:
-            produtos[info["produto"]] += 1
-
         if row.get("valor"):
-            valores.append(float(row["valor"]))
+            try:
+                valores.append(float(row["valor"]))
+            except:
+                pass
 
     top_cliente = clientes.most_common(1)
     top_estado = estados.most_common(1)
-    top_oem = oems.most_common(1)
 
-    ticket = sum(valores)/len(valores) if valores else 0
+    ticket = sum(valores) / len(valores) if valores else 0
 
     return {
         "status": "ok",
-        "insight": {
+        "leitura_estrategica": {
             "cliente_dominante": top_cliente[0][0] if top_cliente else None,
-            "regiao_forte": top_estado[0][0] if top_estado else None,
-            "oem_dominante": top_oem[0][0] if top_oem else None,
+            "regiao_dominante": top_estado[0][0] if top_estado else None,
             "ticket_medio": round(ticket, 2),
-            "leitura": f"""
-O CTI identificou concentração no cliente {top_cliente[0][0] if top_cliente else 'N/A'},
-com forte atuação na região {top_estado[0][0] if top_estado else 'N/A'}.
-
-O OEM predominante é {top_oem[0][0] if top_oem else 'N/A'}.
-
-Ticket médio aproximado de {round(ticket,2)}.
-
-Ação recomendada:
-- Avaliar dependência de cliente
-- Expandir atuação geográfica
-- Mapear concorrência direta
-"""
+            "recomendacoes": [
+                "Expandir base de clientes" if len(clientes) < 10 else None,
+                "Aumentar presença geográfica" if len(estados) < 5 else None,
+                "Explorar grandes contas" if ticket > 10000 else None
+            ]
         }
     }
 
+# ============================================================
+# DEBUG VISUAL (IMPORTANTE PRA VOCÊ)
+# ============================================================
+
+@app.get("/debug/amostra")
+def debug_amostra():
+
+    data = supabase.table("cti_processado") \
+        .select("*") \
+        .limit(20) \
+        .execute().data or []
+
+    return data
 
 # ============================================================
-# EXTENSÃO CTI — STATUS AVANÇADO
+# STATUS DO PIPELINE
 # ============================================================
 
-@app.get("/status-avancado")
-def status_avancado():
+@app.get("/pipeline/status")
+def pipeline_status():
 
     linhas = supabase.table("cti_linhas").select("id").execute().data or []
     processado = supabase.table("cti_processado").select("id").execute().data or []
@@ -1066,648 +742,3 @@ def status_avancado():
         "pipeline": "ativo"
     }
 
-# ==========================================
-# PATCH BLINDAGEM PROCESSAMENTO
-# ==========================================
-
-def extrair_campos_seguro(texto):
-    try:
-        d = extrair_campos(texto)  # CORRETO
-        if not isinstance(d, dict):
-            return {}
-        return d
-    except Exception as e:
-        print("[ERRO extrair_campos]", str(e))
-        return {}
-
-import requests
-import os
-
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-
-def interpretar_linha_com_ia(texto):
-
-    try:
-        prompt = f"""
-        Você é um especialista em inteligência comercial.
-
-        Analise a linha abaixo e classifique corretamente:
-
-        TEXTO:
-        {texto}
-
-        Regras IMPORTANTES:
-        - Cliente = empresa que compra (ex: JBS, transportadoras, frigoríficos)
-        - Produto = apenas:
-            - Trailer (TR)
-            - Diesel Truck (DT)
-            - Direct Drive (DD)
-        - Montadora = fabricante do caminhão (VOLVO, SCANIA, VW, IVECO, etc)
-        - Implementador = fabricante do baú (FACCHINI, RANDON, GUERRA, etc)
-
-        NÃO confundir:
-        - Produto ≠ cliente
-        - Montadora ≠ cliente
-        - Implementador ≠ cliente
-
-        Responda APENAS em JSON:
-
-        {{
-            "cliente": "...",
-            "produto": "...",
-            "montadora": "...",
-            "implementador": "..."
-        }}
-        """
-
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {OPENAI_API_KEY}",
-                "Content-Type": "application/json"
-            },
-            json={
-                "model": "gpt-4o-mini",
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0
-            }
-        )
-
-        result = response.json()
-
-        content = result["choices"][0]["message"]["content"]
-
-        import json
-        return json.loads(content)
-
-    except Exception as e:
-        print("[ERRO IA]", str(e))
-        return {
-            "cliente": None,
-            "produto": None,
-            "montadora": None,
-            "implementador": None
-        }
-
-# =========================================
-# CTI — HASH REAL (SEM PERDA DE DADOS)
-# =========================================
-
-def gerar_hash_linha_real(texto_original):
-    if not texto_original:
-        return None
-    
-    return hashlib.md5(texto_original.encode()).hexdigest()
-
-# =========================================
-# EXTENSÃO CTI — CLASSIFICAÇÃO SEMÂNTICA
-# =========================================
-
-def enriquecer_classificacao(d, texto):
-    try:
-        texto_upper = texto.upper()
-
-        cliente = d.get("cliente")
-        produto = d.get("produto")
-
-        # CLASSIFICAÇÃO DE PRODUTO (CARRIER)
-        if any(p in texto_upper for p in ["TRAILER", " TR "]):
-            produto = "TRAILER"
-
-        elif any(p in texto_upper for p in ["DIESEL", "DT"]):
-            produto = "DIESEL TRUCK"
-
-        elif any(p in texto_upper for p in ["DIRECT", "DD"]):
-            produto = "DIRECT DRIVE"
-
-        # PROTEÇÃO CONTRA ERRO DE CLIENTE
-        if cliente and cliente.upper() in [
-            "TRAILER", "TR", "DT", "DD", "DIESEL", "DIRECT"
-        ]:
-            cliente = None
-
-        d["cliente"] = cliente
-        d["produto"] = produto
-
-        return d
-
-    except:
-        return d
-
-# =========================================
-# EXTENSÃO CTI — SANITIZAÇÃO DE ENTIDADES
-# =========================================
-
-def sanitizar_campos(d, texto):
-    try:
-        cliente = d.get("cliente")
-        produto = d.get("produto")
-
-        texto_upper = texto.upper()
-
-        # LISTA REAL DE PRODUTOS (Carrier)
-        produtos_validos = [
-            "TRAILER", "TR",
-            "DIESEL", "DT",
-            "DIRECT", "DD"
-        ]
-
-        # 🔴 REGRA 1 — cliente não pode ser produto
-        if cliente and any(p == cliente.upper() for p in produtos_validos):
-            cliente = None
-
-        # 🔴 REGRA 2 — se produto não está definido, tenta identificar
-        if not produto:
-            if "TRAILER" in texto_upper or " BAU " in texto_upper:
-                produto = "TRAILER"
-            elif "DIESEL" in texto_upper or " 4X2" in texto_upper or "6X2" in texto_upper:
-                produto = "DIESEL TRUCK"
-            elif "DIRECT" in texto_upper:
-                produto = "DIRECT DRIVE"
-
-        d["cliente"] = cliente
-        d["produto"] = produto
-
-        return d
-
-    except:
-        return d
-
-# =========================================
-# EXTENSÃO CTI — PAGINAÇÃO COMPLETA
-# =========================================
-
-def buscar_todas_linhas(nome_tabela):
-    try:
-        tudo = []
-        offset = 0
-        limite = 1000
-
-        while True:
-            res = supabase.table(nome_tabela) \
-                .select("*") \
-                .range(offset, offset + limite - 1) \
-                .execute()
-
-            dados = res.data or []
-
-            if not dados:
-                break
-
-            tudo.extend(dados)
-
-            if len(dados) < limite:
-                break
-
-            offset += limite
-
-        return tudo
-
-    except Exception as e:
-        print("ERRO PAGINACAO:", e)
-        return []
-
-# =========================================
-# CTI — NORMALIZAÇÃO INTELIGENTE DE CAMPOS
-# =========================================
-
-PRODUTOS_VALIDOS = ["TR", "DT", "DD", "TRAILER", "DIESEL", "DIRECT"]
-
-def classificar_linha_cti(row):
-    try:
-        texto = (row.get("conteudo_original") or "").upper()
-
-        partes = [p.strip() for p in texto.split("|") if p.strip()]
-
-        resultado = {
-            "cliente": None,
-            "produto": None
-        }
-
-        for p in partes:
-            if any(x in p for x in ["TR", "TRAILER"]):
-                resultado["produto"] = "TR"
-            elif any(x in p for x in ["DT", "DIESEL"]):
-                resultado["produto"] = "DT"
-            elif any(x in p for x in ["DD", "DIRECT"]):
-                resultado["produto"] = "DD"
-
-        for p in partes:
-            if p in ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]:
-                resultado["cliente"] = p
-                break
-
-        return resultado
-
-    except Exception as e:
-        print("[ERRO classificar_linha_cti]", str(e))
-        return {"cliente": None, "produto": None}
-
-# ============================================================
-# DIAGNÓSTICO CTI — NÃO ALTERA NADA EXISTENTE
-# ============================================================
-
-@app.get("/debug-cti")
-def debug_cti():
-
-    try:
-        linhas = supabase.table("cti_linhas").select("id, hash").execute().data or []
-        processados = supabase.table("cti_processado").select("id").execute().data or []
-
-        total_linhas = len(linhas)
-        total_processados = len(processados)
-
-        # contar hashes únicos
-        hashes = [l.get("hash") for l in linhas if l.get("hash")]
-        hashes_unicos = len(set(hashes))
-
-        return {
-            "status": "ok",
-            "diagnostico": {
-                "linhas_total": total_linhas,
-                "linhas_processadas": total_processados,
-                "hashes_unicos": hashes_unicos,
-                "possivel_sobrescrita": total_linhas != hashes_unicos
-            },
-            "leitura": f"""
-Total de linhas no banco: {total_linhas}
-Total processado: {total_processados}
-Hashes únicos: {hashes_unicos}
-
-Se linhas_total for igual a hashes_unicos:
-→ O sistema está sobrescrevendo dados (perda de histórico)
-
-Se linhas_total for maior que hashes_unicos:
-→ Existe repetição estrutural (OK)
-
-Diferença entre upload e banco indica perda no upload.
-"""
-        }
-
-    except Exception as e:
-        return {
-            "status": "erro",
-            "mensagem": str(e)
-        }
-
-    except Exception as e:
-        print("ERRO classificar_linha_cti:", e)
-        return {}
-
-# ============================================================
-# CTI SAFE MODE — NORMALIZAÇÃO FINAL (NÃO ALTERA O CORE)
-# ============================================================
-
-import hashlib
-
-MONTADORAS = ["VOLVO", "SCANIA", "IVECO", "VW", "VOLKSWAGEN"]
-IMPLEMENTADORES = ["RANDON", "FACCHINI", "GUERRA"]
-
-def normalizar_linha_cti_safe(row):
-    texto = (row.get("conteudo_original") or "").upper()
-
-    partes = [p.strip() for p in texto.split("|") if p.strip()]
-
-    resultado = {
-        "produto": None,
-        "montadora": None,
-        "implementador": None,
-        "hash_safe": hashlib.md5(texto.encode()).hexdigest()
-    }
-
-    for p in partes:
-        if "TR" in p or "TRAILER" in texto:
-            resultado["produto"] = "TR"
-
-        elif "DT" in p or "DIESEL TRUCK" in texto:
-            resultado["produto"] = "DT"
-
-        elif "DD" in p or "DIRECT DRIVE" in texto:
-            resultado["produto"] = "DD"
-
-        for marca in MONTADORAS:
-            if marca in p:
-                resultado["montadora"] = marca
-
-        for imp in IMPLEMENTADORES:
-            if imp in p:
-                resultado["implementador"] = imp
-
-    return resultado
-
-@app.get("/cti-safe-diagnostico")
-def cti_safe_diagnostico():
-    data = supabase.table("cti_linhas").select("*").execute().data or []
-
-    total = len(data)
-
-    produtos = {}
-    montadoras = {}
-    implementadores = {}
-
-    for row in data:
-        info = normalizar_linha_cti_safe(row)
-
-        if info["produto"]:
-            produtos[info["produto"]] = produtos.get(info["produto"], 0) + 1
-
-        if info["montadora"]:
-            montadoras[info["montadora"]] = montadoras.get(info["montadora"], 0) + 1
-
-        if info["implementador"]:
-            implementadores[info["implementador"]] = implementadores.get(info["implementador"], 0) + 1
-
-    return {
-        "status": "ok",
-        "total_linhas": total,
-        "produtos": produtos,
-        "montadoras": montadoras,
-        "implementadores": implementadores
-    }
-
-@app.get("/cti-safe-diagnostico-full")
-def cti_safe_diagnostico_full():
-    try:
-        all_data = []
-        page = 0
-        page_size = 1000
-
-        while True:
-            res = supabase.table("cti_linhas") \
-                .select("*") \
-                .range(page * page_size, (page + 1) * page_size - 1) \
-                .execute()
-
-            data = res.data or []
-
-            if not data:
-                break
-
-            all_data.extend(data)
-
-            if len(data) < page_size:
-                break
-
-            page += 1
-
-        from collections import Counter
-
-        produtos = Counter()
-        montadoras = Counter()
-        implementadores = Counter()
-
-        for row in all_data:
-            texto = (row.get("conteudo_original") or "").upper()
-
-            if "TR" in texto:
-                produtos["TR"] += 1
-            elif "DT" in texto:
-                produtos["DT"] += 1
-            elif "DD" in texto:
-                produtos["DD"] += 1
-
-            for m in ["VOLVO", "SCANIA", "VW", "IVECO"]:
-                if m in texto:
-                    montadoras[m] += 1
-
-            for i in ["RANDON", "FACCHINI", "GUERRA"]:
-                if i in texto:
-                    implementadores[i] += 1
-
-        return {
-            "status": "ok",
-            "total_linhas": len(all_data),
-            "produtos": dict(produtos),
-            "montadoras": dict(montadoras),
-            "implementadores": dict(implementadores)
-        }
-
-    except Exception as e:
-        import traceback
-        return {
-            "status": "erro",
-            "mensagem": str(e),
-            "trace": traceback.format_exc()
-        }
-
-# ============================================================
-# CTI — IA AVANÇADA (VALIDAÇÃO + ENRIQUECIMENTO REAL)
-# ============================================================
-
-import requests
-
-STOPWORDS_CLIENTE = [
-    "SUDESTE", "SUL", "NORTE", "NORDESTE",
-    "SP", "RJ", "MG", "BRASIL",
-    "TR", "DT", "DD", "TRAILER", "DIESEL", "DIRECT"
-]
-
-def validar_cliente(cliente):
-    if not cliente:
-        return None
-
-    c = cliente.upper().strip()
-
-    if len(c) < 3:
-        return None
-
-    if c in STOPWORDS_CLIENTE:
-        return None
-
-    if any(x in c for x in ["REGIAO", "FILIAL", "UNIDADE"]):
-        return None
-
-    return c
-
-
-def padronizar_produto(produto):
-    if not produto:
-        return None
-
-    p = produto.upper()
-
-    if "TR" in p or "TRAILER" in p:
-        return "TR"
-    elif "DT" in p or "DIESEL" in p:
-        return "DT"
-    elif "DD" in p or "DIRECT" in p:
-        return "DD"
-
-    return None
-
-
-def enriquecer_empresa_google(nome):
-    """
-    Simples enriquecimento via busca textual
-    (pode evoluir depois para API oficial)
-    """
-    try:
-        query = f"{nome} empresa transporte frigorifico brasil"
-        url = f"https://www.google.com/search?q={query}"
-
-        return {
-            "nome_validado": nome,
-            "fonte": "google_stub"
-        }
-    except:
-        return {"nome_validado": nome}
-
-
-def enriquecer_empresa_receita(nome):
-    """
-    Placeholder para integração futura com Receita/CNPJ
-    """
-    return {
-        "nome_validado": nome,
-        "cnpj_encontrado": None
-    }
-
-
-def inteligencia_cti_pipeline(d):
-
-    # =========================
-    # CLIENTE
-    # =========================
-    cliente = validar_cliente(d.get("cliente"))
-
-    if cliente:
-        enriched = enriquecer_empresa_google(cliente)
-        cliente = enriched.get("nome_validado")
-
-    d["cliente"] = cliente
-
-    # =========================
-    # PRODUTO
-    # =========================
-    d["produto"] = padronizar_produto(d.get("produto"))
-
-    # =========================
-    # MONTADORA
-    # =========================
-    montadora = d.get("montadora")
-    if montadora:
-        montadora = montadora.upper()
-        if len(montadora) < 3:
-            montadora = None
-
-    d["montadora"] = montadora
-
-    # =========================
-    # IMPLEMENTADOR (OEM REAL)
-    # =========================
-    implementador = d.get("implementador")
-    if implementador:
-        implementador = implementador.upper()
-
-    d["implementador"] = implementador
-    d["oem"] = implementador
-
-    return d
-
-@app.get("/inteligencia/completa")
-def inteligencia_completa():
-
-    data = supabase.table("cti_processado").select("*").execute().data
-
-    total = len(data)
-
-    clientes = {}
-    produtos = {"TR": 0, "DT": 0, "DD": 0}
-
-    for row in data:
-
-        # CLIENTES
-        c = row.get("cliente")
-        if c:
-            clientes[c] = clientes.get(c, 0) + 1
-
-        # PRODUTOS
-        p = row.get("produto")
-        if p in produtos:
-            produtos[p] += 1
-
-    ranking_clientes = sorted(
-        [{"cliente": k, "compras": v} for k, v in clientes.items()],
-        key=lambda x: x["compras"],
-        reverse=True
-    )[:10]
-
-    return {
-        "total_registros": total,
-        "top_clientes": ranking_clientes,
-        "mix_produtos": produtos
-    }
-
-# ============================================================
-# INTEGRAÇÃO CNPJ (BASE INICIAL)
-# ============================================================
-
-def buscar_cnpj(nome):
-    try:
-        url = f"https://brasilapi.com.br/api/cnpj/v1/{nome}"
-        return requests.get(url).json()
-    except:
-        return None
-
-@app.get("/executivo/dashboard")
-def dashboard_executivo():
-
-    data = supabase.table("cti_processado").select("*").execute().data or []
-
-    total_registros = len(data)
-
-    faturamento_total = 0
-    clientes = {}
-    produtos = {"TR": 0, "DT": 0, "DD": 0}
-    regioes = {}
-    concorrentes = {}
-
-    for row in data:
-
-        # FATURAMENTO (seguro)
-        valor = row.get("valor") or 0
-        try:
-            faturamento_total += float(valor)
-        except:
-            pass
-
-        # CLIENTES
-        cliente = row.get("cliente")
-        if cliente:
-            clientes[cliente] = clientes.get(cliente, 0) + 1
-
-        # PRODUTO
-        produto = row.get("produto")
-        if produto in produtos:
-            produtos[produto] += 1
-
-        # REGIÃO
-        estado = row.get("estado") or "NAO DEFINIDO"
-        regioes[estado] = regioes.get(estado, 0) + 1
-
-        # CONCORRÊNCIA
-        concorrente = row.get("concorrente")
-        if concorrente:
-            concorrentes[concorrente] = concorrentes.get(concorrente, 0) + 1
-
-    top_clientes = sorted(
-        [{"cliente": k, "compras": v} for k, v in clientes.items()],
-        key=lambda x: x["compras"],
-        reverse=True
-    )[:10]
-
-    top_concorrentes = sorted(
-        [{"concorrente": k, "ocorrencias": v} for k, v in concorrentes.items()],
-        key=lambda x: x["ocorrencias"],
-        reverse=True
-    )[:10]
-
-    return {
-        "status": "ok",
-        "total_registros": total_registros,
-        "faturamento_total": faturamento_total or 0,
-        "top_clientes": top_clientes or [],
-        "mix_produtos": produtos,
-        "mapa_regional": regioes,
-        "concorrencia": top_concorrentes or []
-    }
