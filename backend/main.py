@@ -527,7 +527,8 @@ async def upload(file: UploadFile = File(...)):
         for linha in linhas:
 
             registros.append({
-                "hash": gerar_hash_unico(linha),
+                "hash": gerar_hash_unico(linha + file.filename + datetime.utcnow().isoformat()),
+                "lote_id": datetime.utcnow().isoformat(),
                 "conteudo": linha,
                 "arquivo": file.filename,
                 "created_at": datetime.utcnow().isoformat()
