@@ -1648,3 +1648,66 @@ def buscar_cnpj(nome):
         return requests.get(url).json()
     except:
         return None
+
+@app.get("/executivo/dashboard")
+def dashboard_executivo():
+
+    data = supabase.table("cti_processado").select("*").execute().data or []
+
+    total_registros = len(data)
+
+    faturamento_total = 0
+    clientes = {}
+    produtos = {"TR": 0, "DT": 0, "DD": 0}
+    regioes = {}
+    concorrentes = {}
+
+    for row in data:
+
+        # FATURAMENTO (seguro)
+        valor = row.get("valor") or 0
+        try:
+            faturamento_total += float(valor)
+        except:
+            pass
+
+        # CLIENTES
+        cliente = row.get("cliente")
+        if cliente:
+            clientes[cliente] = clientes.get(cliente, 0) + 1
+
+        # PRODUTO
+        produto = row.get("produto")
+        if produto in produtos:
+            produtos[produto] += 1
+
+        # REGIÃO
+        estado = row.get("estado") or "NAO DEFINIDO"
+        regioes[estado] = regioes.get(estado, 0) + 1
+
+        # CONCORRÊNCIA
+        concorrente = row.get("concorrente")
+        if concorrente:
+            concorrentes[concorrente] = concorrentes.get(concorrente, 0) + 1
+
+    top_clientes = sorted(
+        [{"cliente": k, "compras": v} for k, v in clientes.items()],
+        key=lambda x: x["compras"],
+        reverse=True
+    )[:10]
+
+    top_concorrentes = sorted(
+        [{"concorrente": k, "ocorrencias": v} for k, v in concorrentes.items()],
+        key=lambda x: x["ocorrencias"],
+        reverse=True
+    )[:10]
+
+    return {
+        "status": "ok",
+        "total_registros": total_registros,
+        "faturamento_total": faturamento_total or 0,
+        "top_clientes": top_clientes or [],
+        "mix_produtos": produtos,
+        "mapa_regional": regioes,
+        "concorrencia": top_concorrentes or []
+    }
