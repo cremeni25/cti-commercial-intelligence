@@ -1603,3 +1603,37 @@ def inteligencia_cti_pipeline(d):
     d["oem"] = implementador
 
     return d
+
+@app.get("/inteligencia/completa")
+def inteligencia_completa():
+
+    data = supabase.table("cti_processado").select("*").execute().data
+
+    total = len(data)
+
+    clientes = {}
+    produtos = {"TR": 0, "DT": 0, "DD": 0}
+
+    for row in data:
+
+        # CLIENTES
+        c = row.get("cliente")
+        if c:
+            clientes[c] = clientes.get(c, 0) + 1
+
+        # PRODUTOS
+        p = row.get("produto")
+        if p in produtos:
+            produtos[p] += 1
+
+    ranking_clientes = sorted(
+        [{"cliente": k, "compras": v} for k, v in clientes.items()],
+        key=lambda x: x["compras"],
+        reverse=True
+    )[:10]
+
+    return {
+        "total_registros": total,
+        "top_clientes": ranking_clientes,
+        "mix_produtos": produtos
+    }
