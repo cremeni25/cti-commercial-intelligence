@@ -407,14 +407,19 @@ def inserir_linhas_brutas(registros):
         lote = registros[i:i+500]
 
         try:
-            res = supabase.table("cti_linhas") \
-                .insert(lote) \
-                .execute()
+    res = supabase.table("cti_linhas") \
+        .insert(lote) \
+        .execute()
 
-            inseridos += len(lote)
+    print("SUPABASE RESPONSE:", res)
+
+    if hasattr(res, "data") and res.data:
+        inseridos += len(res.data)
+    else:
+        log("DB", "ERRO RESPONSE", str(res))
 
         except Exception as e:
-            log("DB", "ERRO UPSERT", str(e))
+            log("DB", "ERRO INSERT", str(e))
 
     return inseridos
 
