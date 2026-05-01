@@ -408,7 +408,7 @@ def inserir_linhas_brutas(registros):
 
         try:
             res = supabase.table("cti_linhas") \
-                .upsert(lote, on_conflict="hash") \
+                .insert(lote) \
                 .execute()
 
             inseridos += len(lote)
@@ -528,7 +528,7 @@ async def upload(file: UploadFile = File(...)):
         for linha in linhas:
 
             registros.append({
-                "hash": gerar_hash_unico(linha + file.filename + datetime.utcnow().isoformat()),
+                "hash": gerar_hash_unico(linha.strip()),
                 "lote_id": datetime.utcnow().isoformat(),
                 "conteudo": linha,
                 "arquivo": file.filename,
