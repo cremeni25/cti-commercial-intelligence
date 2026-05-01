@@ -493,21 +493,25 @@ def processar_linhas_cti():
 
     inseridos = 0
 
-    for i in range(0, len(novos), 500):
-        lote = novos[i:i+500]
+    for i in range(0, len(registros), 500):
+    lote = registros[i:i+500]
 
         try:
-            res = supabase.table("cti_processado") \
-                .upsert(lote, on_conflict="hash") \
+            res = supabase.table("cti_linhas") \
+                .insert(lote) \
                 .execute()
 
-            inseridos += len(lote)
+            print("SUPABASE RESPONSE:", res)
 
-        except Exception as e:
-            log("DB", "ERRO PROCESSADO", str(e))
+            if hasattr(res, "data") and res.data:
+                inseridos += len(res.data)
+            else:
+                log("DB", "ERRO RESPONSE", str(res))
 
-    log("PIPELINE", "INFO", f"{len(novos)} registros processados")
-    log("DB", "INFO", f"{inseridos} inseridos no processado")
+    except Exception as e:
+        log("DB", "ERRO INSERT", str(e))
+        log("PIPELINE", "INFO", f"{len(novos)} registros processados")
+        log("DB", "INFO", f"{inseridos} inseridos no processado")
     
     return {
         "linhas_lidas": len(dados),
