@@ -455,7 +455,7 @@ def processar_base():
 
     novos = []
 
-    for row in data:
+for row in data:
     try:
         texto = row.get("conteudo", "")
         h = gerar_hash_linha_real(texto)
