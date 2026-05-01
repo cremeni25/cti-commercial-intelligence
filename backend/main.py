@@ -458,7 +458,6 @@ def processar_base():
     for row in data:
         try:
             texto = row.get("conteudo", "")
-            texto = row.get("conteudo", "")
             h = gerar_hash_linha_real(texto)
 
             if not texto:
@@ -470,8 +469,45 @@ def processar_base():
             if h in hashes_existentes:
                 continue
 
-            d = interpretar_linha_com_ia(texto)
-            
+        texto_limpo = limpar_texto_para_ia(texto)
+        d = interpretar_linha_com_ia(texto_limpo)
+
+        if not isinstance(d, dict):
+            continue
+
+# =========================
+# LIMPEZA INTELIGENTE
+# =========================
+
+# 🔹 CLIENTE
+cliente = d.get("cliente")
+if cliente:
+    cliente = cliente.upper()
+
+    if cliente in [
+        "UNIDADES", "SUDESTE", "SP", "BRASIL",
+        "TRAILER", "DT", "DD", "DIRECT DRIVE",
+        "DIESEL TRUCK"
+    ]:
+        cliente = None
+
+d["cliente"] = cliente
+
+
+# 🔹 PRODUTO (PADRÃO OFICIAL)
+produto = (d.get("produto") or "").upper()
+
+if "TRAILER" in produto or produto == "TR":
+    produto = "TR"
+elif "DIESEL" in produto or produto == "DT":
+    produto = "DT"
+elif "DIRECT" in produto or produto == "DD":
+    produto = "DD"
+else:
+    produto = None
+
+d["produto"] = produto
+
             reg = {
                 "hash": h,
                 "controle_id": None,
@@ -486,7 +522,9 @@ def processar_base():
                 "ddd": d.get("ddd"),
                 "zona": d.get("zona"),
                 "valor": d.get("valor"),
-                "oem": d.get("oem"),
+                "montadora": d.get("montadora"),
+                "oem": d.get("implementador"),
+                "implementador": d.get("implementador"),
                 "locadora": d.get("locadora"),
                 "canal": d.get("canal"),
                 "concorrente": d.get("concorrente"),
