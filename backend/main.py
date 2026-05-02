@@ -779,3 +779,126 @@ def pipeline_status():
         "pipeline": "ativo"
     }
 
+# ============================================================
+# DASHBOARD EXECUTIVO V2 (SEM RISCO - NÃO ALTERA NADA EXISTENTE)
+# ============================================================
+
+from collections import Counter
+
+LIXO_CLIENTE_EXEC = [
+    "UNIDADES", "SUDESTE", "SUL", "NORTE", "NORDESTE",
+    "SP", "BRASIL", "FILIAL", "MATRIZ"
+]
+
+MARCAS_EQUIPAMENTO_EXEC = [
+    "CARRIER",
+    "THERMO KING",
+    "THERMOKING",
+    "FRIGOKING",
+    "THERMOSTAR",
+    "RODOFRIO",
+    "THERMOFLEX"
+]
+
+def limpar_cliente_exec(cliente):
+
+    if not cliente:
+        return None
+
+    c = str(cliente).upper().strip()
+
+    if c in LIXO_CLIENTE_EXEC:
+        return None
+
+    if any(m in c for m in MARCAS_EQUIPAMENTO_EXEC):
+        return None
+
+    if len(c) < 4:
+        return None
+
+    return c
+
+
+def limpar_produto_exec(produto):
+
+    if not produto:
+        return None
+
+    p = str(produto).upper()
+
+    if "TRAILER" in p or p == "TR":
+        return "TR"
+
+    if "DIESEL" in p or p == "DT":
+        return "DT"
+
+    if "DIRECT" in p or p == "DD":
+        return "DD"
+
+    return None
+
+
+@app.get("/dashboard/executivo/v2")
+def dashboard_executivo_v2():
+
+    data = carregar_base_processada()
+
+    total = len(data)
+
+    clientes = Counter()
+    produtos = Counter()
+    estados = Counter()
+    montadoras = Counter()
+    implementadores = Counter()
+    concorrentes = Counter()
+
+    faturamento_total = 0
+
+    for row in data:
+
+        cliente = limpar_cliente_exec(row.get("cliente"))
+        produto = limpar_produto_exec(row.get("produto"))
+
+        estado = row.get("estado")
+        montadora = row.get("montadora")
+        implementador = row.get("implementador")
+        concorrente = row.get("concorrente")
+        valor = row.get("valor") or 0
+
+        if cliente:
+            clientes[cliente] += 1
+
+        if produto:
+            produtos[produto] += 1
+
+        if estado:
+            estados[estado] += 1
+
+        if montadora:
+            montadoras[montadora] += 1
+
+        if implementador:
+            implementadores[implementador] += 1
+
+        if concorrente:
+            concorrentes[concorrente] += 1
+
+        try:
+            faturamento_total += float(valor)
+        except:
+            pass
+
+    return {
+        "status": "ok",
+        "resumo": {
+            "total_registros": total,
+            "faturamento_total": round(faturamento_total, 2),
+            "ticket_medio": round(faturamento_total / total, 2) if total > 0 else 0
+        },
+        "clientes": clientes.most_common(10),
+        "produtos": produtos.most_common(5),
+        "estados": estados.most_common(10),
+        "montadoras": montadoras.most_common(10),
+        "implementadores": implementadores.most_common(10),
+        "concorrentes": concorrentes.most_common(10)
+    }
