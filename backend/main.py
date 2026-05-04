@@ -413,10 +413,10 @@ def inserir_linhas_brutas(registros):
 
             print("SUPABASE RESPONSE:", res)
 
-            if hasattr(res, "data") and res.data:
-                inseridos += len(res.data)
+            if hasattr(res, "error") and res.error:
+                log("DB", "ERRO INSERT", str(res.error))
             else:
-                log("DB", "ERRO RESPONSE", str(res))
+                inseridos += len(lote)
 
         except Exception as e:
             log("DB", "ERRO INSERT", str(e))
@@ -511,11 +511,11 @@ def processar_linhas_cti():
 
             print("PROCESSADO RESPONSE:", res)
 
-            if hasattr(res, "data") and res.data:
-                inseridos += len(res.data)
+            if hasattr(res, "error") and res.error:
+                log("DB", "ERRO PROCESSADO", str(res.error))
             else:
-                log("DB", "ERRO RESPONSE PROCESSADO", str(res))
-
+                inseridos += len(lote)
+                
         except Exception as e:
             log("DB", "ERRO INSERT PROCESSADO", str(e))
 
