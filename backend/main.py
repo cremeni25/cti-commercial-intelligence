@@ -426,9 +426,46 @@ def inserir_linhas_brutas(registros):
 # ============================================================
 # PROCESSAMENTO COMPLETO
 # ============================================================
+# ============================================================
+# PROCESSAMENTO COMPLETO
+# ============================================================
+
+def corrigir_partes(partes):
+
+    partes = [p.strip() for p in partes if p.strip()]
+
+    produtos_validos = ["TR", "DT", "DD"]
+
+    # CASO NORMAL
+    if len(partes) >= 6:
+        return partes
+
+    # LINHA CURTA / DESLOCADA
+    if len(partes) == 3:
+
+        fabricante = partes[0]
+        modelo = partes[1]
+        vendedor = partes[2]
+
+        return [
+            fabricante,
+            None,
+            modelo,
+            None,
+            vendedor,
+            None,
+            None,
+            None
+        ]
+
+    # FALLBACK
+    while len(partes) < 8:
+        partes.append(None)
+
+    return partes
+
 
 def processar_linhas_cti():
-
     dados = []
     pagina = 0
     limite = 1000
@@ -475,7 +512,7 @@ def processar_linhas_cti():
 
             d = processar_texto_com_ia(texto)
 
-            partes = [p.strip() for p in texto.split("|")]
+            partes = corrigir_partes(texto.split("|"))
 
             registro = {
                 "hash": hash_linha,
