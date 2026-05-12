@@ -475,17 +475,20 @@ def processar_linhas_cti():
 
             d = processar_texto_com_ia(texto)
 
+            partes = [p.strip() for p in texto.split("|")]
+
             registro = {
                 "hash": hash_linha,
-                "cliente": d.get("cliente"),
-                "produto": d.get("produto"),
-                "montadora": d.get("montadora"),
-                "implementador": d.get("implementador"),
-                "cidade": d.get("cidade"),
-                "estado": d.get("estado"),
-                "valor": d.get("valor") or 0,
-                "concorrente": d.get("concorrente"),
-                "observacoes": d.get("observacoes"),
+
+                "fabricante_equipamento": partes[0] if len(partes) > 0 else None,
+                "produto": partes[1] if len(partes) > 1 else None,
+                "modelo_equipamento": partes[2] if len(partes) > 2 else None,
+                "regiao": partes[3] if len(partes) > 3 else None,
+                "vendedor": partes[4] if len(partes) > 4 else None,
+                "status": partes[5] if len(partes) > 5 else None,
+                "motivo": partes[6] if len(partes) > 6 else None,
+                "ocorrencia": partes[7] if len(partes) > 7 else None,
+
                 "conteudo_original": texto,
                 "created_at": datetime.utcnow().isoformat()
             }
