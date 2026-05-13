@@ -722,6 +722,8 @@ def processar_linhas_cti():
 
         except Exception as e:
             log("PIPELINE", "ERRO LINHA", str(e))
+            print("TEXTO ORIGINAL:", texto)
+            print("DADOS:", d if 'd' in locals() else None)
             continue
 
     # ========================
