@@ -485,7 +485,7 @@ STATUS_VALIDOS = [
     "SEM SOLUCAO TECNICA"
 ]
 
-def tokenizar_linha_cti(texto):
+def nucleo_semantico_cti(texto):
 
     if not texto:
         return {}
@@ -503,70 +503,109 @@ def tokenizar_linha_cti(texto):
         "regiao": None,
         "vendedor": None,
         "status": None,
-        "motivo": None
+        "motivo": None,
+        "ocorrencia": None,
+        "score_geral": 0.0
     }
 
-    for p in partes:
+    # ========================================================
+    # PRESERVAÇÃO POSICIONAL
+    # ========================================================
 
-        up = p.upper()
+    if len(partes) > 0:
+        resultado["fabricante_equipamento"] = partes[0]
 
-        # FABRICANTE
+    if len(partes) > 1:
+        resultado["produto"] = partes[1]
 
-        if up in FABRICANTES:
-            resultado["fabricante_equipamento"] = p
-            continue
+    if len(partes) > 2:
+        resultado["modelo_equipamento"] = partes[2]
 
-        # PRODUTO
+    if len(partes) > 3:
+        resultado["regiao"] = partes[3]
 
-        if up in ["TR", "DT", "DD"]:
-            resultado["produto"] = up
-            continue
+    if len(partes) > 4:
+        resultado["vendedor"] = partes[4]
 
-        # REGIÃO
+    if len(partes) > 5:
+        resultado["status"] = partes[5]
 
-        if "REGIAO" in up:
-            resultado["regiao"] = p
-            continue
+    if len(partes) > 6:
+        resultado["motivo"] = partes[6]
 
-        # STATUS
+    if len(partes) > 7:
+        resultado["ocorrencia"] = partes[7]
 
-        if up in STATUS_VALIDOS:
-            resultado["status"] = p
-            continue
+    # ========================================================
+    # VALIDAÇÃO SEMÂNTICA
+    # ========================================================
 
-        # MOTIVO
+    score = 0
 
-        if up in [
-            "CONCORRENCIA",
-            "USADO",
-            "PRECO"
-        ]:
-            resultado["motivo"] = p
-            continue
+    fabricante = str(
+        resultado.get("fabricante_equipamento") or ""
+    ).upper()
 
-        # MODELOS
+    produto = str(
+        resultado.get("produto") or ""
+    ).upper()
 
-        if any(x in up for x in [
-            "VECTOR",
-            "SUPRA",
-            "XARIOS",
-            "CITIMAX",
-            "X4"
-        ]):
-            resultado["modelo_equipamento"] = p
-            continue
+    regiao = str(
+        resultado.get("regiao") or ""
+    ).upper()
 
-        # VENDEDOR
+    status = str(
+        resultado.get("status") or ""
+    ).upper()
 
-        if (
-            len(up.split()) <= 3
-            and len(up) >= 3
-            and not resultado["vendedor"]
-        ):
-            resultado["vendedor"] = p
+    vendedor = resultado.get("vendedor")
+
+    # FABRICANTES
+
+    fabricantes_validos = [
+        "CARRIER",
+        "THERMOKING",
+        "THERMO KING",
+        "THERMOSTAR",
+        "FRIGOKING",
+        "RODOFRIO",
+        "THERMOFLEX"
+    ]
+
+    if any(f in fabricante for f in fabricantes_validos):
+        score += 0.2
+
+    # PRODUTO
+
+    if produto in ["TR", "DT", "DD"]:
+        score += 0.2
+
+    # REGIÃO
+
+    if "REGIAO" in regiao:
+        score += 0.2
+
+    # STATUS
+
+    status_validos = [
+        "APROVADO",
+        "PERDIDO",
+        "GANHO",
+        "EM NEGOCIACAO",
+        "SEM SOLUCAO TECNICA"
+    ]
+
+    if status in status_validos:
+        score += 0.2
+
+    # VENDEDOR
+
+    if vendedor and len(str(vendedor).strip()) >= 3:
+        score += 0.2
+
+    resultado["score_geral"] = round(score, 2)
 
     return resultado
-
 
 def processar_linhas_cti():
     dados = []
@@ -613,7 +652,7 @@ def processar_linhas_cti():
 
         try:
 
-            d = tokenizar_linha_cti(texto)
+            d = nucleo_semantico_cti(texto)
 
             # ====================================================
             # SCORE DE CONFIANÇA CTI
@@ -692,21 +731,20 @@ def processar_linhas_cti():
                 ) / 5,
                 2
             )
-            
-            partes = corrigir_partes(texto.split("|"))
 
             registro = {
+
                 "hash": hash_linha,
 
-                "fabricante_equipamento": partes[0] if len(partes) > 0 else None,
-                "produto": partes[1] if len(partes) > 1 else None,
-                "modelo_equipamento": partes[2] if len(partes) > 2 else None,
-                "regiao": partes[3] if len(partes) > 3 else None,
-                "vendedor": partes[4] if len(partes) > 4 else None,
-                "status": partes[5] if len(partes) > 5 else None,
-                "motivo": partes[6] if len(partes) > 6 else None,
-                "ocorrencia": partes[7] if len(partes) > 7 else None,
-
+                "fabricante_equipamento": d.get("fabricante_equipamento"),
+                "produto": d.get("produto"),
+                "modelo_equipamento": d.get("modelo_equipamento"),
+                "regiao": d.get("regiao"),
+                "vendedor": d.get("vendedor"),
+                "status": d.get("status"),
+                "motivo": d.get("motivo"),
+                "ocorrencia": d.get("ocorrencia"),
+            
                 "conteudo_original": texto,
                 "confianca_fabricante": confianca_fabricante,
                 "confianca_modelo": confianca_modelo,
