@@ -613,7 +613,7 @@ def processar_linhas_cti():
 
         try:
 
-            d = processar_texto_com_ia(texto)
+            d = tokenizar_linha_cti(texto)
 
             # ====================================================
             # SCORE DE CONFIANÇA CTI
