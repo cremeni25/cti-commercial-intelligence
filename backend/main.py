@@ -512,6 +512,84 @@ def processar_linhas_cti():
 
             d = processar_texto_com_ia(texto)
 
+            # ====================================================
+            # SCORE DE CONFIANÇA CTI
+            # ====================================================
+
+            confianca_fabricante = 0.5
+            confianca_modelo = 0.5
+            confianca_regiao = 0.5
+            confianca_status = 0.5
+            confianca_vendedor = 0.5
+
+            fabricante = d.get("fabricante_equipamento")
+            modelo = d.get("modelo_equipamento")
+            regiao = d.get("regiao")
+            status = d.get("status")
+            vendedor = d.get("vendedor")
+
+            # FABRICANTE
+
+            if fabricante:
+
+                if fabricante.upper() in [
+                    "CARRIER",
+                    "THERMOKING",
+                    "THERMO KING",
+                    "THERMOSTAR",
+                    "FRIGOKING",
+                    "RODOFRIO",
+                    "THERMOFLEX"
+                ]:
+                    confianca_fabricante = 0.95
+
+            # MODELO
+
+            if modelo:
+
+                if len(modelo.strip()) >= 4:
+                    confianca_modelo = 0.90
+
+            # REGIAO
+
+            if regiao:
+
+                if "REGIAO" in regiao.upper():
+                    confianca_regiao = 0.90
+
+            # STATUS
+
+            if status:
+
+                if status.upper() in [
+                    "APROVADO",
+                    "PERDIDO",
+                    "GANHO",
+                    "EM NEGOCIACAO",
+                    "SEM SOLUCAO TECNICA"
+                ]:
+                    confianca_status = 0.95
+
+            # VENDEDOR
+
+            if vendedor:
+
+                if len(vendedor.strip()) >= 3:
+                    confianca_vendedor = 0.85
+
+            # SCORE GERAL
+
+            score_geral = round(
+                (
+                    confianca_fabricante +
+                    confianca_modelo +
+                    confianca_regiao +
+                    confianca_status +
+                    confianca_vendedor
+                ) / 5,
+                2
+            )
+            
             partes = corrigir_partes(texto.split("|"))
 
             registro = {
@@ -527,6 +605,13 @@ def processar_linhas_cti():
                 "ocorrencia": partes[7] if len(partes) > 7 else None,
 
                 "conteudo_original": texto,
+                "confianca_fabricante": confianca_fabricante,
+                "confianca_modelo": confianca_modelo,
+                "confianca_regiao": confianca_regiao,
+                "confianca_status": confianca_status,
+                "confianca_vendedor": confianca_vendedor,
+                "score_geral": score_geral,
+                
                 "created_at": datetime.utcnow().isoformat()
             }
 
