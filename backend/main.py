@@ -326,7 +326,7 @@ def sanitizar_dados_ia(d):
 # PIPELINE IA
 # ============================================================
 
-def processar_texto_com_ia(texto):
+def tokenizar_linha_cti(texto):
 
     texto_limpo = limpar_texto(texto)
 
@@ -463,6 +463,109 @@ def corrigir_partes(partes):
         partes.append(None)
 
     return partes
+
+# ============================================================
+# TOKENIZAÇÃO CONTROLADA CTI
+# ============================================================
+
+FABRICANTES = [
+    "CARRIER",
+    "THERMOKING",
+    "THERMO KING",
+    "THERMOSTAR",
+    "FRIGOKING",
+    "RODOFRIO",
+    "THERMOFLEX"
+]
+
+STATUS_VALIDOS = [
+    "APROVADO",
+    "PERDIDO",
+    "EM NEGOCIACAO",
+    "SEM SOLUCAO TECNICA"
+]
+
+def tokenizar_linha_cti(texto):
+
+    if not texto:
+        return {}
+
+    partes = [
+        p.strip()
+        for p in texto.split("|")
+        if p.strip()
+    ]
+
+    resultado = {
+        "fabricante_equipamento": None,
+        "produto": None,
+        "modelo_equipamento": None,
+        "regiao": None,
+        "vendedor": None,
+        "status": None,
+        "motivo": None
+    }
+
+    for p in partes:
+
+        up = p.upper()
+
+        # FABRICANTE
+
+        if up in FABRICANTES:
+            resultado["fabricante_equipamento"] = p
+            continue
+
+        # PRODUTO
+
+        if up in ["TR", "DT", "DD"]:
+            resultado["produto"] = up
+            continue
+
+        # REGIÃO
+
+        if "REGIAO" in up:
+            resultado["regiao"] = p
+            continue
+
+        # STATUS
+
+        if up in STATUS_VALIDOS:
+            resultado["status"] = p
+            continue
+
+        # MOTIVO
+
+        if up in [
+            "CONCORRENCIA",
+            "USADO",
+            "PRECO"
+        ]:
+            resultado["motivo"] = p
+            continue
+
+        # MODELOS
+
+        if any(x in up for x in [
+            "VECTOR",
+            "SUPRA",
+            "XARIOS",
+            "CITIMAX",
+            "X4"
+        ]):
+            resultado["modelo_equipamento"] = p
+            continue
+
+        # VENDEDOR
+
+        if (
+            len(up.split()) <= 3
+            and len(up) >= 3
+            and not resultado["vendedor"]
+        ):
+            resultado["vendedor"] = p
+
+    return resultado
 
 
 def processar_linhas_cti():
