@@ -833,8 +833,7 @@ async def upload(file: UploadFile = File(...)):
         conteudo = await file.read()
 
         registros = extrair_registros_estruturados(conteudo, file.filename)
-        registros = []
-
+        
         for r in registros:
 
             texto_base = json.dumps(r, ensure_ascii=False)
@@ -850,7 +849,7 @@ async def upload(file: UploadFile = File(...)):
         
         return {
             "status": "ok",
-            "linhas_extraidas": len(linhas),
+            "linhas_extraidas": len(registros),
             "inseridos": inseridos
         }
 
