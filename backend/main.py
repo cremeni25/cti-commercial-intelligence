@@ -399,6 +399,17 @@ def extrair_registros_estruturados(conteudo: bytes, nome_arquivo: str):
                     "produto": row.get("PRODUTO"),
                     "modelo_equipamento": row.get("MODELO EQUIPAMENTO"),
 
+                    "conteudo": " | ".join([
+                        str(row.get("FABRICANTE EQUIPAMENTO", "")),
+                        str(row.get("PRODUTO", "")),
+                        str(row.get("MODELO EQUIPAMENTO", "")),
+                        str(row.get("REGIAO", "")),
+                        str(row.get("RESPONSAVEL", "")),
+                        str(row.get("STATUS", "")),
+                        str(row.get("MOTIVO", "")),
+                        str(row.get("OCORRENCIA", ""))
+                    ]),
+                    
                     "valor": row.get("VALOR"),
 
                     "aba": aba,
