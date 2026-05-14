@@ -348,43 +348,69 @@ from io import BytesIO
 # EXTRAÇÃO UNIVERSAL DE LINHAS
 # ============================================================
 
-def extrair_linhas_arquivo(conteudo: bytes, nome_arquivo: str):
+def extrair_registros_estruturados(conteudo: bytes, nome_arquivo: str):
 
-    linhas = []
+    registros = []
 
     try:
 
-        if nome_arquivo.lower().endswith((".xlsx", ".xls")):
+        xls = pd.ExcelFile(BytesIO(conteudo))
 
-            xls = pd.ExcelFile(BytesIO(conteudo))
+        for aba in xls.sheet_names:
 
-            for aba in xls.sheet_names:
+            df = xls.parse(aba, dtype=str)
 
-                df = xls.parse(aba, dtype=str)
-                df = df.fillna("")
+            df.columns = [str(c).strip().upper() for c in df.columns]
 
-                for _, row in df.iterrows():
+            df = df.fillna("")
 
-                    linha = " | ".join([
-                        str(v) for v in row.values if str(v).strip()
-                    ])
+            for _, row in df.iterrows():
 
-                    if linha and len(linha) > 5:
-                        linhas.append(linha)
+                registro = {
 
-        else:
+                    "data": row.get("DATA"),
+                    "responsavel": row.get("RESPONSAVEL"),
+                    "regiao": row.get("REGIAO"),
+                    "estado": row.get("ESTADO"),
+                    "ddd": row.get("DDD"),
+                    "municipio": row.get("MUNICIPIO"),
+                    "sub_regiao": row.get("SUB-REGIAO"),
 
-            texto = conteudo.decode("utf-8", errors="ignore")
+                    "cnpj_faturado": row.get("CNPJ_FATURADO"),
 
-            for l in texto.split("\n"):
-                if l.strip():
-                    linhas.append(l.strip())
+                    "fabricante_caminhao": row.get("FABRICANTE CAMINHAO"),
+                    "modelo_caminhao": row.get("MODELO CAMINHAO"),
+
+                    "eixo": row.get("EIXO"),
+                    "tipo_veiculo": row.get("TIPO_VEICULO"),
+
+                    "chassi": row.get("CHASSI"),
+                    "placa": row.get("PLACA"),
+
+                    "implementadora": row.get("IMPLEMENTADORA"),
+
+                    "nome_proprietario": row.get("NOME_PROPRIETARIO"),
+
+                    "status": row.get("STATUS"),
+                    "motivo": row.get("MOTIVO"),
+                    "ocorrencia": row.get("OCORRENCIA"),
+
+                    "fabricante_equipamento": row.get("FABRICANTE EQUIPAMENTO"),
+                    "produto": row.get("PRODUTO"),
+                    "modelo_equipamento": row.get("MODELO EQUIPAMENTO"),
+
+                    "valor": row.get("VALOR"),
+
+                    "aba": aba,
+                    "arquivo": nome_arquivo
+                }
+
+                registros.append(registro)
 
     except Exception as e:
         log("UPLOAD", "ERRO EXTRAÇÃO", str(e))
 
-    return linhas
-
+    return registros
 # ============================================================
 # HASH REAL (SEM PERDA)
 # ============================================================
@@ -806,18 +832,16 @@ async def upload(file: UploadFile = File(...)):
 
         conteudo = await file.read()
 
-        linhas = extrair_linhas_arquivo(conteudo, file.filename)
-
+        registros = extrair_registros_estruturados(conteudo, file.filename)
         registros = []
 
-        for linha in linhas:
+        for r in registros:
 
-            registros.append({
-                "hash": gerar_hash_unico(linha.strip()),
-                "conteudo": linha,
-                "arquivo": file.filename,
-                "created_at": datetime.utcnow().isoformat()
-            })
+            texto_base = json.dumps(r, ensure_ascii=False)
+
+            r["hash"] = gerar_hash_unico(texto_base)
+
+            r["created_at"] = datetime.utcnow().isoformat()
 
         inseridos = inserir_linhas_brutas(registros)
 
