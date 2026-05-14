@@ -838,7 +838,17 @@ async def upload(file: UploadFile = File(...)):
 
             texto_base = json.dumps(r, ensure_ascii=False)
 
-            r["hash"] = gerar_hash_unico(texto_base)
+            texto_hash = "|".join([
+                str(r.get("data", "")),
+                str(r.get("responsavel", "")),
+                str(r.get("municipio", "")),
+                str(r.get("chassi", "")),
+                str(r.get("placa", "")),
+                str(r.get("modelo_equipamento", "")),
+                str(r.get("nome_proprietario", ""))
+            ])
+
+            r["hash"] = gerar_hash_unico(texto_hash)
 
             r["created_at"] = datetime.utcnow().isoformat()
 
