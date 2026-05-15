@@ -769,31 +769,31 @@ def processar_linhas_cti():
                 2
             )
 
-                registro = {
+            registro = {
 
-                    "fabricante_equipamento": d.get("fabricante_equipamento"),
-                    "produto": d.get("produto"),
-                    "modelo_equipamento": d.get("modelo_equipamento"),
-                    "regiao": d.get("regiao"),
-                    "vendedor": d.get("vendedor"),
-                    "status": d.get("status"),
-                    "motivo": d.get("motivo"),
-                    "ocorrencia": d.get("ocorrencia"),
+                "fabricante_equipamento": d.get("fabricante_equipamento"),
+                "produto": d.get("produto"),
+                "modelo_equipamento": d.get("modelo_equipamento"),
+                "regiao": d.get("regiao"),
+                "vendedor": d.get("vendedor"),
+                "status": d.get("status"),
+                "motivo": d.get("motivo"),
+                "ocorrencia": d.get("ocorrencia"),
 
-                    "conteudo_original": texto,
-                    "confianca_fabricante": confianca_fabricante,
-                    "confianca_modelo": confianca_modelo,
-                    "confianca_regiao": confianca_regiao,
-                    "confianca_status": confianca_status,
-                    "confianca_vendedor": confianca_vendedor,
-                    "score_geral": score_geral,
+                "conteudo_original": texto,
+                "confianca_fabricante": confianca_fabricante,
+                "confianca_modelo": confianca_modelo,
+                "confianca_regiao": confianca_regiao,
+                "confianca_status": confianca_status,
+                "confianca_vendedor": confianca_vendedor,
+                "score_geral": score_geral,
 
-                    "created_at": datetime.utcnow().isoformat()
-                }
+                "created_at": datetime.utcnow().isoformat()
+            }
 
-                registro["hash"] = gerar_hash_unico(
-                    json.dumps(registro, ensure_ascii=False, sort_keys=True)
-                )
+            registro["hash"] = gerar_hash_unico(
+                json.dumps(registro, ensure_ascii=False, sort_keys=True)
+            )
 
             novos.append(registro)
 
