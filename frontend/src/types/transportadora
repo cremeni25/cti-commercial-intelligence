@@ -1,0 +1,45 @@
+export interface Transportadora {
+  id: number
+
+  nome: string
+
+  cidade: string
+  estado: string
+  regiao: string
+
+  ddds: string[]
+
+  segmento:
+    | "Congelados"
+    | "Resfriados"
+    | "Multitemperatura"
+    | "Medicamentos"
+    | "Perecíveis"
+    | "Distribuição"
+
+  quantidadeFrota?: number
+
+  implementadorasRelacionadas: string[]
+
+  montadorasRelacionadas: string[]
+
+  equipamentosRelacionados: string[]
+
+  principaisConcorrentes?: string[]
+
+  vendedorResponsavel?: string
+
+  potencialMercado: "Alto" | "Médio" | "Baixo"
+
+  scoreOperacional: number
+  scoreComercial: number
+
+  status: "Ativo" | "Inativo"
+
+  observacoes?: string
+
+  ativo: boolean
+
+  createdAt?: string
+  updatedAt?: string
+}

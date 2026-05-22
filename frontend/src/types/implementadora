@@ -1,0 +1,43 @@
+export interface Implementadora {
+  id: number
+
+  nome: string
+
+  cidade: string
+  estado: string
+  regiao: string
+
+  ddds: string[]
+
+  status: "Ativo" | "Inativo"
+
+  scoreOperacional: number
+  scoreComercial: number
+
+  potencialMercado: "Alto" | "Médio" | "Baixo"
+
+  responsavel: string
+
+  telefone: string
+  email?: string
+
+  ultimaInteracao?: string
+  proximoFollowUp?: string
+
+  montadorasRelacionadas: string[]
+
+  equipamentosRelacionados: string[]
+
+  transportadorasRelacionadas?: string[]
+
+  concorrentesRelacionados?: string[]
+
+  oportunidadesAbertas?: number
+
+  observacoes?: string
+
+  ativo: boolean
+
+  createdAt?: string
+  updatedAt?: string
+}

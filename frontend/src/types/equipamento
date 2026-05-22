@@ -1,0 +1,34 @@
+export interface Equipamento {
+  id: number
+
+  fabricante: string
+  modelo: string
+
+  categoria:
+    | "Refrigeração"
+    | "Congelados"
+    | "Multitemperatura"
+    | "Leve"
+    | "Pesado"
+
+  aplicacao: string[]
+
+  regiaoAtuacao: string[]
+
+  implementadorasRelacionadas: string[]
+  montadorasRelacionadas: string[]
+
+  concorrentesRelacionados: string[]
+
+  marketShare?: number
+
+  scoreComercial: number
+  scoreOperacional: number
+
+  status: "Ativo" | "Descontinuado"
+
+  observacoes?: string
+
+  createdAt?: string
+  updatedAt?: string
+}

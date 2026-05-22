@@ -1,0 +1,30 @@
+export interface Regiao {
+  id: number
+
+  nome: string
+  sigla: string
+
+  estados: string[]
+  ddds: string[]
+
+  potencialMercado: "Alto" | "Médio" | "Baixo"
+
+  scoreOperacional: number
+  scoreComercial: number
+
+  quantidadeClientes: number
+  quantidadeImplementadoras: number
+  quantidadeMontadoras: number
+
+  concorrentesDominantes: string[]
+
+  vendedorResponsavel?: string
+  gerenteResponsavel?: string
+
+  observacoes?: string
+
+  ativo: boolean
+
+  createdAt?: string
+  updatedAt?: string
+}

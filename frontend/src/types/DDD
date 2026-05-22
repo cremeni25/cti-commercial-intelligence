@@ -1,0 +1,28 @@
+export interface DDD {
+  id: number
+
+  codigo: string
+
+  estado: string
+  regiao: string
+
+  cidades: string[]
+
+  potencialMercado: "Alto" | "Médio" | "Baixo"
+
+  scoreOperacional: number
+  scoreComercial: number
+
+  quantidadeTransportadoras: number
+  quantidadeImplementadoras: number
+  quantidadeMontadoras: number
+
+  principaisConcorrentes: string[]
+
+  ativo: boolean
+
+  observacoes?: string
+
+  createdAt?: string
+  updatedAt?: string
+}

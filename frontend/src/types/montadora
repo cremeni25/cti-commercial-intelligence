@@ -1,0 +1,33 @@
+export interface Montadora {
+  id: number
+
+  nome: string
+
+  cidade: string
+  estado: string
+  regiao: string
+
+  ddds: string[]
+
+  implementadorasRelacionadas: string[]
+
+  equipamentosRelacionados: string[]
+
+  vendedoresRelacionados?: string[]
+
+  potencialMercado: "Alto" | "Médio" | "Baixo"
+
+  scoreComercial: number
+  scoreOperacional: number
+
+  marketShare?: number
+
+  concorrentesDiretos?: string[]
+
+  status: "Ativo" | "Inativo"
+
+  observacoes?: string
+
+  createdAt?: string
+  updatedAt?: string
+}
