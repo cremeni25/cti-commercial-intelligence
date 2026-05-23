@@ -106,8 +106,7 @@ export default function Sidebar() {
       {/* MENU */}
       <nav className="flex-1 p-4 space-y-2">
         {menuItems.map((item) => {
-          const active =
-            pathname === item.href
+          const active = pathname === item.href
 
           return (
             <Link
@@ -133,7 +132,7 @@ export default function Sidebar() {
                   />
                 ) : (
                   <span className="text-lg">
-                    {item.icon}
+                    {typeof item.icon === "string" ? item.icon : null}
                   </span>
                 )}
               </div>
