@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+<meta charset="UTF-8">
+<title>CTI Dashboard</title>
+
+</head>
+
+<body>
+
+<h1>CTI Dashboard</h1>
+
+<div id="status"></div>
+
+<script>
+
+fetch("https://cti-backend-5ugf.onrender.com/cti/status")
+.then(r => r.json())
+.then(data => {
+
+document.getElementById("status").innerText =
+JSON.stringify(data,null,2)
+
+})
+
+</script>
+
+</body>
+
+</html>

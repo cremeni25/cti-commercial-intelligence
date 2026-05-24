@@ -6,7 +6,7 @@ import { Implementadora } from "../types/implementadora.types"
 
 import {
   gerarInsightsImplementadora,
-} from "@/services/IA/implementadoraInsights"
+} from "@/modules/implementadoras/ai/implementadoraInsights"
 
 interface Props {
   implementadora: Implementadora | null

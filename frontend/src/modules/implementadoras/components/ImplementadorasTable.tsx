@@ -3,8 +3,11 @@
 import { Implementadora } from "../types/implementadora.types"
 
 import {
-  gerarInsightsImplementadora,
-} from "@/services/IA/implementadoraInsights"
+  ordenarImplementadoras,
+  getRankingBadge,
+  getScoreColor,
+  gerarInsights,
+} from "../services/implementadoras.engine"
 
 interface Props {
   implementadoras: Implementadora[]
@@ -19,47 +22,13 @@ export default function ImplementadorasTable({
   onSelectImplementadora,
 }: Props) {
   /*
-   * RANKING EXECUTIVO
+   * ENGINE OPERACIONAL
    */
 
-  const implementadorasOrdenadas = [
-    ...implementadoras,
-  ].sort((a, b) => b.score - a.score)
-
-  /*
-   * BADGES EXECUTIVAS
-   */
-
-  function getRankingBadge(
-    index: number
-  ) {
-    if (index === 0)
-      return "👑 Líder Operacional"
-
-    if (index === 1)
-      return "🔥 Alta Expansão"
-
-    if (index === 2)
-      return "⚡ Estratégica"
-
-    return "📊 Monitoramento"
-  }
-
-  /*
-   * SCORE VISUAL
-   */
-
-  function getScoreColor(
-    score: number
-  ) {
-    if (score >= 90)
-      return "text-cyan-400"
-
-    if (score >= 75)
-      return "text-yellow-400"
-
-    return "text-red-400"
-  }
+  const implementadorasOrdenadas =
+    ordenarImplementadoras(
+      implementadoras
+    )
 
   return (
     <div className="w-full max-w-full bg-[#071226] border border-[#13203f] rounded-3xl p-6 overflow-hidden">
@@ -148,7 +117,7 @@ export default function ImplementadorasTable({
                 index
               ) => {
                 const insights =
-                  gerarInsightsImplementadora(
+                  gerarInsights(
                     implementadora
                   )
 
