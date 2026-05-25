@@ -1,74 +1,134 @@
-# CTI — Arquitetura Oficial
+# CTI — Commercial Technology & Intelligence
 
-## Estrutura Oficial
+## Arquitetura Oficial do Projeto
+
+O CTI é uma plataforma enterprise modular de inteligência comercial,
+territorial, operacional e estratégica.
+
+A arquitetura foi desenhada para:
+- escalabilidade global
+- modularização operacional
+- IA multiagente
+- CRM corporativo
+- scoring inteligente
+- analytics operacional
+- integração Supabase
+- APIs enterprise
+- automação operacional
+
+---
+
+# Estrutura Oficial
 
 src/
-  app/
-  core/
-  modules/
-  shared/
 
----
+## app/
+Camada de rotas e páginas do Next.js.
 
-## app
-
-Responsável por:
+Responsável apenas por:
 - rotas
-- páginas
-- navegação
-- layouts
+- composição
+- renderização macro
 
-Não conter:
-- regra de negócio
-- IA
+Não deve conter:
+- lógica operacional
+- regras de negócio
+- inteligência
 - scoring
-- acesso direto ao banco
+- transformações complexas
 
 ---
 
-## core
+## modules/
+Domínios operacionais independentes do CTI.
+
+Cada domínio possui:
+
+- ai/
+- components/
+- data/
+- services/
+- types/
+- README.md
+
+Domínios atuais:
+- implementadoras
+- transportadoras
+- locadoras
+- oportunidades
+
+Cada módulo é um microecossistema operacional.
+
+---
+
+## core/
+Núcleo corporativo global do CTI.
 
 Responsável por:
-- IA global
+- AI global
+- scoring global
 - CRM
-- scoring
-- APIs
-- banco
+- database
+- auth
 - analytics
-- autenticação
+- APIs corporativas
+
+O core nunca deve conter renderização visual.
 
 ---
 
-## modules
+## shared/
+Componentes e estruturas compartilhadas.
 
 Responsável por:
-- domínios operacionais
-- componentes do domínio
-- datasets
-- filtros
-- tabelas
-- lógica específica
+- UI reutilizável
+- hooks compartilhados
+- utilitários
+- tipagens globais
 
 ---
 
-## shared
-
-Responsável por:
-- componentes reutilizáveis
-- hooks globais
-- helpers
-- utils
-- types globais
+## services/
+Integrações globais e gateways externos.
 
 ---
 
-## Regras Oficiais do CTI
+# Padrão Oficial
 
-1. Não criar lógica pesada dentro de app
-2. Não duplicar componentes
-3. Não misturar IA com domínio
-4. Não acessar banco diretamente pelas páginas
-5. Toda IA deve nascer em core/ai
-6. Todo scoring deve nascer em core/scoring
-7. CRM deve ser centralizado
-8. Domínios operacionais devem permanecer isolados
+## UI
+Componentes React renderizam apenas.
+
+## ENGINE
+Toda lógica operacional deve viver em:
+- services/
+- core/
+
+## IA
+Toda inteligência contextual deve viver em:
+- ai/
+
+## MOCKS
+Toda fonte mock deve viver em:
+- data/
+
+## TIPOS
+Toda tipagem deve viver em:
+- types/
+
+---
+
+# Diretrizes Oficiais
+
+- Nunca misturar UI com engine operacional
+- Nunca colocar lógica complexa em page.tsx
+- Nunca duplicar regras entre módulos
+- Sempre separar domínio e núcleo global
+- Toda IA deve ser desacoplada da renderização
+- Toda engine deve ser reutilizável
+- Toda estrutura deve ser previsível
+
+---
+
+# Status Atual
+
+Arquitetura enterprise modular oficialmente consolidada.

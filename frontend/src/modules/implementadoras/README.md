@@ -1,27 +1,97 @@
-# Módulo Implementadoras
+# Módulo — Implementadoras
 
-Domínio operacional responsável pelas implementadoras do CTI.
+## Objetivo
 
-Responsabilidades:
-- gestão territorial
+Responsável pela inteligência operacional,
+territorial, comercial e estratégica
+das implementadoras vinculadas ao CTI.
+
+---
+
+# Estrutura Oficial
+
+implementadoras/
+
+## ai/
+Camada de inteligência contextual e operacional.
+
+Responsável por:
+- insights
+- recomendações
+- criticidade
+- leitura territorial
+- inteligência estratégica
+
+Nunca deve renderizar UI.
+
+---
+
+## components/
+Camada visual do domínio.
+
+Responsável por:
+- tabelas
+- drawers
+- filtros
+- cards
+- renderização visual
+
+Nunca deve conter:
+- regras complexas
+- scoring
 - inteligência operacional
-- market share
-- performance regional
-- ranking operacional
-- relacionamento comercial
-- pipeline de expansão
-- insights locais
-- análise de capacidade operacional
+- transformações pesadas
 
-Estrutura:
-- components → UI do domínio
-- data → datasets e mocks
-- services → lógica operacional
-- types → tipagens
-- ai → inteligência específica do domínio
+---
 
-Regras:
-- não acessar banco diretamente
-- não conter IA global
-- não conter scoring global
-- não conter CRM central
+## data/
+Mocks e fontes temporárias.
+
+Responsável por:
+- mocks
+- seeds
+- dados temporários
+- dados estáticos
+
+---
+
+## services/
+Engine operacional do domínio.
+
+Responsável por:
+- ordenação
+- scoring
+- cálculos
+- transformações
+- classificação
+- engines reutilizáveis
+
+Toda regra operacional deve viver aqui.
+
+---
+
+## types/
+Tipagens oficiais do domínio.
+
+Responsável por:
+- interfaces
+- contratos
+- entidades
+- tipos reutilizáveis
+
+---
+
+# Regras Oficiais
+
+- Nunca misturar UI com engine
+- Nunca colocar lógica operacional em components/
+- Nunca colocar IA em page.tsx
+- Toda inteligência deve ser desacoplada
+- Toda transformação deve ser reutilizável
+- Toda regra operacional deve viver em services/
+
+---
+
+# Status
+
+Módulo blueprint oficial do CTI.
