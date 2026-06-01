@@ -1,14 +1,83 @@
+"use client";
+
+import { usePathname } from "next/navigation";
+
+const paginas = {
+  "/dashboard": {
+    titulo: "Dashboard Executivo",
+    descricao: "Plataforma corporativa de inteligência comercial",
+  },
+
+  "/ia-comercial": {
+    titulo: "IA Comercial",
+    descricao: "Central de inteligência e recomendações estratégicas",
+  },
+
+  "/transportadoras": {
+    titulo: "Transportadoras",
+    descricao: "Gestão operacional e inteligência logística",
+  },
+
+  "/implementadoras": {
+    titulo: "Implementadoras",
+    descricao: "Rede estratégica de implementadoras homologadas",
+  },
+
+  "/locadoras": {
+    titulo: "Locadoras",
+    descricao: "Gestão comercial e expansão de locadoras",
+  },
+
+  "/oportunidades": {
+    titulo: "Oportunidades",
+    descricao: "Pipeline estratégico e gestão de oportunidades",
+  },
+
+  "/mapa-estrategico": {
+    titulo: "Mapa Estratégico",
+    descricao: "Análise territorial e expansão comercial",
+  },
+
+  "/equipamentos/trailer": {
+    titulo: "TR • Trailer",
+    descricao: "Linha Trailer Carrier Transicold",
+  },
+
+  "/equipamentos/diesel-truck": {
+    titulo: "DT • Diesel Truck",
+    descricao: "Linha Diesel Truck Carrier Transicold",
+  },
+
+  "/equipamentos/direct-drive": {
+    titulo: "DD • Direct Drive",
+    descricao: "Linha Direct Drive Carrier Transicold",
+  },
+
+  "/configuracoes": {
+    titulo: "Configurações",
+    descricao: "Configurações administrativas do CTI",
+  },
+};
+
 export default function Topbar() {
+  const pathname = usePathname();
+
+  const paginaAtual =
+    paginas[pathname as keyof typeof paginas] || {
+      titulo: "CTI",
+      descricao: "Centro de Tecnologia e Inteligência Comercial",
+    };
+
   return (
     <header className="w-full h-[90px] border-b border-[#13203f] bg-[#071028] flex items-center justify-between px-8">
       {/* LEFT */}
       <div>
         <h2 className="text-2xl font-bold text-white">
-          Dashboard Executivo
+          {paginaAtual.titulo}
         </h2>
 
         <p className="text-sm text-gray-400 mt-1">
-          Plataforma corporativa de inteligência comercial
+          {paginaAtual.descricao}
         </p>
       </div>
 
@@ -37,7 +106,7 @@ export default function Topbar() {
           🔔
         </button>
 
-        {/* NEW PROJECT */}
+        {/* NOVO PROJETO */}
         <button className="bg-cyan-500 hover:bg-cyan-400 transition-all px-6 py-3 rounded-xl font-semibold text-black">
           Novo Projeto
         </button>
@@ -50,11 +119,11 @@ export default function Topbar() {
 
           <div>
             <p className="text-sm font-semibold text-white">
-              Anderson
+              Anderson Navarro
             </p>
 
             <p className="text-xs text-gray-400">
-              CEO • CTI
+              CEO • ADMIN_MASTER
             </p>
           </div>
         </div>

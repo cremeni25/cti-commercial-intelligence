@@ -1,0 +1,5 @@
+export * from "./normalize"
+export * from "./normalize-product"
+export * from "./normalize-implementadora"
+export * from "./normalize-concorrente"
+export * from "./normalize-montadora"

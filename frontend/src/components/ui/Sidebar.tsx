@@ -8,6 +8,51 @@ import trailerIcon from "@/assets/equipamentos/trailer.png"
 import dieselTruckIcon from "@/assets/equipamentos/diesel-truck.png"
 import directDriveIcon from "@/assets/equipamentos/direct-drive.png"
 
+const perfilAtual = "ADMIN_MASTER"
+
+const permissoesMenu = {
+  ADMIN_MASTER: [
+    "/dashboard",
+    "/ia-comercial",
+    "/transportadoras",
+    "/implementadoras",
+    "/locadoras",
+    "/oportunidades",
+    "/mapa-estrategico",
+    "/equipamentos/trailer",
+    "/equipamentos/diesel-truck",
+    "/equipamentos/direct-drive",
+    "/configuracoes",
+    "/usuarios",
+  ],
+
+  DIRETOR: [
+    "/dashboard",
+    "/ia-comercial",
+    "/transportadoras",
+    "/implementadoras",
+    "/locadoras",
+    "/oportunidades",
+    "/mapa-estrategico",
+    "/equipamentos/trailer",
+    "/equipamentos/diesel-truck",
+    "/equipamentos/direct-drive",
+  ],
+
+  GERENTE: [
+    "/dashboard",
+    "/transportadoras",
+    "/implementadoras",
+    "/locadoras",
+    "/oportunidades",
+  ],
+
+  VENDEDOR: [
+    "/dashboard",
+    "/oportunidades",
+  ],
+}
+
 const menuItems = [
   {
     label: "Dashboard Executivo",
@@ -80,6 +125,13 @@ const menuItems = [
   },
 
   {
+    label: "Usuários",
+    href: "/usuarios",
+    icon: "👥",
+    type: "emoji",
+  },
+    
+  {
     label: "Configurações",
     href: "/configuracoes",
     icon: "⚙️",
@@ -89,6 +141,11 @@ const menuItems = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+
+  const menusPermitidos =
+    permissoesMenu[
+      perfilAtual as keyof typeof permissoesMenu
+    ] || []
 
   return (
     <aside className="w-[280px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
@@ -105,42 +162,48 @@ export default function Sidebar() {
 
       {/* MENU */}
       <nav className="flex-1 p-4 space-y-2">
-        {menuItems.map((item) => {
-          const active = pathname === item.href
-
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`
-                w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all
-                ${
-                  active
-                    ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400"
-                    : "text-gray-300 hover:bg-[#101b36]"
-                }
-              `}
-            >
-              <div className="w-[28px] flex items-center justify-center">
-                {item.type === "image" ? (
-                  <Image
-                    src={item.icon}
-                    alt={item.label}
-                    width={28}
-                    height={28}
-                    className="object-contain"
-                  />
-                ) : (
-                  <span className="text-lg">
-                    {typeof item.icon === "string" ? item.icon : null}
-                  </span>
-                )}
-              </div>
-
-              <span>{item.label}</span>
-            </Link>
+        {menuItems
+          .filter((item) =>
+            menusPermitidos.includes(item.href)
           )
-        })}
+          .map((item) => {
+            const active = pathname === item.href
+
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`
+                  w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all
+                  ${
+                    active
+                      ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400"
+                      : "text-gray-300 hover:bg-[#101b36]"
+                  }
+                `}
+              >
+                <div className="w-[28px] flex items-center justify-center">
+                  {item.type === "image" ? (
+                    <Image
+                      src={item.icon}
+                      alt={item.label}
+                      width={28}
+                      height={28}
+                      className="object-contain"
+                    />
+                  ) : (
+                    <span className="text-lg">
+                      {typeof item.icon === "string"
+                        ? item.icon
+                        : null}
+                    </span>
+                  )}
+                </div>
+
+                <span>{item.label}</span>
+              </Link>
+            )
+          })}
       </nav>
 
       {/* FOOTER */}
