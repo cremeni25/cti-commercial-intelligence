@@ -1,11 +1,58 @@
+```python
 import pandas as pd
 from io import BytesIO
+
+
+PRODUTOS_ALIAS = {
+
+    "TR": "TRAILER",
+    "TRAILER": "TRAILER",
+    "SEMI REBOQUE": "TRAILER",
+
+    "DT": "DIESEL TRUCK",
+    "DIESEL": "DIESEL TRUCK",
+    "DIESEL TRUCK": "DIESEL TRUCK",
+
+    "DD": "DIRECT DRIVE",
+    "DIRECT": "DIRECT DRIVE",
+    "DIRECT DRIVE": "DIRECT DRIVE"
+}
+
+
+IMPLEMENTADORAS_ALIAS = {
+
+    "RANDON": "RANDON",
+    "RANDON IMPLEMENTOS": "RANDON",
+
+    "IBIPORA": "IBIPORÃ",
+    "IBIPORÃ": "IBIPORÃ",
+
+    "SULBRASIL": "SULBRASIL",
+
+    "MERCOSUL": "MERCOSUL",
+
+    "NIJU": "NIJU",
+
+    "FACCHINI": "FACCHINI",
+
+    "FIBRASIL": "FIBRASIL",
+
+    "LABONIA": "LABONIA",
+
+    "HC": "HC",
+
+    "PAVAN": "PAVAN"
+}
 
 
 def normalizar_colunas(df):
 
     df.columns = [
-        str(c).strip().upper().replace("Ç","C").replace("Ã","A")
+        str(c)
+        .strip()
+        .upper()
+        .replace("Ç", "C")
+        .replace("Ã", "A")
         for c in df.columns
     ]
 
@@ -15,7 +62,9 @@ def normalizar_colunas(df):
 def detectar_coluna(df, palavras):
 
     for coluna in df.columns:
+
         for palavra in palavras:
+
             if palavra in coluna:
                 return coluna
 
@@ -27,40 +76,84 @@ def detectar_mapeamento(df):
     mapa = {}
 
     mapa["estado"] = detectar_coluna(df, [
+
         "UF",
         "ESTADO",
         "UF DESTINO",
         "ESTADO CLIENTE"
+
     ])
 
     mapa["linha"] = detectar_coluna(df, [
+
         "LINHA",
         "PRODUTO",
         "TIPO IMPLEMENTO",
         "IMPLEMENTO"
+
     ])
 
     mapa["fabricante"] = detectar_coluna(df, [
+
         "FABRICANTE",
         "MARCA",
         "OEM",
         "IMPLEMENTADOR"
+
     ])
 
     mapa["valor"] = detectar_coluna(df, [
+
         "VALOR",
         "VALOR TOTAL",
         "VALOR UNIT",
         "PRECO",
         "PREÇO"
+
     ])
 
     return mapa
 
 
+def normalizar_produto(valor):
+
+    if not valor:
+        return ""
+
+    valor = (
+        str(valor)
+        .strip()
+        .upper()
+    )
+
+    return PRODUTOS_ALIAS.get(
+        valor,
+        valor
+    )
+
+
+def normalizar_implementadora(valor):
+
+    if not valor:
+        return ""
+
+    valor = (
+        str(valor)
+        .strip()
+        .upper()
+    )
+
+    return IMPLEMENTADORAS_ALIAS.get(
+        valor,
+        valor
+    )
+
+
 def processar_planilha_universal(contents):
 
-    df = pd.read_excel(BytesIO(contents))
+    df = pd.read_excel(
+        BytesIO(contents)
+    )
 
     df = normalizar_colunas(df)
 
@@ -70,21 +163,58 @@ def processar_planilha_universal(contents):
 
     for _, row in df.iterrows():
 
-        estado = row.get(mapa["estado"]) if mapa["estado"] else None
-        linha = row.get(mapa["linha"]) if mapa["linha"] else None
-        fabricante = row.get(mapa["fabricante"]) if mapa["fabricante"] else None
-        valor = row.get(mapa["valor"]) if mapa["valor"] else None
+        estado = (
+            row.get(mapa["estado"])
+            if mapa["estado"]
+            else None
+        )
+
+        linha_original = (
+            row.get(mapa["linha"])
+            if mapa["linha"]
+            else None
+        )
+
+        fabricante_original = (
+            row.get(mapa["fabricante"])
+            if mapa["fabricante"]
+            else None
+        )
+
+        valor = (
+            row.get(mapa["valor"])
+            if mapa["valor"]
+            else None
+        )
+
+        linha = normalizar_produto(
+            linha_original
+        )
+
+        fabricante = (
+            normalizar_implementadora(
+                fabricante_original
+            )
+        )
 
         if pd.isna(valor):
             valor = 0
 
         registros.append({
 
-            "estado": str(estado) if estado and not pd.isna(estado) else "",
-            "linha": str(linha) if linha and not pd.isna(linha) else "",
-            "implementador": str(fabricante) if fabricante and not pd.isna(fabricante) else "",
+            "estado": (
+                str(estado)
+                if estado and not pd.isna(estado)
+                else ""
+            ),
+
+            "linha": linha,
+
+            "implementador": fabricante,
+
             "valor": float(valor)
 
         })
 
     return registros
+```

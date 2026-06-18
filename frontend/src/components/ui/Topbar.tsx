@@ -33,6 +33,31 @@ const paginas = {
     descricao: "Pipeline estratégico e gestão de oportunidades",
   },
 
+  "/pipeline": {
+    titulo: "Pipeline",
+    descricao: "Gestão visual do funil comercial",
+  },
+
+  "/propostas": {
+    titulo: "Propostas",
+    descricao: "Gestão e acompanhamento de propostas comerciais",
+  },
+
+  "/pedidos": {
+    titulo: "Pedidos",
+    descricao: "Controle operacional dos pedidos comerciais",
+  },
+
+  "/atividades": {
+    titulo: "Atividades",
+    descricao: "Agenda comercial e acompanhamento operacional",
+  },
+
+  "/forecast": {
+    titulo: "Forecast",
+    descricao: "Previsão comercial e projeção de resultados",
+  },
+
   "/mapa-estrategico": {
     titulo: "Mapa Estratégico",
     descricao: "Análise territorial e expansão comercial",
@@ -84,7 +109,7 @@ export default function Topbar() {
       {/* RIGHT */}
       <div className="flex items-center gap-5">
         {/* SEARCH */}
-        <div className="bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3 w-[320px]">
+        <div className="bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3 w-[420px]">
           <input
             type="text"
             placeholder="Buscar implementadoras, regiões, oportunidades..."
@@ -97,18 +122,13 @@ export default function Topbar() {
           <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
 
           <span className="text-sm text-green-400 font-medium">
-            Sistema Online
+            CTI Online
           </span>
         </div>
 
         {/* NOTIFICATION */}
         <button className="w-[52px] h-[52px] rounded-xl bg-[#0b1730] border border-[#13203f] text-xl hover:bg-[#13203f] transition-all">
           🔔
-        </button>
-
-        {/* NOVO PROJETO */}
-        <button className="bg-cyan-500 hover:bg-cyan-400 transition-all px-6 py-3 rounded-xl font-semibold text-black">
-          Novo Projeto
         </button>
 
         {/* USER */}

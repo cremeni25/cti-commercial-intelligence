@@ -5,6 +5,8 @@
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime
 import hashlib
 import os
@@ -12,6 +14,23 @@ import json
 import re
 import requests
 
+from core.cti_taxonomy import (
+   PRODUTOS,
+   IMPLEMENTADORAS,
+   FABRICANTES_EQUIPAMENTO,
+   STATUS_OPERACIONAIS,
+   LIXO_OPERACIONAL,
+   normalizar_produto,
+   normalizar_implementadora,
+   fabricante_valido,
+   status_valido,
+   cliente_lixo
+)
+
+from core.score_engine import(
+    calcular_score_registro, 
+    consolidar_scores
+)
 # ============================================================
 # APP
 # ============================================================
@@ -25,6 +44,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+from routers.crm_router import router as crm_router
+
+app.include_router(crm_router)
 
 # ============================================================
 # ENV / CONFIG
@@ -75,23 +98,6 @@ def safe_upper(valor):
 # NORMALIZAÇÃO BASE
 # ============================================================
 
-STOPWORDS_CLIENTE = [
-    "UNIDADES", "SUDESTE", "SP", "BRASIL",
-    "TRAILER", "DT", "DD", "DIRECT DRIVE",
-    "DIESEL TRUCK", "VALOR", "PREÇO", "VENDA",
-    "COTAÇÃO", "REGIAO", "FILIAL"
-]
-
-MARCAS_EQUIPAMENTO = [
-    "CARRIER",
-    "THERMO KING",
-    "THERMOKING",
-    "FRIGOKING",
-    "THERMOSTAR",
-    "RODOFRIO",
-    "THERMOFLEX"
-]
-
 def validar_cliente(cliente):
 
     if not cliente:
@@ -106,46 +112,31 @@ def validar_cliente(cliente):
     if len(c) < 4:
         return None
 
-    # marcas de equipamento (CRÍTICO)
-    if any(marca in c for marca in MARCAS_EQUIPAMENTO):
+    if cliente_lixo(c):
         return None
 
-    # lixo comum
+    if fabricante_valido(c):
+        return None
+
     if any(x in c for x in [
-        "PREÇO", "VALOR", "VENDA", "COTAÇÃO",
-        "SOLUÇÃO", "PROBLEMA", "SEM", "NÃO"
+        "PREÇO",
+        "VALOR",
+        "VENDA",
+        "COTAÇÃO",
+        "SOLUÇÃO",
+        "PROBLEMA",
+        "SEM",
+        "NÃO"
     ]):
+
         return None
 
-    # produto disfarçado
-    if any(p in c for p in [
-        "TR", "DT", "DD",
-        "TRAILER", "DIESEL", "DIRECT"
-    ]):
+    produto = normalizar_produto(c)
+
+    if produto:
         return None
 
     return c
-
-# ============================================================
-# PRODUTO PADRÃO
-# ============================================================
-
-def normalizar_produto(produto):
-    if not produto:
-        return None
-
-    p = safe_upper(produto)
-
-    if "TRAILER" in p or p == "TR":
-        return "TR"
-
-    if "DIESEL" in p or p == "DT":
-        return "DT"
-
-    if "DIRECT" in p or p == "DD":
-        return "DD"
-
-    return None
 
 # ============================================================
 # BANCO
@@ -505,23 +496,6 @@ def corrigir_partes(partes):
 # TOKENIZAÇÃO CONTROLADA CTI
 # ============================================================
 
-FABRICANTES = [
-    "CARRIER",
-    "THERMOKING",
-    "THERMO KING",
-    "THERMOSTAR",
-    "FRIGOKING",
-    "RODOFRIO",
-    "THERMOFLEX"
-]
-
-STATUS_VALIDOS = [
-    "APROVADO",
-    "PERDIDO",
-    "EM NEGOCIACAO",
-    "SEM SOLUCAO TECNICA"
-]
-
 def nucleo_semantico_cti(texto):
 
     if not texto:
@@ -609,7 +583,7 @@ def nucleo_semantico_cti(texto):
         "THERMOFLEX"
     ]
 
-    if any(f in fabricante for f in fabricantes_validos):
+    if fabricante_valido(fabricante):
         score += 0.2
 
     # PRODUTO
@@ -632,7 +606,7 @@ def nucleo_semantico_cti(texto):
         "SEM SOLUCAO TECNICA"
     ]
 
-    if status in status_validos:
+    if status_valido(status):
         score += 0.2
 
     # VENDEDOR
@@ -1090,21 +1064,6 @@ def pipeline_status():
 
 from collections import Counter
 
-LIXO_CLIENTE_EXEC = [
-    "UNIDADES", "SUDESTE", "SUL", "NORTE", "NORDESTE",
-    "SP", "BRASIL", "FILIAL", "MATRIZ"
-]
-
-MARCAS_EQUIPAMENTO_EXEC = [
-    "CARRIER",
-    "THERMO KING",
-    "THERMOKING",
-    "FRIGOKING",
-    "THERMOSTAR",
-    "RODOFRIO",
-    "THERMOFLEX"
-]
-
 def limpar_cliente_exec(cliente):
 
     if not cliente:
@@ -1122,26 +1081,6 @@ def limpar_cliente_exec(cliente):
         return None
 
     return c
-
-
-def limpar_produto_exec(produto):
-
-    if not produto:
-        return None
-
-    p = str(produto).upper()
-
-    if "TRAILER" in p or p == "TR":
-        return "TR"
-
-    if "DIESEL" in p or p == "DT":
-        return "DT"
-
-    if "DIRECT" in p or p == "DD":
-        return "DD"
-
-    return None
-
 
 @app.get("/dashboard/executivo/v2")
 def dashboard_executivo_v2():
@@ -1162,7 +1101,7 @@ def dashboard_executivo_v2():
     for row in data:
 
         cliente = limpar_cliente_exec(row.get("cliente"))
-        produto = limpar_produto_exec(row.get("produto"))
+        produto = normalizar_produto(row.get("produto"))
 
         estado = row.get("estado")
         montadora = row.get("montadora")

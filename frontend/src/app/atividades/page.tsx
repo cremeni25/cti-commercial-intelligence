@@ -4,28 +4,27 @@ import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 
-interface Oportunidade {
+interface Atividade {
   id: string
   titulo: string
-  origem: string
+  tipo: string
+  cliente: string
+  responsavel: string
   status: string
-  valor_estimado: number
-  probabilidade: number
-  data_abertura?: string
-  created_at: string
+  vencimento: string
 }
 
-export default function OportunidadesPage() {
-console.log("PAGINA OPORTUNIDADES CARREGADA")
+export default function AtividadesPage() {
+console.log("PAGINA ATIVIDADES CARREGADA")
 
-  const [dados, setDados] = useState<Oportunidade[]>([])
+  const [dados, setDados] = useState<Atividade[]>([])
   const [loading, setLoading] = useState(true)
   const [modalAberto, setModalAberto] = useState(false)
 
-  async function carregarOportunidades() {
+  async function carregarAtividades() {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/crm/oportunidades"
+        "http://127.0.0.1:8000/crm/atividades"
       )
 
       const json = await response.json()
@@ -40,27 +39,30 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
     }
   }
 
-  async function salvarOportunidade() {
+  async function salvarAtividade() {
     
   }
 
   useEffect(() => {
-    console.log("INICIANDO CARGA DE OPORTUNIDADES")
-    carregarOportunidades()
+    console.log("INICIANDO CARGA DE ATIVIDADES")
+    carregarAtividades()
   }, [])
 
-  const valorPipeline = dados.reduce(
-   (acc: number, item: Oportunidade) =>
-    acc + (item.valor_estimado || 0),
-  0
-)
-  const pipelinePonderado = dados.reduce(
-    (acc: number, item: Oportunidade) =>
-    acc +
-    ((item.valor_estimado || 0) *
-      ((item.probabilidade || 0) / 100)),
-  0
-)
+  const aFazer = dados.filter(
+    item => item.status === "A_FAZER"
+  ).length
+
+  const emAndamento = dados.filter(
+    item => item.status === "EM_ANDAMENTO"
+  ).length
+
+  const concluidas = dados.filter(
+    item => item.status === "CONCLUIDA"
+  ).length
+
+  const atrasadas = dados.filter(
+    item => item.status === "ATRASADA"
+  ).length
 
   function formatarData(data?: string) {
     if (!data) return "-"
@@ -68,24 +70,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
     return new Date(data).toLocaleDateString("pt-BR")
   }
 
-  function calcularAging(data?: string) {
-    if (!data) return "-"
-
-    const abertura = new Date(data)
-    const hoje = new Date()
-
-    const diffMs =
-      hoje.getTime() - abertura.getTime()
-
-    const dias = Math.max(
-      0,
-      Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    )
-
-    return dias
-  }
-
-  return (
+    return (
     <main className="flex min-h-screen bg-[#020817]">
       <Sidebar />
 
@@ -105,27 +90,25 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
             <div className="bg-[#091a33] border border-[#13203f] rounded-2xl p-8 w-[600px]">
               <h2 className="text-2xl font-bold text-white mb-6">
-                Nova Oportunidade
+                Nova Atividade
               </h2>
 
               <div className="space-y-4">
                 <input
                   id="titulo"
-                  placeholder="Título da oportunidade"
+                  placeholder="Título da atividade"
                   className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
                 />
 
                 <input
-                  id="valor"
-                  type="number"
-                  placeholder="Valor estimado"
+                  id="tipo"
+                  placeholder="Tipo da atividade"
                   className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
                 />
 
                 <input
-                  id="probabilidade"
-                  type="number"
-                  placeholder="Probabilidade (%)"
+                  id="responsavel"
+                  placeholder="Responsável"
                   className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
                 />
               </div>
@@ -139,7 +122,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
                 </button>
 
                 <button
-                  onClick={salvarOportunidade}
+                  onClick={salvarAtividade}
                   className="px-5 py-3 rounded-xl bg-cyan-500 text-black font-semibold"
                 >
                   Salvar
@@ -152,7 +135,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
         <div className="p-8">
           <div className="mb-8">
             <h1 className="text-4xl font-bold text-white">
-              CRM • Oportunidades
+              CRM • Atividades
             </h1>
 
             <p className="text-gray-400 mt-2">
@@ -163,7 +146,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
           <div className="grid grid-cols-5 gap-4 mb-8">
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Oportunidades
+                Total Atividades
               </p>
 
               <h2 className="text-3xl text-cyan-400 font-bold mt-2">
@@ -173,50 +156,41 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
 
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Pipeline Total
+                A Fazer
               </p>
 
               <h2 className="text-3xl text-green-400 font-bold mt-2">
-                R$ {valorPipeline.toLocaleString()}
+                {aFazer}
               </h2>
             </div>
 
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Pipeline Ponderado
+                Em Andamento
               </p>
 
               <h2 className="text-3xl text-cyan-400 font-bold mt-2">
-                R$ {pipelinePonderado.toLocaleString()}
+                {emAndamento}
               </h2>
             </div>
 
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Probabilidade Média
+                Concluidas
               </p>
 
               <h2 className="text-3xl text-yellow-400 font-bold mt-2">
-                {dados.length
-                  ? Math.round(
-                      dados.reduce(
-                        (acc, item) =>
-                          acc + item.probabilidade,
-                        0
-                      ) / dados.length
-                    )
-                  : 0}
-                %
+                {concluidas}
               </h2>
             </div>
 
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Backend CRM
+                Atrasadas
               </p>
 
               <h2 className="text-3xl text-green-400 font-bold mt-2">
-                ONLINE
+                {atrasadas}
               </h2>
             </div>
           </div>
@@ -224,7 +198,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
           <div className="bg-[#091a33] rounded-2xl border border-[#13203f] overflow-hidden">
             <div className="p-6 border-b border-[#13203f]">
               <h2 className="text-white text-xl font-semibold">
-                Oportunidades Comerciais
+                Atividades Comerciais
               </h2>
             </div>
 
@@ -237,12 +211,11 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
                 <thead>
                   <tr className="text-left border-b border-[#13203f]">
                     <th className="p-4 text-gray-400">Título</th>
-                    <th className="p-4 text-gray-400">Origem</th>
+                    <th className="p-4 text-gray-400">Tipo</th>
+                    <th className="p-4 text-gray-400">Cliente</th>
+                    <th className="p-4 text-gray-400">Responsável</th>
                     <th className="p-4 text-gray-400">Status</th>
-                    <th className="p-4 text-gray-400">Valor</th>
-                    <th className="p-4 text-gray-400">Probabilidade</th>
-                    <th className="p-4 text-gray-400">Abertura</th>
-                    <th className="p-4 text-gray-400">Aging</th>
+                    <th className="p-4 text-gray-400">Vencimento</th>
                   </tr>
                 </thead>
 
@@ -257,31 +230,27 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
                       </td>
 
                       <td className="p-4 text-gray-300">
-                        {item.origem}
+                        {item.tipo}
+                      </td>
+
+                      <td className="p-4 text-white">
+                        {item.cliente}
+                      </td>
+
+                      <td className="p-4 text-gray-300">
+                        {item.responsavel}
                       </td>
 
                       <td className="p-4 text-cyan-400">
                         {item.status}
                       </td>
 
-                      <td className="p-4 text-green-400">
-                        R$ {item.valor_estimado}
-                      </td>
-
                       <td className="p-4 text-yellow-400">
-                        {item.probabilidade}%
-                      </td>
-
-                      <td className="p-4 text-white">
-                        {formatarData(item.data_abertura)}
-                      </td>
-
-                      <td className="p-4 text-orange-400">
-                        {calcularAging(item.data_abertura)} dias
+                        {formatarData(item.vencimento)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                      ))}
+                    </tbody>
               </table>
             )}
           </div>
