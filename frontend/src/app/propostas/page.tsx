@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { API_URL } from "@/lib/api"
 
 interface Proposta {
   id: string
@@ -22,7 +23,7 @@ export default function PropostasPage() {
   async function carregarPropostas() {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/crm/propostas"
+        `${API_URL}/crm/propostas`
       )
 
       const json = await response.json()

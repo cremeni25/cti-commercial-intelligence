@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { API_URL } from "@/lib/api"
 
 interface Atividade {
   id: string
@@ -24,7 +25,7 @@ console.log("PAGINA ATIVIDADES CARREGADA")
   async function carregarAtividades() {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/crm/atividades"
+        `${API_URL}/crm/atividades`
       )
 
       const json = await response.json()

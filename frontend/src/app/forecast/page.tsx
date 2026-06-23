@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { API_URL } from "@/lib/api"
 
 interface Forecast {
   id: string
@@ -20,8 +21,8 @@ export default function ForecastPage() {
   async function carregarForecast() {
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/crm/forecast"
-      )
+        `${API_URL}/crm/forecast`
+      ) 
 
       const json = await response.json()
 
