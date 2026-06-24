@@ -46,8 +46,21 @@ app.add_middleware(
 )
 
 from routers.crm_router import router as crm_router
+from routers.analytics_router import router as analytics_router
+from routers.engine_router import router as engine_router
+from routers.negociacoes_router import router as negociacoes_router
+from routers.clientes_router import router as clientes_router
+from routers.vendas_router import router as vendas_router
+from routers.upload_router import router as upload_router
 
 app.include_router(crm_router)
+
+app.include_router(analytics_router)
+app.include_router(engine_router)
+app.include_router(negociacoes_router)
+app.include_router(clientes_router)
+app.include_router(vendas_router)
+app.include_router(upload_router)
 
 # ============================================================
 # ENV / CONFIG
