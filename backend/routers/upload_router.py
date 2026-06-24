@@ -174,10 +174,7 @@ async def upload_anfir_seguro(
 
         contents = await file.read()
 
-        registros =
-            processar_planilha_viena(
-                contents
-        )
+        registros = processar_planilha_viena(contents)
 
         inteligencia = (
             gerar_inteligencia_operacional(
