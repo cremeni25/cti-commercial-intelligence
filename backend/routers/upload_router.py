@@ -5,8 +5,8 @@ from fastapi import (
     HTTPException
 )
 
-from planilha_engine import (
-    processar_planilha_universal
+from planilha_engine_viena import (
+    processar_planilha_viena
 )
 
 from supabase import create_client
@@ -174,10 +174,9 @@ async def upload_anfir_seguro(
 
         contents = await file.read()
 
-        registros = (
-            processar_planilha_universal(
+        registros =
+            processar_planilha_viena(
                 contents
-            )
         )
 
         inteligencia = (
