@@ -922,62 +922,79 @@ from collections import Counter
 
 def carregar_base_processada():
 
-    response = (
-        supabase
-        .table("cti_anfir")
-        .select("*")
-        .eq("ativo", True)
-        .execute()
-    )
-
-    registros = response.data or []
-
     base = []
 
-    for r in registros:
+    pagina = 0
+    limite = 1000
 
-        base.append({
+    while True:
 
-            "ano": r.get("ano"),
-
-            "mes": r.get("mes"),
-
-            "cliente": r.get("cliente"),
-
-            "cnpj": r.get("cnpj"),
-
-            "estado": r.get("estado"),
-
-            "cidade": r.get("cidade"),
-
-            "ddd": r.get("ddd"),
-
-            "regiao": r.get("regiao"),
-
-            "implementadora": r.get("implementador"),
-
-            "linha": r.get("linha"),
-
-            "modelo": r.get("modelo"),
-
-            "responsavel": r.get("responsavel"),
-
-            "placa": r.get("placa"),
-
-            "chassi": r.get("chassi"),
-
-            "valor": float(
-                r.get("valor") or 0
-            ),
-
-            "data_venda": r.get("data_venda"),
-
-            "origem": r.get(
-                "origem_dado",
-                "VIENA"
+        response = (
+            supabase
+            .table("cti_anfir")
+            .select("*")
+            .eq("ativo", True)
+            .range(
+                pagina * limite,
+                ((pagina + 1) * limite) - 1
             )
+            .execute()
+        )
 
-        })
+        registros = response.data or []
+
+        if not registros:
+            break
+
+        for r in registros:
+
+            base.append({
+
+                "ano": r.get("ano"),
+
+                "mes": r.get("mes"),
+
+                "cliente": r.get("cliente"),
+
+                "cnpj": r.get("cnpj"),
+
+                "estado": r.get("estado"),
+
+                "cidade": r.get("cidade"),
+
+                "ddd": r.get("ddd"),
+
+                "regiao": r.get("regiao"),
+
+                "implementadora": r.get("implementador"),
+
+                "linha": r.get("linha"),
+
+                "modelo": r.get("modelo"),
+
+                "responsavel": r.get("responsavel"),
+
+                "placa": r.get("placa"),
+
+                "chassi": r.get("chassi"),
+
+                "valor": float(r.get("valor") or 0),
+
+                "data_venda": r.get("data_venda"),
+
+                "origem": r.get(
+                    "origem_dado",
+                    "VIENA"
+                )
+
+            })
+
+        if len(registros) < limite:
+            break
+
+        pagina += 1
+
+    print(f"[DASHBOARD] {len(base)} registros carregados.")
 
     return base
 
