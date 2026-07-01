@@ -103,67 +103,121 @@ class UploadEngine:
 
     def inserir_batches(
 
-        self,
+    self,
 
-        tabela: str,
+    tabela: str,
 
-        registros: List[Dict],
+    registros: List[Dict],
 
-        batch_size: int = 500
+    batch_size: int = 500
+
+):
+
+    inseridos = 0
+
+    batches = 0
+
+    duplicados = 0
+
+    for inicio in range(
+
+        0,
+
+        len(registros),
+
+        batch_size
 
     ):
 
-        inseridos = 0
+        lote = registros[
+            inicio:inicio + batch_size
+        ]
 
-        batches = 0
+        try:
 
-        for inicio in range(
+            print("=" * 80)
+            print("TABELA:", tabela)
+            print("PRIMEIRO REGISTRO:")
+            print(lote[0])
+            print("=" * 80)
 
-            0,
+            ids_lote = [
 
-            len(registros),
+                r["id_operacional"]
 
-            batch_size
+                for r in lote
 
-        ):
+                if r.get("id_operacional")
 
-            lote = registros[
-                inicio:inicio + batch_size
             ]
 
-            try:
+            existentes = (
 
-                print("=" * 80)
-                print("TABELA:", tabela)
-                print("PRIMEIRO REGISTRO:")
-                print(lote[0])
-                print("=" * 80)
+                self.supabase
+
+                    .table(tabela)
+
+                    .select("id_operacional")
+
+                    .in_("id_operacional", ids_lote)
+
+                    .execute()
+
+            )
+
+            ids_existentes = {
+
+                r["id_operacional"]
+
+                for r in (existentes.data or [])
+
+            }
+
+            novos = [
+
+                r
+
+                for r in lote
+
+                if r.get("id_operacional") not in ids_existentes
+
+            ]
+
+            duplicados += len(lote) - len(novos)
+
+            if novos:
 
                 self.supabase.table(
+
                     tabela
+
                 ).insert(
-                    lote
+
+                    novos
+
                 ).execute()
 
-                inseridos += len(lote)
+                inseridos += len(novos)
 
-                batches += 1
+            batches += 1
 
-            except Exception as erro:
+        except Exception as erro:
 
-                raise Exception(
+            raise Exception(
 
-                    f"Erro ao inserir lote {batches + 1}: {erro}"
+                f"Erro ao inserir lote {batches + 1}: {erro}"
 
-                )
+            )
 
-        return {
+    return {
 
-            "batches": batches,
+        "batches": batches,
 
-            "inseridos": inseridos
+        "inseridos": inseridos,
 
-        }
+        "duplicados": duplicados
+
+    }
 
     # ======================================================
     # PROCESSAMENTO COMPLETO
@@ -229,8 +283,10 @@ class UploadEngine:
 
                 resultado_insert["inseridos"],
 
+            "duplicados_banco":
+
+                resultado_insert["duplicados"],
+
             "tempo_execucao":
 
                 tempo
-
-        }
