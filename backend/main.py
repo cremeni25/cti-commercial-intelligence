@@ -52,6 +52,7 @@ from routers.negociacoes_router import router as negociacoes_router
 from routers.clientes_router import router as clientes_router
 from routers.vendas_router import router as vendas_router
 from routers.upload_router import router as upload_router
+from routers.cti_api_router import router as cti_api_router
 
 app.include_router(crm_router)
 
@@ -61,6 +62,7 @@ app.include_router(negociacoes_router)
 app.include_router(clientes_router)
 app.include_router(vendas_router)
 app.include_router(upload_router)
+app.include_router(cti_api_router)
 
 # ============================================================
 # ENV / CONFIG
