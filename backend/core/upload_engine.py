@@ -101,123 +101,131 @@ class UploadEngine:
     # INSERÇÃO EM LOTES
     # ======================================================
 
+        # ======================================================
+    # INSERÇÃO EM LOTES
+    # ======================================================
+
     def inserir_batches(
 
-    self,
+        self,
 
-    tabela: str,
+        tabela: str,
 
-    registros: List[Dict],
+        registros: List[Dict],
 
-    batch_size: int = 500
-
-    ):
-
-    inseridos = 0
-
-    batches = 0
-
-    duplicados = 0
-
-    for inicio in range(
-
-        0,
-
-        len(registros),
-
-        batch_size
+        batch_size: int = 500
 
     ):
 
-        lote = registros[
-            inicio:inicio + batch_size
-        ]
+        inseridos = 0
 
-        try:
+        batches = 0
 
-            print("=" * 80)
-            print("TABELA:", tabela)
-            print("PRIMEIRO REGISTRO:")
-            print(lote[0])
-            print("=" * 80)
+        duplicados = 0
 
-            ids_lote = [
+        for inicio in range(
 
-                r["id_operacional"]
+            0,
 
-                for r in lote
+            len(registros),
 
-                if r.get("id_operacional")
+            batch_size
 
+        ):
+
+            lote = registros[
+                inicio:inicio + batch_size
             ]
 
-            existentes = (
+            try:
 
-                self.supabase
+                print("=" * 80)
+                print("TABELA:", tabela)
+                print("PRIMEIRO REGISTRO:")
+                print(lote[0])
+                print("=" * 80)
 
-                    .table(tabela)
+                ids_lote = [
 
-                    .select("id_operacional")
+                    r["id_operacional"]
 
-                    .in_("id_operacional", ids_lote)
+                    for r in lote
 
-                    .execute()
+                    if r.get("id_operacional")
 
-            )
+                ]
 
-            ids_existentes = {
+                ids_existentes = set()
 
-                r["id_operacional"]
+                if ids_lote:
 
-                for r in (existentes.data or [])
+                    existentes = (
 
-            }
+                        self.supabase
 
-            novos = [
+                            .table(tabela)
 
-                r
+                            .select("id_operacional")
 
-                for r in lote
+                            .in_("id_operacional", ids_lote)
 
-                if r.get("id_operacional") not in ids_existentes
+                            .execute()
 
-            ]
+                    )
 
-            duplicados += len(lote) - len(novos)
+                    ids_existentes = {
 
-            if novos:
+                        r["id_operacional"]
 
-                self.supabase.table(
+                        for r in (existentes.data or [])
 
-                    tabela
+                    }
 
-                ).insert(
+                novos = [
 
-                    novos
+                    r
 
-                ).execute()
+                    for r in lote
 
-                inseridos += len(novos)
+                    if r.get("id_operacional") not in ids_existentes
 
-            batches += 1
+                ]
 
-        except Exception as erro:
+                duplicados += len(lote) - len(novos)
 
-            raise Exception(
+                if novos:
 
-                f"Erro ao inserir lote {batches + 1}: {erro}"
+                    self.supabase.table(
 
-            )
+                        tabela
 
-    return {
+                    ).insert(
 
-        "batches": batches,
+                        novos
 
-        "inseridos": inseridos,
+                    ).execute()
 
-        "duplicados": duplicados
+                    inseridos += len(novos)
 
-    }
+                batches += 1
+
+            except Exception as erro:
+
+                raise Exception(
+
+                    f"Erro ao inserir lote {batches + 1}: {erro}"
+
+                )
+
+        return {
+
+            "batches": batches,
+
+            "inseridos": inseridos,
+
+            "duplicados": duplicados
+
+        }
 
     # ======================================================
     # PROCESSAMENTO COMPLETO
