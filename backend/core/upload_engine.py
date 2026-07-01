@@ -101,10 +101,6 @@ class UploadEngine:
     # INSERÇÃO EM LOTES
     # ======================================================
 
-        # ======================================================
-    # INSERÇÃO EM LOTES
-    # ======================================================
-
     def inserir_batches(
 
         self,
@@ -120,8 +116,6 @@ class UploadEngine:
         inseridos = 0
 
         batches = 0
-
-        duplicados = 0
 
         for inicio in range(
 
@@ -145,67 +139,13 @@ class UploadEngine:
                 print(lote[0])
                 print("=" * 80)
 
-                ids_lote = [
+                self.supabase.table(
+                    tabela
+                ).insert(
+                    lote
+                ).execute()
 
-                    r["id_operacional"]
-
-                    for r in lote
-
-                    if r.get("id_operacional")
-
-                ]
-
-                ids_existentes = set()
-
-                if ids_lote:
-
-                    existentes = (
-
-                        self.supabase
-
-                            .table(tabela)
-
-                            .select("id_operacional")
-
-                            .in_("id_operacional", ids_lote)
-
-                            .execute()
-
-                    )
-
-                    ids_existentes = {
-
-                        r["id_operacional"]
-
-                        for r in (existentes.data or [])
-
-                    }
-
-                novos = [
-
-                    r
-
-                    for r in lote
-
-                    if r.get("id_operacional") not in ids_existentes
-
-                ]
-
-                duplicados += len(lote) - len(novos)
-
-                if novos:
-
-                    self.supabase.table(
-
-                        tabela
-
-                    ).insert(
-
-                        novos
-
-                    ).execute()
-
-                    inseridos += len(novos)
+                inseridos += len(lote)
 
                 batches += 1
 
@@ -221,9 +161,7 @@ class UploadEngine:
 
             "batches": batches,
 
-            "inseridos": inseridos,
-
-            "duplicados": duplicados
+            "inseridos": inseridos
 
         }
 
@@ -291,10 +229,8 @@ class UploadEngine:
 
                 resultado_insert["inseridos"],
 
-            "duplicados_banco":
-
-                resultado_insert["duplicados"],
-
             "tempo_execucao":
 
                 tempo
+
+        }
