@@ -1,3 +1,22 @@
+# ============================================================
+# CTI - COMMERCIAL INTELLIGENCE
+# Arquivo......: upload_router.py
+# Versão.......: 1.0.0
+# Status.......: ESTÁVEL
+# Data.........: 24/06/2026
+#
+# Responsabilidade:
+# - Receber arquivos enviados pelo frontend
+# - Acionar o parser correspondente
+# - Gerar inteligência operacional
+# - Calcular score
+# - Delegar persistência ao UploadEngine
+#
+# OBS:
+# Este arquivo NÃO realiza mais gravação direta no Supabase.
+# Toda persistência é responsabilidade do UploadEngine.
+# ============================================================
+
 from fastapi import (
     APIRouter,
     UploadFile,
@@ -5,45 +24,32 @@ from fastapi import (
     HTTPException
 )
 
+import traceback
+
+from collections import Counter
+
 from planilha_engine_viena import (
     processar_planilha_viena
 )
-
-from supabase import create_client
-
-from collections import Counter
 
 from core.score_engine import (
     consolidar_scores
 )
 
-import os
-
+from core.upload_engine import (
+    UploadEngine
+)
 
 router = APIRouter()
 
-
-SUPABASE_URL = os.getenv(
-    "SUPABASE_URL"
-)
-
-SUPABASE_KEY = os.getenv(
-    "SUPABASE_KEY"
-)
+upload_engine = UploadEngine()
 
 
-supabase = create_client(
-    SUPABASE_URL,
-    SUPABASE_KEY
-)
-
-
-# ======================================
+# ============================================================
 # INTELIGÊNCIA OPERACIONAL
-# ======================================
-def gerar_inteligencia_operacional(
-    registros
-):
+# ============================================================
+
+def gerar_inteligencia_operacional(registros):
 
     total_registros = len(registros)
 
@@ -70,23 +76,12 @@ def gerar_inteligencia_operacional(
         if r.get("implementador")
     )
 
-    ranking_estados = (
-        estados.most_common(10)
-    )
-
-    ranking_produtos = (
-        produtos.most_common(10)
-    )
-
-    ranking_implementadoras = (
-        implementadoras.most_common(10)
-    )
+    ranking_estados = estados.most_common(10)
+    ranking_produtos = produtos.most_common(10)
+    ranking_implementadoras = implementadoras.most_common(10)
 
     insights = []
 
-    # ===============================
-    # INSIGHT ESTADOS
-    # ===============================
     if ranking_estados:
 
         estado_top = ranking_estados[0]
@@ -95,9 +90,6 @@ def gerar_inteligencia_operacional(
             f"O estado com maior volume operacional é {estado_top[0]} com {estado_top[1]} registros."
         )
 
-    # ===============================
-    # INSIGHT PRODUTOS
-    # ===============================
     if ranking_produtos:
 
         produto_top = ranking_produtos[0]
@@ -106,22 +98,14 @@ def gerar_inteligencia_operacional(
             f"O produto dominante da operação é {produto_top[0]} com {produto_top[1]} ocorrências."
         )
 
-    # ===============================
-    # INSIGHT IMPLEMENTADORAS
-    # ===============================
     if ranking_implementadoras:
 
-        impl_top = (
-            ranking_implementadoras[0]
-        )
+        impl_top = ranking_implementadoras[0]
 
         insights.append(
             f"A implementadora com maior presença operacional é {impl_top[0]} com {impl_top[1]} registros."
         )
 
-    # ===============================
-    # INSIGHT VOLUME
-    # ===============================
     if total_valor > 5000000:
 
         insights.append(
@@ -142,29 +126,24 @@ def gerar_inteligencia_operacional(
 
     return {
 
-        "total_registros":
-            total_registros,
+        "total_registros": total_registros,
 
-        "total_valor":
-            total_valor,
+        "total_valor": total_valor,
 
-        "ranking_estados":
-            ranking_estados,
+        "ranking_estados": ranking_estados,
 
-        "ranking_produtos":
-            ranking_produtos,
+        "ranking_produtos": ranking_produtos,
 
-        "ranking_implementadoras":
-            ranking_implementadoras,
+        "ranking_implementadoras": ranking_implementadoras,
 
-        "insights":
-            insights
+        "insights": insights
     }
 
 
-# ======================================
-# UPLOAD ANFIR SEGURO
-# ======================================
+# ============================================================
+# UPLOAD CTI
+# ============================================================
+
 @router.post("/upload/anfir/seguro")
 async def upload_anfir_seguro(
     file: UploadFile = File(...)
@@ -174,12 +153,12 @@ async def upload_anfir_seguro(
 
         contents = await file.read()
 
-        registros = processar_planilha_viena(contents)
+        registros = processar_planilha_viena(
+            contents
+        )
 
-        inteligencia = (
-            gerar_inteligencia_operacional(
-                registros
-            )
+        inteligencia = gerar_inteligencia_operacional(
+            registros
         )
 
         score = consolidar_scores(
@@ -192,89 +171,67 @@ async def upload_anfir_seguro(
 
             registros_processados.append({
 
-                "ano":
-                    r.get("ano"),
+                "ano": r.get("ano"),
+                "mes": r.get("mes"),
+                "data_venda": r.get("data_venda"),
+                "cliente": r.get("cliente"),
+                "cnpj": r.get("cnpj"),
+                "cidade": r.get("cidade"),
+                "estado": r.get("estado"),
+                "ddd": r.get("ddd"),
+                "regiao": r.get("regiao"),
+                "placa": r.get("placa"),
+                "chassi": r.get("chassi"),
+                "implementador": r.get("implementador"),
+                "linha": r.get("linha"),
+                "modelo": r.get("modelo"),
+                "responsavel": r.get("responsavel"),
+                "valor": float(r.get("valor", 0)),
+                "origem_dado": r.get("origem_dado", "VIENA"),
+                "arquivo_origem": r.get("arquivo_origem"),
 
-                "mes":
-                    r.get("mes"),
+                # NOVO
+                "id_operacional": r.get("id_operacional"),
 
-                "estado":
-                    r.get("estado"),
+                # EXISTENTE
+                "hash_registro": r.get("hash_registro"),
 
-                "linha":
-                    r.get("linha"),
+                "ativo": True
 
-                "implementador":
-                    r.get("implementador"),
-
-                "valor":
-                    float(
-                        r.get(
-                            "valor",
-                            0
-                        )
-                    ),
-
-                "score_inicial":
-                    r.get(
-                        "score_inicial",
-                        0
-                    ),
-
-                "classificacao":
-                    r.get(
-                        "classificacao",
-                        ""
-                    ),
-
-                "origem":
-                    r.get(
-                        "origem",
-                        ""
-                    )
             })
 
-        batch_size = 500
+        resultado_upload = upload_engine.processar(
 
-        for i in range(
-            0,
-            len(registros_processados),
-            batch_size
-        ):
+            tabela="cti_anfir",
 
-            batch = (
-                registros_processados[
-                    i:i + batch_size
-                ]
-            )
+            registros=registros_processados
 
-            supabase.table(
-                "cti_anfir"
-            ).insert(batch).execute()
+        )
 
         return {
 
-            "status":
-                "ANFIR atualizado",
+            "status": "Upload realizado com sucesso",
 
-            "registros_inseridos":
-                len(
-                    registros_processados
-                ),
+            "upload": resultado_upload,
 
             "inteligencia": inteligencia,
 
-            "scores": scores
+            "score": score
+
         }
 
     except Exception as e:
 
+        erro = traceback.format_exc()
+
+        print("\n")
+        print("=" * 80)
+        print("ERRO COMPLETO DO UPLOAD")
+        print("=" * 80)
+        print(erro)
+        print("=" * 80)
+
         raise HTTPException(
-
             status_code=500,
-
-            detail=(
-                f"Erro ao processar planilha: {str(e)}"
-            )
+            detail=erro
         )
-

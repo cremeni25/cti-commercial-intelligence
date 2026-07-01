@@ -203,7 +203,38 @@ def status():
 
 from openai import OpenAI
 
-client = OpenAI(api_key=OPENAI_API_KEY)
+# ============================================================
+# CLIENTE OPENAI
+# Inicializa somente quando existir chave configurada
+# ============================================================
+
+client = None
+
+if OPENAI_API_KEY:
+
+    try:
+
+        client = OpenAI(
+            api_key=OPENAI_API_KEY
+        )
+
+        print(
+            "OpenAI inicializado."
+        )
+
+    except Exception as e:
+
+        print(
+            f"Falha ao inicializar OpenAI: {e}"
+        )
+
+        client = None
+
+else:
+
+    print(
+        "OPENAI_API_KEY não configurada. IA desabilitada temporariamente."
+    )
 
 # ============================================================
 # IA — INTERPRETAÇÃO CONTROLADA
@@ -212,6 +243,9 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 def interpretar_linha_com_ia(texto):
 
     if not texto:
+        return {}
+
+    if client is None:
         return {}
 
     try:
@@ -888,30 +922,64 @@ from collections import Counter
 
 def carregar_base_processada():
 
-    dados = []
-    pagina = 0
-    limite = 1000
+    response = (
+        supabase
+        .table("cti_anfir")
+        .select("*")
+        .eq("ativo", True)
+        .execute()
+    )
 
-    while True:
+    registros = response.data or []
 
-        res = supabase.table("cti_processado") \
-            .select("*") \
-            .range(pagina * limite, (pagina + 1) * limite - 1) \
-            .execute()
+    base = []
 
-        parte = res.data or []
+    for r in registros:
 
-        if not parte:
-            break
+        base.append({
 
-        dados.extend(parte)
+            "ano": r.get("ano"),
 
-        if len(parte) < limite:
-            break
+            "mes": r.get("mes"),
 
-        pagina += 1
+            "cliente": r.get("cliente"),
 
-    return dados
+            "cnpj": r.get("cnpj"),
+
+            "estado": r.get("estado"),
+
+            "cidade": r.get("cidade"),
+
+            "ddd": r.get("ddd"),
+
+            "regiao": r.get("regiao"),
+
+            "implementadora": r.get("implementador"),
+
+            "linha": r.get("linha"),
+
+            "modelo": r.get("modelo"),
+
+            "responsavel": r.get("responsavel"),
+
+            "placa": r.get("placa"),
+
+            "chassi": r.get("chassi"),
+
+            "valor": float(
+                r.get("valor") or 0
+            ),
+
+            "data_venda": r.get("data_venda"),
+
+            "origem": r.get(
+                "origem_dado",
+                "VIENA"
+            )
+
+        })
+
+    return base
 
 # ============================================================
 # DASHBOARD EXECUTIVO
@@ -925,71 +993,81 @@ def dashboard_executivo():
     total = len(data)
 
     clientes = Counter()
-    produtos = Counter()
+    linhas = Counter()
     estados = Counter()
-    montadoras = Counter()
-    implementadores = Counter()
-    concorrentes = Counter()
+    implementadoras = Counter()
+    responsaveis = Counter()
 
     faturamento_total = 0
 
     for row in data:
 
         cliente = row.get("cliente")
-        produto = row.get("produto")
+        linha = row.get("linha")
         estado = row.get("estado")
-        montadora = row.get("montadora")
-        implementador = row.get("implementador")
-        concorrente = row.get("concorrente")
+        implementadora = row.get("implementadora")
+        responsavel = row.get("responsavel")
         valor = row.get("valor") or 0
 
         if cliente:
             clientes[cliente] += 1
 
-        if produto:
-            produtos[produto] += 1
+        if linha:
+            linhas[linha] += 1
 
         if estado:
             estados[estado] += 1
 
-        if montadora:
-            montadoras[montadora] += 1
+        if implementadora:
+            implementadoras[implementadora] += 1
 
-        if implementador:
-            implementadores[implementador] += 1
-
-        if concorrente:
-            concorrentes[concorrente] += 1
+        if responsavel:
+            responsaveis[responsavel] += 1
 
         try:
             faturamento_total += float(valor)
-        except:
+        except Exception:
             pass
 
-    # TOPS
-    top_clientes = clientes.most_common(10)
-    top_produtos = produtos.most_common(5)
-    top_estados = estados.most_common(10)
-    top_montadoras = montadoras.most_common(10)
-    top_implementadores = implementadores.most_common(10)
-    top_concorrentes = concorrentes.most_common(10)
-
-    # TICKET MÉDIO
-    ticket_medio = faturamento_total / total if total > 0 else 0
+    ticket_medio = (
+        faturamento_total / total
+        if total
+        else 0
+    )
 
     return {
+
         "status": "ok",
+
         "resumo": {
+
             "total_registros": total,
-            "faturamento_total": round(faturamento_total, 2),
-            "ticket_medio": round(ticket_medio, 2)
+
+            "faturamento_total": round(
+                faturamento_total,
+                2
+            ),
+
+            "ticket_medio": round(
+                ticket_medio,
+                2
+            )
         },
-        "clientes": top_clientes,
-        "produtos": top_produtos,
-        "estados": top_estados,
-        "montadoras": top_montadoras,
-        "implementadores": top_implementadores,
-        "concorrentes": top_concorrentes
+
+        "clientes":
+            clientes.most_common(10),
+
+        "linhas":
+            linhas.most_common(10),
+
+        "estados":
+            estados.most_common(10),
+
+        "implementadoras":
+            implementadoras.most_common(10),
+
+        "responsaveis":
+            responsaveis.most_common(10)
     }
 
 # ============================================================
