@@ -111,7 +111,7 @@ class UploadEngine:
 
     batch_size: int = 500
 
-):
+    ):
 
     inseridos = 0
 
