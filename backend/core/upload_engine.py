@@ -141,8 +141,9 @@ class UploadEngine:
 
                 self.supabase.table(
                     tabela
-                ).insert(
-                    lote
+                ).upsert(
+                    lote,
+                    on_conflict="id_operacional"
                 ).execute()
 
                 inseridos += len(lote)
