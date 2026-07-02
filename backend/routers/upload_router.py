@@ -40,6 +40,8 @@ from core.upload_engine import (
     UploadEngine
 )
 
+from core.supabase_client import supabase
+
 router = APIRouter()
 
 upload_engine = UploadEngine()
@@ -190,23 +192,52 @@ async def upload_anfir_seguro(
                 "origem_dado": r.get("origem_dado", "VIENA"),
                 "arquivo_origem": r.get("arquivo_origem"),
 
-                # NOVO
                 "id_operacional": r.get("id_operacional"),
-
-                # EXISTENTE
                 "hash_registro": r.get("hash_registro"),
 
                 "ativo": True
 
             })
 
+        ids_lote = [
+            r["id_operacional"]
+            for r in registros_processados
+            if r.get("id_operacional")
+        ]
+
+        existentes = (
+            supabase
+            .table("cti_anfir")
+            .select("id_operacional")
+            .in_("id_operacional", ids_lote)
+            .execute()
+        )
+
+        ids_existentes = {
+            r["id_operacional"]
+            for r in (existentes.data or [])
+        }
+
+        registros_novos = [
+            r
+            for r in registros_processados
+            if r.get("id_operacional") not in ids_existentes
+        ]
+
+        ignorados = (
+            len(registros_processados)
+            - len(registros_novos)
+        )
+
         resultado_upload = upload_engine.processar(
 
             tabela="cti_anfir",
 
-            registros=registros_processados
+            registros=registros_novos
 
         )
+
+        resultado_upload["ignorados"] = ignorados
 
         return {
 
