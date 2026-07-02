@@ -193,52 +193,82 @@ export default function UploadPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-[#13203f]">
-                  <th className="text-left p-3 text-cyan-400">
-                    Produto
-                  </th>
 
-                  <th className="text-left p-3 text-cyan-400">
-                    Fabricante
-                  </th>
+                <th className="text-left p-3 text-cyan-400">
+                  Cliente
+                </th>
 
-                  <th className="text-left p-3 text-cyan-400">
-                    Status
-                  </th>
+                <th className="text-left p-3 text-cyan-400">
+                  Implementadora
+                </th>
 
-                  <th className="text-left p-3 text-cyan-400">
-                    Score
-                  </th>
+                <th className="text-left p-3 text-cyan-400">
+                  Linha
+                </th>
+
+                <th className="text-left p-3 text-cyan-400">
+                  Modelo
+                </th>
+
+                <th className="text-left p-3 text-cyan-400">
+                  UF
+                </th>
+
+                <th className="text-left p-3 text-cyan-400">
+                  Valor
+                </th>
+
+                <th className="text-left p-3 text-cyan-400">
+                  Score
+                </th>
+
                 </tr>
               </thead>
 
               <tbody>
-                {auditoria.map(
-                  (item, index) => (
+                {auditoria.map((item, index) => (
                     <tr
                       key={index}
                       className="border-b border-[#13203f]"
                     >
                       <td className="p-3 text-white">
-                        {item.produto}
+                          {item.cliente ?? "-"}
                       </td>
 
                       <td className="p-3 text-white">
-                        {
-                          item.fabricante_equipamento
-                        }
+                          {item.implementador ?? "-"}
                       </td>
 
                       <td className="p-3 text-white">
-                        {item.status}
+                          {item.linha ?? "-"}
                       </td>
 
-                      <td className="p-3 text-cyan-400 font-bold">
-                        {item.score_geral}
+                      <td className="p-3 text-white">
+                          {item.modelo ?? "-"}
                       </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
+
+                      <td className="p-3 text-white">
+                          {item.estado ?? "-"}
+                      </td>
+
+                      <td className="p-3 text-cyan-400">
+                          {item.valor
+                            ? Number(item.valor).toLocaleString(
+                                "pt-BR",
+                                {
+                                  style: "currency",
+                                  currency: "BRL",
+                                }
+                              )
+                            : "-"}
+                        </td>
+
+                        <td className="p-3 text-emerald-400 font-bold">
+                          {item.score_operacional ?? "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
             </table>
           </div>
         </div>

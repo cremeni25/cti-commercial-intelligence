@@ -1145,12 +1145,27 @@ def insights():
 @app.get("/debug/amostra")
 def debug_amostra():
 
-    data = supabase.table("cti_processado") \
-        .select("*") \
-        .limit(20) \
-        .execute().data or []
+    dados = (
+        supabase
+        .table("cti_anfir")
+        .select(
+            """
+            cliente,
+            implementador,
+            linha,
+            modelo,
+            estado,
+            valor,
+            score_operacional
+            """
+        )
+        .eq("ativo", True)
+        .order("created_at", desc=True)
+        .limit(20)
+        .execute()
+    )
 
-    return data
+    return dados.data or []
 
 # ============================================================
 # STATUS DO PIPELINE
@@ -1159,12 +1174,20 @@ def debug_amostra():
 @app.get("/pipeline/status")
 def pipeline_status():
 
-    linhas = supabase.table("cti_linhas").select("id").execute().data or []
-    processado = supabase.table("cti_processado").select("id").execute().data or []
+    resposta = (
+        supabase
+        .table("cti_anfir")
+        .select("id", count="exact")
+        .eq("ativo", True)
+        .limit(1)
+        .execute()
+    )
+
+    total = resposta.count or 0
 
     return {
-        "linhas_brutas": len(linhas),
-        "linhas_processadas": len(processado),
+        "linhas_brutas": total,
+        "linhas_processadas": total,
         "pipeline": "ativo"
     }
 
