@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { getDashboardExecutivo } from "@/services/cti-api"
 
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -33,6 +34,14 @@ export default function Home() {
       null
     )
 
+  const [dashboard, setDashboard] =
+    useState<any>(null)
+
+  const [
+    loadingDashboard,
+    setLoadingDashboard,
+  ] = useState(true)
+
   function handleOpenDrawer(
     implementadora: Implementadora
   ) {
@@ -47,80 +56,63 @@ export default function Home() {
     setDrawerOpen(false)
   }
 
+  useEffect(() => {
+  async function carregarDashboard() {
+    try {
+      const dados =
+        await getDashboardExecutivo()
+
+      setDashboard(dados)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoadingDashboard(false)
+    }
+  }
+
+  carregarDashboard()
+}, [])
+
   /*
    * KPIs EXECUTIVOS
    */
 
-  const kpis = useMemo(() => {
-    const implementadorasAtivas =
-      implementadorasMock.filter(
-        (item) =>
-          item.status === "Ativo"
-      )
+   const kpis = useMemo(() => {
 
-    const implementadorasRisco =
-      implementadorasMock.filter(
-        (item) =>
-          item.status ===
-            "Inativo" ||
-          item.score < 70
-      )
-
-    const implementadorasEstrategicas =
-      implementadorasMock.filter(
-        (item) =>
-          item.score >= 85 &&
-          (item.marketShare ?? 0) >=
-            25
-      )
-
-    const oportunidadesTotais =
-      implementadorasMock.reduce(
-        (acc, item) =>
-          acc +
-          (item.oportunidadesAbertas ??
-            item.oportunidades),
-        0
-      )
-
-    const scoreMedio =
-      Math.round(
-        implementadorasMock.reduce(
-          (acc, item) =>
-            acc + item.score,
-          0
-        ) /
-          implementadorasMock.length
-      )
-
-    const crescimentoMedio =
-      Math.round(
-        implementadorasMock.reduce(
-          (acc, item) =>
-            acc +
-            (item.crescimento ?? 0),
-          0
-        ) /
-          implementadorasMock.length
-      )
+    if (!dashboard) {
+      return {
+        totalRegistros: 0,
+        faturamentoTotal: 0,
+        ticketMedio: 0,
+        totalClientes: 0,
+        totalEstados: 0,
+        totalImplementadoras: 0,
+      }
+    }
 
     return {
-      implementadorasAtivas:
-        implementadorasAtivas.length,
 
-      implementadorasRisco:
-        implementadorasRisco.length,
+      totalRegistros:
+        dashboard.resumo?.total_registros ?? 0,
 
-      implementadorasEstrategicas:
-        implementadorasEstrategicas.length,
+      faturamentoTotal:
+        dashboard.resumo?.faturamento_total ?? 0,
 
-      oportunidadesTotais,
+      ticketMedio:
+        dashboard.resumo?.ticket_medio ?? 0,
 
-      scoreMedio,
+      totalClientes:
+        dashboard.clientes?.length ?? 0,
 
-      crescimentoMedio,
+      totalEstados:
+        dashboard.estados?.length ?? 0,
+
+      totalImplementadoras:
+        dashboard.implementadoras?.length ?? 0,
+
     }
-  }, [])
+
+  }, [dashboard])
 
   /*
    * CENTRAL EXECUTIVA IA
@@ -284,36 +276,43 @@ export default function Home() {
           {/* KPI GRID */}
 
           <div className="grid grid-cols-1 xl:grid-cols-4 md:grid-cols-2 gap-4 mb-8">
-            <KPICard
-              title="Implementadoras Estratégicas"
-              value={String(
-                kpis.implementadorasEstrategicas
-              )}
-              change={`${kpis.scoreMedio}% score médio`}
-            />
+        <KPICard
+          title="Total de Registros"
+          value={String(kpis.totalRegistros)}
+          change={`${kpis.totalClientes} clientes`}
+        />
 
-            <KPICard
-              title="Operações em Risco"
-              value={String(
-                kpis.implementadorasRisco
-              )}
-              change="Monitoramento IA"
-              positive={false}
-            />
+        <KPICard
+          title="Faturamento"
+          value={Number(kpis.faturamentoTotal).toLocaleString(
+            "pt-BR",
+            {
+              style: "currency",
+              currency: "BRL",
+              maximumFractionDigits: 0,
+            }
+          )}
+          change="Receita operacional"
+        />
 
-            <KPICard
-              title="Expansão Carrier"
-              value={`${kpis.crescimentoMedio}%`}
-              change="Crescimento operacional"
-            />
+        <KPICard
+          title="Ticket Médio"
+          value={Number(kpis.ticketMedio).toLocaleString(
+            "pt-BR",
+            {
+              style: "currency",
+              currency: "BRL",
+              maximumFractionDigits: 0,
+            }
+          )}
+          change="Valor médio"
+        />
 
-            <KPICard
-              title="Oportunidades Ativas"
-              value={String(
-                kpis.oportunidadesTotais
-              )}
-              change={`${kpis.implementadorasAtivas} implementadoras ativas`}
-            />
+        <KPICard
+          title="Cobertura"
+          value={`${kpis.totalEstados} UF`}
+          change={`${kpis.totalImplementadoras} implementadoras`}
+        />
           </div>
 
           {/* CENTRAL EXECUTIVA IA */}
