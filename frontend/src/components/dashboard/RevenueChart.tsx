@@ -1,5 +1,7 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { getDashboardExecutivo } from "@/services/cti-api"
 import {
   AreaChart,
   Area,
@@ -9,40 +11,9 @@ import {
   CartesianGrid,
 } from "recharts"
 
-const data = [
-  {
-    mes: "Jan",
-    oportunidades: 40,
-    score: 62,
-  },
-  {
-    mes: "Fev",
-    oportunidades: 65,
-    score: 71,
-  },
-  {
-    mes: "Mar",
-    oportunidades: 52,
-    score: 68,
-  },
-  {
-    mes: "Abr",
-    oportunidades: 90,
-    score: 82,
-  },
-  {
-    mes: "Mai",
-    oportunidades: 81,
-    score: 79,
-  },
-  {
-    mes: "Jun",
-    oportunidades: 120,
-    score: 94,
-  },
-]
-
 export function RevenueChart() {
+  const [dashboard, setDashboard] = useState<any>(null)
+  const [data, setData] = useState<any[]>([])
   return (
     <div className="bg-[#071226] border border-[#13203f] rounded-2xl p-6 mb-8">
       <div className="flex items-center justify-between mb-8">
@@ -63,7 +34,7 @@ export function RevenueChart() {
             </p>
 
             <p className="text-xl font-bold text-cyan-400">
-              82%
+              {dashboard?.clientes?.length ?? 0}
             </p>
           </div>
 
@@ -73,7 +44,7 @@ export function RevenueChart() {
             </p>
 
             <p className="text-xl font-bold text-emerald-400">
-              +18.2%
+              {dashboard?.implementadoras?.length ?? 0}
             </p>
           </div>
         </div>
@@ -152,7 +123,7 @@ export function RevenueChart() {
           </p>
 
           <p className="text-2xl font-bold text-cyan-400 mt-2">
-            Sul
+            {dashboard?.estados?.[0]?.[0] ?? "-"}
           </p>
         </div>
 
@@ -162,7 +133,7 @@ export function RevenueChart() {
           </p>
 
           <p className="text-2xl font-bold text-cyan-400 mt-2">
-            54
+            {dashboard?.clientes?.length ?? 0}
           </p>
         </div>
 
@@ -172,7 +143,7 @@ export function RevenueChart() {
           </p>
 
           <p className="text-2xl font-bold text-emerald-400 mt-2">
-            94%
+            {dashboard?.implementadoras?.length ?? 0}
           </p>
         </div>
 
@@ -182,7 +153,7 @@ export function RevenueChart() {
           </p>
 
           <p className="text-2xl font-bold text-cyan-400 mt-2">
-            120
+            {dashboard?.resumo?.total_registros ?? 0}
           </p>
         </div>
       </div>
