@@ -1,13 +1,11 @@
 from fastapi import APIRouter
-from core.supabase_client import supabase
+
+from engine.cti_engine import cti_engine
 
 router = APIRouter()
+
 
 @router.get("/analytics/dashboard")
 def dashboard():
 
-    vendas = supabase.table("vendas").select("*").execute()
-
-    return {
-        "total_vendas": len(vendas.data)
-    }
+    return cti_engine.analytics_dashboard()

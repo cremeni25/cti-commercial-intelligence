@@ -59,19 +59,51 @@ def normalizar_planilha(contents, origem="upload"):
 
             cliente = detectar_campo(linha, ["cliente", "razao", "empresa", "nome"])
             cnpj = detectar_campo(linha, ["cnpj", "cpf"])
+            chassi = detectar_campo(
+                linha,
+                [
+                    "chassi",
+                    "chassis",
+                    "serial",
+                    "nº chassi",
+                    "numero chassi",
+                    "número chassi"
+                ]
+            )
+
+            placa = detectar_campo(
+                linha,
+                [
+                    "placa",
+                    "veiculo",
+                    "veículo"
+                ]
+            )
             cidade = detectar_campo(linha, ["cidade", "municipio"])
             estado = detectar_campo(linha, ["estado", "uf"])
             valor = detectar_campo(linha, ["valor", "total", "preco"])
             data = detectar_campo(linha, ["data", "emissao"])
 
             registro = {
+
                 "cliente": limpar_texto(cliente),
+
                 "cnpj": re.sub(r"\D", "", str(cnpj)) if cnpj else None,
+
+                "chassi": limpar_texto(chassi),
+
+                "placa": limpar_texto(placa),
+
                 "cidade": limpar_texto(cidade),
+
                 "estado": limpar_texto(estado),
+
                 "valor": limpar_numero(valor),
+
                 "data": str(data),
+
                 "origem": f"{origem}_{nome_aba}",
+
                 "created_at": datetime.utcnow().isoformat()
             }
 
@@ -79,6 +111,8 @@ def normalizar_planilha(contents, origem="upload"):
             if not any([
                 registro["cliente"],
                 registro["cnpj"],
+                registro["chassi"],
+                registro["placa"],
                 registro["valor"]
             ]):
                 continue

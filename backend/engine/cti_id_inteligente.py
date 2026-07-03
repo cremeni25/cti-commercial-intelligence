@@ -18,25 +18,41 @@ def gerar_hash(valor: str) -> str:
 
 def gerar_id_cliente(row: dict) -> str:
     """
-    Gera ID único inteligente baseado em prioridade:
-    1. CNPJ
-    2. Nome + Cidade + Estado
-    3. Fallback com hash geral
+    Gera ID inteligente obedecendo a seguinte prioridade:
+
+    1. Chassi
+    2. Placa
+    3. CNPJ
+    4. Cliente + Cidade + Estado
+    5. Hash Geral
     """
 
+    chassi = limpar_texto(row.get("chassi"))
+    placa = limpar_texto(row.get("placa"))
     cnpj = limpar_texto(row.get("cnpj"))
     cliente = limpar_texto(row.get("cliente"))
     cidade = limpar_texto(row.get("cidade"))
     estado = limpar_texto(row.get("estado"))
 
+    # 1 - CHASSI
+    if chassi:
+        return f"CHASSI_{chassi}"
+
+    # 2 - PLACA
+    if placa:
+        return f"PLACA_{placa}"
+
+    # 3 - CNPJ
     if cnpj:
         return f"CNPJ_{cnpj}"
 
+    # 4 - Nome + Cidade + Estado
     if cliente and cidade and estado:
         base = f"{cliente}_{cidade}_{estado}"
         return f"NOME_{gerar_hash(base)}"
 
-    base = f"{cliente}_{cidade}_{estado}_{row.get('valor', '')}"
+    # 5 - Hash Geral
+    base = f"{cliente}_{cidade}_{estado}_{row.get('valor','')}"
     return f"GEN_{gerar_hash(base)}"
 
 
