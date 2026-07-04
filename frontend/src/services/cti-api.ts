@@ -3,7 +3,7 @@ const API_URL =
 
 export async function getDashboardExecutivo() {
   const response = await fetch(
-    `${API_URL}/dashboard/executivo`,
+    `${API_URL}/analytics/dashboard`,
     {
       cache: "no-store",
     }
