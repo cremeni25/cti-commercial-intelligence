@@ -2,6 +2,7 @@ from collections import defaultdict
 from statistics import mean
 
 from core.supabase_client import supabase
+from core.cti_taxonomy import normalizar_implementadora
 
 
 class CTIEngine:
@@ -35,7 +36,9 @@ class CTIEngine:
             if estado:
                 estados[estado] += 1
 
-            implementadora = row.get("implementador")
+            implementadora = normalizar_implementadora(
+                row.get("implementador")
+            )
 
             if implementadora:
                 implementadoras.add(implementadora)
