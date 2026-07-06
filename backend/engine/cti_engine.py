@@ -114,6 +114,12 @@ class CTIEngine:
 
             "prioridades": dict(prioridades),
 
+            "debug": {
+                "implementadoras": sorted(
+                    list(implementadoras)
+                )
+            },
+
             "riscos": dict(riscos),
         }
 
