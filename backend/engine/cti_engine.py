@@ -17,15 +17,6 @@ class CTIEngine:
             or []
         )
 
-        from collections import Counter
-
-        estados = Counter()
-        cidades = Counter()
-        ddd = Counter()
-        implementadores = Counter()
-        linhas = Counter()
-        segmentos = Counter()
-
         estados = defaultdict(int)
         implementadoras = set()
 
@@ -44,20 +35,26 @@ class CTIEngine:
             if estado:
                 estados[estado] += 1
 
-            implementador = row.get("implementador")
+            implementadora = row.get("implementador")
 
-            if implementador:
-                implementadoras.add(implementador)
+            if implementadora:
+                implementadoras.add(implementadora)
 
             so = row.get("score_operacional")
 
             if so is not None:
-                score_operacional.append(float(so))
+                try:
+                    score_operacional.append(float(so))
+                except (TypeError, ValueError):
+                    pass
 
             sc = row.get("score_comercial")
 
             if sc is not None:
-                score_comercial.append(float(sc))
+                try:
+                    score_comercial.append(float(sc))
+                except (TypeError, ValueError):
+                    pass
 
             prioridade = row.get("prioridade")
 
@@ -69,57 +66,57 @@ class CTIEngine:
             if risco:
                 riscos[risco] += 1
 
-            valor_total += float(row.get("valor") or 0)
+            try:
+                valor_total += float(row.get("valor") or 0)
+            except (TypeError, ValueError):
+                pass
 
         return {
 
-            "total_registros": len(dados),
+            "kpis": {
+                "total_registros": len(dados),
+                "implementadoras": len(implementadoras),
+                "estados": len(estados),
+                "valor_total": valor_total,
+                "score_operacional": (
+                    round(mean(score_operacional), 2)
+                    if score_operacional
+                    else None
+                ),
+                "score_comercial": (
+                    round(mean(score_comercial), 2)
+                    if score_comercial
+                    else None
+                ),
+            },
 
-            "implementadoras": len(
-                implementadoras
-            ),
+            "territorial": {
+                "estados": sorted(
+                    [
+                        {
+                            "estado": estado,
+                            "quantidade": quantidade,
+                        }
+                        for estado, quantidade in estados.items()
+                    ],
+                    key=lambda x: x["quantidade"],
+                    reverse=True,
+                )
+            },
 
-            "valor_total": valor_total,
+            "timeline": {
+                "status": "indisponivel"
+            },
 
-            "score_operacional":
-                round(
-                    mean(score_operacional),
-                    2
-                ) if score_operacional else 0,
-
-            "score_comercial":
-                round(
-                    mean(score_comercial),
-                    2
-                ) if score_comercial else 0,
-
-            "estados": sorted(
-
-                [
-
-                    {
-                        "estado": estado,
-                        "quantidade": quantidade
-                    }
-
-                    for estado,
-                    quantidade
-                    in estados.items()
-
-                ],
-
-                key=lambda x:
-                x["quantidade"],
-
-                reverse=True
-
-            ),
+            "insights": {
+                "status": "indisponivel"
+            },
 
             "prioridades": dict(prioridades),
 
-            "riscos": dict(riscos)
-
+            "riscos": dict(riscos),
         }
+
     def analytics_dashboard(self):
         return self.dashboard_insights()
 
