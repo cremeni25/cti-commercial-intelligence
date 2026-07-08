@@ -55,11 +55,11 @@ export default function UploadPage() {
       alert(`
         Upload concluído com sucesso.
 
-        Recebidos: ${resultado.upload.recebidos}
-        Válidos: ${resultado.upload.validos}
-        Inseridos: ${resultado.upload.inseridos}
-        Ignorados: ${resultado.upload.ignorados}
-        Tempo: ${resultado.upload.tempo_execucao}s
+        Recebidos: ${resultado.recebidos}
+        Válidos: ${resultado.validos}
+        Inseridos: ${resultado.inseridos}
+        Ignorados: ${resultado.duplicados_lote}
+        Tempo: ${resultado.tempo_execucao}s
       `)
 
       await carregarDados()
