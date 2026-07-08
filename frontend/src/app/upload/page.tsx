@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useRef } from "react"
 
 import {
   uploadArquivo,
@@ -21,6 +21,9 @@ export default function UploadPage() {
 
   const [loading, setLoading] =
     useState(false)
+
+  const fileInputRef =
+    useRef<HTMLInputElement>(null)
 
   async function carregarDados() {
     try {
@@ -47,14 +50,22 @@ export default function UploadPage() {
     try {
       setLoading(true)
 
-      const resultado =
-        await uploadArquivo(file)
+      const resultado = await uploadArquivo(file)
 
-      alert(
-        `Upload concluído. ${resultado.linhas_extraidas} linhas encontradas.`
-      )
+      alert(`
+        Upload concluído com sucesso.
+
+        Recebidos: ${resultado.upload.recebidos}
+        Válidos: ${resultado.upload.validos}
+        Inseridos: ${resultado.upload.inseridos}
+        Ignorados: ${resultado.upload.ignorados}
+        Tempo: ${resultado.upload.tempo_execucao}s
+      `)
 
       await carregarDados()
+      window.dispatchEvent(
+        new Event("cti-upload-finalizado")
+      )
     } catch (error) {
       console.error(error)
       alert("Erro no upload")
@@ -145,6 +156,7 @@ export default function UploadPage() {
             </h2>
 
             <input
+              ref={fileInputRef}
               type="file"
               accept=".xlsx,.xls"
               onChange={(e) =>
@@ -152,15 +164,26 @@ export default function UploadPage() {
                   e.target.files?.[0] ?? null
                 )
               }
-              className="w-full text-white"
+              className="hidden"
             />
 
             <button
-              onClick={enviarArquivo}
-              disabled={loading}
-              className="mt-4 w-full bg-cyan-500 text-black font-bold py-3 rounded-xl"
+                onClick={() => {
+
+                    if (!file) {
+                        fileInputRef.current?.click()
+                        return
+                    }
+
+                    enviarArquivo()
+
+                }}
+                disabled={loading}
+                className="mt-4 w-full bg-cyan-500 text-black font-bold py-3 rounded-xl"
             >
-              Enviar Arquivo
+                {file
+                    ? "Iniciar Upload"
+                    : "Selecionar Arquivo"}
             </button>
           </div>
 
@@ -172,11 +195,10 @@ export default function UploadPage() {
             </h2>
 
             <button
-              onClick={executarPipeline}
-              disabled={loading}
-              className="w-full bg-emerald-500 text-black font-bold py-3 rounded-xl"
+              disabled
+              className="w-full bg-gray-600 text-gray-300 font-bold py-3 rounded-xl cursor-not-allowed"
             >
-              Executar Pipeline
+              Pipeline Integrado ao Upload
             </button>
           </div>
 

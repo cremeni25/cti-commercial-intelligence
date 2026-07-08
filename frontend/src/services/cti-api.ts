@@ -60,7 +60,7 @@ export async function uploadArquivo(
   formData.append("file", file)
 
   const response = await fetch(
-    `${API_URL}/upload`,
+    `${API_URL}/upload/anfir/seguro`,
     {
       method: "POST",
       body: formData,
@@ -77,20 +77,9 @@ export async function uploadArquivo(
 }
 
 export async function processarPipeline() {
-  const response = await fetch(
-    `${API_URL}/processar`,
-    {
-      method: "POST",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      "Erro ao processar pipeline"
-    )
+  return {
+    status: "PIPELINE_INTEGRADO",
   }
-
-  return response.json()
 }
 
 export async function getDebugAmostra() {
