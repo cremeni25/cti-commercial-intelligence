@@ -22,6 +22,9 @@ export default function UploadPage() {
   const [loading, setLoading] =
     useState(false)
 
+  const [statusUpload, setStatusUpload] =
+    useState("Aguardando arquivo")
+
   const [resultadoUpload, setResultadoUpload] =
     useState<any>(null)
 
@@ -55,10 +58,13 @@ export default function UploadPage() {
 
     try {
       setLoading(true)
+      setStatusUpload("Selecionando arquivo...")
 
       const resultado = await uploadArquivo(file)
+      setStatusUpload("Validando registros...")
 
       setResultadoUpload(resultado)
+      setStatusUpload("Upload concluído com sucesso")
 
       await carregarDados()
       window.dispatchEvent(
@@ -214,19 +220,37 @@ export default function UploadPage() {
           {/* PROCESSAMENTO */}
 
           <div className="bg-[#071226] border border-[#13203f] rounded-2xl p-6">
-            <h2 className="text-white text-xl font-bold mb-4">
-              Processamento
-            </h2>
 
-            <button
-              disabled
-              className="w-full bg-gray-600 text-gray-300 font-bold py-3 rounded-xl cursor-not-allowed"
-            >
-              Pipeline Integrado ao Upload
-            </button>
-          </div>
+              <h2 className="text-white text-xl font-bold mb-4">
+                  Status Operacional
+              </h2>
 
-        </div>
+              <div className="space-y-4">
+
+                  <div className="w-full h-3 rounded-full bg-[#13203f] overflow-hidden">
+
+                      <div
+                          className="h-full bg-emerald-400 transition-all duration-700"
+                          style={{
+                              width:
+                                  loading
+                                      ? "70%"
+                                      : resultadoUpload
+                                      ? "100%"
+                                      : "0%"
+                            }}
+                        />
+
+                  </div>
+
+                  <p className="text-white">
+                      {statusUpload}
+                  </p>
+
+              </div>
+              </div>
+
+            </div>
 
         {/* AUDITORIA */}
 
