@@ -22,6 +22,9 @@ export default function UploadPage() {
   const [loading, setLoading] =
     useState(false)
 
+  const [resultadoUpload, setResultadoUpload] =
+    useState<any>(null)
+
   const fileInputRef =
     useRef<HTMLInputElement>(null)
 
@@ -52,15 +55,7 @@ export default function UploadPage() {
 
       const resultado = await uploadArquivo(file)
 
-      alert(`
-        Upload concluído com sucesso.
-
-        Recebidos: ${resultado.recebidos}
-        Válidos: ${resultado.validos}
-        Inseridos: ${resultado.inseridos}
-        Ignorados: ${resultado.duplicados_lote}
-        Tempo: ${resultado.tempo_execucao}s
-      `)
+      setResultadoUpload(resultado)
 
       await carregarDados()
       window.dispatchEvent(
@@ -294,6 +289,66 @@ export default function UploadPage() {
             </table>
           </div>
         </div>
+
+{
+  resultadoUpload && (
+
+    <div className="mt-8 bg-[#071226] border border-[#13203f] rounded-2xl p-6">
+
+      <h2 className="text-2xl font-bold text-white mb-6">
+        Resultado do Upload
+      </h2>
+
+      <div className="grid grid-cols-2 gap-4">
+
+        <div>
+          <p className="text-gray-400">Recebidos</p>
+          <p className="text-cyan-400 text-xl">
+            {resultadoUpload.recebidos ?? "-"}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400">Válidos</p>
+          <p className="text-cyan-400 text-xl">
+            {resultadoUpload.validos ?? "-"}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400">Inseridos</p>
+          <p className="text-emerald-400 text-xl">
+            {resultadoUpload.inseridos ?? "-"}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400">Duplicados</p>
+          <p className="text-yellow-400 text-xl">
+            {resultadoUpload.duplicados_lote ?? "-"}
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400">Tempo</p>
+          <p className="text-white text-xl">
+            {resultadoUpload.tempo_execucao ?? "-"} s
+          </p>
+        </div>
+
+        <div>
+          <p className="text-gray-400">Status</p>
+          <p className="text-emerald-400 text-xl">
+            {resultadoUpload.status}
+          </p>
+        </div>
+
+      </div>
+
+    </div>
+
+  )
+}
 
       </div>
     </main>
