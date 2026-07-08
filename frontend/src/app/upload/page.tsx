@@ -25,6 +25,9 @@ export default function UploadPage() {
   const [resultadoUpload, setResultadoUpload] =
     useState<any>(null)
 
+  const [nomeArquivo, setNomeArquivo] =
+    useState("")
+
   const fileInputRef =
     useRef<HTMLInputElement>(null)
 
@@ -154,11 +157,20 @@ export default function UploadPage() {
               ref={fileInputRef}
               type="file"
               accept=".xlsx,.xls"
-              onChange={(e) =>
-                setFile(
-                  e.target.files?.[0] ?? null
-                )
-              }
+              onChange={(e) => {
+
+                  const arquivo =
+                      e.target.files?.[0] ?? null
+
+                  setFile(arquivo)
+
+                  setNomeArquivo(
+                      arquivo
+                          ? arquivo.name
+                          : ""
+                  )
+
+              }}
               className="hidden"
             />
 
@@ -180,6 +192,23 @@ export default function UploadPage() {
                     ? "Iniciar Upload"
                     : "Selecionar Arquivo"}
             </button>
+
+                {nomeArquivo && (
+
+                <div className="mt-4 rounded-xl border border-emerald-500 bg-emerald-500/10 p-4">
+
+                    <p className="text-sm text-emerald-400 font-semibold">
+                        Arquivo selecionado
+                    </p>
+
+                    <p className="text-white mt-1">
+                        {nomeArquivo}
+                    </p>
+
+                </div>
+
+                )}
+
           </div>
 
           {/* PROCESSAMENTO */}
