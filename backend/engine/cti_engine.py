@@ -120,7 +120,103 @@ class CTIEngine:
         }
 
     def analytics_dashboard(self):
-        return self.dashboard_insights()
+
+        dados = repository.buscar_cti_anfir()
+
+        estados = defaultdict(int)
+        implementadoras = defaultdict(int)
+        clientes = defaultdict(int)
+
+        faturamento_total = 0
+
+        for row in dados:
+
+            cliente = row.get("cliente")
+            if cliente:
+                clientes[cliente] += 1
+
+            estado = row.get("estado")
+            if estado:
+                estados[estado] += 1
+
+            implementadora = normalizar_implementadora(
+                row.get("implementador")
+            )
+
+            if implementadora:
+                implementadoras[
+                    implementadora
+                ] += 1
+
+            try:
+                faturamento_total += float(
+                    row.get("valor") or 0
+                )
+            except (TypeError, ValueError):
+                pass
+
+        total_registros = len(dados)
+
+        ticket_medio = (
+            faturamento_total / total_registros
+            if total_registros
+            else 0
+        )
+
+        return {
+
+            "resumo": {
+
+                "total_registros":
+                    total_registros,
+
+                "faturamento_total":
+                    round(faturamento_total, 2),
+
+                "ticket_medio":
+                    round(ticket_medio, 2),
+
+            },
+
+            "clientes": sorted(
+                [
+                    {
+                        "cliente": cliente,
+                        "quantidade": quantidade,
+                    }
+                    for cliente, quantidade
+                    in clientes.items()
+                ],
+                key=lambda x: x["quantidade"],
+                reverse=True,
+            ),
+
+            "implementadoras": sorted(
+                [
+                    {
+                        "implementadora": nome,
+                        "quantidade": quantidade,
+                    }
+                    for nome, quantidade
+                    in implementadoras.items()
+                ],
+                key=lambda x: x["quantidade"],
+                reverse=True,
+            ),
+
+            "estados": sorted(
+                [
+                    {
+                        "estado": uf,
+                        "quantidade": quantidade,
+                    }
+                    for uf, quantidade
+                    in estados.items()
+                ],
+                key=lambda x: x["quantidade"],
+                reverse=True,
+            ),
+        }
 
 
 cti_engine = CTIEngine()
