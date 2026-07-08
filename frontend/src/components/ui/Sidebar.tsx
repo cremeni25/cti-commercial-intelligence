@@ -15,6 +15,7 @@ const permissoesMenu = {
   ADMIN_MASTER: [
     "/dashboard",
     "/ia-comercial",
+    "/upload",
     "/transportadoras",
     "/implementadoras",
     "/locadoras",
@@ -35,6 +36,7 @@ const permissoesMenu = {
   DIRETOR: [
     "/dashboard",
     "/ia-comercial",
+    "/upload",
     "/transportadoras",
     "/implementadoras",
     "/locadoras",
@@ -98,6 +100,12 @@ const menuGroups = [
         label: "Pipeline",
         href: "/pipeline",
         icon: "🔄",
+        type: "emoji",
+      },
+      {
+        label: "Upload Operacional",
+        href: "/upload",
+        icon: "📤",
         type: "emoji",
       },
       {
