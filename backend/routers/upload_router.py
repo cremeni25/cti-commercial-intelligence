@@ -28,9 +28,7 @@ import traceback
 
 from collections import Counter
 
-from planilha_engine_viena import (
-    processar_planilha_viena
-)
+from parsers.viena_parser import processar_planilha_viena
 
 from core.score_engine import (
     consolidar_scores
@@ -40,7 +38,7 @@ from core.upload_engine import (
     UploadEngine
 )
 
-from core.supabase_client import supabase
+from repositories.cti_repository import repository
 
 router = APIRouter()
 
@@ -169,59 +167,34 @@ async def upload_anfir_seguro(
 
         registros_processados = []
 
-        for r in registros:
+        for registro in registros:
 
-            registros_processados.append({
+            if hasattr(registro, "to_dict"):
 
-                "ano": r.get("ano"),
-                "mes": r.get("mes"),
-                "data_venda": r.get("data_venda"),
-                "cliente": r.get("cliente"),
-                "cnpj": r.get("cnpj"),
-                "cidade": r.get("cidade"),
-                "estado": r.get("estado"),
-                "ddd": r.get("ddd"),
-                "regiao": r.get("regiao"),
-                "placa": r.get("placa"),
-                "chassi": r.get("chassi"),
-                "implementador": r.get("implementador"),
-                "linha": r.get("linha"),
-                "modelo": r.get("modelo"),
-                "responsavel": r.get("responsavel"),
-                "valor": float(r.get("valor", 0)),
-                "origem_dado": r.get("origem_dado", "VIENA"),
-                "arquivo_origem": r.get("arquivo_origem"),
+                registros_processados.append(
+                    registro.to_dict()
+                )
 
-                "id_operacional": r.get("id_operacional"),
-                "hash_registro": r.get("hash_registro"),
+            else:
 
-                "ativo": True
+                registros_processados.append(
+                    registro
+                )
 
-            })
-
-        ids_lote = [
-            r["id_operacional"]
+        hashes_lote = [
+            r["hash_registro"]
             for r in registros_processados
-            if r.get("id_operacional")
+            if r.get("hash_registro")
         ]
 
-        existentes = (
-            supabase
-            .table("cti_anfir")
-            .select("id_operacional")
-            .in_("id_operacional", ids_lote)
-            .execute()
+        hashes_existentes = repository.buscar_hashes_existentes(
+        hashes_lote
         )
-
-        ids_existentes = {
-            r["id_operacional"]
-            for r in (existentes.data or [])
-        }
 
         registros_novos = [
             r
             for r in registros_processados
-            if r.get("id_operacional") not in ids_existentes
+            if r.get("hash_registro") not in hashes_existentes
         ]
 
         ignorados = (

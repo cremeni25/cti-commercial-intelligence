@@ -1,22 +1,13 @@
 from collections import defaultdict
 from statistics import mean
 
-from core.supabase_client import supabase
 from core.cti_taxonomy import normalizar_implementadora
+from repositories.cti_repository import repository
 
 
 class CTIEngine:
 
     def dashboard_insights(self):
-
-        dados = (
-            supabase
-            .table("cti_anfir")
-            .select("*")
-            .execute()
-            .data
-            or []
-        )
 
         estados = defaultdict(int)
         implementadoras = set()
@@ -28,6 +19,8 @@ class CTIEngine:
         riscos = defaultdict(int)
 
         valor_total = 0
+
+        dados = repository.buscar_cti_anfir()
 
         for row in dados:
 

@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 import re
 
@@ -217,4 +216,4 @@ def normalizar_dataframe(df, origem):
         registros.append(registro)
 
     return registros
-```
+

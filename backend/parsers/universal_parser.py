@@ -1,4 +1,3 @@
-```python
 import pandas as pd
 from io import BytesIO
 
@@ -217,4 +216,4 @@ def processar_planilha_universal(contents):
         })
 
     return registros
-```
+

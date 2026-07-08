@@ -28,6 +28,8 @@ import re
 from datetime import datetime
 from io import BytesIO
 
+from models.cti_record import CTIRecord
+
 import pandas as pd
 
 
@@ -453,401 +455,149 @@ def converter_registro(df, row, nome_aba):
 
     )
 
-    registro = {
+    registro = CTIRecord(
+
+    # ======================================================
+    # DADOS TEMPORAIS
+    # ======================================================
+
+    ano=extrair_ano(data_venda),
+    mes=extrair_mes(data_venda),
+    data_venda=data_venda,
+
+    # ======================================================
+    # OPERAÇÃO
+    # ======================================================
+
+    responsavel=texto(
+        campo(df, row, COLUNAS["RESPONSAVEL"])
+    ),
+
+    # ======================================================
+    # LOCALIZAÇÃO
+    # ======================================================
+
+    regiao=texto(
+        campo(df, row, COLUNAS["REGIAO"])
+    ),
+
+    estado=texto(
+        campo(df, row, COLUNAS["ESTADO"])
+    ),
 
-        "ano":
+    ddd=texto(
+        campo(df, row, COLUNAS["DDD"])
+    ),
 
-            extrair_ano(data_venda),
+    cidade=texto(
+        campo(df, row, COLUNAS["MUNICIPIO"])
+    ),
 
-        "mes":
+    sub_regiao=texto(
+        campo(df, row, COLUNAS["SUB_REGIAO"])
+    ),
 
-            extrair_mes(data_venda),
+    # ======================================================
+    # CLIENTE
+    # ======================================================
 
-        "data_venda":
+    cliente=texto(
+        campo(df, row, COLUNAS["CLIENTE"])
+    ),
 
-            data_venda,
+    cnpj=texto(
+        campo(df, row, COLUNAS["CNPJ"])
+    ),
 
-        "responsavel":
+    # ======================================================
+    # VEÍCULO
+    # ======================================================
 
-            texto(
+    fabricante_caminhao=texto(
+        campo(df, row, COLUNAS["FABRICANTE_CAMINHAO"])
+    ),
 
-                campo(
+    modelo_caminhao=texto(
+        campo(df, row, COLUNAS["MODELO_CAMINHAO"])
+    ),
 
-                    df,
+    eixo=texto(
+        campo(df, row, COLUNAS["EIXO"])
+    ),
 
-                    row,
+    tipo_veiculo=texto(
+        campo(df, row, COLUNAS["TIPO_VEICULO"])
+    ),
 
-                    COLUNAS["RESPONSAVEL"]
+    placa=texto(
+        campo(df, row, COLUNAS["PLACA"])
+    ),
 
-                )
+    chassi=texto(
+        campo(df, row, COLUNAS["CHASSI"])
+    ),
 
-            ),
+    # ======================================================
+    # EQUIPAMENTO
+    # ======================================================
 
-        "regiao":
+    implementador=texto(
+        campo(df, row, COLUNAS["IMPLEMENTADORA"])
+    ),
 
-            texto(
+    fabricante_equipamento=texto(
+        campo(df, row, COLUNAS["FABRICANTE_EQUIPAMENTO"])
+    ),
 
-                campo(
+    linha=texto(
+        campo(df, row, COLUNAS["LINHA"])
+    ),
 
-                    df,
+    modelo=texto(
+        campo(df, row, COLUNAS["MODELO"])
+    ),
 
-                    row,
+    # ======================================================
+    # OPERAÇÃO
+    # ======================================================
 
-                    COLUNAS["REGIAO"]
+    status=texto(
+        campo(df, row, COLUNAS["STATUS"])
+    ),
 
-                )
+    motivo=texto(
+        campo(df, row, COLUNAS["MOTIVO"])
+    ),
 
-            ),
+    ocorrencia=texto(
+        campo(df, row, COLUNAS["OCORRENCIA"])
+    ),
 
-        "estado":
+    valor=numero(
+        campo(df, row, COLUNAS["VALOR"])
+    ),
 
-            texto(
+    # ======================================================
+    # ORIGEM
+    # ======================================================
 
-                campo(
+    origem_dado="VIENA",
 
-                    df,
+    arquivo_origem="PLANILHA_VIENA",
 
-                    row,
+    aba_origem=nome_aba,
 
-                    COLUNAS["ESTADO"]
+    versao_parser="2.0.0",
 
-                )
+    pipeline="UPLOAD_VIENA",
 
-            ),
+    ativo=True,
 
-        "ddd":
+    created_at=datetime.utcnow().isoformat()
 
-            texto(
+)
 
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["DDD"]
-
-                )
-
-            ),
-
-        "cidade":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["MUNICIPIO"]
-
-                )
-
-            ),
-
-        "sub_regiao":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["SUB_REGIAO"]
-
-                )
-
-            ),
-
-        "cliente":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["CLIENTE"]
-
-                )
-
-            ),
-
-        "cnpj":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["CNPJ"]
-
-                )
-
-            ),
-
-                    "fabricante_caminhao":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["FABRICANTE_CAMINHAO"]
-
-                )
-
-            ),
-
-        "modelo_caminhao":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["MODELO_CAMINHAO"]
-
-                )
-
-            ),
-
-        "eixo":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["EIXO"]
-
-                )
-
-            ),
-
-        "tipo_veiculo":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["TIPO_VEICULO"]
-
-                )
-
-            ),
-
-        "placa":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["PLACA"]
-
-                )
-
-            ),
-
-        "chassi":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["CHASSI"]
-
-                )
-
-            ),
-
-        "implementador":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["IMPLEMENTADORA"]
-
-                )
-
-            ),
-
-        "status":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["STATUS"]
-
-                )
-
-            ),
-
-        "motivo":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["MOTIVO"]
-
-                )
-
-            ),
-
-        "ocorrencia":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["OCORRENCIA"]
-
-                )
-
-            ),
-
-        "fabricante_equipamento":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["FABRICANTE_EQUIPAMENTO"]
-
-                )
-
-            ),
-
-        "linha":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["LINHA"]
-
-                )
-
-            ),
-
-        "modelo":
-
-            texto(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["MODELO"]
-
-                )
-
-            ),
-
-        "valor":
-
-            numero(
-
-                campo(
-
-                    df,
-
-                    row,
-
-                    COLUNAS["VALOR"]
-
-                )
-
-            ),
-
-        "origem_dado":
-
-            "VIENA",
-
-        "arquivo_origem":
-
-            "PLANILHA_VIENA",
-
-        "aba_origem":
-
-            nome_aba,
-
-        "versao_parser":
-
-            "2.0.0",
-
-        "pipeline":
-
-            "UPLOAD_VIENA",
-
-        "ativo":
-
-            True,
-
-        "created_at":
-
-            datetime.utcnow().isoformat()
-
-    }
+    registro = registro.to_dict()
 
     registro["hash_registro"] = gerar_hash(
         registro
