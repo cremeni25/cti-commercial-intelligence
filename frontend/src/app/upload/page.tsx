@@ -52,8 +52,13 @@ export default function UploadPage() {
 
   async function enviarArquivo() {
     if (!file) {
-      alert("Selecione um arquivo")
-      return
+
+        setStatusUpload(
+            "Selecione um arquivo para iniciar o upload."
+        )
+
+        return
+
     }
 
     try {
@@ -72,7 +77,9 @@ export default function UploadPage() {
       )
     } catch (error) {
       console.error(error)
-      alert("Erro no upload")
+      setStatusUpload(
+          "Falha durante o upload."
+      )
     } finally {
       setLoading(false)
     }
@@ -212,6 +219,28 @@ export default function UploadPage() {
                   <p className="text-white">
                       {statusUpload}
                   </p>
+
+                  <div className="mt-3">
+
+                      <div className="h-2 rounded-full bg-[#13203f]">
+
+                          <div
+                              className="h-2 rounded-full bg-cyan-400 transition-all duration-700"
+                              style={{
+                                  width:
+                                      resultadoUpload
+                                          ? "100%"
+                                          : loading
+                                          ? "65%"
+                                          : nomeArquivo
+                                          ? "20%"
+                                          : "0%"
+                                }}
+                            />
+
+                      </div>
+
+                  </div>
 
               </div>
               </div>
