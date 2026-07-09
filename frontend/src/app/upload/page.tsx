@@ -66,9 +66,14 @@ export default function UploadPage() {
       setStatusUpload("Selecionando arquivo...")
 
       const resultado = await uploadArquivo(file)
+      console.log(
+          "RETORNO UPLOAD:",
+          resultado
+      )
       setStatusUpload("Validando registros...")
 
       setResultadoUpload(resultado)
+      console.table(resultado)
       setStatusUpload("Upload concluído com sucesso")
 
       await carregarDados()
