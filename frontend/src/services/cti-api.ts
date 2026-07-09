@@ -73,8 +73,10 @@ export async function uploadArquivo(
     )
   }
 
-  return response.json()
-}
+  const json = await response.json()
+
+  return json.upload ?? json
+  }
 
 export async function processarPipeline() {
   return {
