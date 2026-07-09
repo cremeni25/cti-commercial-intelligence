@@ -116,41 +116,7 @@ export default function UploadPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-
-          {/* PIPELINE */}
-
-          <div className="bg-[#071226] border border-[#13203f] rounded-2xl p-6">
-            <h2 className="text-white text-xl font-bold mb-4">
-              Pipeline
-            </h2>
-
-            <div className="space-y-3">
-              <p className="text-gray-300">
-                Linhas Brutas:
-                {" "}
-                <span className="text-cyan-400">
-                  {status?.linhas_brutas ?? 0}
-                </span>
-              </p>
-
-              <p className="text-gray-300">
-                Processadas:
-                {" "}
-                <span className="text-cyan-400">
-                  {status?.linhas_processadas ?? 0}
-                </span>
-              </p>
-
-              <p className="text-gray-300">
-                Status:
-                {" "}
-                <span className="text-emerald-400">
-                  {status?.pipeline ?? "-"}
-                </span>
-              </p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
           {/* UPLOAD */}
 
