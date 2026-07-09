@@ -125,6 +125,16 @@ export default function UploadPage() {
 
           <p className="text-gray-400 mt-2">
             Ingestão, processamento e auditoria operacional
+
+        <div className="mt-4">
+            <button
+              onClick={() => window.location.href = "/dashboard"}
+              className="px-4 py-2 rounded-lg bg-cyan-500 text-black font-semibold hover:bg-cyan-400 transition-colors"
+            >
+              ← Voltar ao Dashboard
+            </button>
+        </div>
+
           </p>
         </div>
 
