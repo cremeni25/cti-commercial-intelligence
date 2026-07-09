@@ -278,16 +278,16 @@ export default function UploadPage() {
         </div>
 
         <div>
-            <p className="text-gray-400">Recebidos</p>
+            <p className="text-gray-400">Linhas do Arquivo</p>
             <p className="text-cyan-400 text-xl">
-                {resultadoUpload?.recebidos ?? "-"}
+                {status?.linhas_brutas ?? "-"}
             </p>
         </div>
 
         <div>
-            <p className="text-gray-400">Válidos</p>
+            <p className="text-gray-400">Processados</p>
             <p className="text-emerald-400 text-xl">
-                {resultadoUpload?.validos ?? "-"}
+                {resultadoUpload?.recebidos ?? "-"}
             </p>
         </div>
 
@@ -299,9 +299,12 @@ export default function UploadPage() {
         </div>
 
         <div>
-            <p className="text-gray-400">Duplicados</p>
+            <p className="text-gray-400">Ignorados</p>
             <p className="text-yellow-400 text-xl">
-                {resultadoUpload?.duplicados_lote ?? "-"}
+                {status?.linhas_brutas && resultadoUpload
+                    ? status.linhas_brutas - resultadoUpload.recebidos
+                    : "-"
+                }
             </p>
         </div>
 
