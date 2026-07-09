@@ -247,96 +247,66 @@ export default function UploadPage() {
 
             </div>
 
-        {/* AUDITORIA */}
+<div className="mt-8 bg-[#071226] border border-[#13203f] rounded-2xl p-6">
 
-        <div className="mt-8 bg-[#071226] border border-[#13203f] rounded-2xl p-6">
-          <h2 className="text-white text-2xl font-bold mb-6">
-            Auditoria Operacional
-          </h2>
+    <h2 className="text-white text-2xl font-bold mb-6">
+        Painel Oficial do Upload
+    </h2>
 
-          <div className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[#13203f]">
+    <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
 
-                <th className="text-left p-3 text-cyan-400">
-                  Cliente
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  Implementadora
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  Linha
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  Modelo
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  UF
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  Valor
-                </th>
-
-                <th className="text-left p-3 text-cyan-400">
-                  Score
-                </th>
-
-                </tr>
-              </thead>
-
-              <tbody>
-                {auditoria.map((item, index) => (
-                    <tr
-                      key={index}
-                      className="border-b border-[#13203f]"
-                    >
-                      <td className="p-3 text-white">
-                          {item.cliente ?? "-"}
-                      </td>
-
-                      <td className="p-3 text-white">
-                          {item.implementador ?? "-"}
-                      </td>
-
-                      <td className="p-3 text-white">
-                          {item.linha ?? "-"}
-                      </td>
-
-                      <td className="p-3 text-white">
-                          {item.modelo ?? "-"}
-                      </td>
-
-                      <td className="p-3 text-white">
-                          {item.estado ?? "-"}
-                      </td>
-
-                      <td className="p-3 text-cyan-400">
-                          {item.valor
-                            ? Number(item.valor).toLocaleString(
-                                "pt-BR",
-                                {
-                                  style: "currency",
-                                  currency: "BRL",
-                                }
-                              )
-                            : "-"}
-                        </td>
-
-                        <td className="p-3 text-emerald-400 font-bold">
-                          {item.score_operacional ?? "-"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-            </table>
-          </div>
+        <div>
+            <p className="text-gray-400">Arquivo</p>
+            <p className="text-white">
+                {nomeArquivo || "-"}
+            </p>
         </div>
+
+        <div>
+            <p className="text-gray-400">Recebidos</p>
+            <p className="text-cyan-400 text-xl">
+                {resultadoUpload?.recebidos ?? "-"}
+            </p>
+        </div>
+
+        <div>
+            <p className="text-gray-400">Válidos</p>
+            <p className="text-emerald-400 text-xl">
+                {resultadoUpload?.validos ?? "-"}
+            </p>
+        </div>
+
+        <div>
+            <p className="text-gray-400">Inseridos</p>
+            <p className="text-white text-xl">
+                {resultadoUpload?.inseridos ?? "-"}
+            </p>
+        </div>
+
+        <div>
+            <p className="text-gray-400">Duplicados</p>
+            <p className="text-yellow-400 text-xl">
+                {resultadoUpload?.duplicados_lote ?? "-"}
+            </p>
+        </div>
+
+        <div>
+            <p className="text-gray-400">Tempo</p>
+            <p className="text-white">
+                {resultadoUpload?.tempo_execucao ?? "-"} s
+            </p>
+        </div>
+
+        <div>
+            <p className="text-gray-400">Status</p>
+            <p className="text-emerald-400">
+                {resultadoUpload?.status ?? statusUpload}
+            </p>
+        </div>
+
+    </div>
+
+</div>
 
 {
   resultadoUpload && (
