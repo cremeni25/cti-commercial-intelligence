@@ -1,3 +1,5 @@
+from core.entity_normalizer import normalizar_entidade
+
 # ============================================================
 # CTI - TAXONOMIA CENTRAL
 # Núcleo semântico oficial do sistema
@@ -275,9 +277,17 @@ def normalizar_produto(produto):
     if not produto:
         return None
 
-    return PRODUTOS.get(
-        str(produto).upper().strip()
-    )
+    produto = normalizar_entidade(produto)
+
+    if produto in PRODUTOS:
+        return PRODUTOS[produto]
+
+    for original, oficial in PRODUTOS.items():
+
+        if normalizar_entidade(original) == produto:
+            return oficial
+
+    return produto
 
 
 def normalizar_implementadora(nome):
@@ -285,10 +295,17 @@ def normalizar_implementadora(nome):
     if not nome:
         return None
 
-    return IMPLEMENTADORAS.get(
-        str(nome).upper().strip(),
-        str(nome).upper().strip()
-    )
+    chave = normalizar_entidade(nome)
+
+    if chave in IMPLEMENTADORAS:
+        return IMPLEMENTADORAS[chave]
+
+    for original, oficial in IMPLEMENTADORAS.items():
+
+        if normalizar_entidade(original) == chave:
+            return oficial
+
+    return chave
 
 
 def fabricante_valido(nome):
@@ -296,9 +313,14 @@ def fabricante_valido(nome):
     if not nome:
         return False
 
-    n = str(nome).upper().strip()
+    nome = normalizar_entidade(nome)
 
-    return any(f in n for f in FABRICANTES_EQUIPAMENTO)
+    for fabricante in FABRICANTES_EQUIPAMENTO:
+
+        if normalizar_entidade(fabricante) in nome:
+            return True
+
+    return False
 
 
 def status_valido(status):
@@ -321,3 +343,21 @@ def cliente_lixo(cliente):
         str(cliente).upper().strip()
         in LIXO_OPERACIONAL
     )
+
+# ============================================================
+# CONSOLIDAÇÕES CENTRAIS
+# ============================================================
+
+def consolidar_cliente(cliente):
+
+    return normalizar_entidade(cliente)
+
+
+def consolidar_transportadora(nome):
+
+    return normalizar_entidade(nome)
+
+
+def consolidar_cidade(nome):
+
+    return normalizar_entidade(nome)

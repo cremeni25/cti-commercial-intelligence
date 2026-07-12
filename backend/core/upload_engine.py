@@ -20,6 +20,10 @@ from typing import List, Dict
 
 from supabase import create_client
 
+from core.entity_normalizer import (
+    normalizar_entidade,
+)
+
 import os
 
 import time

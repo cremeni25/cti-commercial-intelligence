@@ -1,7 +1,10 @@
-# cti_consolidacao.py — versão completa e final
+# cti_consolidacao.py — ETAPA 13.1.1
+# Motor Oficial de Consolidação do CTI
 
 from collections import defaultdict
+
 from engine.cti_id_inteligente import gerar_id_cliente
+from core.cti_taxonomy import normalizar_implementadora
 
 
 MARCAS_PRIORITARIAS = [
@@ -14,10 +17,11 @@ MARCAS_PRIORITARIAS = [
 
 
 def classificar_marca(marca: str) -> str:
+
     if not marca:
         return "OUTROS"
 
-    marca = marca.upper()
+    marca = str(marca).upper()
 
     for m in MARCAS_PRIORITARIAS:
         if m in marca:
@@ -25,17 +29,54 @@ def classificar_marca(marca: str) -> str:
 
     return "OUTROS"
 
+def obter_campo(row, *campos):
+
+    for campo in campos:
+
+        valor = row.get(campo)
+
+        if valor not in (None, "", "nan"):
+
+            return valor
+
+    return None
+
+
+def obter_valor(row):
+
+    valor = obter_campo(
+        row,
+        "valor",
+        "VALOR",
+        "VALOR - CARRIER",
+        "VALOR - CONCORRÊNCIA"
+    )
+
+    try:
+        return float(valor or 0)
+    except:
+        return 0.0
+
 
 def consolidar_dados(registros: list) -> dict:
     """
-    Consolida dados em múltiplas dimensões:
-    - Cliente
-    - Estado
-    - DDD
-    - Marca
+    Motor Oficial de Consolidação CTI
+
+    Consolida atualmente:
+
+    • Clientes
+    • Implementadoras
+    • Estados
+    • DDD
+    • Marcas
+
+    (ETAPA 13 em evolução)
     """
 
     clientes = {}
+
+    implementadoras = {}
+
     por_estado = defaultdict(float)
     por_ddd = defaultdict(float)
     por_marca = defaultdict(float)
@@ -44,48 +85,265 @@ def consolidar_dados(registros: list) -> dict:
 
     for row in registros:
 
-        valor = float(row.get("valor", 0) or 0)
-        estado = row.get("estado", "UNKNOWN")
-        ddd = str(row.get("ddd", "00"))
-        marca = classificar_marca(row.get("marca"))
+        valor = obter_valor(row)
+
+        estado = obter_campo(
+            row,
+            "estado",
+            "ESTADO"
+        ) or "UNKNOWN"
+
+        ddd = str(
+            obter_campo(
+            row,
+            "ddd",
+            "DDD"
+        ) or "00"
+)
+          
+        marca = classificar_marca(
+            obter_campo(
+            row,
+            "marca",
+            "MARCA",
+            "FABRICANTE EQUIPAMENTO"
+        )
+)
 
         id_cliente = gerar_id_cliente(row)
 
         total_geral += valor
 
+        # ======================================================
         # CLIENTE
+        # ======================================================
+
         if id_cliente not in clientes:
+
             clientes[id_cliente] = {
+
                 "cliente": row.get("cliente"),
+
                 "estado": estado,
+
                 "ddd": ddd,
+
                 "total": 0
+
             }
 
         clientes[id_cliente]["total"] += valor
 
-        # AGREGAÇÕES
+        # ======================================================
+        # IMPLEMENTADORA (NOVA CONSOLIDAÇÃO)
+        # ======================================================
+
+        implementadora = normalizar_implementadora(
+
+            obter_campo(
+
+                row,
+
+                "implementadora",
+
+                "implementador",
+
+                "IMPLEMENTADORA"
+
+            ) or ""
+
+        )
+
+        if implementadora:
+
+            if implementadora not in implementadoras:
+
+                implementadoras[implementadora] = {
+
+                    "nome": implementadora,
+
+                    "negocios": 0,
+
+                    "clientes": set(),
+
+                    "placas": set(),
+
+                    "chassis": set(),
+
+                    "estados": set(),
+
+                    "ddd": set(),
+
+                    "linhas": defaultdict(int),
+
+                    "valor_total": 0.0
+
+                }
+
+            imp = implementadoras[implementadora]
+
+            imp["negocios"] += 1
+
+            imp["valor_total"] += valor
+
+            imp["clientes"].add(id_cliente)
+
+            placa = obter_campo(
+                row,
+                "placa",
+                "PLACA"
+            )
+
+            if placa:
+
+                imp["placas"].add(
+                    str(placa).upper()
+                )
+
+            chassi = obter_campo(
+                row,
+                "chassi",
+                "CHASSI"
+            )
+
+            if chassi:
+
+                imp["chassis"].add(
+                    str(chassi).upper()
+                )
+
+            if estado:
+                imp["estados"].add(estado)
+
+            if ddd:
+                imp["ddd"].add(ddd)
+
+            linha = obter_campo(
+
+                row,
+
+                "linha",
+
+                "LINHA",
+
+                "LINHA DE PRODUTO",
+
+                "MODELO DE PRODUTO",
+
+                "MODELO DE PRODUTO - CARRIER"
+
+            )
+
+            if not linha:
+                linha = "OUTROS"
+
+            imp["linhas"][linha] += 1
+
+        # ======================================================
+        # AGREGAÇÕES GERAIS
+        # ======================================================
+
         por_estado[estado] += valor
+
         por_ddd[ddd] += valor
+
         por_marca[marca] += valor
 
+    # ==========================================================
+    # IMPLEMENTADORAS CONSOLIDADAS
+    # ==========================================================
+
+    implementadoras_consolidadas = {}
+
+    for nome, dados in implementadoras.items():
+
+        implementadoras_consolidadas[nome] = {
+
+            "nome": nome,
+
+            "negocios": dados["negocios"],
+
+            "clientes": len(dados["clientes"]),
+
+            "placas": len(dados["placas"]),
+
+            "chassis": len(dados["chassis"]),
+
+            "valor_total": round(
+                dados["valor_total"],
+                2
+            ),
+
+            "estados": sorted(
+                list(dados["estados"])
+            ),
+
+            "ddd": sorted(
+                list(dados["ddd"])
+            ),
+
+            "linhas": dict(
+                dados["linhas"]
+            )
+
+        }
+
+    # ==========================================================
     # MARKET SHARE
+    # ==========================================================
+
     share_marca = {
-        marca: (valor / total_geral * 100 if total_geral else 0)
+
+        marca: (
+            valor / total_geral * 100
+            if total_geral
+            else 0
+        )
+
         for marca, valor in por_marca.items()
+
     }
 
     share_ddd = {
-        ddd: (valor / total_geral * 100 if total_geral else 0)
+
+        ddd: (
+            valor / total_geral * 100
+            if total_geral
+            else 0
+        )
+
         for ddd, valor in por_ddd.items()
+
     }
 
+    # ==========================================================
+    # RESUMO OFICIAL
+    # ==========================================================
+    ticket_medio = (
+        total_geral / len(registros)
+        if registros else 0
+    )
+
+    resumo = {
+        "total_registros": len(registros),
+        "total_clientes": len(clientes),
+        "total_implementadoras": len(implementadoras_consolidadas),
+        "total_estados": len(por_estado),
+        "ticket_medio": round(ticket_medio, 2),
+        "valor_total": round(total_geral, 2),
+    }
+
+    # ==========================================================
+    # RETORNO
+    # ==========================================================
     return {
-        "total_geral": total_geral,
+        "total_geral": round(total_geral, 2),
         "clientes": clientes,
+        "implementadoras": implementadoras_consolidadas,
         "por_estado": dict(por_estado),
         "por_ddd": dict(por_ddd),
         "por_marca": dict(por_marca),
         "share_marca": share_marca,
-        "share_ddd": share_ddd
+        "share_ddd": share_ddd,
+        "resumo": resumo,
     }

@@ -3,6 +3,7 @@ from statistics import mean
 
 from core.cti_taxonomy import normalizar_implementadora
 from repositories.cti_repository import repository
+from engine.cti_consolidacao import consolidar_dados
 
 
 class CTIEngine:
@@ -21,6 +22,7 @@ class CTIEngine:
         valor_total = 0
 
         dados = repository.buscar_cti_anfir()
+        consolidado = consolidar_dados(dados)
 
         for row in dados:
 
@@ -67,24 +69,22 @@ class CTIEngine:
             except (TypeError, ValueError):
                 pass
 
-        return {
+        kpis = consolidado["resumo"].copy()
 
-            "kpis": {
-                "total_registros": len(dados),
-                "implementadoras": len(implementadoras),
-                "estados": len(estados),
-                "valor_total": valor_total,
-                "score_operacional": (
-                    round(mean(score_operacional), 2)
-                    if score_operacional
-                    else None
-                ),
-                "score_comercial": (
-                    round(mean(score_comercial), 2)
-                    if score_comercial
-                    else None
-                ),
-            },
+        kpis["score_operacional"] = (
+            round(mean(score_operacional), 2)
+            if score_operacional
+            else None
+        )
+
+        kpis["score_comercial"] = (
+            round(mean(score_comercial), 2)
+            if score_comercial
+            else None
+        )
+
+        return {
+            "kpis": kpis,
 
             "territorial": {
                 "estados": sorted(
@@ -122,6 +122,7 @@ class CTIEngine:
     def analytics_dashboard(self):
 
         dados = repository.buscar_cti_anfir()
+        consolidado = consolidar_dados(dados)
 
         estados = defaultdict(int)
         implementadoras = defaultdict(int)
@@ -155,28 +156,8 @@ class CTIEngine:
             except (TypeError, ValueError):
                 pass
 
-        total_registros = len(dados)
-
-        ticket_medio = (
-            faturamento_total / total_registros
-            if total_registros
-            else 0
-        )
-
         return {
-
-            "resumo": {
-
-                "total_registros":
-                    total_registros,
-
-                "faturamento_total":
-                    round(faturamento_total, 2),
-
-                "ticket_medio":
-                    round(ticket_medio, 2),
-
-            },
+            "resumo": consolidado["resumo"],
 
             "clientes": sorted(
                 [
@@ -192,15 +173,8 @@ class CTIEngine:
             ),
 
             "implementadoras": sorted(
-                [
-                    {
-                        "implementadora": nome,
-                        "quantidade": quantidade,
-                    }
-                    for nome, quantidade
-                    in implementadoras.items()
-                ],
-                key=lambda x: x["quantidade"],
+                consolidado["implementadoras"].values(),
+                key=lambda x: x["valor_total"],
                 reverse=True,
             ),
 
@@ -218,5 +192,5 @@ class CTIEngine:
             ),
         }
 
-
+          
 cti_engine = CTIEngine()
