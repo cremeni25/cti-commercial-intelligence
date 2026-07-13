@@ -1,50 +1,118 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 
-interface Props {
-  title: string
-  description: string
-}
+import ImplementadorasTable from "@/modules/implementadoras/components/ImplementadorasTable"
+import ImplementadorasDrawer from "@/modules/implementadoras/components/ImplementadoraDrawer"
+import ImplementadorasFilters from "@/modules/implementadoras/components/ImplementadorasFilters"
 
-function ModulePlaceholder({
-  title,
-  description,
-}: Props) {
+import { Implementadora } from "@/modules/implementadoras"
+
+import { apiGet } from "@/core/api"
+
+export default function ImplementadorasPage() {
+  const [implementadoras, setImplementadoras] = useState<Implementadora[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const [search, setSearch] = useState("")
+  const [status, setStatus] = useState("Todos")
+
+  const [selected, setSelected] =
+    useState<Implementadora | null>(null)
+
+  const [drawerOpen, setDrawerOpen] =
+    useState(false)
+
+  useEffect(() => {
+    carregarImplementadoras()
+  }, [])
+
+  async function carregarImplementadoras() {
+    try {
+      setLoading(true)
+
+      const data =
+        await apiGet("/implementadoras")
+
+      setImplementadoras(data)
+    } catch (e) {
+      console.error(e)
+      setImplementadoras([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const lista = useMemo(() => {
+    return implementadoras.filter((item) => {
+
+      const okStatus =
+        status === "Todos"
+          ? true
+          : item.status === status
+
+      const okSearch =
+        item.nome
+          .toLowerCase()
+          .includes(search.toLowerCase())
+
+      return okStatus && okSearch
+    })
+  }, [implementadoras, search, status])
+
+  function abrirDrawer(
+    implementadora: Implementadora
+  ) {
+    setSelected(implementadora)
+    setDrawerOpen(true)
+  }
+
   return (
     <main className="flex min-h-screen bg-[#020817]">
+
       <Sidebar />
 
       <section className="flex-1">
+
         <Topbar />
 
-        <div className="p-8">
-          <div className="bg-[#091a33] border border-[#13203f] rounded-3xl p-10">
-            <p className="text-cyan-400 text-sm uppercase tracking-[0.2em]">
-              CTI OPERACIONAL
-            </p>
+        <div className="p-8 space-y-8">
 
-            <h1 className="text-5xl font-bold text-white mt-4">
-              {title}
-            </h1>
+          <ImplementadorasFilters
+            search={search}
+            setSearch={setSearch}
+            status={status}
+            setStatus={setStatus}
+          />
 
-            <p className="text-gray-400 text-lg mt-6 max-w-3xl leading-8">
-              {description}
-            </p>
-          </div>
+          {loading ? (
+
+            <div className="text-center text-cyan-400 py-20">
+              Carregando Implementadoras...
+            </div>
+
+          ) : (
+
+            <ImplementadorasTable
+              implementadoras={lista}
+              onSelectImplementadora={abrirDrawer}
+            />
+
+          )}
+
         </div>
-      </section>
-    </main>
-  )
-}
 
-export default function Page() {
-  return (
-    <ModulePlaceholder
-      title="IMPLEMENTADORAS"
-      description="
-      Inteligência operacional, territorial, comercial e concorrencial
-      aplicada às implementadoras estratégicas da operação CTI.
-      "
-    />
+      </section>
+
+      <ImplementadorasDrawer
+        implementadora={selected}
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+      />
+
+    </main>
   )
 }
