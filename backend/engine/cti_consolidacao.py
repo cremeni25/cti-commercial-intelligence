@@ -83,6 +83,13 @@ def consolidar_dados(registros: list) -> dict:
 
     total_geral = 0
 
+    # ==========================================================
+    # ENTIDADE MESTRE DO CTI
+    # Histórico por veículo (CHASSI + PLACA)
+    # ==========================================================
+
+    veiculos = {}
+    
     for row in registros:
 
         valor = obter_valor(row)
@@ -111,6 +118,68 @@ def consolidar_dados(registros: list) -> dict:
 )
 
         id_cliente = gerar_id_cliente(row)
+
+        id_operacional = (
+            obter_campo(
+                row,
+                "id_operacional",
+                "ID_OPERACIONAL"
+            )
+            or (
+                f"{obter_campo(row,'chassi','CHASSI')}_"
+                f"{obter_campo(row,'placa','PLACA')}"
+            )
+        )
+
+        if id_operacional not in veiculos:
+
+            veiculos[id_operacional] = {
+
+                "id_operacional": id_operacional,
+
+                "placa": obter_campo(
+                    row,
+                    "placa",
+                    "PLACA"
+                ),
+
+                "chassi": obter_campo(
+                    row,
+                    "chassi",
+                    "CHASSI"
+                ),
+
+                "clientes": set(),
+
+                "implementadoras": set(),
+
+                "estados": set(),
+
+                "ddd": set(),
+
+                "marcas": set(),
+
+                "linhas": defaultdict(int),
+
+                "valor_total": 0.0,
+
+                "ocorrencias": 0
+
+            }
+
+        veiculo = veiculos[id_operacional]
+
+        veiculo["clientes"].add(id_cliente)
+
+        veiculo["estados"].add(estado)
+
+        veiculo["ddd"].add(ddd)
+
+        veiculo["marcas"].add(marca)
+
+        veiculo["valor_total"] += valor
+
+        veiculo["ocorrencias"] += 1
 
         total_geral += valor
 
@@ -239,9 +308,15 @@ def consolidar_dados(registros: list) -> dict:
 
             imp["linhas"][linha] += 1
 
-        # ======================================================
-        # AGREGAÇÕES GERAIS
-        # ======================================================
+            veiculo["implementadoras"].add(
+                implementadora
+            )
+
+            veiculo["linhas"][linha] += 1
+
+# ======================================================
+# AGREGAÇÕES GERAIS
+# ======================================================
 
         por_estado[estado] += valor
 
@@ -289,32 +364,125 @@ def consolidar_dados(registros: list) -> dict:
         }
 
     # ==========================================================
+    # VEÍCULOS CONSOLIDADOS
+    # ==========================================================
+
+    veiculos_consolidados = {}
+
+    for id_operacional, dados in veiculos.items():
+
+        veiculos_consolidados[id_operacional] = {
+
+            "id_operacional": id_operacional,
+
+            "placa": dados["placa"],
+
+            "chassi": dados["chassi"],
+
+            "clientes": len(dados["clientes"]),
+
+            "implementadoras": len(
+                dados["implementadoras"]
+            ),
+
+            "ocorrencias": dados["ocorrencias"],
+
+            "valor_total": round(
+                dados["valor_total"],
+                2
+            ),
+
+            "estados": sorted(
+                list(dados["estados"])
+            ),
+
+            "ddd": sorted(
+                list(dados["ddd"])
+            ),
+
+            "marcas": sorted(
+                list(dados["marcas"])
+            ),
+
+            "linhas": dict(
+                dados["linhas"]
+            )
+
+        }
+
+    # ==========================================================
     # MARKET SHARE
     # ==========================================================
 
-    share_marca = {
+    share_marca = {}
 
-        marca: (
-            valor / total_geral * 100
-            if total_geral
-            else 0
-        )
+    for dados in veiculos.values():
 
-        for marca, valor in por_marca.items()
+        for marca in dados["marcas"]:
 
-    }
+            share_marca.setdefault(
+                marca,
+                0
+            )
 
-    share_ddd = {
+            share_marca[marca] += 1
 
-        ddd: (
-            valor / total_geral * 100
-            if total_geral
-            else 0
-        )
+    total_marcas = sum(
+        share_marca.values()
+    )
 
-        for ddd, valor in por_ddd.items()
+    if total_marcas:
 
-    }
+        for marca in list(
+            share_marca.keys()
+        ):
+
+            share_marca[marca] = round(
+
+                share_marca[marca]
+                / total_marcas
+                * 100,
+
+                2
+
+            )
+
+    # ==========================================================
+    # SHARE POR DDD (BASE VEÍCULO)
+    # ==========================================================
+
+    share_ddd = {}
+
+    for dados in veiculos.values():
+
+        for ddd in dados["ddd"]:
+
+            share_ddd.setdefault(
+                ddd,
+                0
+            )
+
+            share_ddd[ddd] += 1
+
+    total_ddd = sum(
+        share_ddd.values()
+    )
+
+    if total_ddd:
+
+        for ddd in list(
+            share_ddd.keys()
+        ):
+
+            share_ddd[ddd] = round(
+
+                share_ddd[ddd]
+                / total_ddd
+                * 100,
+
+                2
+
+            )
 
     # ==========================================================
     # RESUMO OFICIAL
@@ -326,11 +494,45 @@ def consolidar_dados(registros: list) -> dict:
 
     resumo = {
         "total_registros": len(registros),
-        "total_clientes": len(clientes),
-        "total_implementadoras": len(implementadoras_consolidadas),
+        "total_clientes": len(
+            {
+                cliente
+                for veiculo in veiculos.values()
+                for cliente in veiculo["clientes"]
+            }
+        ),
+        
+        "total_implementadoras": len(
+            {
+                implementadora
+                for veiculo in veiculos.values()
+                for implementadora
+                in veiculo["implementadoras"]
+            }
+        ),
         "total_estados": len(por_estado),
         "ticket_medio": round(ticket_medio, 2),
         "valor_total": round(total_geral, 2),
+
+        "total_veiculos": len(
+            veiculos
+        ),
+
+        "total_chassis": len(
+            {
+                dados["chassi"]
+                for dados in veiculos.values()
+                if dados["chassi"]
+            }
+        ),
+
+        "total_placas": len(
+            {
+                dados["placa"]
+                for dados in veiculos.values()
+                if dados["placa"]
+            }
+        ),
     }
 
     # ==========================================================
@@ -339,6 +541,7 @@ def consolidar_dados(registros: list) -> dict:
     return {
         "total_geral": round(total_geral, 2),
         "clientes": clientes,
+        "veiculos": veiculos_consolidados,
         "implementadoras": implementadoras_consolidadas,
         "por_estado": dict(por_estado),
         "por_ddd": dict(por_ddd),

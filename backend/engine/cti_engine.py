@@ -112,8 +112,11 @@ class CTIEngine:
 
             "debug": {
                 "implementadoras": sorted(
-                    list(implementadoras)
-                )
+                    consolidado["implementadoras"].keys()
+                ),
+                "veiculos": len(
+                    consolidado["veiculos"]
+                ),
             },
 
             "riscos": dict(riscos),
@@ -125,6 +128,7 @@ class CTIEngine:
         consolidado = consolidar_dados(dados)
 
         estados = defaultdict(int)
+        veiculos = consolidado["veiculos"]
         implementadoras = defaultdict(int)
         clientes = defaultdict(int)
 
@@ -158,6 +162,11 @@ class CTIEngine:
 
         return {
             "resumo": consolidado["resumo"],
+            "veiculos": sorted(
+                veiculos.values(),
+                key=lambda x: x["valor_total"],
+                reverse=True,
+            ),
 
             "clientes": sorted(
                 [
