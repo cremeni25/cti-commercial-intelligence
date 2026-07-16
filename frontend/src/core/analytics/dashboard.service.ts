@@ -1,6 +1,8 @@
-import { supabase } from "../database/supabase"
+import { getSupabaseClient } from "../database/supabase"
 
 export async function buscarDashboardExecutivo() {
+  const supabase = getSupabaseClient()
+
   const { data, error } = await supabase
     .from("cti_dashboard_executivo")
     .select("*")

@@ -53,6 +53,8 @@ from routers.clientes_router import router as clientes_router
 from routers.vendas_router import router as vendas_router
 from routers.upload_router import router as upload_router
 from routers.cti_api_router import router as cti_api_router
+from routers.brasil_router import router as brasil_router
+from routers.autorizados_router import router as autorizados_router
 
 app.include_router(crm_router)
 
@@ -63,6 +65,8 @@ app.include_router(clientes_router)
 app.include_router(vendas_router)
 app.include_router(upload_router)
 app.include_router(cti_api_router)
+app.include_router(brasil_router)
+app.include_router(autorizados_router)
 
 # ============================================================
 # ENV / CONFIG
@@ -1226,7 +1230,7 @@ def dashboard_executivo_v2():
     produtos = Counter()
     estados = Counter()
     montadoras = Counter()
-    implementadores = Counter()
+    implementadoras = Counter()
     concorrentes = Counter()
 
     faturamento_total = 0
@@ -1238,7 +1242,7 @@ def dashboard_executivo_v2():
 
         estado = row.get("estado")
         montadora = row.get("montadora")
-        implementador = row.get("implementador")
+        implementadora = row.get("implementadora")
         concorrente = row.get("concorrente")
         valor = row.get("valor") or 0
 
@@ -1254,8 +1258,8 @@ def dashboard_executivo_v2():
         if montadora:
             montadoras[montadora] += 1
 
-        if implementador:
-            implementadores[implementador] += 1
+        if implementadora:
+            implementadoras[implementadora] += 1
 
         if concorrente:
             concorrentes[concorrente] += 1
@@ -1276,6 +1280,6 @@ def dashboard_executivo_v2():
         "produtos": produtos.most_common(5),
         "estados": estados.most_common(10),
         "montadoras": montadoras.most_common(10),
-        "implementadores": implementadores.most_common(10),
+        "implementadoras": implementadoras.most_common(10),
         "concorrentes": concorrentes.most_common(10)
     }
