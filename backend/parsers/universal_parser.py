@@ -1,6 +1,8 @@
 import pandas as pd
 from io import BytesIO
 
+from core.cti_taxonomy import normalizar_implementadora as normalizar_implementadora_oficial
+
 
 PRODUTOS_ALIAS = {
 
@@ -15,32 +17,6 @@ PRODUTOS_ALIAS = {
     "DD": "DIRECT DRIVE",
     "DIRECT": "DIRECT DRIVE",
     "DIRECT DRIVE": "DIRECT DRIVE"
-}
-
-
-IMPLEMENTADORAS_ALIAS = {
-
-    "RANDON": "RANDON",
-    "RANDON IMPLEMENTOS": "RANDON",
-
-    "IBIPORA": "IBIPORÃ",
-    "IBIPORÃ": "IBIPORÃ",
-
-    "SULBRASIL": "SULBRASIL",
-
-    "MERCOSUL": "MERCOSUL",
-
-    "NIJU": "NIJU",
-
-    "FACCHINI": "FACCHINI",
-
-    "FIBRASIL": "FIBRASIL",
-
-    "LABONIA": "LABONIA",
-
-    "HC": "HC",
-
-    "PAVAN": "PAVAN"
 }
 
 
@@ -92,8 +68,9 @@ def detectar_mapeamento(df):
 
     ])
 
-    mapa["fabricante"] = detectar_coluna(df, [
+    mapa["implementadora"] = detectar_coluna(df, [
 
+        "IMPLEMENTADORA",
         "FABRICANTE",
         "MARCA",
         "OEM",
@@ -133,19 +110,7 @@ def normalizar_produto(valor):
 
 def normalizar_implementadora(valor):
 
-    if not valor:
-        return ""
-
-    valor = (
-        str(valor)
-        .strip()
-        .upper()
-    )
-
-    return IMPLEMENTADORAS_ALIAS.get(
-        valor,
-        valor
-    )
+    return normalizar_implementadora_oficial(valor) or ""
 
 
 def processar_planilha_universal(contents):
@@ -174,9 +139,9 @@ def processar_planilha_universal(contents):
             else None
         )
 
-        fabricante_original = (
-            row.get(mapa["fabricante"])
-            if mapa["fabricante"]
+        implementadora_original = (
+            row.get(mapa["implementadora"])
+            if mapa["implementadora"]
             else None
         )
 
@@ -190,9 +155,9 @@ def processar_planilha_universal(contents):
             linha_original
         )
 
-        fabricante = (
+        implementadora = (
             normalizar_implementadora(
-                fabricante_original
+                implementadora_original
             )
         )
 
@@ -209,11 +174,10 @@ def processar_planilha_universal(contents):
 
             "linha": linha,
 
-            "implementador": fabricante,
+            "implementadora": implementadora,
 
             "valor": float(valor)
 
         })
 
     return registros
-

@@ -136,6 +136,10 @@ IMPLEMENTADORAS = {
     # --------------------------------------------------------
 
     "HIGH FLEX": "HIGH FLEX",
+    "HIGH FLEX INDUSTRIA": "HIGH FLEX",
+    "HIGH FLEX INDÚSTRIA": "HIGH FLEX",
+    "HIGH FLEX INDUSTRIA E COMERCIO": "HIGH FLEX",
+    "HIGH FLEX INDÚSTRIA E COMÉRCIO": "HIGH FLEX",
     "HIGH FLEX INDÚSTRIA E COMÉRCIO E COMÉRCIO DE IMPLEMENTOS EIRELI - EPP": "HIGH FLEX",
 
     # --------------------------------------------------------
@@ -175,6 +179,9 @@ IMPLEMENTADORAS = {
 
     "PAVAN": "PAVAN",
     "PAVAN INDUSTRIA DE CAMARAS": "PAVAN",
+    "PAVAN INDÚSTRIA DE CAMARAS": "PAVAN",
+    "PAVAN INDUSTRIA DE CÂMARAS": "PAVAN",
+    "PAVAN INDÚSTRIA DE CÂMARAS": "PAVAN",
     "PAVAN INDÚSTRIA DE CAMÂRAS": "PAVAN",
 
     # --------------------------------------------------------
@@ -307,6 +314,36 @@ def normalizar_implementadora(nome):
 
     return chave
 
+
+
+def aliases_implementadora(nome_oficial):
+
+    oficial = normalizar_implementadora(nome_oficial)
+
+    if not oficial:
+        return []
+
+    aliases = {oficial}
+
+    for alias, destino in IMPLEMENTADORAS.items():
+
+        if destino == oficial:
+            aliases.add(alias)
+
+    return sorted(aliases)
+
+
+def todas_implementadoras_oficiais():
+
+    return sorted(set(IMPLEMENTADORAS.values()))
+
+
+def mapa_aliases_implementadoras():
+
+    return {
+        oficial: aliases_implementadora(oficial)
+        for oficial in todas_implementadoras_oficiais()
+    }
 
 def fabricante_valido(nome):
 

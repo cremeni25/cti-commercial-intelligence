@@ -1,7 +1,9 @@
-import { supabase } from "@/core/database/supabase"
+import { getSupabaseClient } from "@/core/database/supabase"
 import { UsuarioCTI } from "../types/usuario.types"
 
 export async function listarUsuarios(): Promise<UsuarioCTI[]> {
+  const supabase = getSupabaseClient()
+
   const { data, error } = await supabase
     .from("cti_users")
     .select("*")

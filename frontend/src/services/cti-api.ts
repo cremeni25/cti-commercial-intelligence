@@ -1,9 +1,9 @@
 const API_URL =
   process.env.NEXT_PUBLIC_API_URL
 
-export async function getDashboardExecutivo() {
+async function request(endpoint: string) {
   const response = await fetch(
-    `${API_URL}/analytics/dashboard`,
+    `${API_URL}${endpoint}`,
     {
       cache: "no-store",
     }
@@ -11,45 +11,43 @@ export async function getDashboardExecutivo() {
 
   if (!response.ok) {
     throw new Error(
-      "Erro ao carregar dashboard"
+      `Erro ao carregar ${endpoint}`
     )
   }
 
   return response.json()
+}
+
+export async function getDashboardExecutivo() {
+  return request("/analytics/dashboard")
+}
+
+export async function getBrasilDashboard() {
+  return request("/brasil/dashboard")
+}
+
+export async function getBrasilImplementadoras() {
+  return request("/brasil/implementadoras")
+}
+
+export async function getVienaDashboard() {
+  return request("/autorizados/viena-sp/dashboard")
+}
+
+export async function getVienaImplementadoras() {
+  return request("/autorizados/viena-sp/implementadoras")
+}
+
+export async function getVienaHistorico() {
+  return request("/autorizados/viena-sp/historico")
 }
 
 export async function getInsights() {
-  const response = await fetch(
-    `${API_URL}/dashboard/insights`,
-    {
-      cache: "no-store",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      "Erro ao carregar insights"
-    )
-  }
-
-  return response.json()
+  return request("/dashboard/insights")
 }
 
 export async function getPipelineStatus() {
-  const response = await fetch(
-    `${API_URL}/pipeline/status`,
-    {
-      cache: "no-store",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      "Erro ao carregar pipeline"
-    )
-  }
-
-  return response.json()
+  return request("/pipeline/status")
 }
 
 export async function uploadArquivo(
@@ -73,10 +71,8 @@ export async function uploadArquivo(
     )
   }
 
-  const json = await response.json()
-
-  return json.upload ?? json
-  }
+  return response.json()
+}
 
 export async function processarPipeline() {
   return {
@@ -85,18 +81,5 @@ export async function processarPipeline() {
 }
 
 export async function getDebugAmostra() {
-  const response = await fetch(
-    `${API_URL}/debug/amostra`,
-    {
-      cache: "no-store",
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(
-      "Erro ao carregar auditoria"
-    )
-  }
-
-  return response.json()
+  return request("/debug/amostra")
 }
