@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { getVienaDashboard, getVienaHistorico, getVienaImplementadoras } from "@/services/cti-api"
 
+function normalizarBusca(valor: string) {
+  return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+}
+
+
 export default function VienaPage() {
   const [dashboard, setDashboard] = useState<any>(null)
   const [implementadoras, setImplementadoras] = useState<any[]>([])
@@ -25,7 +30,7 @@ export default function VienaPage() {
       .catch(() => setErro("Erro ao carregar dados reais da visão Viena SP."))
   }, [])
 
-  const lista = useMemo(() => implementadoras.filter((item) => item.nome.toLowerCase().includes(busca.toLowerCase())), [implementadoras, busca])
+  const lista = useMemo(() => implementadoras.filter((item) => normalizarBusca([item.nome, ...(item.aliases ?? [])].join(" ")).includes(normalizarBusca(busca))), [implementadoras, busca])
 
   return (
     <main className="min-h-screen bg-[#020817] p-8 text-white">

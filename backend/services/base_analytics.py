@@ -1,5 +1,7 @@
 from collections import Counter, defaultdict
 
+from core.cti_taxonomy import aliases_implementadora, normalizar_implementadora
+
 
 def valor_float(valor):
     try:
@@ -21,12 +23,20 @@ def consolidar_dashboard(registros):
     clientes = {r.get("cliente") for r in registros if r.get("cliente")}
     estados = {r.get("estado") for r in registros if r.get("estado")}
     municipios = {r.get("cidade") for r in registros if r.get("cidade")}
-    implementadoras = {r.get("implementadora") for r in registros if r.get("implementadora")}
+    implementadoras = {
+        normalizar_implementadora(r.get("implementadora"))
+        for r in registros
+        if r.get("implementadora")
+    }
     faturamento_total = sum(valor_float(r.get("valor")) for r in registros)
     status = Counter(r.get("status") or "OUTROS" for r in registros)
     linhas = Counter(r.get("linha") or "OUTROS" for r in registros)
     tipos = Counter(r.get("tipo_veiculo") or "OUTROS" for r in registros)
-    ranking_impl = Counter(r.get("implementadora") for r in registros if r.get("implementadora"))
+    ranking_impl = Counter(
+        normalizar_implementadora(r.get("implementadora"))
+        for r in registros
+        if r.get("implementadora")
+    )
     ranking_clientes = Counter(r.get("cliente") for r in registros if r.get("cliente"))
     return {
         "total_registros": total_registros,
@@ -54,7 +64,7 @@ def consolidar_dashboard(registros):
 def consolidar_implementadoras(registros):
     dados = {}
     for r in registros:
-        nome = r.get("implementadora")
+        nome = normalizar_implementadora(r.get("implementadora"))
         if not nome:
             continue
         item = dados.setdefault(nome, {
@@ -69,6 +79,7 @@ def consolidar_implementadoras(registros):
             "status": {"aprovados": 0, "perdidos": 0, "outros": 0},
             "score_operacional": None,
             "score_comercial": None,
+            "aliases": aliases_implementadora(nome),
         })
         item["quantidade_registros"] += 1
         item["valor_total"] += valor_float(r.get("valor"))

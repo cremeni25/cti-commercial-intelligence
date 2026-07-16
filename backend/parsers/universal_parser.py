@@ -1,6 +1,8 @@
 import pandas as pd
 from io import BytesIO
 
+from core.cti_taxonomy import normalizar_implementadora as normalizar_implementadora_oficial
+
 
 PRODUTOS_ALIAS = {
 
@@ -15,32 +17,6 @@ PRODUTOS_ALIAS = {
     "DD": "DIRECT DRIVE",
     "DIRECT": "DIRECT DRIVE",
     "DIRECT DRIVE": "DIRECT DRIVE"
-}
-
-
-IMPLEMENTADORAS_ALIAS = {
-
-    "RANDON": "RANDON",
-    "RANDON IMPLEMENTOS": "RANDON",
-
-    "IBIPORA": "IBIPORÃ",
-    "IBIPORÃ": "IBIPORÃ",
-
-    "SULBRASIL": "SULBRASIL",
-
-    "MERCOSUL": "MERCOSUL",
-
-    "NIJU": "NIJU",
-
-    "FACCHINI": "FACCHINI",
-
-    "FIBRASIL": "FIBRASIL",
-
-    "LABONIA": "LABONIA",
-
-    "HC": "HC",
-
-    "PAVAN": "PAVAN"
 }
 
 
@@ -134,19 +110,7 @@ def normalizar_produto(valor):
 
 def normalizar_implementadora(valor):
 
-    if not valor:
-        return ""
-
-    valor = (
-        str(valor)
-        .strip()
-        .upper()
-    )
-
-    return IMPLEMENTADORAS_ALIAS.get(
-        valor,
-        valor
-    )
+    return normalizar_implementadora_oficial(valor) or ""
 
 
 def processar_planilha_universal(contents):

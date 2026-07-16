@@ -20,6 +20,7 @@ from typing import List
 import traceback
 
 from core.supabase_client import supabase
+from core.cti_taxonomy import normalizar_implementadora
 
 
 COLUNAS_LEGADAS_CTI_ANFIR = {
@@ -40,8 +41,8 @@ def _adaptar_dominio_para_persistencia(registro):
     payload = dict(registro)
 
     if "implementadora" in payload:
-        payload["implementador"] = payload.pop(
-            "implementadora"
+        payload["implementador"] = normalizar_implementadora(
+            payload.pop("implementadora")
         )
 
     return payload
@@ -84,8 +85,8 @@ def _adaptar_persistencia_para_dominio(registro):
     payload = dict(registro)
 
     if "implementador" in payload:
-        payload["implementadora"] = payload.pop(
-            "implementador"
+        payload["implementadora"] = normalizar_implementadora(
+            payload.pop("implementador")
         )
 
     origem_base, autorizado, ano_referencia, escopo = _inferir_origem(

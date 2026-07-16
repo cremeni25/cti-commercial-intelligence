@@ -7,6 +7,7 @@ from io import BytesIO
 import pandas as pd
 
 from models.cti_record import CTIRecord
+from core.cti_taxonomy import normalizar_implementadora
 
 ABAS_PROCESSADAS = {
     "BRASIL": {
@@ -230,7 +231,7 @@ def converter_registro(df, row, nome_aba, contexto, arquivo_origem, linha_planil
         tipo_veiculo=texto(campo(df, row, "tipo_veiculo")),
         placa=texto_identificador(campo(df, row, "placa")),
         chassi=texto_identificador(campo(df, row, "chassi")),
-        implementadora=texto(campo(df, row, "implementadora")),
+        implementadora=normalizar_implementadora(texto(campo(df, row, "implementadora"))),
         fabricante_equipamento=texto(campo(df, row, "fabricante_equipamento")),
         linha=texto(campo(df, row, "linha")),
         modelo=texto(campo(df, row, "modelo")),

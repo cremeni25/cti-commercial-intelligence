@@ -4,6 +4,11 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { getBrasilDashboard, getBrasilImplementadoras } from "@/services/cti-api"
 
+function normalizarBusca(valor: string) {
+  return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+}
+
+
 export default function BrasilPage() {
   const [dashboard, setDashboard] = useState<any>(null)
   const [implementadoras, setImplementadoras] = useState<any[]>([])
@@ -24,7 +29,7 @@ export default function BrasilPage() {
 
   const lista = useMemo(() => {
     return implementadoras.filter((item) =>
-      item.nome.toLowerCase().includes(busca.toLowerCase())
+      normalizarBusca([item.nome, ...(item.aliases ?? [])].join(" ")).includes(normalizarBusca(busca))
     )
   }, [implementadoras, busca])
 
