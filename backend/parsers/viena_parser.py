@@ -239,7 +239,7 @@ def gerar_hash(registro):
         texto(registro.get("placa")),
         texto(registro.get("chassi")),
         texto(registro.get("linha")),
-        texto(registro.get("implementador")),
+        texto(registro.get("implementadora")),
         texto(registro.get("data_venda"))
 
     ])
@@ -541,7 +541,7 @@ def converter_registro(df, row, nome_aba):
     # EQUIPAMENTO
     # ======================================================
 
-    implementador=texto(
+    implementadora=texto(
         campo(df, row, COLUNAS["IMPLEMENTADORA"])
     ),
 

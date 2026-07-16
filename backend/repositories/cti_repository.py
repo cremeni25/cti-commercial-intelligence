@@ -20,6 +20,30 @@ from typing import List
 from core.supabase_client import supabase
 
 
+def _adaptar_dominio_para_persistencia(registro):
+
+    payload = dict(registro)
+
+    if "implementadora" in payload:
+        payload["implementador"] = payload.pop(
+            "implementadora"
+        )
+
+    return payload
+
+
+def _adaptar_persistencia_para_dominio(registro):
+
+    payload = dict(registro)
+
+    if "implementador" in payload:
+        payload["implementadora"] = payload.pop(
+            "implementador"
+        )
+
+    return payload
+
+
 class CTIRepository:
 
     TABELA = "cti_anfir"
@@ -30,7 +54,7 @@ class CTIRepository:
 
     def buscar_cti_anfir(self):
 
-        return (
+        registros = (
             supabase
             .table(self.TABELA)
             .select("*")
@@ -38,6 +62,11 @@ class CTIRepository:
             .data
             or []
         )
+
+        return [
+            _adaptar_persistencia_para_dominio(registro)
+            for registro in registros
+        ]
 
     def buscar_ids_existentes(
         self,
@@ -158,7 +187,11 @@ class CTIRepository:
 
         dados = resultado.data or []
 
-        return dados[0] if dados else None
+        return (
+            _adaptar_persistencia_para_dominio(dados[0])
+            if dados
+            else None
+        )
 
     def buscar_por_hash(
         self,
@@ -179,7 +212,11 @@ class CTIRepository:
 
         dados = resultado.data or []
 
-        return dados[0] if dados else None
+        return (
+            _adaptar_persistencia_para_dominio(dados[0])
+            if dados
+            else None
+        )
 
     # ======================================================
     # APOIO
@@ -198,7 +235,7 @@ class CTIRepository:
 
     def listar_implementadoras(self):
 
-        return (
+        registros = (
             supabase
             .table(self.TABELA)
             .select("implementador")
@@ -206,6 +243,11 @@ class CTIRepository:
             .data
             or []
         )
+
+        return [
+            _adaptar_persistencia_para_dominio(registro)
+            for registro in registros
+        ]
 
 
 repository = CTIRepository()

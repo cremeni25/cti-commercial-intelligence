@@ -1,8 +1,9 @@
-import { supabase } from "../database/supabase"
+import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 
 export async function buscarUsuarioAtual():
 Promise<UsuarioCTI | null> {
+  const supabase = getSupabaseClient()
 
   const {
     data: authData,

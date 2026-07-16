@@ -71,9 +71,9 @@ def gerar_inteligencia_operacional(registros):
     )
 
     implementadoras = Counter(
-        r.get("implementador", "")
+        r.get("implementadora", "")
         for r in registros
-        if r.get("implementador")
+        if r.get("implementadora")
     )
 
     ranking_estados = estados.most_common(10)
@@ -141,6 +141,32 @@ def gerar_inteligencia_operacional(registros):
 
 
 # ============================================================
+# ADAPTADOR DE PERSISTÊNCIA LEGADA
+# ============================================================
+
+def adaptar_payload_persistencia_legada(registros):
+
+    payload = []
+
+    for registro in registros:
+
+        item = dict(registro)
+
+        item["implementador"] = item.get(
+            "implementadora"
+        )
+
+        item.pop(
+            "implementadora",
+            None
+        )
+
+        payload.append(item)
+
+    return payload
+
+
+# ============================================================
 # UPLOAD CTI
 # ============================================================
 
@@ -202,11 +228,17 @@ async def upload_anfir_seguro(
             - len(registros_novos)
         )
 
+        registros_persistencia = (
+            adaptar_payload_persistencia_legada(
+                registros_novos
+            )
+        )
+
         resultado_upload = upload_engine.processar(
 
             tabela="cti_anfir",
 
-            registros=registros_novos
+            registros=registros_persistencia
 
         )
 
