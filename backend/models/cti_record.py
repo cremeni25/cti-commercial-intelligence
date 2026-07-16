@@ -47,7 +47,7 @@ class CTIRecord:
     # EQUIPAMENTO
     # ======================================================
 
-    implementador: Optional[str] = None
+    implementadora: Optional[str] = None
 
     fabricante_equipamento: Optional[str] = None
 
