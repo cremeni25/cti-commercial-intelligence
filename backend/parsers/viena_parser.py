@@ -172,7 +172,15 @@ def chave_deduplicacao(registro):
     elif placa:
         chave = f"{origem}|{ano}|PLACA|{placa}"
     else:
-        chave = f"{origem}|{ano}|TEMP|{uuid.uuid4()}"
+        chave = "|".join([
+            str(origem),
+            str(ano),
+            "ALT",
+            texto(registro.get("cliente")),
+            texto(registro.get("data_venda")),
+            texto(registro.get("linha")),
+            str(registro.get("valor") or ""),
+        ])
     return chave
 
 
@@ -201,7 +209,7 @@ def linha_valida(registro):
     return cliente not in {"TOTAL", "TOTAL GERAL", "SUBTOTAL", "GERAL", "RESUMO"}
 
 
-def converter_registro(df, row, nome_aba, contexto, arquivo_origem):
+def converter_registro(df, row, nome_aba, contexto, arquivo_origem, linha_planilha=None):
     data_venda = normalizar_data(campo(df, row, "data_venda"))
     ano_referencia = contexto["ano_referencia"] or extrair_ano(data_venda)
     registro = CTIRecord(
@@ -240,6 +248,7 @@ def converter_registro(df, row, nome_aba, contexto, arquivo_origem):
     ).to_dict()
     registro["modelo_carrier"] = texto(campo(df, row, "modelo_carrier"))
     registro["modelo_concorrencia"] = texto(campo(df, row, "modelo_concorrencia"))
+    registro["linha_planilha"] = linha_planilha
     registro["origem_base"] = contexto["origem_base"]
     registro["autorizado"] = contexto["autorizado"]
     registro["ano_referencia"] = ano_referencia
@@ -261,7 +270,7 @@ def processar_aba(df, nome_aba, arquivo_origem="PLANILHA_ANFIR"):
     vistos = set()
     linhas_lidas = 0
     for _, row in df.iterrows():
-        registro = converter_registro(df, row, nome_aba, contexto, arquivo_origem)
+        registro = converter_registro(df, row, nome_aba, contexto, arquivo_origem, int(_) + 2)
         if not linha_valida(registro):
             continue
         linhas_lidas += 1
@@ -277,8 +286,8 @@ def criar_relatorio(arquivo):
     return {
         "arquivo": arquivo,
         "bases_processadas": {
-            "BRASIL": {"abas": [], "linhas_lidas": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0},
-            "VIENA_SP": {"abas": [], "linhas_lidas": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0},
+            "BRASIL": {"abas": [], "linhas_lidas": 0, "registros_validos": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0, "erros_por_tipo": {"campo_invalido": 0, "registro_sem_identificador": 0, "schema_incompativel": 0, "erro_persistencia": 0, "outros": 0}, "amostra_erros": []},
+            "VIENA_SP": {"abas": [], "linhas_lidas": 0, "registros_validos": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0, "erros_por_tipo": {"campo_invalido": 0, "registro_sem_identificador": 0, "schema_incompativel": 0, "erro_persistencia": 0, "outros": 0}, "amostra_erros": []},
         },
         "status": "PROCESSADO",
     }
@@ -298,10 +307,23 @@ def processar_planilha_viena_com_relatorio(contents, arquivo_origem="PLANILHA_AN
             base = contexto["origem_base"]
             relatorio["bases_processadas"][base]["abas"].append(nome_aba)
             relatorio["bases_processadas"][base]["linhas_lidas"] += linhas_lidas
+            relatorio["bases_processadas"][base]["registros_validos"] += len(registros_aba)
             relatorio["bases_processadas"][base]["duplicados_ignorados"] += max(linhas_lidas - len(registros_aba), 0)
             registros.extend(registros_aba)
-        except Exception:
-            relatorio["bases_processadas"][contexto["origem_base"]]["erros"] += 1
+        except Exception as erro:
+            base = contexto["origem_base"]
+            relatorio["bases_processadas"][base]["erros"] += 1
+            relatorio["bases_processadas"][base]["erros_por_tipo"]["outros"] += 1
+            if len(relatorio["bases_processadas"][base]["amostra_erros"]) < 100:
+                relatorio["bases_processadas"][base]["amostra_erros"].append({
+                    "linha": None,
+                    "aba": nome_aba,
+                    "etapa": "parser",
+                    "tipo": "outros",
+                    "mensagem": str(erro),
+                    "campo": None,
+                    "valor": None,
+                })
     if not registros:
         relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
     return registros, relatorio

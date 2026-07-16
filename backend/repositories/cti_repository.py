@@ -17,7 +17,22 @@
 
 from typing import List
 
+import traceback
+
 from core.supabase_client import supabase
+
+
+COLUNAS_LEGADAS_CTI_ANFIR = {
+    "ano", "mes", "data_venda", "cliente", "cnpj", "cidade", "estado",
+    "ddd", "regiao", "sub_regiao", "placa", "chassi",
+    "fabricante_caminhao", "modelo_caminhao", "eixo", "tipo_veiculo",
+    "implementador", "fabricante_equipamento", "linha", "modelo",
+    "responsavel", "status", "motivo", "ocorrencia", "valor",
+    "origem_dado", "arquivo_origem", "aba_origem", "versao_parser",
+    "pipeline", "created_at", "id_operacional", "hash_registro", "ativo",
+    "score_operacional", "score_comercial", "classificacao", "prioridade",
+    "nivel_risco",
+}
 
 
 def _adaptar_dominio_para_persistencia(registro):
@@ -32,6 +47,38 @@ def _adaptar_dominio_para_persistencia(registro):
     return payload
 
 
+def _inferir_origem(registro):
+
+    origem = registro.get("origem_base") or registro.get("origem_dado")
+    aba = str(registro.get("aba_origem") or "").upper()
+
+    if origem in ("BRASIL", "VIENA_SP"):
+        origem_base = origem
+    elif "VIENA SP" in aba:
+        origem_base = "VIENA_SP"
+    elif "BRASIL" in aba:
+        origem_base = "BRASIL"
+    else:
+        origem_base = origem
+
+    autorizado = registro.get("autorizado")
+    ano_referencia = registro.get("ano_referencia")
+    escopo = registro.get("escopo_operacional")
+
+    if origem_base == "VIENA_SP":
+        autorizado = autorizado or "VIENA"
+        escopo = escopo or "AUTORIZADO"
+        if not ano_referencia:
+            if "2025" in aba:
+                ano_referencia = 2025
+            elif "2026" in aba:
+                ano_referencia = 2026
+    elif origem_base == "BRASIL":
+        escopo = escopo or "NACIONAL"
+
+    return origem_base, autorizado, ano_referencia, escopo
+
+
 def _adaptar_persistencia_para_dominio(registro):
 
     payload = dict(registro)
@@ -41,8 +88,57 @@ def _adaptar_persistencia_para_dominio(registro):
             "implementador"
         )
 
+    origem_base, autorizado, ano_referencia, escopo = _inferir_origem(
+        payload
+    )
+
+    payload["origem_base"] = origem_base
+    payload["autorizado"] = autorizado
+    payload["ano_referencia"] = ano_referencia
+    payload["escopo_operacional"] = escopo
+
     return payload
 
+
+def _filtrar_colunas_legadas(payload):
+
+    return {
+        chave: valor
+        for chave, valor in payload.items()
+        if chave in COLUNAS_LEGADAS_CTI_ANFIR
+    }
+
+
+def _classificar_erro_persistencia(erro):
+
+    mensagem = str(erro)
+    texto = mensagem.lower()
+
+    if "column" in texto or "schema" in texto or "could not find" in texto:
+        return "schema_incompativel"
+
+    if "jwt" in texto or "auth" in texto or "permission" in texto:
+        return "erro_autenticacao"
+
+    if "connection" in texto or "timeout" in texto or "network" in texto:
+        return "erro_rede"
+
+    return "erro_persistencia"
+
+
+def _erro_payload(registro, etapa, tipo, mensagem, campo=None, valor=None):
+
+    return {
+        "linha": registro.get("linha_planilha"),
+        "aba": registro.get("aba_origem"),
+        "etapa": etapa,
+        "tipo": tipo,
+        "mensagem": mensagem,
+        "campo": campo,
+        "valor": valor,
+        "hash_registro": registro.get("hash_registro"),
+        "origem_base": registro.get("origem_base"),
+    }
 
 def _valor_preenchido(valor):
 
@@ -59,6 +155,21 @@ def _mesclar_sem_apagar(existente, novo):
             payload[chave] = valor
 
     return payload
+
+
+
+def _registrar_erro(resultado, erro):
+
+    resultado["erros"] += 1
+    tipo = erro.get("tipo") or "outros"
+
+    if tipo not in resultado["erros_por_tipo"]:
+        tipo = "outros"
+
+    resultado["erros_por_tipo"][tipo] += 1
+
+    if len(resultado["amostra_erros"]) < 100:
+        resultado["amostra_erros"].append(erro)
 
 
 class CTIRepository:
@@ -246,29 +357,16 @@ class CTIRepository:
         autorizado: str = None
     ):
 
-        consulta = (
-            supabase
-            .table(self.TABELA)
-            .select("*")
-            .eq("origem_base", origem_base)
-        )
-
-        if autorizado:
-            consulta = consulta.eq(
-                "autorizado",
-                autorizado
-            )
-
-        registros = (
-            consulta
-            .execute()
-            .data
-            or []
-        )
+        registros = self.buscar_cti_anfir()
 
         return [
-            _adaptar_persistencia_para_dominio(registro)
+            registro
             for registro in registros
+            if registro.get("origem_base") == origem_base
+            and (
+                autorizado is None
+                or registro.get("autorizado") == autorizado
+            )
         ]
 
     def persistir_registros_idempotente(
@@ -276,24 +374,44 @@ class CTIRepository:
         registros: List[dict]
     ):
 
-        inseridos = 0
-        atualizados = 0
-        duplicados_ignorados = 0
-        erros = 0
+        resultado = {
+            "tentados": len(registros),
+            "inseridos": 0,
+            "atualizados": 0,
+            "duplicados_ignorados": 0,
+            "erros": 0,
+            "erros_por_tipo": {
+                "campo_invalido": 0,
+                "registro_sem_identificador": 0,
+                "schema_incompativel": 0,
+                "erro_persistencia": 0,
+                "erro_autenticacao": 0,
+                "erro_rede": 0,
+                "outros": 0,
+            },
+            "amostra_erros": [],
+        }
 
         for registro in registros:
 
-            try:
+            payload_dominio = dict(registro)
+            hash_registro = payload_dominio.get(
+                "hash_registro"
+            )
 
-                payload_dominio = dict(registro)
-                hash_registro = payload_dominio.get(
-                    "hash_registro"
+            if not hash_registro:
+                erro = _erro_payload(
+                    payload_dominio,
+                    "validacao",
+                    "registro_sem_identificador",
+                    "Registro sem hash_registro.",
+                    "hash_registro",
+                    None
                 )
+                _registrar_erro(resultado, erro)
+                continue
 
-                if not hash_registro:
-                    erros += 1
-                    continue
-
+            try:
                 existente = (
                     supabase
                     .table(self.TABELA)
@@ -308,6 +426,7 @@ class CTIRepository:
                 payload = _adaptar_dominio_para_persistencia(
                     payload_dominio
                 )
+                payload = _filtrar_colunas_legadas(payload)
 
                 if existente:
                     legado_existente = existente[0]
@@ -315,9 +434,10 @@ class CTIRepository:
                         legado_existente,
                         payload
                     )
+                    mesclado = _filtrar_colunas_legadas(mesclado)
 
-                    if mesclado == legado_existente:
-                        duplicados_ignorados += 1
+                    if mesclado == _filtrar_colunas_legadas(legado_existente):
+                        resultado["duplicados_ignorados"] += 1
                         continue
 
                     supabase.table(self.TABELA).update(
@@ -326,23 +446,35 @@ class CTIRepository:
                         "hash_registro",
                         hash_registro
                     ).execute()
-                    atualizados += 1
+                    resultado["atualizados"] += 1
                     continue
 
                 supabase.table(self.TABELA).insert(
                     payload
                 ).execute()
-                inseridos += 1
+                resultado["inseridos"] += 1
 
-            except Exception:
-                erros += 1
+            except Exception as erro:
+                traceback.print_exc()
+                print(
+                    "ERRO_PERSISTENCIA",
+                    {
+                        "hash_registro": hash_registro,
+                        "aba_origem": payload_dominio.get("aba_origem"),
+                        "origem_base": payload_dominio.get("origem_base"),
+                        "mensagem": str(erro),
+                    }
+                )
+                tipo = _classificar_erro_persistencia(erro)
+                erro_payload = _erro_payload(
+                    payload_dominio,
+                    "persistencia",
+                    tipo,
+                    str(erro)
+                )
+                _registrar_erro(resultado, erro_payload)
 
-        return {
-            "inseridos": inseridos,
-            "atualizados": atualizados,
-            "duplicados_ignorados": duplicados_ignorados,
-            "erros": erros,
-        }
+        return resultado
 
     def listar_clientes(self):
 

@@ -197,6 +197,7 @@ async def upload_anfir_seguro(
         )
 
         resultado_persistencia = {
+            "tentados": 0,
             "inseridos": 0,
             "atualizados": 0,
             "duplicados_ignorados": 0,
@@ -226,6 +227,17 @@ async def upload_anfir_seguro(
             relatorio["bases_processadas"][origem_base]["erros"] += (
                 resultado_base["erros"]
             )
+            for tipo, quantidade in resultado_base.get("erros_por_tipo", {}).items():
+                relatorio["bases_processadas"][origem_base]["erros_por_tipo"][tipo] = (
+                    relatorio["bases_processadas"][origem_base]["erros_por_tipo"].get(tipo, 0)
+                    + quantidade
+                )
+            relatorio["bases_processadas"][origem_base]["amostra_erros"].extend(
+                resultado_base.get("amostra_erros", [])
+            )
+            relatorio["bases_processadas"][origem_base]["amostra_erros"] = (
+                relatorio["bases_processadas"][origem_base]["amostra_erros"][:100]
+            )
 
             for chave in resultado_persistencia:
                 resultado_persistencia[chave] += resultado_base[chave]
@@ -236,11 +248,16 @@ async def upload_anfir_seguro(
             + resultado_persistencia["duplicados_ignorados"]
         )
 
-        relatorio["status"] = (
-            "PROCESSADO"
-            if total_gravado > 0
-            else "SEM_PERSISTENCIA"
-        )
+        if resultado_persistencia["erros"] and (
+            resultado_persistencia["inseridos"]
+            or resultado_persistencia["atualizados"]
+            or resultado_persistencia["duplicados_ignorados"]
+        ):
+            relatorio["status"] = "SUCESSO_PARCIAL"
+        elif resultado_persistencia["erros"]:
+            relatorio["status"] = "ERRO_PERSISTENCIA"
+        else:
+            relatorio["status"] = "SUCESSO"
         relatorio["persistencia"] = resultado_persistencia
         relatorio["inteligencia"] = inteligencia
         relatorio["score"] = score
@@ -260,5 +277,8 @@ async def upload_anfir_seguro(
 
         raise HTTPException(
             status_code=500,
-            detail=erro
+            detail={
+                "status": "ERRO_PROCESSAMENTO",
+                "mensagem": "Falha ao processar upload. Consulte logs do backend.",
+            }
         )

@@ -75,7 +75,15 @@ export default function UploadPage() {
 
       setResultadoUpload(resultado)
       console.table(resultado)
-      setStatusUpload(resultado.status ?? "Upload processado")
+      if (resultado.status === "ERRO_PERSISTENCIA") {
+        setStatusUpload("Os registros foram processados, mas não puderam ser persistidos.")
+      } else if (resultado.status === "SUCESSO_PARCIAL") {
+        setStatusUpload("Upload concluído parcialmente. Consulte os erros abaixo.")
+      } else if (resultado.status === "SUCESSO") {
+        setStatusUpload("Upload concluído e persistido com sucesso.")
+      } else {
+        setStatusUpload(resultado.status ?? "Upload processado")
+      }
 
       await carregarDados()
       window.dispatchEvent(
@@ -276,11 +284,27 @@ export default function UploadPage() {
                 <p className="text-gray-400 mt-2">Abas: {dados.abas?.join(", ") || "-"}</p>
                 <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
                     <Info label="Linhas lidas" value={dados.linhas_lidas} />
+                    <Info label="Registros válidos" value={dados.registros_validos} />
                     <Info label="Inseridos" value={dados.inseridos} />
                     <Info label="Atualizados" value={dados.atualizados} />
                     <Info label="Duplicados ignorados" value={dados.duplicados_ignorados} />
                     <Info label="Erros" value={dados.erros} />
                 </div>
+                {dados.erros > 0 && (
+                    <div className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+                        <p className="font-semibold">Erros por tipo</p>
+                        {Object.entries(dados.erros_por_tipo ?? {}).map(([tipo, total]: any) => (
+                            total ? <p key={tipo}>{tipo}: {total}</p> : null
+                        ))}
+                        <div className="mt-3 space-y-2">
+                            {(dados.amostra_erros ?? []).slice(0, 5).map((erro: any, index: number) => (
+                                <p key={index}>
+                                    Linha {erro.linha ?? "-"} • {erro.etapa} • {erro.tipo}: {erro.mensagem}
+                                </p>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         ))}
     </div>
