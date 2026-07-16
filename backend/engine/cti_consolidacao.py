@@ -215,8 +215,6 @@ def consolidar_dados(registros: list) -> dict:
 
                 "implementadora",
 
-                "implementador",
-
                 "IMPLEMENTADORA"
 
             ) or ""

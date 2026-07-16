@@ -28,7 +28,7 @@ import traceback
 
 from collections import Counter
 
-from parsers.viena_parser import processar_planilha_viena
+from parsers.viena_parser import processar_planilha_viena_com_relatorio
 
 from core.score_engine import (
     consolidar_scores
@@ -71,9 +71,9 @@ def gerar_inteligencia_operacional(registros):
     )
 
     implementadoras = Counter(
-        r.get("implementador", "")
+        r.get("implementadora", "")
         for r in registros
-        if r.get("implementador")
+        if r.get("implementadora")
     )
 
     ranking_estados = estados.most_common(10)
@@ -141,6 +141,32 @@ def gerar_inteligencia_operacional(registros):
 
 
 # ============================================================
+# ADAPTADOR DE PERSISTÊNCIA LEGADA
+# ============================================================
+
+def adaptar_payload_persistencia_legada(registros):
+
+    payload = []
+
+    for registro in registros:
+
+        item = dict(registro)
+
+        item["implementador"] = item.get(
+            "implementadora"
+        )
+
+        item.pop(
+            "implementadora",
+            None
+        )
+
+        payload.append(item)
+
+    return payload
+
+
+# ============================================================
 # UPLOAD CTI
 # ============================================================
 
@@ -153,76 +179,73 @@ async def upload_anfir_seguro(
 
         contents = await file.read()
 
-        registros = processar_planilha_viena(
-            contents
+        registros_processados, relatorio = processar_planilha_viena_com_relatorio(
+            contents,
+            file.filename
         )
 
+        if not registros_processados:
+            relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
+            return relatorio
+
         inteligencia = gerar_inteligencia_operacional(
-            registros
+            registros_processados
         )
 
         score = consolidar_scores(
-            registros
+            registros_processados
         )
 
-        registros_processados = []
-
-        for registro in registros:
-
-            if hasattr(registro, "to_dict"):
-
-                registros_processados.append(
-                    registro.to_dict()
-                )
-
-            else:
-
-                registros_processados.append(
-                    registro
-                )
-
-        hashes_lote = [
-            r["hash_registro"]
-            for r in registros_processados
-            if r.get("hash_registro")
-        ]
-
-        hashes_existentes = repository.buscar_hashes_existentes(
-        hashes_lote
-        )
-
-        registros_novos = [
-            r
-            for r in registros_processados
-            if r.get("hash_registro") not in hashes_existentes
-        ]
-
-        ignorados = (
-            len(registros_processados)
-            - len(registros_novos)
-        )
-
-        resultado_upload = upload_engine.processar(
-
-            tabela="cti_anfir",
-
-            registros=registros_novos
-
-        )
-
-        resultado_upload["ignorados"] = ignorados
-
-        return {
-
-            "status": "Upload realizado com sucesso",
-
-            "upload": resultado_upload,
-
-            "inteligencia": inteligencia,
-
-            "score": score
-
+        resultado_persistencia = {
+            "inseridos": 0,
+            "atualizados": 0,
+            "duplicados_ignorados": 0,
+            "erros": 0,
         }
+
+        for origem_base in relatorio["bases_processadas"]:
+            registros_base = [
+                registro
+                for registro in registros_processados
+                if registro.get("origem_base") == origem_base
+            ]
+
+            resultado_base = repository.persistir_registros_idempotente(
+                registros_base
+            )
+
+            relatorio["bases_processadas"][origem_base]["inseridos"] = (
+                resultado_base["inseridos"]
+            )
+            relatorio["bases_processadas"][origem_base]["atualizados"] = (
+                resultado_base["atualizados"]
+            )
+            relatorio["bases_processadas"][origem_base]["duplicados_ignorados"] += (
+                resultado_base["duplicados_ignorados"]
+            )
+            relatorio["bases_processadas"][origem_base]["erros"] += (
+                resultado_base["erros"]
+            )
+
+            for chave in resultado_persistencia:
+                resultado_persistencia[chave] += resultado_base[chave]
+
+        total_gravado = (
+            resultado_persistencia["inseridos"]
+            + resultado_persistencia["atualizados"]
+            + resultado_persistencia["duplicados_ignorados"]
+        )
+
+        relatorio["status"] = (
+            "PROCESSADO"
+            if total_gravado > 0
+            else "SEM_PERSISTENCIA"
+        )
+        relatorio["persistencia"] = resultado_persistencia
+        relatorio["inteligencia"] = inteligencia
+        relatorio["score"] = score
+
+        return relatorio
 
     except Exception as e:
 

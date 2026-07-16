@@ -92,8 +92,9 @@ def detectar_mapeamento(df):
 
     ])
 
-    mapa["fabricante"] = detectar_coluna(df, [
+    mapa["implementadora"] = detectar_coluna(df, [
 
+        "IMPLEMENTADORA",
         "FABRICANTE",
         "MARCA",
         "OEM",
@@ -174,9 +175,9 @@ def processar_planilha_universal(contents):
             else None
         )
 
-        fabricante_original = (
-            row.get(mapa["fabricante"])
-            if mapa["fabricante"]
+        implementadora_original = (
+            row.get(mapa["implementadora"])
+            if mapa["implementadora"]
             else None
         )
 
@@ -190,9 +191,9 @@ def processar_planilha_universal(contents):
             linha_original
         )
 
-        fabricante = (
+        implementadora = (
             normalizar_implementadora(
-                fabricante_original
+                implementadora_original
             )
         )
 
@@ -209,11 +210,10 @@ def processar_planilha_universal(contents):
 
             "linha": linha,
 
-            "implementador": fabricante,
+            "implementadora": implementadora,
 
             "valor": float(valor)
 
         })
 
     return registros
-

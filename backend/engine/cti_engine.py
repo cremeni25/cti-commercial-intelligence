@@ -32,7 +32,7 @@ class CTIEngine:
                 estados[estado] += 1
 
             implementadora = normalizar_implementadora(
-                row.get("implementador")
+                row.get("implementadora")
             )
 
             if implementadora:
@@ -145,7 +145,7 @@ class CTIEngine:
                 estados[estado] += 1
 
             implementadora = normalizar_implementadora(
-                row.get("implementador")
+                row.get("implementadora")
             )
 
             if implementadora:

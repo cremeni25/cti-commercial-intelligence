@@ -63,6 +63,7 @@ export default function UploadPage() {
 
     try {
       setLoading(true)
+      setResultadoUpload(null)
       setStatusUpload("Selecionando arquivo...")
 
       const resultado = await uploadArquivo(file)
@@ -74,7 +75,7 @@ export default function UploadPage() {
 
       setResultadoUpload(resultado)
       console.table(resultado)
-      setStatusUpload("Upload concluído com sucesso")
+      setStatusUpload(resultado.status ?? "Upload processado")
 
       await carregarDados()
       window.dispatchEvent(
@@ -268,65 +269,40 @@ export default function UploadPage() {
         Painel Oficial do Upload
     </h2>
 
-    <div className="grid grid-cols-2 xl:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        {Object.entries(resultadoUpload?.bases_processadas ?? {}).map(([base, dados]: any) => (
+            <div key={base} className="rounded-xl border border-[#13203f] bg-[#091a33] p-4">
+                <h3 className="text-cyan-400 font-bold">{base}</h3>
+                <p className="text-gray-400 mt-2">Abas: {dados.abas?.join(", ") || "-"}</p>
+                <div className="grid grid-cols-2 gap-3 mt-4 text-sm">
+                    <Info label="Linhas lidas" value={dados.linhas_lidas} />
+                    <Info label="Inseridos" value={dados.inseridos} />
+                    <Info label="Atualizados" value={dados.atualizados} />
+                    <Info label="Duplicados ignorados" value={dados.duplicados_ignorados} />
+                    <Info label="Erros" value={dados.erros} />
+                </div>
+            </div>
+        ))}
+    </div>
 
-        <div>
-            <p className="text-gray-400">Arquivo</p>
-            <p className="text-white">
-                {nomeArquivo || "-"}
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Linhas do Arquivo</p>
-            <p className="text-cyan-400 text-xl">
-                {status?.linhas_brutas ?? "-"}
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Processados</p>
-            <p className="text-emerald-400 text-xl">
-                {resultadoUpload?.recebidos ?? "-"}
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Inseridos</p>
-            <p className="text-white text-xl">
-                {resultadoUpload?.inseridos ?? "-"}
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Ignorados</p>
-            <p className="text-yellow-400 text-xl">
-                {status?.linhas_brutas && resultadoUpload
-                    ? status.linhas_brutas - resultadoUpload.recebidos
-                    : "-"
-                }
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Tempo</p>
-            <p className="text-white">
-                {resultadoUpload?.tempo_execucao ?? "-"} s
-            </p>
-        </div>
-
-        <div>
-            <p className="text-gray-400">Status</p>
-            <p className="text-emerald-400">
-                {resultadoUpload?.status ?? statusUpload}
-            </p>
-        </div>
-
+    <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-6">
+        <Info label="Arquivo" value={resultadoUpload?.arquivo ?? nomeArquivo ?? "-"} />
+        <Info label="Status" value={resultadoUpload?.status ?? statusUpload} />
+        <Info label="Inseridos totais" value={resultadoUpload?.persistencia?.inseridos ?? 0} />
+        <Info label="Atualizados totais" value={resultadoUpload?.persistencia?.atualizados ?? 0} />
     </div>
 
 </div>
-
       </div>
     </main>
+  )
+}
+
+function Info({ label, value }: { label: string; value: any }) {
+  return (
+    <div>
+      <p className="text-gray-400">{label}</p>
+      <p className="text-white text-xl">{value ?? "-"}</p>
+    </div>
   )
 }
