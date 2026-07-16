@@ -44,6 +44,23 @@ def _adaptar_persistencia_para_dominio(registro):
     return payload
 
 
+def _valor_preenchido(valor):
+
+    return valor not in (None, "", "nan")
+
+
+def _mesclar_sem_apagar(existente, novo):
+
+    payload = dict(existente or {})
+
+    for chave, valor in novo.items():
+
+        if _valor_preenchido(valor):
+            payload[chave] = valor
+
+    return payload
+
+
 class CTIRepository:
 
     TABELA = "cti_anfir"
@@ -221,6 +238,111 @@ class CTIRepository:
     # ======================================================
     # APOIO
     # ======================================================
+
+
+    def buscar_por_origem(
+        self,
+        origem_base: str,
+        autorizado: str = None
+    ):
+
+        consulta = (
+            supabase
+            .table(self.TABELA)
+            .select("*")
+            .eq("origem_base", origem_base)
+        )
+
+        if autorizado:
+            consulta = consulta.eq(
+                "autorizado",
+                autorizado
+            )
+
+        registros = (
+            consulta
+            .execute()
+            .data
+            or []
+        )
+
+        return [
+            _adaptar_persistencia_para_dominio(registro)
+            for registro in registros
+        ]
+
+    def persistir_registros_idempotente(
+        self,
+        registros: List[dict]
+    ):
+
+        inseridos = 0
+        atualizados = 0
+        duplicados_ignorados = 0
+        erros = 0
+
+        for registro in registros:
+
+            try:
+
+                payload_dominio = dict(registro)
+                hash_registro = payload_dominio.get(
+                    "hash_registro"
+                )
+
+                if not hash_registro:
+                    erros += 1
+                    continue
+
+                existente = (
+                    supabase
+                    .table(self.TABELA)
+                    .select("*")
+                    .eq("hash_registro", hash_registro)
+                    .limit(1)
+                    .execute()
+                    .data
+                    or []
+                )
+
+                payload = _adaptar_dominio_para_persistencia(
+                    payload_dominio
+                )
+
+                if existente:
+                    legado_existente = existente[0]
+                    mesclado = _mesclar_sem_apagar(
+                        legado_existente,
+                        payload
+                    )
+
+                    if mesclado == legado_existente:
+                        duplicados_ignorados += 1
+                        continue
+
+                    supabase.table(self.TABELA).update(
+                        mesclado
+                    ).eq(
+                        "hash_registro",
+                        hash_registro
+                    ).execute()
+                    atualizados += 1
+                    continue
+
+                supabase.table(self.TABELA).insert(
+                    payload
+                ).execute()
+                inseridos += 1
+
+            except Exception:
+                erros += 1
+
+        return {
+            "inseridos": inseridos,
+            "atualizados": atualizados,
+            "duplicados_ignorados": duplicados_ignorados,
+            "erros": erros,
+        }
 
     def listar_clientes(self):
 

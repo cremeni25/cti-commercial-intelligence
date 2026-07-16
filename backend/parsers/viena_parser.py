@@ -1,218 +1,109 @@
-# ============================================================
-# CTI - COMMERCIAL INTELLIGENCE
-# Arquivo......: planilha_engine_viena.py
-# Versão.......: 2.0.0
-# Status.......: PRODUÇÃO
-#
-# Parser Oficial VIENA
-#
-# Responsabilidade:
-#
-# - Ler qualquer planilha VIENA
-# - Detectar automaticamente o cabeçalho
-# - Normalizar colunas
-# - Converter registros CTI
-# - Gerar hash
-#
-# NÃO:
-#
-# - grava banco
-# - calcula score
-# - gera inteligência
-# ============================================================
-
 import hashlib
-import uuid
 import re
-
-from datetime import datetime
+import uuid
+from datetime import datetime, timedelta
 from io import BytesIO
-
-from models.cti_record import CTIRecord
 
 import pandas as pd
 
+from models.cti_record import CTIRecord
 
-# ============================================================
-# COLUNAS ACEITAS
-# ============================================================
+ABAS_PROCESSADAS = {
+    "BRASIL": {
+        "origem_base": "BRASIL",
+        "autorizado": None,
+        "ano_referencia": None,
+        "escopo_operacional": "NACIONAL",
+    },
+    "VIENA SP 2025": {
+        "origem_base": "VIENA_SP",
+        "autorizado": "VIENA",
+        "ano_referencia": 2025,
+        "escopo_operacional": "AUTORIZADO",
+    },
+    "VIENA SP 2026": {
+        "origem_base": "VIENA_SP",
+        "autorizado": "VIENA",
+        "ano_referencia": 2026,
+        "escopo_operacional": "AUTORIZADO",
+    },
+}
 
 COLUNAS = {
-
-    "DATA": [
-        "DATA",
-        "DATA VENDA",
-        "DT VENDA",
-        "EMISSAO"
-    ],
-
-    "RESPONSAVEL": [
-        "RESPONSAVEL",
-        "RESPONSÁVEL",
-        "VENDEDOR",
-        "CONSULTOR"
-    ],
-
-    "REGIAO": [
-        "REGIAO",
-        "REGIÃO"
-    ],
-
-    "ESTADO": [
-        "ESTADO",
-        "UF"
-    ],
-
-    "DDD": [
-        "DDD"
-    ],
-
-    "MUNICIPIO": [
-        "MUNICIPIO",
-        "MUNICÍPIO",
-        "CIDADE"
-    ],
-
-    "SUB_REGIAO": [
-        "SUB REGIAO",
-        "SUB-REGIAO",
-        "SUBREGIAO"
-    ],
-
-    "CLIENTE": [
-        "CLIENTE",
-        "NOME_PROPRIETARIO",
-        "NOME PROPRIETARIO",
-        "PROPRIETARIO",
-        "RAZAO SOCIAL",
-        "RAZAO_SOCIAL"
-    ],
-
-    "CNPJ": [
-        "CNPJ",
-        "CNPJ FATURADO",
-        "CNPJ_FATURADO"
-    ],
-
-    "FABRICANTE_CAMINHAO": [
-        "FABRICANTE CAMINHAO",
-        "FABRICANTE_CAMINHÃO"
-    ],
-
-    "MODELO_CAMINHAO": [
-        "MODELO CAMINHAO",
-        "MODELO_CAMINHÃO"
-    ],
-
-    "EIXO": [
-        "EIXO"
-    ],
-
-    "TIPO_VEICULO": [
-        "TIPO VEICULO",
-        "TIPO_VEICULO"
-    ],
-
-    "PLACA": [
-        "PLACA"
-    ],
-
-    "CHASSI": [
-        "CHASSI"
-    ],
-
-    "IMPLEMENTADORA": [
-        "IMPLEMENTADORA",
-        "IMPLEMENTADOR"
-    ],
-
-    "STATUS": [
-        "STATUS"
-    ],
-
-    "MOTIVO": [
-        "MOTIVO"
-    ],
-
-    "OCORRENCIA": [
-        "OCORRENCIA",
-        "OCORRÊNCIA"
-    ],
-
-    "FABRICANTE_EQUIPAMENTO": [
-        "FABRICANTE EQUIPAMENTO"
-    ],
-
-    "LINHA": [
-        "LINHA DE PRODUTO",
-        "LINHA",
-        "PRODUTO"
-    ],
-
-    "MODELO": [
-        "MODELO DE PRODUTO",
-        "MODELO"
-    ],
-
-    "VALOR": [
-        "VALOR",
-        "VALOR VENDA",
-        "VALOR_TOTAL"
-    ]
-
+    "data_venda": ["DATA", "DATA VENDA", "DT VENDA", "EMISSAO"],
+    "responsavel": ["RESPONSAVEL", "RESPONSÁVEL", "VENDEDOR", "CONSULTOR"],
+    "regiao": ["REGIAO", "REGIÃO"],
+    "estado": ["ESTADO", "UF"],
+    "ddd": ["DDD"],
+    "cidade": ["MUNICIPIO", "MUNICÍPIO", "CIDADE"],
+    "sub_regiao": ["SUB REGIAO", "SUB-REGIAO", "SUBREGIAO", "SUB REGIÃO"],
+    "cliente": ["NOME_PROPRIETARIO", "NOME PROPRIETARIO", "CLIENTE", "PROPRIETARIO", "RAZAO SOCIAL", "RAZAO_SOCIAL"],
+    "cnpj": ["CNPJ_FATURADO", "CNPJ FATURADO", "CNPJ"],
+    "fabricante_caminhao": ["FABRICANTE CAMINHAO", "FABRICANTE_CAMINHAO", "FABRICANTE_CAMINHÃO"],
+    "modelo_caminhao": ["MODELO CAMINHAO", "MODELO_CAMINHAO", "MODELO_CAMINHÃO"],
+    "eixo": ["EIXO"],
+    "tipo_veiculo": ["TIPO_VEICULO", "TIPO VEICULO"],
+    "placa": ["PLACA"],
+    "chassi": ["CHASSI"],
+    "implementadora": ["IMPLEMENTADORA", "IMPLEMENTADOR"],
+    "status": ["STATUS"],
+    "motivo": ["MOTIVO"],
+    "ocorrencia": ["OCORRENCIA", "OCORRÊNCIA"],
+    "fabricante_equipamento": ["FABRICANTE EQUIPAMENTO", "FABRICANTE_EQUIPAMENTO"],
+    "linha": ["LINHA DE PRODUTO", "LINHA", "PRODUTO"],
+    "modelo": ["MODELO DE PRODUTO", "MODELO"],
+    "modelo_carrier": ["MODELO DE PRODUTO - CARRIER"],
+    "modelo_concorrencia": ["MODELO DE PRODUTO - CONCORRÊNCIA", "MODELO DE PRODUTO - CONCORRENCIA"],
+    "valor": ["VALOR"],
+    "valor_carrier": ["VALOR - CARRIER"],
+    "valor_concorrencia": ["VALOR - CONCORRÊNCIA", "VALOR - CONCORRENCIA"],
 }
 
 
-# ============================================================
-# NORMALIZA TEXTO
-# ============================================================
+def limpar_nome_coluna(nome):
+    nome = "" if pd.isna(nome) else str(nome)
+    nome = re.sub(r"\s+", " ", nome.strip().upper())
+    return nome
+
 
 def texto(valor):
-
     if pd.isna(valor):
         return ""
-
+    if isinstance(valor, float) and valor.is_integer():
+        return str(int(valor))
     return str(valor).strip()
 
 
+def texto_identificador(valor):
+    return texto(valor).replace(".0", "")
+
+
 def numero(valor):
-
+    if pd.isna(valor) or valor == "":
+        return 0.0
+    if isinstance(valor, str):
+        valor = valor.replace("R$", "").replace(".", "").replace(",", ".").strip()
     try:
-
-        if pd.isna(valor):
-            return 0.0
-
-        if valor == "":
-            return 0.0
-
-        if isinstance(valor, str):
-
-            valor = (
-                valor
-                .replace(".", "")
-                .replace(",", ".")
-                .replace("R$", "")
-                .strip()
-            )
-
         return float(valor)
-
-    except Exception:
-
+    except (TypeError, ValueError):
         return 0.0
 
 
-def limpar_nome_coluna(nome):
-
-    nome = texto(nome).upper()
-
-    nome = re.sub(r"\s+", " ", nome)
-
-    return nome.strip()
+def normalizar_data(valor):
+    if pd.isna(valor) or valor == "":
+        return ""
+    if isinstance(valor, (int, float)):
+        try:
+            return (datetime(1899, 12, 30) + timedelta(days=float(valor))).date().isoformat()
+        except (TypeError, ValueError, OverflowError):
+            return texto(valor)
+    try:
+        return pd.to_datetime(valor).date().isoformat()
+    except Exception:
+        return texto(valor)
 
 
 def extrair_ano(data):
-
     try:
         return pd.to_datetime(data).year
     except Exception:
@@ -220,514 +111,202 @@ def extrair_ano(data):
 
 
 def extrair_mes(data):
-
     try:
         return pd.to_datetime(data).month
     except Exception:
         return None
 
 
-# ============================================================
-# HASH DO REGISTRO
-# ============================================================
-
-def gerar_hash(registro):
-
-    chave = "|".join([
-
-        texto(registro.get("cliente")),
-        texto(registro.get("placa")),
-        texto(registro.get("chassi")),
-        texto(registro.get("linha")),
-        texto(registro.get("implementadora")),
-        texto(registro.get("data_venda"))
-
-    ])
-
-    return hashlib.sha256(
-        chave.encode("utf-8")
-    ).hexdigest()
-
-
-# ============================================================
-# IDENTIFICADOR OPERACIONAL DO VEÍCULO
-# ============================================================
-
 def normalizar_chassi(chassi):
-
-    return (
-        texto(chassi)
-        .upper()
-        .replace("-", "")
-        .replace(" ", "")
-    )
+    return re.sub(r"[^A-Z0-9]", "", texto(chassi).upper())
 
 
 def normalizar_placa(placa):
+    return re.sub(r"[^A-Z0-9]", "", texto(placa).upper())
 
-    return (
-        texto(placa)
-        .upper()
-        .replace("-", "")
-        .replace(" ", "")
-    )
-
-
-def gerar_id_operacional(registro):
-
-    chassi = normalizar_chassi(
-        registro.get("chassi")
-    )
-
-    placa = normalizar_placa(
-        registro.get("placa")
-    )
-
-    if chassi and placa:
-
-        chave = f"CHASSI_PLACA|{chassi}|{placa}"
-
-    elif chassi:
-
-        chave = f"CHASSI|{chassi}"
-
-    elif placa:
-
-        chave = f"PLACA|{placa}"
-
-    else:
-
-        chave = f"TEMP|{uuid.uuid4()}"
-
-    return hashlib.sha256(
-        chave.encode("utf-8")
-    ).hexdigest()
-
-# ============================================================
-# LOCALIZA CABEÇALHO
-# ============================================================
 
 def localizar_cabecalho(df):
-
     melhor_linha = None
     maior_pontuacao = -1
-
+    aliases = {alias for lista in COLUNAS.values() for alias in lista}
     for indice in range(min(len(df), 30)):
-
-        linha = df.iloc[indice].tolist()
-
-        linha_normalizada = [
-            limpar_nome_coluna(c)
-            for c in linha
-        ]
-
-        pontuacao = 0
-
-        for coluna in linha_normalizada:
-
-            for aliases in COLUNAS.values():
-
-                if coluna in aliases:
-
-                    pontuacao += 1
-
+        linha = [limpar_nome_coluna(c) for c in df.iloc[indice].tolist()]
+        pontuacao = sum(1 for coluna in linha if coluna in aliases)
         if pontuacao > maior_pontuacao:
-
             maior_pontuacao = pontuacao
             melhor_linha = indice
+    return melhor_linha if maior_pontuacao > 0 else None
 
-    return melhor_linha
-
-
-# ============================================================
-# NORMALIZA COLUNAS
-# ============================================================
 
 def normalizar_dataframe(df):
-
     cabecalho = localizar_cabecalho(df)
-
     if cabecalho is None:
-
         return None
+    nomes = [limpar_nome_coluna(coluna) for coluna in df.iloc[cabecalho]]
+    dados = df.iloc[cabecalho + 1:].copy()
+    dados.columns = nomes
+    return dados.reset_index(drop=True).fillna("")
 
-    nomes = []
-
-    for coluna in df.iloc[cabecalho]:
-
-        nomes.append(
-            limpar_nome_coluna(coluna)
-        )
-
-    df = df.iloc[cabecalho + 1:].copy()
-
-    df.columns = nomes
-
-    df = df.reset_index(drop=True)
-
-    return df
-
-
-# ============================================================
-# PROCURA COLUNA POR ALIAS
-# ============================================================
 
 def localizar_coluna(df, aliases):
-
     for alias in aliases:
-
         if alias in df.columns:
-
             return alias
-
     return None
 
 
-# ============================================================
-# LÊ VALOR
-# ============================================================
-
-def campo(df, row, aliases):
-
-    coluna = localizar_coluna(df, aliases)
-
+def campo(df, row, nome):
+    coluna = localizar_coluna(df, COLUNAS[nome])
     if coluna is None:
-
         return ""
-
     return row[coluna]
 
 
-# ============================================================
-# LINHAS INVÁLIDAS
-# ============================================================
+def chave_deduplicacao(registro):
+    chassi = normalizar_chassi(registro.get("chassi"))
+    placa = normalizar_placa(registro.get("placa"))
+    origem = registro.get("origem_base") or "SEM_ORIGEM"
+    ano = registro.get("ano_referencia") if origem == "VIENA_SP" else ""
+    if chassi:
+        chave = f"{origem}|{ano}|CHASSI|{chassi}"
+    elif placa:
+        chave = f"{origem}|{ano}|PLACA|{placa}"
+    else:
+        chave = f"{origem}|{ano}|TEMP|{uuid.uuid4()}"
+    return chave
+
+
+def gerar_hash(registro):
+    return hashlib.sha256(chave_deduplicacao(registro).encode("utf-8")).hexdigest()
+
+
+def gerar_id_operacional(registro):
+    return gerar_hash(registro)
+
+
+def valor_operacional(df, row):
+    valor = numero(campo(df, row, "valor"))
+    if valor:
+        return valor
+    status_motivo = f"{texto(campo(df, row, 'status'))} {texto(campo(df, row, 'motivo'))}".upper()
+    if "CARRIER" in status_motivo:
+        return numero(campo(df, row, "valor_carrier"))
+    return numero(campo(df, row, "valor_concorrencia"))
+
 
 def linha_valida(registro):
-
-    if (
-        registro["cliente"] == ""
-        and registro["placa"] == ""
-        and registro["chassi"] == ""
-    ):
-
+    if not registro.get("chassi") and not registro.get("placa") and not registro.get("cliente"):
         return False
-
-    cliente = registro["cliente"].upper()
-
-    lixo = [
-
-        "TOTAL",
-
-        "TOTAL GERAL",
-
-        "SUBTOTAL",
-
-        "GERAL",
-
-        "RESUMO"
-
-    ]
-
-    if cliente in lixo:
-
-        return False
-
-    return True
+    cliente = texto(registro.get("cliente")).upper()
+    return cliente not in {"TOTAL", "TOTAL GERAL", "SUBTOTAL", "GERAL", "RESUMO"}
 
 
-# ============================================================
-# CONVERTE LINHA
-# ============================================================
-
-def converter_registro(df, row, nome_aba):
-
-    data_venda = texto(
-
-        campo(
-
-            df,
-
-            row,
-
-            COLUNAS["DATA"]
-
-        )
-
-    )
-
+def converter_registro(df, row, nome_aba, contexto, arquivo_origem):
+    data_venda = normalizar_data(campo(df, row, "data_venda"))
+    ano_referencia = contexto["ano_referencia"] or extrair_ano(data_venda)
     registro = CTIRecord(
-
-    # ======================================================
-    # DADOS TEMPORAIS
-    # ======================================================
-
-    ano=extrair_ano(data_venda),
-    mes=extrair_mes(data_venda),
-    data_venda=data_venda,
-
-    # ======================================================
-    # OPERAÇÃO
-    # ======================================================
-
-    responsavel=texto(
-        campo(df, row, COLUNAS["RESPONSAVEL"])
-    ),
-
-    # ======================================================
-    # LOCALIZAÇÃO
-    # ======================================================
-
-    regiao=texto(
-        campo(df, row, COLUNAS["REGIAO"])
-    ),
-
-    estado=texto(
-        campo(df, row, COLUNAS["ESTADO"])
-    ),
-
-    ddd=texto(
-        campo(df, row, COLUNAS["DDD"])
-    ),
-
-    cidade=texto(
-        campo(df, row, COLUNAS["MUNICIPIO"])
-    ),
-
-    sub_regiao=texto(
-        campo(df, row, COLUNAS["SUB_REGIAO"])
-    ),
-
-    # ======================================================
-    # CLIENTE
-    # ======================================================
-
-    cliente=texto(
-        campo(df, row, COLUNAS["CLIENTE"])
-    ),
-
-    cnpj=texto(
-        campo(df, row, COLUNAS["CNPJ"])
-    ),
-
-    # ======================================================
-    # VEÍCULO
-    # ======================================================
-
-    fabricante_caminhao=texto(
-        campo(df, row, COLUNAS["FABRICANTE_CAMINHAO"])
-    ),
-
-    modelo_caminhao=texto(
-        campo(df, row, COLUNAS["MODELO_CAMINHAO"])
-    ),
-
-    eixo=texto(
-        campo(df, row, COLUNAS["EIXO"])
-    ),
-
-    tipo_veiculo=texto(
-        campo(df, row, COLUNAS["TIPO_VEICULO"])
-    ),
-
-    placa=texto(
-        campo(df, row, COLUNAS["PLACA"])
-    ),
-
-    chassi=texto(
-        campo(df, row, COLUNAS["CHASSI"])
-    ),
-
-    # ======================================================
-    # EQUIPAMENTO
-    # ======================================================
-
-    implementadora=texto(
-        campo(df, row, COLUNAS["IMPLEMENTADORA"])
-    ),
-
-    fabricante_equipamento=texto(
-        campo(df, row, COLUNAS["FABRICANTE_EQUIPAMENTO"])
-    ),
-
-    linha=texto(
-        campo(df, row, COLUNAS["LINHA"])
-    ),
-
-    modelo=texto(
-        campo(df, row, COLUNAS["MODELO"])
-    ),
-
-    # ======================================================
-    # OPERAÇÃO
-    # ======================================================
-
-    status=texto(
-        campo(df, row, COLUNAS["STATUS"])
-    ),
-
-    motivo=texto(
-        campo(df, row, COLUNAS["MOTIVO"])
-    ),
-
-    ocorrencia=texto(
-        campo(df, row, COLUNAS["OCORRENCIA"])
-    ),
-
-    valor=numero(
-        campo(df, row, COLUNAS["VALOR"])
-    ),
-
-    # ======================================================
-    # ORIGEM
-    # ======================================================
-
-    origem_dado="VIENA",
-
-    arquivo_origem="PLANILHA_VIENA",
-
-    aba_origem=nome_aba,
-
-    versao_parser="2.0.0",
-
-    pipeline="UPLOAD_VIENA",
-
-    ativo=True,
-
-    created_at=datetime.utcnow().isoformat()
-
-)
-
-    registro = registro.to_dict()
-
-    registro["hash_registro"] = gerar_hash(
-        registro
-    )
-
-    registro["id_operacional"] = gerar_id_operacional(
-    registro
-    )
-
+        ano=extrair_ano(data_venda),
+        mes=extrair_mes(data_venda),
+        data_venda=data_venda,
+        responsavel=texto(campo(df, row, "responsavel")),
+        regiao=texto(campo(df, row, "regiao")),
+        estado=texto(campo(df, row, "estado")),
+        ddd=texto_identificador(campo(df, row, "ddd")),
+        cidade=texto(campo(df, row, "cidade")),
+        sub_regiao=texto(campo(df, row, "sub_regiao")),
+        cliente=texto(campo(df, row, "cliente")),
+        cnpj=texto_identificador(campo(df, row, "cnpj")),
+        fabricante_caminhao=texto(campo(df, row, "fabricante_caminhao")),
+        modelo_caminhao=texto(campo(df, row, "modelo_caminhao")),
+        eixo=texto(campo(df, row, "eixo")),
+        tipo_veiculo=texto(campo(df, row, "tipo_veiculo")),
+        placa=texto_identificador(campo(df, row, "placa")),
+        chassi=texto_identificador(campo(df, row, "chassi")),
+        implementadora=texto(campo(df, row, "implementadora")),
+        fabricante_equipamento=texto(campo(df, row, "fabricante_equipamento")),
+        linha=texto(campo(df, row, "linha")),
+        modelo=texto(campo(df, row, "modelo")),
+        status=texto(campo(df, row, "status")),
+        motivo=texto(campo(df, row, "motivo")),
+        ocorrencia=texto(campo(df, row, "ocorrencia")),
+        valor=valor_operacional(df, row),
+        origem_dado=contexto["origem_base"],
+        arquivo_origem=arquivo_origem,
+        aba_origem=nome_aba,
+        versao_parser="3.0.0",
+        pipeline="UPLOAD_ANFIR_OPERACIONAL",
+        ativo=True,
+        created_at=datetime.utcnow().isoformat(),
+    ).to_dict()
+    registro["modelo_carrier"] = texto(campo(df, row, "modelo_carrier"))
+    registro["modelo_concorrencia"] = texto(campo(df, row, "modelo_concorrencia"))
+    registro["origem_base"] = contexto["origem_base"]
+    registro["autorizado"] = contexto["autorizado"]
+    registro["ano_referencia"] = ano_referencia
+    registro["escopo_operacional"] = contexto["escopo_operacional"]
+    registro["hash_registro"] = gerar_hash(registro)
+    registro["id_operacional"] = gerar_id_operacional(registro)
     return registro
 
 
-# ============================================================
-# PROCESSA UMA ABA
-# ============================================================
-
-def processar_aba(df, nome_aba):
-
+def processar_aba(df, nome_aba, arquivo_origem="PLANILHA_ANFIR"):
+    chave_aba = limpar_nome_coluna(nome_aba)
+    contexto = ABAS_PROCESSADAS.get(chave_aba)
+    if not contexto:
+        return [], 0
     df = normalizar_dataframe(df)
-
     if df is None:
-
-        return []
-
-    df = df.fillna("")
-
+        return [], 0
     registros = []
-
+    vistos = set()
+    linhas_lidas = 0
     for _, row in df.iterrows():
+        registro = converter_registro(df, row, nome_aba, contexto, arquivo_origem)
+        if not linha_valida(registro):
+            continue
+        linhas_lidas += 1
+        chave = registro["hash_registro"]
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        registros.append(registro)
+    return registros, linhas_lidas
 
-        registro = converter_registro(
 
-            df,
+def criar_relatorio(arquivo):
+    return {
+        "arquivo": arquivo,
+        "bases_processadas": {
+            "BRASIL": {"abas": [], "linhas_lidas": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0},
+            "VIENA_SP": {"abas": [], "linhas_lidas": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0},
+        },
+        "status": "PROCESSADO",
+    }
 
-            row,
 
-            nome_aba
+def processar_planilha_viena_com_relatorio(contents, arquivo_origem="PLANILHA_ANFIR"):
+    abas = pd.read_excel(BytesIO(contents), sheet_name=None, header=None, dtype=object)
+    registros = []
+    relatorio = criar_relatorio(arquivo_origem)
+    for nome_aba, df in abas.items():
+        chave_aba = limpar_nome_coluna(nome_aba)
+        contexto = ABAS_PROCESSADAS.get(chave_aba)
+        if not contexto:
+            continue
+        try:
+            registros_aba, linhas_lidas = processar_aba(df, nome_aba, arquivo_origem)
+            base = contexto["origem_base"]
+            relatorio["bases_processadas"][base]["abas"].append(nome_aba)
+            relatorio["bases_processadas"][base]["linhas_lidas"] += linhas_lidas
+            relatorio["bases_processadas"][base]["duplicados_ignorados"] += max(linhas_lidas - len(registros_aba), 0)
+            registros.extend(registros_aba)
+        except Exception:
+            relatorio["bases_processadas"][contexto["origem_base"]]["erros"] += 1
+    if not registros:
+        relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
+    return registros, relatorio
 
-        )
-
-        if linha_valida(registro):
-
-            registros.append(registro)
-
-    return registros
-
-    # ============================================================
-# PROCESSAMENTO PRINCIPAL
-# ============================================================
 
 def processar_planilha_viena(contents):
-
-    abas = pd.read_excel(
-
-        BytesIO(contents),
-
-        sheet_name=None,
-
-        header=None,
-
-        dtype=object
-
-    )
-
-    registros = []
-
-    for nome_aba, df in abas.items():
-
-        try:
-
-            registros.extend(
-
-                processar_aba(
-
-                    df,
-
-                    nome_aba
-
-                )
-
-            )
-
-        except Exception:
-
-            # Caso uma aba apresente problema,
-            # continua processando as demais.
-            continue
-
-    # ========================================================
-    # REMOVE DUPLICADOS DO ARQUIVO
-    # ========================================================
-
-    registros_unicos = []
-
-    hashes = set()
-
-    for registro in registros:
-
-        chave = registro.get("hash_registro")
-
-        if not chave:
-
-            registros_unicos.append(registro)
-
-            continue
-
-        if chave in hashes:
-
-            continue
-
-        hashes.add(chave)
-
-        registros_unicos.append(registro)
-
-    # ========================================================
-    # ORDENA POR DATA
-    # ========================================================
-
-    registros_unicos.sort(
-
-        key=lambda r: (
-
-            r.get("ano") or 0,
-
-            r.get("mes") or 0,
-
-            r.get("cliente") or ""
-
-        )
-
-    )
-
-    return registros_unicos
+    registros, _ = processar_planilha_viena_com_relatorio(contents)
+    return registros

@@ -53,6 +53,8 @@ class CTIRecord:
 
     linha: Optional[str] = None
     modelo: Optional[str] = None
+    modelo_carrier: Optional[str] = None
+    modelo_concorrencia: Optional[str] = None
 
     # ======================================================
     # OPERAÇÃO
@@ -71,6 +73,10 @@ class CTIRecord:
     # ======================================================
 
     origem_dado: Optional[str] = None
+    origem_base: Optional[str] = None
+    autorizado: Optional[str] = None
+    ano_referencia: Optional[int] = None
+    escopo_operacional: Optional[str] = None
 
     arquivo_origem: Optional[str] = None
     aba_origem: Optional[str] = None
