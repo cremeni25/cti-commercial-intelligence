@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { getDashboardExecutivo } from "@/services/cti-api"
+import { useState } from "react"
 import {
   AreaChart,
   Area,
@@ -12,8 +11,8 @@ import {
 } from "recharts"
 
 export function RevenueChart() {
-  const [dashboard, setDashboard] = useState<any>(null)
-  const [data, setData] = useState<any[]>([])
+  const [dashboard] = useState<{ clientes?: unknown[]; implementadoras?: unknown[]; estados?: Array<[string, number]>; produtos?: Array<[string, number]>; resumo?: { total_registros?: number } } | null>(null)
+  const [data] = useState<Array<{ mes: string; oportunidades: number }>>([])
   return (
     <div className="bg-[#071226] border border-[#13203f] rounded-2xl p-6 mb-8">
       <div className="flex items-center justify-between mb-8">

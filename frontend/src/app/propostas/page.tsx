@@ -37,7 +37,7 @@ export default function PropostasPage() {
   }
 
   useEffect(() => {
-    carregarPropostas()
+    queueMicrotask(() => void carregarPropostas())
   }, [])
 
   const valorTotal = dados.reduce(

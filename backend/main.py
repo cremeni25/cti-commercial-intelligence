@@ -55,6 +55,7 @@ from routers.upload_router import router as upload_router
 from routers.cti_api_router import router as cti_api_router
 from routers.brasil_router import router as brasil_router
 from routers.autorizados_router import router as autorizados_router
+from routers.modulos_router import router as modulos_router
 
 app.include_router(crm_router)
 
@@ -67,6 +68,7 @@ app.include_router(upload_router)
 app.include_router(cti_api_router)
 app.include_router(brasil_router)
 app.include_router(autorizados_router)
+app.include_router(modulos_router)
 
 # ============================================================
 # ENV / CONFIG
