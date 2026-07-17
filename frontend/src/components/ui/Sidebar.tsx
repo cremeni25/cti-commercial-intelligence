@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image, { type StaticImageData } from "next/image"
 import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -16,7 +16,7 @@ const permissoesMenu = {
     "/dashboard",
     "/ia-comercial",
     "/upload",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
     "/locadoras",
     "/oportunidades",
@@ -25,19 +25,19 @@ const permissoesMenu = {
     "/pedidos",
     "/atividades",
     "/forecast",
-    "/mapa-estrategico",
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
-    "/configuracoes",
+    "/mapa-estrategico",
     "/usuarios",
+    "/configuracoes",
   ],
 
   DIRETOR: [
     "/dashboard",
     "/ia-comercial",
     "/upload",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
     "/locadoras",
     "/oportunidades",
@@ -46,17 +46,17 @@ const permissoesMenu = {
     "/pedidos",
     "/atividades",
     "/forecast",
-    "/mapa-estrategico",
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
-    "/configuracoes",
+    "/mapa-estrategico",
     "/usuarios",
+    "/configuracoes",
   ],
 
   GERENTE: [
     "/dashboard",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
     "/locadoras",
     "/oportunidades",
@@ -67,10 +67,12 @@ const permissoesMenu = {
     "/oportunidades",
   ],
 }
+type MenuItem = { label: string; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
+type MenuGroup = { titulo: string; itens: MenuItem[] }
 
-const menuGroups = [
+const menuGroups: MenuGroup[] = [
   {
-    titulo: "",
+    titulo: "Principal",
     itens: [
       {
         label: "Dashboard Executivo",
@@ -139,9 +141,9 @@ const menuGroups = [
     titulo: "Cadastros",
     itens: [
       {
-        label: "Transportadoras",
-        href: "/transportadoras",
-        icon: "🚛",
+        label: "Empresas",
+        href: "/empresas",
+        icon: "🏢",
         type: "emoji",
       },
       {
@@ -153,7 +155,7 @@ const menuGroups = [
       {
         label: "Locadoras",
         href: "/locadoras",
-        icon: "🏢",
+        icon: "🏬",
         type: "emoji",
       },
     ],
@@ -180,12 +182,6 @@ const menuGroups = [
         icon: directDriveIcon,
         type: "image",
       },
-    ],
-  },
-
-  {
-    titulo: "",
-    itens: [
       {
         label: "Mapa Estratégico",
         href: "/mapa-estrategico",
@@ -213,7 +209,6 @@ const menuGroups = [
     ],
   },
 ]
-
 export default function Sidebar() {
   const pathname = usePathname()
 
@@ -272,7 +267,7 @@ export default function Sidebar() {
 
                 {item.type === "image" ? (
                   <Image
-                    src={item.icon as any}
+                    src={item.icon as StaticImageData}
                     alt={item.label}
                     width={28}
                     height={28}

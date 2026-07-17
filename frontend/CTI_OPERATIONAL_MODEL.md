@@ -11,12 +11,16 @@ fora destas definições.
 
 ---
 
-# 1. CLIENTE
+# 1. EMPRESA
 
 Entidade operacional principal.
 
-Representa:
+Representa razões sociais como:
 - transportadora
+- indústria
+- distribuidora
+- comércio
+- laboratório
 - operador logístico
 - frigorífico
 - embarcador
@@ -32,8 +36,10 @@ Nunca:
 ## Campos oficiais
 
 - id
+- empresa
 - razao_social
 - nome_fantasia
+- tipo_empresa (opcional)
 - cnpj
 - cidade
 - estado
@@ -52,7 +58,7 @@ Representa potencial comercial identificado.
 ## Campos oficiais
 
 - id
-- cliente_id
+- empresa_id
 - produto
 - montadora
 - implementadora

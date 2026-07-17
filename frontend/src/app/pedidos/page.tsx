@@ -36,7 +36,7 @@ export default function PedidosPage() {
   }
 
   useEffect(() => {
-    carregarPedidos()
+    queueMicrotask(() => void carregarPedidos())
   }, [])
 
   const valorTotal = dados.reduce(

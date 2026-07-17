@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 import { AuthProvider } from "@/core/auth";
+import { OperationalContextProvider } from "@/context/OperationalContext";
 
 export const metadata: Metadata = {
   title: "CTI",
@@ -21,7 +22,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          {children}
+          <OperationalContextProvider>
+            {children}
+          </OperationalContextProvider>
         </AuthProvider>
       </body>
     </html>
