@@ -1,5 +1,6 @@
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL
+  process.env.NEXT_PUBLIC_API_URL ||
+  "https://cti-backend-5ugf.onrender.com"
 
 async function request(endpoint: string) {
   const response = await fetch(
@@ -75,9 +76,7 @@ export async function uploadArquivo(
 }
 
 export async function processarPipeline() {
-  return {
-    status: "PIPELINE_INTEGRADO",
-  }
+  return request("/pipeline/status")
 }
 
 export async function getDebugAmostra() {

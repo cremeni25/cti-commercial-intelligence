@@ -35,7 +35,7 @@ export default function ForecastPage() {
   }
 
   useEffect(() => {
-    carregarForecast()
+    queueMicrotask(() => void carregarForecast())
   }, [])
 
   const pipelineTotal = dados.reduce(

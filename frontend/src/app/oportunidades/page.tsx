@@ -21,7 +21,6 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
 
   const [dados, setDados] = useState<Oportunidade[]>([])
   const [loading, setLoading] = useState(true)
-  const [modalAberto, setModalAberto] = useState(false)
 
   async function carregarOportunidades() {
     try {
@@ -41,13 +40,9 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
     }
   }
 
-  async function salvarOportunidade() {
-    
-  }
-
   useEffect(() => {
     console.log("INICIANDO CARGA DE OPORTUNIDADES")
-    carregarOportunidades()
+    queueMicrotask(() => void carregarOportunidades())
   }, [])
 
   const valorPipeline = dados.reduce(
@@ -91,64 +86,7 @@ console.log("PAGINA OPORTUNIDADES CARREGADA")
       <Sidebar />
 
       <section className="flex-1">
-        <div className="relative">
-          <Topbar />
-
-          <button
-            onClick={() => setModalAberto(true)}
-            className="absolute right-56 top-5 bg-cyan-500 hover:bg-cyan-400 transition-all px-6 py-3 rounded-xl font-semibold text-black"
-          >
-            Novo Projeto
-          </button>
-        </div>
-
-        {modalAberto && (
-          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-            <div className="bg-[#091a33] border border-[#13203f] rounded-2xl p-8 w-[600px]">
-              <h2 className="text-2xl font-bold text-white mb-6">
-                Nova Oportunidade
-              </h2>
-
-              <div className="space-y-4">
-                <input
-                  id="titulo"
-                  placeholder="Título da oportunidade"
-                  className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
-                />
-
-                <input
-                  id="valor"
-                  type="number"
-                  placeholder="Valor estimado"
-                  className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
-                />
-
-                <input
-                  id="probabilidade"
-                  type="number"
-                  placeholder="Probabilidade (%)"
-                  className="w-full p-3 rounded-xl bg-[#071028] border border-[#13203f] text-white"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 mt-8">
-                <button
-                  onClick={() => setModalAberto(false)}
-                  className="px-5 py-3 rounded-xl bg-gray-600 text-white"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  onClick={salvarOportunidade}
-                  className="px-5 py-3 rounded-xl bg-cyan-500 text-black font-semibold"
-                >
-                  Salvar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <Topbar />
 
         <div className="p-8">
           <div className="mb-8">
