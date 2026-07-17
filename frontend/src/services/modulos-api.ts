@@ -1,6 +1,6 @@
 import { apiGet } from "@/lib/api"
 
-export type ModuloResumoItem = {
+export type EmpresaResumoItem = {
   nome: string
   quantidade_registros: number
   valor_total?: number
@@ -23,11 +23,15 @@ export type EquipamentoResumo = {
   estados: RankingItem[]
   implementadoras: RankingItem[]
   linhas: RankingItem[]
-  clientes: RankingItem[]
+  empresas: RankingItem[]
+}
+
+export function getEmpresas() {
+  return apiGet("/modulos/empresas") as Promise<EmpresaResumoItem[]>
 }
 
 export function getTransportadoras() {
-  return apiGet("/modulos/transportadoras") as Promise<ModuloResumoItem[]>
+  return apiGet("/modulos/transportadoras") as Promise<EmpresaResumoItem[]>
 }
 
 export function getEquipamento(slug: string) {

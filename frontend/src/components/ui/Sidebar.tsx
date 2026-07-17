@@ -14,9 +14,11 @@ const perfilAtual = "ADMIN_MASTER"
 const permissoesMenu = {
   ADMIN_MASTER: [
     "/dashboard",
+    "/ia-comercial",
     "/upload",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
+    "/locadoras",
     "/oportunidades",
     "/pipeline",
     "/propostas",
@@ -26,13 +28,18 @@ const permissoesMenu = {
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
+    "/mapa-estrategico",
+    "/usuarios",
+    "/configuracoes",
   ],
 
   DIRETOR: [
     "/dashboard",
+    "/ia-comercial",
     "/upload",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
+    "/locadoras",
     "/oportunidades",
     "/pipeline",
     "/propostas",
@@ -42,12 +49,16 @@ const permissoesMenu = {
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
+    "/mapa-estrategico",
+    "/usuarios",
+    "/configuracoes",
   ],
 
   GERENTE: [
     "/dashboard",
-    "/transportadoras",
+    "/empresas",
     "/implementadoras",
+    "/locadoras",
     "/oportunidades",
   ],
 
@@ -56,18 +67,23 @@ const permissoesMenu = {
     "/oportunidades",
   ],
 }
-
 type MenuItem = { label: string; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
 type MenuGroup = { titulo: string; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
   {
-    titulo: "",
+    titulo: "Principal",
     itens: [
       {
         label: "Dashboard Executivo",
         href: "/dashboard",
         icon: "📊",
+        type: "emoji",
+      },
+      {
+        label: "IA Comercial",
+        href: "/ia-comercial",
+        icon: "🧠",
         type: "emoji",
       },
     ],
@@ -125,15 +141,21 @@ const menuGroups: MenuGroup[] = [
     titulo: "Cadastros",
     itens: [
       {
-        label: "Transportadoras",
-        href: "/transportadoras",
-        icon: "🚛",
+        label: "Empresas",
+        href: "/empresas",
+        icon: "🏢",
         type: "emoji",
       },
       {
         label: "Implementadoras",
         href: "/implementadoras",
         icon: "🏭",
+        type: "emoji",
+      },
+      {
+        label: "Locadoras",
+        href: "/locadoras",
+        icon: "🏬",
         type: "emoji",
       },
     ],
@@ -160,22 +182,33 @@ const menuGroups: MenuGroup[] = [
         icon: directDriveIcon,
         type: "image",
       },
-    ],
-  },
-
-  {
-    titulo: "",
-    itens: [
+      {
+        label: "Mapa Estratégico",
+        href: "/mapa-estrategico",
+        icon: "🌎",
+        type: "emoji",
+      },
     ],
   },
 
   {
     titulo: "Administração",
     itens: [
+      {
+        label: "Usuários",
+        href: "/usuarios",
+        icon: "👥",
+        type: "emoji",
+      },
+      {
+        label: "Configurações",
+        href: "/configuracoes",
+        icon: "⚙️",
+        type: "emoji",
+      },
     ],
   },
 ]
-
 export default function Sidebar() {
   const pathname = usePathname()
 

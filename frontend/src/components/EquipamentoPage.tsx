@@ -59,7 +59,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
               <Ranking titulo="Linhas de produto" itens={dados.linhas} />
               <Ranking titulo="Implementadoras" itens={dados.implementadoras} />
               <Ranking titulo="Estados" itens={dados.estados} />
-              <Ranking titulo="Clientes" itens={dados.clientes} />
+              <Ranking titulo="Empresas" itens={dados.empresas} />
             </div>
           )}
         </div>
