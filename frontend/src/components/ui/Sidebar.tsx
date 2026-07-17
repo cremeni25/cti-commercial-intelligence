@@ -1,6 +1,6 @@
 "use client"
 
-import Image from "next/image"
+import Image, { type StaticImageData } from "next/image"
 import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -14,51 +14,40 @@ const perfilAtual = "ADMIN_MASTER"
 const permissoesMenu = {
   ADMIN_MASTER: [
     "/dashboard",
-    "/ia-comercial",
     "/upload",
     "/transportadoras",
     "/implementadoras",
-    "/locadoras",
     "/oportunidades",
     "/pipeline",
     "/propostas",
     "/pedidos",
     "/atividades",
     "/forecast",
-    "/mapa-estrategico",
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
-    "/configuracoes",
-    "/usuarios",
   ],
 
   DIRETOR: [
     "/dashboard",
-    "/ia-comercial",
     "/upload",
     "/transportadoras",
     "/implementadoras",
-    "/locadoras",
     "/oportunidades",
     "/pipeline",
     "/propostas",
     "/pedidos",
     "/atividades",
     "/forecast",
-    "/mapa-estrategico",
     "/equipamentos/trailer",
     "/equipamentos/diesel-truck",
     "/equipamentos/direct-drive",
-    "/configuracoes",
-    "/usuarios",
   ],
 
   GERENTE: [
     "/dashboard",
     "/transportadoras",
     "/implementadoras",
-    "/locadoras",
     "/oportunidades",
   ],
 
@@ -68,7 +57,10 @@ const permissoesMenu = {
   ],
 }
 
-const menuGroups = [
+type MenuItem = { label: string; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
+type MenuGroup = { titulo: string; itens: MenuItem[] }
+
+const menuGroups: MenuGroup[] = [
   {
     titulo: "",
     itens: [
@@ -76,12 +68,6 @@ const menuGroups = [
         label: "Dashboard Executivo",
         href: "/dashboard",
         icon: "📊",
-        type: "emoji",
-      },
-      {
-        label: "IA Comercial",
-        href: "/ia-comercial",
-        icon: "🧠",
         type: "emoji",
       },
     ],
@@ -150,12 +136,6 @@ const menuGroups = [
         icon: "🏭",
         type: "emoji",
       },
-      {
-        label: "Locadoras",
-        href: "/locadoras",
-        icon: "🏢",
-        type: "emoji",
-      },
     ],
   },
 
@@ -186,30 +166,12 @@ const menuGroups = [
   {
     titulo: "",
     itens: [
-      {
-        label: "Mapa Estratégico",
-        href: "/mapa-estrategico",
-        icon: "🌎",
-        type: "emoji",
-      },
     ],
   },
 
   {
     titulo: "Administração",
     itens: [
-      {
-        label: "Usuários",
-        href: "/usuarios",
-        icon: "👥",
-        type: "emoji",
-      },
-      {
-        label: "Configurações",
-        href: "/configuracoes",
-        icon: "⚙️",
-        type: "emoji",
-      },
     ],
   },
 ]
@@ -272,7 +234,7 @@ export default function Sidebar() {
 
                 {item.type === "image" ? (
                   <Image
-                    src={item.icon as any}
+                    src={item.icon as StaticImageData}
                     alt={item.label}
                     width={28}
                     height={28}

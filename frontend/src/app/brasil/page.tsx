@@ -1,6 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+
+type DashboardBrasil = { total_registros?: number; total_clientes?: number; total_estados?: number; total_implementadoras?: number }
+type ImplementadoraResumo = { nome: string; aliases?: string[]; quantidade_registros?: number; valor_total?: number }
 import Link from "next/link"
 import { getBrasilDashboard, getBrasilImplementadoras } from "@/services/cti-api"
 
@@ -10,8 +13,8 @@ function normalizarBusca(valor: string) {
 
 
 export default function BrasilPage() {
-  const [dashboard, setDashboard] = useState<any>(null)
-  const [implementadoras, setImplementadoras] = useState<any[]>([])
+  const [dashboard, setDashboard] = useState<DashboardBrasil | null>(null)
+  const [implementadoras, setImplementadoras] = useState<ImplementadoraResumo[]>([])
   const [erro, setErro] = useState("")
   const [busca, setBusca] = useState("")
 
@@ -62,6 +65,6 @@ function Kpi({ titulo, valor }: { titulo: string; valor: number }) {
   return <div className="rounded-2xl bg-[#071226] border border-[#13203f] p-5"><p className="text-gray-400">{titulo}</p><p className="text-3xl font-bold text-cyan-400">{valor}</p></div>
 }
 
-function Card({ item }: { item: any }) {
+function Card({ item }: { item: ImplementadoraResumo }) {
   return <div className="rounded-xl border border-[#13203f] p-4"><p className="font-bold">{item.nome}</p><p className="text-gray-400">{item.quantidade_registros} registros • R$ {Number(item.valor_total).toLocaleString("pt-BR")}</p></div>
 }
