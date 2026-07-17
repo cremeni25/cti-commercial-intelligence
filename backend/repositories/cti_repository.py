@@ -40,6 +40,9 @@ def _adaptar_dominio_para_persistencia(registro):
 
     payload = dict(registro)
 
+    if "empresa" in payload and not payload.get("cliente"):
+        payload["cliente"] = payload.pop("empresa")
+
     if "implementadora" in payload:
         payload["implementador"] = normalizar_implementadora(
             payload.pop("implementadora")
@@ -92,6 +95,9 @@ def _adaptar_persistencia_para_dominio(registro):
     origem_base, autorizado, ano_referencia, escopo = _inferir_origem(
         payload
     )
+
+    payload["empresa"] = payload.get("empresa") or payload.get("cliente")
+    payload["tipo_empresa"] = payload.get("tipo_empresa")
 
     payload["origem_base"] = origem_base
     payload["autorizado"] = autorizado

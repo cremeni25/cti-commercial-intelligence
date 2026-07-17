@@ -34,13 +34,23 @@ def _texto_registro(registro):
     ).upper()
 
 
-@router.get("/transportadoras")
-def listar_transportadoras():
-    registros = [r for r in _todos_registros() if r.get("cliente")]
+CAMPOS_EMPRESA = ("empresa", "cliente", "transportadora", "razao_social", "razão social", "nome_cliente")
+
+
+def _nome_empresa(registro):
+    for campo in CAMPOS_EMPRESA:
+        valor = registro.get(campo)
+        if valor:
+            return str(valor).strip()
+    return ""
+
+
+def _consolidar_empresas():
+    registros = [r for r in _todos_registros() if _nome_empresa(r)]
     agrupado = {}
 
     for registro in registros:
-        nome = str(registro.get("cliente") or "").strip()
+        nome = _nome_empresa(registro)
         if not nome:
             continue
 
@@ -78,6 +88,16 @@ def listar_transportadoras():
     return sorted(resultado, key=lambda item: item["quantidade_registros"], reverse=True)
 
 
+@router.get("/empresas")
+def listar_empresas():
+    return _consolidar_empresas()
+
+
+@router.get("/transportadoras")
+def listar_transportadoras():
+    return _consolidar_empresas()
+
+
 @router.get("/equipamentos/{slug}")
 def detalhe_equipamento(slug: str):
     config = EQUIPAMENTOS.get(slug)
@@ -96,7 +116,7 @@ def detalhe_equipamento(slug: str):
         r.get("implementadora") for r in registros if r.get("implementadora")
     )
     linhas = Counter(r.get("linha") for r in registros if r.get("linha"))
-    clientes = Counter(r.get("cliente") for r in registros if r.get("cliente"))
+    empresas = Counter(_nome_empresa(r) for r in registros if _nome_empresa(r))
     valor_total = sum(valor_float(r.get("valor")) for r in registros)
 
     return {
@@ -116,8 +136,8 @@ def detalhe_equipamento(slug: str):
             {"nome": nome, "quantidade_registros": qtd}
             for nome, qtd in linhas.most_common()
         ],
-        "clientes": [
+        "empresas": [
             {"nome": nome, "quantidade_registros": qtd}
-            for nome, qtd in clientes.most_common(20)
+            for nome, qtd in empresas.most_common(20)
         ],
     }

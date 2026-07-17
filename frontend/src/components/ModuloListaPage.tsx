@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import type { ModuloResumoItem } from "@/services/modulos-api"
+import type { EmpresaResumoItem } from "@/services/modulos-api"
 
 function normalizar(valor: string) {
   return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -16,9 +16,9 @@ export default function ModuloListaPage({
 }: {
   titulo: string
   subtitulo: string
-  carregar: () => Promise<ModuloResumoItem[]>
+  carregar: () => Promise<EmpresaResumoItem[]>
 }) {
-  const [dados, setDados] = useState<ModuloResumoItem[]>([])
+  const [dados, setDados] = useState<EmpresaResumoItem[]>([])
   const [busca, setBusca] = useState("")
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
@@ -77,7 +77,7 @@ export default function ModuloListaPage({
               <input
                 value={busca}
                 onChange={(event) => setBusca(event.target.value)}
-                placeholder="Buscar por nome"
+                placeholder="Buscar empresa"
                 className="rounded-xl bg-[#071028] border border-[#13203f] px-4 py-3 text-white"
               />
             </div>
@@ -85,7 +85,7 @@ export default function ModuloListaPage({
             {loading ? (
               <p className="text-gray-400 mt-8">Carregando dados reais...</p>
             ) : lista.length === 0 ? (
-              <p className="text-gray-400 mt-8">Nenhum registro encontrado para o filtro atual.</p>
+              <p className="text-gray-400 mt-8">Nenhuma empresa encontrada para o filtro atual.</p>
             ) : (
               <div className="mt-6 overflow-x-auto">
                 <table className="w-full text-left">

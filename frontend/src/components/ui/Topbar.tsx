@@ -13,9 +13,14 @@ const paginas = {
     descricao: "Central de inteligência e recomendações estratégicas",
   },
 
+  "/empresas": {
+    titulo: "Empresas",
+    descricao: "Gestão operacional de empresas e razões sociais",
+  },
+
   "/transportadoras": {
-    titulo: "Transportadoras",
-    descricao: "Gestão operacional e inteligência logística",
+    titulo: "Empresas",
+    descricao: "Redirecionamento legado para Empresas",
   },
 
   "/implementadoras": {
@@ -78,6 +83,11 @@ const paginas = {
     descricao: "Linha Direct Drive Carrier Transicold",
   },
 
+  "/usuarios": {
+    titulo: "Usuários",
+    descricao: "Administração de usuários e permissões",
+  },
+
   "/configuracoes": {
     titulo: "Configurações",
     descricao: "Configurações administrativas do CTI",
@@ -108,15 +118,6 @@ export default function Topbar() {
 
       {/* RIGHT */}
       <div className="flex items-center gap-5">
-        {/* SEARCH */}
-        <div className="bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3 w-[420px]">
-          <input
-            type="text"
-            placeholder="Buscar implementadoras, regiões, oportunidades..."
-            className="bg-transparent outline-none text-sm text-white w-full"
-          />
-        </div>
-
         {/* STATUS */}
         <div className="flex items-center gap-2 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3">
           <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
