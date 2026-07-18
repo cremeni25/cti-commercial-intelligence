@@ -1,5 +1,7 @@
 import pandas as pd
 
+from core.cti_taxonomy import normalizar_implementadora
+
 # ============================================================
 # PREÇO OFICIAL (TABELA BRUTA)
 # ============================================================
@@ -54,10 +56,19 @@ class MarketEngine:
 
     def __init__(self, data):
 
-        self.data = [
-            d for d in data
-            if d.get("estado") and d.get("segmento")
-        ]
+        self.data = []
+
+        for item in data:
+
+            implementadora = normalizar_implementadora(
+                item.get("implementadora") or item.get("implementador")
+            )
+
+            registro = dict(item)
+            registro["implementadora"] = implementadora
+
+            if registro.get("estado") and registro.get("segmento"):
+                self.data.append(registro)
 
         for d in self.data:
 
@@ -110,8 +121,16 @@ class MarketEngine:
         if total == 0:
             return []
 
+        if "implementadora" not in df.columns:
+            return []
+
+        df = df.dropna(subset=["implementadora"])
+
+        if df.empty:
+            return []
+
         oem = (
-            df.groupby("implementador")["valor"]
+            df.groupby("implementadora")["valor"]
             .sum()
             .reset_index()
         )
@@ -208,8 +227,16 @@ class MarketEngine:
         if total == 0:
             return []
 
+        if "implementadora" not in df.columns:
+            return []
+
+        df = df.dropna(subset=["implementadora"])
+
+        if df.empty:
+            return []
+
         dominance = (
-            df.groupby("implementador")["valor"]
+            df.groupby("implementadora")["valor"]
             .sum()
             .reset_index()
         )
