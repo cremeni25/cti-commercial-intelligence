@@ -133,7 +133,37 @@ def test_pipeline_muda_fase_e_persiste_na_oportunidade(monkeypatch):
 
     pipeline = client.get("/crm/pipeline")
     assert pipeline.status_code == 200
+    assert pipeline.json()[0]["id"] == pipeline_id
     assert pipeline.json()[0]["etapa"] == "GANHO"
+
+
+def test_pipeline_lista_linhas_reais_e_preserva_historico(monkeypatch):
+    client, _fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "status": "PROSPECCAO"
+    }).json()[0]["id"]
+    primeira = client.post("/crm/pipeline", json={
+        "oportunidade_id": oportunidade_id, "etapa": "PROSPECCAO", "usuario_id": "user-1", "observacao": "entrada"
+    }).json()[0]
+    segunda = client.post("/crm/pipeline", json={
+        "oportunidade_id": oportunidade_id, "etapa": "NEGOCIACAO", "usuario_id": "user-2", "observacao": "avanco"
+    }).json()[0]
+
+    pipeline = client.get("/crm/pipeline")
+
+    assert pipeline.status_code == 200
+    assert len(pipeline.json()) == 2
+    assert {item["id"] for item in pipeline.json()} == {primeira["id"], segunda["id"]}
+    assert {item["usuario_id"] for item in pipeline.json()} == {"user-1", "user-2"}
+    assert {item["observacao"] for item in pipeline.json()} == {"entrada", "avanco"}
+
+    atualizada = client.put(f"/crm/pipeline/{primeira['id']}", json={"etapa": "GANHO", "observacao": "fechamento"})
+
+    assert atualizada.status_code == 200
+    assert atualizada.json()[0]["id"] == primeira["id"]
+    assert atualizada.json()[0]["observacao"] == "fechamento"
+    assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "GANHO"
+    assert len(client.get("/crm/pipeline").json()) == 2
 
 
 def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
@@ -165,16 +195,51 @@ def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
 
 
 def test_forecast_calcula_probabilidades_percentual_e_decimal(monkeypatch):
-    client, _fake = client_with_fake(monkeypatch)
-    client.post("/crm/oportunidades", json={
-        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "A", "valor_estimado": 1000, "probabilidade": 50, "status": "NEGOCIACAO", "data_fechamento_prevista": "2026-08-10"
-    })
-    client.post("/crm/oportunidades", json={
-        "cliente_id": "empresa-2", "responsavel_id": "user-1", "titulo": "B", "valor_estimado": 1000, "probabilidade": 0.25, "status": "NEGOCIACAO", "data_fechamento_prevista": "2026-08-20"
-    })
+    client, fake = client_with_fake(monkeypatch)
+    casos_validos = [
+        ("zero", 0, 0),
+        ("um_decimal", 0.01, 10),
+        ("vinte_cinco_decimal", 0.25, 250),
+        ("cinquenta_decimal", 0.5, 500),
+        ("um_percentual", 1, 10),
+        ("cinquenta_percentual", 50, 500),
+        ("cem_percentual", 100, 1000),
+        ("negativo", -1, 0),
+        ("maior_que_cem", 101, 0),
+    ]
+    for titulo, probabilidade, _ponderado in casos_validos:
+        response = client.post("/crm/oportunidades", json={
+            "cliente_id": f"empresa-{titulo}",
+            "responsavel_id": "user-1",
+            "titulo": titulo,
+            "valor_estimado": 1000,
+            "probabilidade": probabilidade,
+            "status": "NEGOCIACAO",
+            "data_fechamento_prevista": "2026-08-10",
+        })
+        assert response.status_code == 200
+
+    casos_legados_invalidos = [
+        ("string_invalida", "abc", 0),
+        ("nulo", None, 0),
+    ]
+    for titulo, probabilidade, _ponderado in casos_legados_invalidos:
+        fake.db["cti_oportunidades"].append({
+            "id": f"legado-{titulo}",
+            "cliente_id": f"empresa-{titulo}",
+            "responsavel_id": "user-1",
+            "titulo": titulo,
+            "valor_estimado": 1000,
+            "probabilidade": probabilidade,
+            "status": "NEGOCIACAO",
+            "data_fechamento_prevista": "2026-08-10",
+            "created_at": "2026-07-18T00:00:00Z",
+        })
 
     forecast = client.get("/crm/forecast")
+    casos = casos_validos + casos_legados_invalidos
+
     assert forecast.status_code == 200
-    assert forecast.json()[0]["pipeline_total"] == 2000
-    assert forecast.json()[0]["pipeline_ponderado"] == 750
-    assert forecast.json()[0]["qtd_oportunidades"] == 2
+    assert forecast.json()[0]["pipeline_total"] == 11000
+    assert forecast.json()[0]["pipeline_ponderado"] == sum(item[2] for item in casos)
+    assert forecast.json()[0]["qtd_oportunidades"] == len(casos)

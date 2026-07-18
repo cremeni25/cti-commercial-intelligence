@@ -168,14 +168,14 @@ def _payload(model: BaseModel, fields: list[str]) -> dict[str, Any]:
     return {field: getattr(model, field) for field in fields if getattr(model, field) is not None}
 
 
-def _probability_factor(probability: Any) -> float:
+def _normalizar_probabilidade_para_fator(probability: Any) -> float:
     try:
         value = float(probability or 0)
     except (TypeError, ValueError):
         return 0
-    if value < 0:
+    if value < 0 or value > 100:
         return 0
-    if value <= 1:
+    if 0 < value < 1:
         return value
     return value / 100
 
@@ -221,8 +221,7 @@ def excluir_oportunidade(oportunidade_id: str):
 
 @router.get("/pipeline")
 def listar_pipeline():
-    oportunidades = listar_oportunidades()
-    return [dict(item, etapa=item.get("status") or item.get("etapa") or "PROSPECCAO", oportunidade_id=item.get("id")) for item in oportunidades]
+    return supabase.table("cti_pipeline").select("*").order("created_at", desc=True).execute().data
 
 
 @router.post("/pipeline")
@@ -334,7 +333,7 @@ def forecast_comercial():
         periodo = (item.get("data_fechamento_prevista") or item.get("created_at") or "SEM_PERIODO")[:7]
         key = (etapa, responsavel, periodo)
         grupos[key]["pipeline_total"] += valor
-        grupos[key]["pipeline_ponderado"] += valor * _probability_factor(item.get("probabilidade"))
+        grupos[key]["pipeline_ponderado"] += valor * _normalizar_probabilidade_para_fator(item.get("probabilidade"))
         grupos[key]["qtd_oportunidades"] += 1
     return [
         {"id": f"{etapa}:{responsavel}:{periodo}", "fase": etapa, "vendedor": responsavel, "carteira": periodo, "status": etapa, "pipeline_total": round(valores["pipeline_total"], 2), "pipeline_ponderado": round(valores["pipeline_ponderado"], 2), "meta": 0, "qtd_oportunidades": valores["qtd_oportunidades"]}
