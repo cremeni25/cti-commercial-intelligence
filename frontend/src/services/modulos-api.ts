@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import type { OperationalContextValue } from "@/context/OperationalContext"
 
 export type EmpresaResumoItem = {
   nome: string
@@ -26,14 +27,18 @@ export type EquipamentoResumo = {
   empresas: RankingItem[]
 }
 
-export function getEmpresas() {
-  return apiGet("/modulos/empresas") as Promise<EmpresaResumoItem[]>
+function contextoQuery(contexto: OperationalContextValue) {
+  return `?contexto=${encodeURIComponent(contexto)}`
 }
 
-export function getTransportadoras() {
-  return apiGet("/modulos/transportadoras") as Promise<EmpresaResumoItem[]>
+export function getEmpresas(contexto: OperationalContextValue) {
+  return apiGet(`/modulos/empresas${contextoQuery(contexto)}`) as Promise<EmpresaResumoItem[]>
 }
 
-export function getEquipamento(slug: string) {
-  return apiGet(`/modulos/equipamentos/${slug}`) as Promise<EquipamentoResumo>
+export function getTransportadoras(contexto: OperationalContextValue) {
+  return getEmpresas(contexto)
+}
+
+export function getEquipamento(slug: string, contexto: OperationalContextValue) {
+  return apiGet(`/modulos/equipamentos/${slug}${contextoQuery(contexto)}`) as Promise<EquipamentoResumo>
 }

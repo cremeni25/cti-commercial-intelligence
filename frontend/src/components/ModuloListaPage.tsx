@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { useOperationalContext } from "@/context/OperationalContext"
 import type { EmpresaResumoItem } from "@/services/modulos-api"
+import type { OperationalContextValue } from "@/context/OperationalContext"
 
 function normalizar(valor: string) {
   return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -16,8 +18,9 @@ export default function ModuloListaPage({
 }: {
   titulo: string
   subtitulo: string
-  carregar: () => Promise<EmpresaResumoItem[]>
+  carregar: (contexto: OperationalContextValue) => Promise<EmpresaResumoItem[]>
 }) {
+  const { contexto, contextoAtual } = useOperationalContext()
   const [dados, setDados] = useState<EmpresaResumoItem[]>([])
   const [busca, setBusca] = useState("")
   const [loading, setLoading] = useState(true)
@@ -26,7 +29,7 @@ export default function ModuloListaPage({
   useEffect(() => {
     let ativo = true
 
-    carregar()
+    carregar(contexto)
       .then((resultado) => {
         if (ativo) setDados(resultado)
       })
@@ -40,7 +43,7 @@ export default function ModuloListaPage({
     return () => {
       ativo = false
     }
-  }, [carregar])
+  }, [carregar, contexto])
 
   const lista = useMemo(() => {
     return dados.filter((item) => normalizar(item.nome).includes(normalizar(busca)))
@@ -58,6 +61,7 @@ export default function ModuloListaPage({
           <div>
             <h1 className="text-4xl font-bold text-white">{titulo}</h1>
             <p className="text-gray-400 mt-2">{subtitulo}</p>
+            <p className="text-cyan-300 text-sm mt-2">Contexto ativo: {contextoAtual.label}</p>
           </div>
 
           {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}

@@ -13,6 +13,7 @@ def test_empresas_consolida_campo_canonico_e_legado(monkeypatch):
         lambda: [
             {
                 "empresa": "Empresa Alfa",
+                "origem_base": "BRASIL",
                 "estado": "SP",
                 "cidade": "Campinas",
                 "linha": "VECTOR 8500",
@@ -21,6 +22,7 @@ def test_empresas_consolida_campo_canonico_e_legado(monkeypatch):
             },
             {
                 "cliente": "Empresa Alfa",
+                "origem_base": "BRASIL",
                 "estado": "RJ",
                 "cidade": "Rio de Janeiro",
                 "linha": "SUPRA 850",
@@ -29,6 +31,8 @@ def test_empresas_consolida_campo_canonico_e_legado(monkeypatch):
             },
             {
                 "transportadora": "Operador Beta",
+                "origem_base": "VIENA_SP",
+                "autorizado": "VIENA",
                 "valor": None,
             },
         ],
@@ -123,3 +127,39 @@ def test_equipamento_slug_invalido(monkeypatch):
     response = client.get("/modulos/equipamentos/invalido")
 
     assert response.status_code == 404
+
+
+def test_contexto_operacional_filtra_brasil_e_viena(monkeypatch):
+    monkeypatch.setattr(
+        modulos_router.repository,
+        "buscar_cti_anfir",
+        lambda: [
+            {"empresa": "Empresa Brasil", "origem_base": "BRASIL", "valor": 100},
+            {"empresa": "Empresa Viena", "origem_base": "VIENA_SP", "autorizado": "VIENA", "valor": 200},
+        ],
+    )
+
+    brasil = client.get("/modulos/empresas?contexto=brasil")
+    viena = client.get("/modulos/empresas?contexto=viena-sp")
+
+    assert brasil.status_code == 200
+    assert {item["nome"] for item in brasil.json()} == {"Empresa Brasil", "Empresa Viena"}
+    assert viena.status_code == 200
+    assert [item["nome"] for item in viena.json()] == ["Empresa Viena"]
+
+
+def test_contexto_operacional_filtra_equipamentos(monkeypatch):
+    monkeypatch.setattr(
+        modulos_router.repository,
+        "buscar_cti_anfir",
+        lambda: [
+            {"empresa": "Trailer Brasil", "origem_base": "BRASIL", "linha": "VECTOR 8500", "valor": 100},
+            {"empresa": "Trailer Viena", "origem_base": "VIENA_SP", "autorizado": "VIENA", "linha": "VECTOR 8500", "valor": 200},
+        ],
+    )
+
+    response = client.get("/modulos/equipamentos/trailer?contexto=viena-sp")
+
+    assert response.status_code == 200
+    assert response.json()["total_registros"] == 1
+    assert response.json()["empresas"][0]["nome"] == "Trailer Viena"

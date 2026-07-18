@@ -21,7 +21,8 @@ from fastapi import (
     APIRouter,
     UploadFile,
     File,
-    HTTPException
+    HTTPException,
+    Form
 )
 
 import traceback
@@ -172,7 +173,8 @@ def adaptar_payload_persistencia_legada(registros):
 
 @router.post("/upload/anfir/seguro")
 async def upload_anfir_seguro(
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    contexto_operacional: str = Form("brasil")
 ):
 
     try:
@@ -183,6 +185,8 @@ async def upload_anfir_seguro(
             contents,
             file.filename
         )
+
+        relatorio["contexto_operacional"] = contexto_operacional
 
         if not registros_processados:
             relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"

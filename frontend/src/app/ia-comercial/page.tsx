@@ -1,5 +1,8 @@
+"use client"
+
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { useOperationalContext } from "@/context/OperationalContext"
 
 interface Props {
   title: string
@@ -10,6 +13,8 @@ function ModulePlaceholder({
   title,
   description,
 }: Props) {
+  const { contextoAtual } = useOperationalContext()
+
   return (
     <main className="flex min-h-screen bg-[#020817]">
       <Sidebar />
@@ -30,6 +35,14 @@ function ModulePlaceholder({
             <p className="text-gray-400 text-lg mt-6 max-w-3xl leading-8">
               {description}
             </p>
+
+            <p className="text-cyan-300 text-sm mt-6">
+              Contexto ativo: {contextoAtual.label} — {contextoAtual.description}.
+            </p>
+
+            <p className="text-gray-500 text-sm mt-2">
+              Este módulo preserva o escopo atual e não executa novas funcionalidades nesta etapa.
+            </p>
           </div>
         </div>
       </section>
@@ -41,10 +54,7 @@ export default function Page() {
   return (
     <ModulePlaceholder
       title="IA COMERCIAL"
-      description="
-      Central analítica de inteligência comercial, recomendações estratégicas,
-      monitoramento operacional e suporte executivo orientado por dados.
-      "
+      description="Central analítica de inteligência comercial, recomendações estratégicas, monitoramento operacional e suporte executivo orientado por dados."
     />
   )
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { OPERATIONAL_CONTEXTS, useOperationalContext, type OperationalContextValue } from "@/context/OperationalContext";
 
 const paginas = {
   "/dashboard": {
@@ -96,6 +97,7 @@ const paginas = {
 
 export default function Topbar() {
   const pathname = usePathname();
+  const { contexto, setContexto, contextoAtual } = useOperationalContext();
 
   const paginaAtual =
     paginas[pathname as keyof typeof paginas] || {
@@ -118,6 +120,23 @@ export default function Topbar() {
 
       {/* RIGHT */}
       <div className="flex items-center gap-5">
+        {/* GLOBAL CONTEXT */}
+        <label className="flex flex-col gap-1 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-2 text-xs text-gray-400">
+          Contexto Operacional
+          <select
+            value={contexto}
+            onChange={(event) => setContexto(event.target.value as OperationalContextValue)}
+            className="bg-transparent text-sm text-white outline-none"
+            aria-label="Contexto Operacional Global"
+          >
+            {OPERATIONAL_CONTEXTS.map((item) => (
+              <option key={item.value} value={item.value} className="bg-[#071028] text-white">
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <span className="sr-only">{contextoAtual.description}</span>
+        </label>
         {/* STATUS */}
         <div className="flex items-center gap-2 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3">
           <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div>
