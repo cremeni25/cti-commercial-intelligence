@@ -1,6 +1,6 @@
 from collections import Counter
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from repositories.cti_repository import repository
 from services.base_analytics import valor_float
@@ -23,8 +23,20 @@ EQUIPAMENTOS = {
 }
 
 
-def _todos_registros():
-    return repository.buscar_cti_anfir()
+def _todos_registros(contexto: str = "brasil"):
+    registros = repository.buscar_cti_anfir()
+    if contexto == "viena-sp":
+        return [
+            registro
+            for registro in registros
+            if registro.get("origem_base") == "VIENA_SP"
+            and (registro.get("autorizado") in (None, "VIENA"))
+        ]
+    return registros
+
+
+def _contexto_param(contexto: str = Query("brasil", pattern="^(brasil|viena-sp)$")):
+    return contexto
 
 
 def _texto_registro(registro):
@@ -45,8 +57,8 @@ def _nome_empresa(registro):
     return ""
 
 
-def _consolidar_empresas():
-    registros = [r for r in _todos_registros() if _nome_empresa(r)]
+def _consolidar_empresas(contexto: str = "brasil"):
+    registros = [r for r in _todos_registros(contexto) if _nome_empresa(r)]
     agrupado = {}
 
     for registro in registros:
@@ -89,17 +101,17 @@ def _consolidar_empresas():
 
 
 @router.get("/empresas")
-def listar_empresas():
-    return _consolidar_empresas()
+def listar_empresas(contexto: str = Query("brasil", pattern="^(brasil|viena-sp)$")):
+    return _consolidar_empresas(contexto)
 
 
 @router.get("/transportadoras")
-def listar_transportadoras():
-    return _consolidar_empresas()
+def listar_transportadoras(contexto: str = Query("brasil", pattern="^(brasil|viena-sp)$")):
+    return _consolidar_empresas(contexto)
 
 
 @router.get("/equipamentos/{slug}")
-def detalhe_equipamento(slug: str):
+def detalhe_equipamento(slug: str, contexto: str = Query("brasil", pattern="^(brasil|viena-sp)$")):
     config = EQUIPAMENTOS.get(slug)
     if not config:
         raise HTTPException(status_code=404, detail="Equipamento não configurado")
@@ -107,7 +119,7 @@ def detalhe_equipamento(slug: str):
     termos = config["termos"]
     registros = [
         registro
-        for registro in _todos_registros()
+        for registro in _todos_registros(contexto)
         if any(termo in _texto_registro(registro) for termo in termos)
     ]
 

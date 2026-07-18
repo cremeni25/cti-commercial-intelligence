@@ -1,9 +1,11 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
+import { useOperationalContext } from "@/context/OperationalContext"
 
 type BaseProcessada = { abas?: string[]; linhas_lidas?: number; registros_validos?: number; inseridos?: number; atualizados?: number; duplicados_ignorados?: number; erros?: number; erros_por_tipo?: Record<string, number>; amostra_erros?: Array<{ linha?: number; etapa?: string; tipo?: string; mensagem?: string }> }
-type ResultadoUpload = { arquivo?: string; status?: string; bases_processadas?: Record<string, BaseProcessada>; persistencia?: { inseridos?: number; atualizados?: number } }
+type ResultadoUpload = { arquivo?: string; status?: string; contexto_operacional?: string; bases_processadas?: Record<string, BaseProcessada>; persistencia?: { inseridos?: number; atualizados?: number } }
+
 
 import {
   uploadArquivo,
@@ -12,6 +14,8 @@ import {
 } from "@/services/cti-api"
 
 export default function UploadPage() {
+  const { contexto, contextoAtual } = useOperationalContext()
+
   const [file, setFile] =
     useState<File | null>(null)
 
@@ -68,7 +72,7 @@ export default function UploadPage() {
       setResultadoUpload(null)
       setStatusUpload("Selecionando arquivo...")
 
-      const resultado = await uploadArquivo(file)
+      const resultado = await uploadArquivo(file, contexto)
       console.log(
           "RETORNO UPLOAD:",
           resultado
@@ -116,8 +120,18 @@ export default function UploadPage() {
 
           <p className="text-gray-400 mt-2">
             Ingestão, processamento e auditoria operacional
+          </p>
 
-        <div className="mt-4">
+          <p className="text-cyan-300 text-sm mt-2">
+            Contexto ativo: {contextoAtual.label} — enviado como metadado da operação.
+          </p>
+
+          <p className="text-gray-500 text-xs mt-1">
+            A origem dos registros continua sendo definida pelo parser da planilha.
+          </p>
+
+          <div className="mt-4">
+
             <button
               onClick={() => window.location.href = "/dashboard"}
               className="px-4 py-2 rounded-lg bg-cyan-500 text-black font-semibold hover:bg-cyan-400 transition-colors"
@@ -126,7 +140,6 @@ export default function UploadPage() {
             </button>
         </div>
 
-          </p>
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -294,6 +307,7 @@ export default function UploadPage() {
     <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-6">
         <Info label="Arquivo" value={resultadoUpload?.arquivo ?? nomeArquivo ?? "-"} />
         <Info label="Status" value={resultadoUpload?.status ?? statusUpload} />
+        <Info label="Contexto" value={resultadoUpload?.contexto_operacional ?? contextoAtual.label} />
         <Info label="Inseridos totais" value={resultadoUpload?.persistencia?.inseridos ?? 0} />
         <Info label="Atualizados totais" value={resultadoUpload?.persistencia?.atualizados ?? 0} />
     </div>

@@ -3,9 +3,11 @@
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { useOperationalContext } from "@/context/OperationalContext"
 import { getEquipamento, type EquipamentoResumo, type RankingItem } from "@/services/modulos-api"
 
 export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string; fallbackTitulo: string }) {
+  const { contexto, contextoAtual } = useOperationalContext()
   const [dados, setDados] = useState<EquipamentoResumo | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
@@ -13,7 +15,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
   useEffect(() => {
     let ativo = true
 
-    getEquipamento(slug)
+    getEquipamento(slug, contexto)
       .then((resultado) => {
         if (ativo) setDados(resultado)
       })
@@ -27,7 +29,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
     return () => {
       ativo = false
     }
-  }, [slug])
+  }, [slug, contexto])
 
   return (
     <main className="flex min-h-screen bg-[#020817]">
@@ -38,6 +40,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
           <div>
             <h1 className="text-4xl font-bold text-white">{dados?.nome ?? fallbackTitulo}</h1>
             <p className="text-gray-400 mt-2">Visão operacional baseada nos registros reais persistidos no CTI.</p>
+            <p className="text-cyan-300 text-sm mt-2">Contexto ativo: {contextoAtual.label}</p>
           </div>
 
           {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}

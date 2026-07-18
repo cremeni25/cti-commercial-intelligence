@@ -2,6 +2,8 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   "https://cti-backend-5ugf.onrender.com"
 
+export type OperationalContextValue = "brasil" | "viena-sp"
+
 async function request(endpoint: string) {
   const response = await fetch(
     `${API_URL}${endpoint}`,
@@ -19,8 +21,23 @@ async function request(endpoint: string) {
   return response.json()
 }
 
+function contextoQuery(contexto: OperationalContextValue) {
+  return `?contexto=${encodeURIComponent(contexto)}`
+}
+
 export async function getDashboardExecutivo() {
   return request("/analytics/dashboard")
+}
+
+export async function getDashboardExecutivoContextual(contexto: OperationalContextValue) {
+  return request(`/analytics/dashboard${contextoQuery(contexto)}`)
+}
+
+export async function getImplementadorasContextuais(contexto: OperationalContextValue) {
+  if (contexto === "viena-sp") {
+    return getVienaImplementadoras()
+  }
+  return getBrasilImplementadoras()
 }
 
 export async function getBrasilDashboard() {
@@ -52,11 +69,13 @@ export async function getPipelineStatus() {
 }
 
 export async function uploadArquivo(
-  file: File
+  file: File,
+  contexto: OperationalContextValue = "brasil"
 ) {
   const formData = new FormData()
 
   formData.append("file", file)
+  formData.append("contexto_operacional", contexto)
 
   const response = await fetch(
     `${API_URL}/upload/anfir/seguro`,
