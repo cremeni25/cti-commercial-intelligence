@@ -155,3 +155,13 @@ def test_indicadores_consolidados_ticket_rankings_e_vazio():
     assert vazio["total_registros"] == 0
     assert vazio["ticket_medio"] == 0
     assert vazio["ranking_clientes"] == []
+
+
+def test_amostra_operacional_nao_carrega_base_inteira(monkeypatch):
+    fake = FakeSupabasePaginado([registro(i) for i in range(2427)])
+    monkeypatch.setattr(cti_repository, "supabase", fake)
+
+    dados = CTIRepository().buscar_amostra_cti_anfir(10)
+
+    assert len(dados) == 10
+    assert fake.chamadas == [(0, 9)]

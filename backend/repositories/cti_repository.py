@@ -239,6 +239,32 @@ class CTIRepository:
             for registro in registros
         ]
 
+
+    def buscar_amostra_cti_anfir(self, limite: int = 10):
+
+        if limite <= 0:
+            return []
+
+        try:
+            registros = (
+                supabase
+                .table(self.TABELA)
+                .select("*")
+                .range(0, limite - 1)
+                .execute()
+                .data
+                or []
+            )
+        except Exception as erro:
+            raise RuntimeError(
+                "Erro seguro ao buscar amostra da tabela operacional CTI."
+            ) from erro
+
+        return [
+            _adaptar_persistencia_para_dominio(registro)
+            for registro in registros
+        ]
+
     def buscar_ids_existentes(
         self,
         ids_operacionais: List[str],

@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/engine/test-db")
 def test_db():
 
-    return repository.buscar_cti_anfir()[:10]
+    return repository.buscar_amostra_cti_anfir(10)
 
 
 # ----------------------------------------
