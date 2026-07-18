@@ -39,6 +39,7 @@ def consolidar_dashboard(registros):
     )
     ranking_clientes = Counter(r.get("cliente") for r in registros if r.get("cliente"))
     return {
+        "fonte_indicadores": "cti_anfir_repository_paginado",
         "total_registros": total_registros,
         "total_clientes": len(clientes),
         "total_estados": len(estados),

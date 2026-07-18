@@ -187,16 +187,52 @@ class CTIRepository:
     # CONSULTAS
     # ======================================================
 
+    TAMANHO_PAGINA = 1000
+
+    def _selecionar_todos(
+        self,
+        colunas: str = "*",
+        tamanho_pagina: int = None
+    ):
+
+        tamanho = tamanho_pagina or self.TAMANHO_PAGINA
+        inicio = 0
+        registros = []
+
+        while True:
+
+            fim = inicio + tamanho - 1
+
+            try:
+                resultado = (
+                    supabase
+                    .table(self.TABELA)
+                    .select(colunas)
+                    .range(inicio, fim)
+                    .execute()
+                )
+            except Exception as erro:
+                raise RuntimeError(
+                    "Erro seguro ao paginar a tabela operacional CTI."
+                ) from erro
+
+            pagina = resultado.data or []
+
+            if not pagina:
+                break
+
+            registros.extend(pagina)
+
+            if len(pagina) < tamanho:
+                break
+
+            inicio += tamanho
+
+        return registros
+
     def buscar_cti_anfir(self):
 
-        registros = (
-            supabase
-            .table(self.TABELA)
-            .select("*")
-            .execute()
-            .data
-            or []
-        )
+        registros = self._selecionar_todos("*")
 
         return [
             _adaptar_persistencia_para_dominio(registro)
@@ -485,25 +521,11 @@ class CTIRepository:
 
     def listar_clientes(self):
 
-        return (
-            supabase
-            .table(self.TABELA)
-            .select("cliente")
-            .execute()
-            .data
-            or []
-        )
+        return self._selecionar_todos("cliente")
 
     def listar_implementadoras(self):
 
-        registros = (
-            supabase
-            .table(self.TABELA)
-            .select("implementador")
-            .execute()
-            .data
-            or []
-        )
+        registros = self._selecionar_todos("implementador")
 
         return [
             _adaptar_persistencia_para_dominio(registro)
