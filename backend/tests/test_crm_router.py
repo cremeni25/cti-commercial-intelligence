@@ -249,3 +249,38 @@ def test_registrar_perda_remove_do_forecast_e_registra_historico(monkeypatch):
     assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "PERDIDO"
     assert client.get("/crm/forecast").json() == []
     assert fake.db["cti_oportunidade_historico"][-1]["tipo"] == "PERDA"
+
+
+def test_pipeline_lista_movimentacoes_e_oportunidades_legadas_sem_duplicar(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Com movimento", "status": "NEGOCIACAO"
+    }).json()[0]["id"]
+    fake.db["cti_oportunidades"].append({
+        "id": "legacy-1", "cliente_id": "empresa-2", "responsavel_id": "user-2", "titulo": "Legada", "status": "PROSPECCAO", "created_at": "2026-07-18T00:00:00Z"
+    })
+
+    pipeline = client.get("/crm/pipeline")
+
+    assert pipeline.status_code == 200
+    dados = pipeline.json()
+    assert [item["oportunidade_id"] for item in dados].count(oportunidade_id) == 1
+    legado = [item for item in dados if item["oportunidade_id"] == "legacy-1"]
+    assert len(legado) == 1
+    assert legado[0]["etapa"] == "PROSPECCAO"
+    assert legado[0]["origem"] == "LEGADO_SEM_MOVIMENTACAO"
+
+
+def test_criar_proposta_registra_etapa_anterior_real_da_oportunidade(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "status": "NEGOCIACAO"
+    }).json()[0]["id"]
+
+    proposta = client.post("/crm/propostas", json={
+        "numero": "P-3", "cliente_id": "empresa-1", "oportunidade_id": oportunidade_id, "valor": 1000
+    })
+
+    assert proposta.status_code == 200
+    assert fake.db["cti_pipeline"][-1]["etapa_anterior"] == "NEGOCIACAO"
+    assert fake.db["cti_pipeline"][-1]["nova_etapa"] == "PROPOSTA"

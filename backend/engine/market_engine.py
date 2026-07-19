@@ -1,5 +1,7 @@
 import pandas as pd
 
+from core.cti_taxonomy import normalizar_implementadora
+
 # ============================================================
 # PREÇO OFICIAL (TABELA BRUTA)
 # ============================================================
@@ -58,12 +60,12 @@ class MarketEngine:
 
         for item in data:
             registro = dict(item)
-            implementadora = (
+            implementadora = normalizar_implementadora(
                 registro.get("implementadora")
                 or registro.get("implementador")
             )
 
-            if not (registro.get("estado") and registro.get("segmento") and implementadora):
+            if not (registro.get("estado") and registro.get("segmento")):
                 continue
 
             registro["implementadora"] = implementadora
@@ -113,7 +115,8 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.dropna(subset=["valor"])
+        df = self.df.dropna(subset=["valor", "implementadora"])
+        df = df[df["implementadora"] != ""]
 
         total = df["valor"].sum()
 
@@ -211,7 +214,8 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.dropna(subset=["valor"])
+        df = self.df.dropna(subset=["valor", "implementadora"])
+        df = df[df["implementadora"] != ""]
 
         total = df["valor"].sum()
 

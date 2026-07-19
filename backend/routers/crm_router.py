@@ -374,8 +374,29 @@ def registrar_perda(oportunidade_id: str, perda: PerdaCreate):
 
 @router.get("/pipeline")
 def listar_pipeline():
-    dados = supabase.table("cti_pipeline").select("*").order("created_at", desc=True).execute().data or []
-    return sorted(dados, key=lambda item: item.get("updated_at") or item.get("created_at") or "", reverse=True)
+    movimentacoes = supabase.table("cti_pipeline").select("*").order("created_at", desc=True).execute().data or []
+    movimentacoes_ordenadas = sorted(
+        movimentacoes,
+        key=lambda item: item.get("updated_at") or item.get("created_at") or "",
+        reverse=True,
+    )
+    oportunidades_com_movimentacao = {
+        item.get("oportunidade_id")
+        for item in movimentacoes_ordenadas
+        if item.get("oportunidade_id")
+    }
+    oportunidades_legadas = [
+        dict(
+            item,
+            etapa=item.get("status") or item.get("etapa") or "OPORTUNIDADE",
+            nova_etapa=item.get("status") or item.get("etapa") or "OPORTUNIDADE",
+            oportunidade_id=item.get("id"),
+            origem="LEGADO_SEM_MOVIMENTACAO",
+        )
+        for item in listar_oportunidades()
+        if item.get("id") not in oportunidades_com_movimentacao
+    ]
+    return movimentacoes_ordenadas + oportunidades_legadas
 
 
 @router.post("/pipeline")
@@ -415,11 +436,12 @@ def obter_proposta(proposta_id: str):
 
 @router.post("/propostas")
 def criar_proposta(proposta: PropostaCreate):
-    _first("cti_oportunidades", proposta.oportunidade_id, "Oportunidade não encontrada")
+    oportunidade = _first("cti_oportunidades", proposta.oportunidade_id, "Oportunidade não encontrada")
     payload = _payload(proposta, _campos_proposta())
     created = _insert("cti_propostas", payload)
+    etapa_anterior = oportunidade.get("status") or oportunidade.get("etapa") or "OPORTUNIDADE"
     _update("cti_oportunidades", proposta.oportunidade_id, {"status": "PROPOSTA"}, "Oportunidade não encontrada")
-    _registrar_pipeline(proposta.oportunidade_id, None, "PROPOSTA", proposta.responsavel_id, "Proposta criada a partir da oportunidade.")
+    _registrar_pipeline(proposta.oportunidade_id, etapa_anterior, "PROPOSTA", proposta.responsavel_id, "Proposta criada a partir da oportunidade.")
     _registrar_historico(proposta.oportunidade_id, "PROPOSTA", "Proposta criada exclusivamente a partir da oportunidade.", proposta.responsavel_id, created[0])
     return created
 
