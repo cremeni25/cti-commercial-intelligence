@@ -187,16 +187,33 @@ class CTIRepository:
     # CONSULTAS
     # ======================================================
 
-    def buscar_cti_anfir(self):
+    def buscar_cti_anfir(self, page_size: int = 1000):
 
-        registros = (
-            supabase
-            .table(self.TABELA)
-            .select("*")
-            .execute()
-            .data
-            or []
-        )
+        registros = []
+        inicio = 0
+
+        while True:
+
+            fim = inicio + page_size - 1
+            pagina = (
+                supabase
+                .table(self.TABELA)
+                .select("*")
+                .range(inicio, fim)
+                .execute()
+                .data
+                or []
+            )
+
+            if not pagina:
+                break
+
+            registros.extend(pagina)
+
+            if len(pagina) < page_size:
+                break
+
+            inicio += page_size
 
         return [
             _adaptar_persistencia_para_dominio(registro)

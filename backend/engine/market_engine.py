@@ -54,10 +54,20 @@ class MarketEngine:
 
     def __init__(self, data):
 
-        self.data = [
-            d for d in data
-            if d.get("estado") and d.get("segmento")
-        ]
+        self.data = []
+
+        for item in data:
+            registro = dict(item)
+            implementadora = (
+                registro.get("implementadora")
+                or registro.get("implementador")
+            )
+
+            if not (registro.get("estado") and registro.get("segmento") and implementadora):
+                continue
+
+            registro["implementadora"] = implementadora
+            self.data.append(registro)
 
         for d in self.data:
 
@@ -111,7 +121,7 @@ class MarketEngine:
             return []
 
         oem = (
-            df.groupby("implementador")["valor"]
+            df.groupby("implementadora")["valor"]
             .sum()
             .reset_index()
         )
@@ -209,7 +219,7 @@ class MarketEngine:
             return []
 
         dominance = (
-            df.groupby("implementador")["valor"]
+            df.groupby("implementadora")["valor"]
             .sum()
             .reset_index()
         )
