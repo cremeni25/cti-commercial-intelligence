@@ -1167,7 +1167,7 @@ def debug_amostra():
         )
         .eq("ativo", True)
         .order("created_at", desc=True)
-        .limit(10)
+        .limit(20)
         .execute()
     )
 
