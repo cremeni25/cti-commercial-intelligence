@@ -39,7 +39,15 @@ def consolidar_dashboard(registros):
     )
     ranking_clientes = Counter(r.get("cliente") for r in registros if r.get("cliente"))
     return {
-        "fonte_indicadores": "cti_anfir_repository_paginado",
+        "contexto": {
+            "origem": "Base histórica consolidada de uploads CTI",
+            "periodo": "Período disponível nos registros filtrados pelo Contexto Operacional Global",
+            "significado": "Operações concluídas, pedidos faturados, equipamentos entregues e implementações já realizadas.",
+            "criterio_calculo": "Consolidação dos registros persistidos após filtros de origem, autorizado e escopo operacional.",
+            "relacionamento": "Inteligência Histórica; não alimenta automaticamente oportunidades do CRM operacional.",
+            "finalidade_operacional": "Analisar histórico comercial e territorial sem alterar o fluxo futuro do CRM.",
+        },
+        "territorialidade": ["Estado", "DDD", "Sub-Região", "Município", "Bairro", "Responsável Comercial"],
         "total_registros": total_registros,
         "total_clientes": len(clientes),
         "total_estados": len(estados),

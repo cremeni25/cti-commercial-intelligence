@@ -59,16 +59,17 @@ class MarketEngine:
         self.data = []
 
         for item in data:
-
+            registro = dict(item)
             implementadora = normalizar_implementadora(
-                item.get("implementadora") or item.get("implementador")
+                registro.get("implementadora")
+                or registro.get("implementador")
             )
 
-            registro = dict(item)
-            registro["implementadora"] = implementadora
+            if not (registro.get("estado") and registro.get("segmento")):
+                continue
 
-            if registro.get("estado") and registro.get("segmento"):
-                self.data.append(registro)
+            registro["implementadora"] = implementadora
+            self.data.append(registro)
 
         for d in self.data:
 
@@ -114,19 +115,12 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.dropna(subset=["valor"])
+        df = self.df.dropna(subset=["valor", "implementadora"])
+        df = df[df["implementadora"] != ""]
 
         total = df["valor"].sum()
 
         if total == 0:
-            return []
-
-        if "implementadora" not in df.columns:
-            return []
-
-        df = df.dropna(subset=["implementadora"])
-
-        if df.empty:
             return []
 
         oem = (
@@ -220,19 +214,12 @@ class MarketEngine:
         if self.df.empty:
             return []
 
-        df = self.df.dropna(subset=["valor"])
+        df = self.df.dropna(subset=["valor", "implementadora"])
+        df = df[df["implementadora"] != ""]
 
         total = df["valor"].sum()
 
         if total == 0:
-            return []
-
-        if "implementadora" not in df.columns:
-            return []
-
-        df = df.dropna(subset=["implementadora"])
-
-        if df.empty:
             return []
 
         dominance = (

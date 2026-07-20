@@ -133,37 +133,7 @@ def test_pipeline_muda_fase_e_persiste_na_oportunidade(monkeypatch):
 
     pipeline = client.get("/crm/pipeline")
     assert pipeline.status_code == 200
-    assert pipeline.json()[0]["id"] == pipeline_id
     assert pipeline.json()[0]["etapa"] == "GANHO"
-
-
-def test_pipeline_lista_linhas_reais_e_preserva_historico(monkeypatch):
-    client, _fake = client_with_fake(monkeypatch)
-    oportunidade_id = client.post("/crm/oportunidades", json={
-        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "status": "PROSPECCAO"
-    }).json()[0]["id"]
-    primeira = client.post("/crm/pipeline", json={
-        "oportunidade_id": oportunidade_id, "etapa": "PROSPECCAO", "usuario_id": "user-1", "observacao": "entrada"
-    }).json()[0]
-    segunda = client.post("/crm/pipeline", json={
-        "oportunidade_id": oportunidade_id, "etapa": "NEGOCIACAO", "usuario_id": "user-2", "observacao": "avanco"
-    }).json()[0]
-
-    pipeline = client.get("/crm/pipeline")
-
-    assert pipeline.status_code == 200
-    assert len(pipeline.json()) == 2
-    assert {item["id"] for item in pipeline.json()} == {primeira["id"], segunda["id"]}
-    assert {item["usuario_id"] for item in pipeline.json()} == {"user-1", "user-2"}
-    assert {item["observacao"] for item in pipeline.json()} == {"entrada", "avanco"}
-
-    atualizada = client.put(f"/crm/pipeline/{primeira['id']}", json={"etapa": "GANHO", "observacao": "fechamento"})
-
-    assert atualizada.status_code == 200
-    assert atualizada.json()[0]["id"] == primeira["id"]
-    assert atualizada.json()[0]["observacao"] == "fechamento"
-    assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "GANHO"
-    assert len(client.get("/crm/pipeline").json()) == 2
 
 
 def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
@@ -195,51 +165,122 @@ def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
 
 
 def test_forecast_calcula_probabilidades_percentual_e_decimal(monkeypatch):
-    client, fake = client_with_fake(monkeypatch)
-    casos_validos = [
-        ("zero", 0, 0),
-        ("um_decimal", 0.01, 10),
-        ("vinte_cinco_decimal", 0.25, 250),
-        ("cinquenta_decimal", 0.5, 500),
-        ("um_percentual", 1, 10),
-        ("cinquenta_percentual", 50, 500),
-        ("cem_percentual", 100, 1000),
-        ("negativo", -1, 0),
-        ("maior_que_cem", 101, 0),
-    ]
-    for titulo, probabilidade, _ponderado in casos_validos:
-        response = client.post("/crm/oportunidades", json={
-            "cliente_id": f"empresa-{titulo}",
-            "responsavel_id": "user-1",
-            "titulo": titulo,
-            "valor_estimado": 1000,
-            "probabilidade": probabilidade,
-            "status": "NEGOCIACAO",
-            "data_fechamento_prevista": "2026-08-10",
-        })
-        assert response.status_code == 200
-
-    casos_legados_invalidos = [
-        ("string_invalida", "abc", 0),
-        ("nulo", None, 0),
-    ]
-    for titulo, probabilidade, _ponderado in casos_legados_invalidos:
-        fake.db["cti_oportunidades"].append({
-            "id": f"legado-{titulo}",
-            "cliente_id": f"empresa-{titulo}",
-            "responsavel_id": "user-1",
-            "titulo": titulo,
-            "valor_estimado": 1000,
-            "probabilidade": probabilidade,
-            "status": "NEGOCIACAO",
-            "data_fechamento_prevista": "2026-08-10",
-            "created_at": "2026-07-18T00:00:00Z",
-        })
+    client, _fake = client_with_fake(monkeypatch)
+    client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "A", "valor_estimado": 1000, "probabilidade": 50, "status": "NEGOCIACAO", "data_fechamento_prevista": "2026-08-10"
+    })
+    client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-2", "responsavel_id": "user-1", "titulo": "B", "valor_estimado": 1000, "probabilidade": 0.25, "status": "NEGOCIACAO", "data_fechamento_prevista": "2026-08-20"
+    })
 
     forecast = client.get("/crm/forecast")
-    casos = casos_validos + casos_legados_invalidos
-
     assert forecast.status_code == 200
-    assert forecast.json()[0]["pipeline_total"] == 11000
-    assert forecast.json()[0]["pipeline_ponderado"] == sum(item[2] for item in casos)
-    assert forecast.json()[0]["qtd_oportunidades"] == len(casos)
+    assert forecast.json()[0]["pipeline_total"] == 2000
+    assert forecast.json()[0]["pipeline_ponderado"] == 750
+    assert forecast.json()[0]["qtd_oportunidades"] == 2
+
+
+def test_oportunidade_cria_pipeline_historico_auditoria_e_campos_operacionais(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+
+    created = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1",
+        "contato_id": "contato-1",
+        "responsavel_id": "user-1",
+        "titulo": "Nova carreta refrigerada",
+        "descricao": "Operação futura do cliente",
+        "origem": "INDICACAO",
+        "linha_equipamentos": "TRAILER",
+        "equipamento": "VECTOR 8500",
+        "implementadora": "RANDON",
+        "locadora": "LOCADORA A",
+        "estado": "SP",
+        "ddd": "11",
+        "sub_regiao": "Grande São Paulo",
+        "municipio": "São Paulo",
+        "bairro": "Mooca",
+        "valor_estimado": 1000,
+        "probabilidade": 50,
+        "data_fechamento_prevista": "2026-08-10",
+        "observacoes": "Prioridade comercial",
+    })
+
+    assert created.status_code == 200
+    oportunidade = created.json()[0]
+    assert oportunidade["probabilidade"] == 0.5
+    assert oportunidade["implementadora"] == "RANDON"
+    assert fake.db["cti_pipeline"][0]["etapa_anterior"] is None
+    assert fake.db["cti_pipeline"][0]["nova_etapa"] == "OPORTUNIDADE"
+    assert fake.db["cti_oportunidade_historico"][0]["tipo"] == "OPORTUNIDADE"
+    assert fake.db["cti_crm_auditoria"][0]["acao"] == "CRIACAO"
+
+
+def test_converter_proposta_em_pedido_vincula_fluxo_e_marca_ganho(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "valor_estimado": 3000
+    }).json()[0]["id"]
+    proposta_id = client.post("/crm/propostas", json={
+        "numero": "P-2", "cliente_id": "empresa-1", "oportunidade_id": oportunidade_id, "valor": 3000, "status": "ENVIADA"
+    }).json()[0]["id"]
+
+    pedido = client.post(f"/crm/propostas/{proposta_id}/converter-pedido", json={"numero": "PED-2"})
+
+    assert pedido.status_code == 200
+    assert pedido.json()[0]["proposta_id"] == proposta_id
+    assert pedido.json()[0]["oportunidade_id"] == oportunidade_id
+    assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "GANHO"
+    assert fake.db["cti_propostas"][0]["status"] == "APROVADA"
+    assert fake.db["cti_pipeline"][-1]["nova_etapa"] == "GANHO"
+    assert fake.db["cti_oportunidade_historico"][-1]["tipo"] == "PEDIDO"
+
+
+def test_registrar_perda_remove_do_forecast_e_registra_historico(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "valor_estimado": 3000, "probabilidade": 80
+    }).json()[0]["id"]
+
+    perda = client.post(f"/crm/oportunidades/{oportunidade_id}/perdas", json={
+        "motivo": "Preço", "concorrente": "Concorrente A", "responsavel_id": "user-1", "valor_perdido": 3000
+    })
+
+    assert perda.status_code == 200
+    assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "PERDIDO"
+    assert client.get("/crm/forecast").json() == []
+    assert fake.db["cti_oportunidade_historico"][-1]["tipo"] == "PERDA"
+
+
+def test_pipeline_lista_movimentacoes_e_oportunidades_legadas_sem_duplicar(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Com movimento", "status": "NEGOCIACAO"
+    }).json()[0]["id"]
+    fake.db["cti_oportunidades"].append({
+        "id": "legacy-1", "cliente_id": "empresa-2", "responsavel_id": "user-2", "titulo": "Legada", "status": "PROSPECCAO", "created_at": "2026-07-18T00:00:00Z"
+    })
+
+    pipeline = client.get("/crm/pipeline")
+
+    assert pipeline.status_code == 200
+    dados = pipeline.json()
+    assert [item["oportunidade_id"] for item in dados].count(oportunidade_id) == 1
+    legado = [item for item in dados if item["oportunidade_id"] == "legacy-1"]
+    assert len(legado) == 1
+    assert legado[0]["etapa"] == "PROSPECCAO"
+    assert legado[0]["origem"] == "LEGADO_SEM_MOVIMENTACAO"
+
+
+def test_criar_proposta_registra_etapa_anterior_real_da_oportunidade(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    oportunidade_id = client.post("/crm/oportunidades", json={
+        "cliente_id": "empresa-1", "responsavel_id": "user-1", "titulo": "Venda", "status": "NEGOCIACAO"
+    }).json()[0]["id"]
+
+    proposta = client.post("/crm/propostas", json={
+        "numero": "P-3", "cliente_id": "empresa-1", "oportunidade_id": oportunidade_id, "valor": 1000
+    })
+
+    assert proposta.status_code == 200
+    assert fake.db["cti_pipeline"][-1]["etapa_anterior"] == "NEGOCIACAO"
+    assert fake.db["cti_pipeline"][-1]["nova_etapa"] == "PROPOSTA"

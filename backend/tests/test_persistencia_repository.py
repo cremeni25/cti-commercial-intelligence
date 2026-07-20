@@ -126,3 +126,45 @@ def test_erros_classificados(monkeypatch):
 
     resultado = repo.persistir_registros_idempotente([registro(hash_registro=None)])
     assert resultado["erros_por_tipo"]["registro_sem_identificador"] == 1
+
+class FakePagedTable:
+    def __init__(self, registros):
+        self.registros = registros
+        self.inicio = 0
+        self.fim = 0
+        self.ranges = []
+
+    def select(self, *_args, **_kwargs):
+        return self
+
+    def range(self, inicio, fim):
+        self.inicio = inicio
+        self.fim = fim
+        self.ranges.append((inicio, fim))
+        return self
+
+    def execute(self):
+        return Resultado(self.registros[self.inicio:self.fim + 1])
+
+
+class FakePagedSupabase:
+    def __init__(self, registros):
+        self.tabela = FakePagedTable(registros)
+
+    def table(self, _nome):
+        return self.tabela
+
+
+def test_buscar_cti_anfir_pagina_todos_os_registros(monkeypatch):
+    registros = [
+        {"hash_registro": str(i), "cliente": f"Cliente {i}", "implementador": "RANDON"}
+        for i in range(5)
+    ]
+    fake = FakePagedSupabase(registros)
+    monkeypatch.setattr(cti_repository, "supabase", fake)
+
+    resultado = CTIRepository().buscar_cti_anfir(page_size=2)
+
+    assert [item["hash_registro"] for item in resultado] == ["0", "1", "2", "3", "4"]
+    assert fake.tabela.ranges == [(0, 1), (2, 3), (4, 5)]
+    assert all(item["implementadora"] == "RANDON" for item in resultado)

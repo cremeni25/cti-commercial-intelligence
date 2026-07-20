@@ -187,78 +187,33 @@ class CTIRepository:
     # CONSULTAS
     # ======================================================
 
-    TAMANHO_PAGINA = 1000
+    def buscar_cti_anfir(self, page_size: int = 1000):
 
-    def _selecionar_todos(
-        self,
-        colunas: str = "*",
-        tamanho_pagina: int = None
-    ):
-
-        tamanho = tamanho_pagina or self.TAMANHO_PAGINA
-        inicio = 0
         registros = []
+        inicio = 0
 
         while True:
 
-            fim = inicio + tamanho - 1
-
-            try:
-                resultado = (
-                    supabase
-                    .table(self.TABELA)
-                    .select(colunas)
-                    .range(inicio, fim)
-                    .execute()
-                )
-            except Exception as erro:
-                raise RuntimeError(
-                    "Erro seguro ao paginar a tabela operacional CTI."
-                ) from erro
-
-            pagina = resultado.data or []
+            fim = inicio + page_size - 1
+            pagina = (
+                supabase
+                .table(self.TABELA)
+                .select("*")
+                .range(inicio, fim)
+                .execute()
+                .data
+                or []
+            )
 
             if not pagina:
                 break
 
             registros.extend(pagina)
 
-            if len(pagina) < tamanho:
+            if len(pagina) < page_size:
                 break
 
-            inicio += tamanho
-
-        return registros
-
-    def buscar_cti_anfir(self):
-
-        registros = self._selecionar_todos("*")
-
-        return [
-            _adaptar_persistencia_para_dominio(registro)
-            for registro in registros
-        ]
-
-
-    def buscar_amostra_cti_anfir(self, limite: int = 10):
-
-        if limite <= 0:
-            return []
-
-        try:
-            registros = (
-                supabase
-                .table(self.TABELA)
-                .select("*")
-                .range(0, limite - 1)
-                .execute()
-                .data
-                or []
-            )
-        except Exception as erro:
-            raise RuntimeError(
-                "Erro seguro ao buscar amostra da tabela operacional CTI."
-            ) from erro
+            inicio += page_size
 
         return [
             _adaptar_persistencia_para_dominio(registro)
@@ -547,11 +502,25 @@ class CTIRepository:
 
     def listar_clientes(self):
 
-        return self._selecionar_todos("cliente")
+        return (
+            supabase
+            .table(self.TABELA)
+            .select("cliente")
+            .execute()
+            .data
+            or []
+        )
 
     def listar_implementadoras(self):
 
-        registros = self._selecionar_todos("implementador")
+        registros = (
+            supabase
+            .table(self.TABELA)
+            .select("implementador")
+            .execute()
+            .data
+            or []
+        )
 
         return [
             _adaptar_persistencia_para_dominio(registro)

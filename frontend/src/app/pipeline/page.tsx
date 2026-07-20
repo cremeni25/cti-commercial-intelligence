@@ -44,7 +44,7 @@ console.log("PAGINA PIPELINE CARREGADA")
   }, [])
 
       const prospeccao = dados.filter(
-      (item) => item.etapa === "PROSPECCAO"
+      (item) => item.etapa === "OPORTUNIDADE"
     ).length
 
     const negociacao = dados.filter(
@@ -52,11 +52,11 @@ console.log("PAGINA PIPELINE CARREGADA")
     ).length
 
     const ganhos = dados.filter(
-      (item) => item.etapa === "FECHADO_GANHO"
+      (item) => item.etapa === "GANHO"
     ).length
 
     const perdidos = dados.filter(
-      (item) => item.etapa === "FECHADO_PERDIDO"
+      (item) => item.etapa === "PERDIDO"
     ).length
   
   function formatarData(data?: string) {
@@ -96,7 +96,7 @@ console.log("PAGINA PIPELINE CARREGADA")
 
             <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
               <p className="text-gray-400 text-sm">
-                Prospecção
+                Oportunidade
               </p>
 
               <h2 className="text-3xl text-green-400 font-bold mt-2">
@@ -136,6 +136,11 @@ console.log("PAGINA PIPELINE CARREGADA")
             </div>
           </div>
 
+          <div className="mb-6 rounded-2xl border border-[#13203f] bg-[#071226] p-5 text-sm text-gray-300">
+            <h2 className="text-white font-semibold mb-2">Contexto dos indicadores</h2>
+            <p><strong>Origem dos indicadores:</strong> CRM Operacional. <strong>Período considerado:</strong> movimentações cadastradas no pipeline do CRM. <strong>Significado operacional:</strong> histórico de avanço das oportunidades por etapa. <strong>Critério de cálculo:</strong> contagem das movimentações reais por etapa. <strong>Finalidade operacional:</strong> acompanhar a evolução do fluxo Oportunidade → Atividades → Proposta → Negociação → Pedido → Conclusão → Inteligência.</p>
+          </div>
+
           <div className="bg-[#091a33] rounded-2xl border border-[#13203f] overflow-hidden">
             <div className="p-6 border-b border-[#13203f]">
               <h2 className="text-white text-xl font-semibold">
@@ -147,20 +152,29 @@ console.log("PAGINA PIPELINE CARREGADA")
   <div className="p-10 text-gray-400">
     Carregando...
   </div>
+) : dados.length === 0 ? (
+  <div className="p-10 text-gray-300 space-y-4">
+    <p>Nenhuma movimentação de pipeline cadastrada. Cada oportunidade deve gerar a primeira movimentação automaticamente, preservando etapa anterior, nova etapa, data, hora, usuário e observações.</p>
+    <div className="flex flex-wrap gap-3">
+      <a href="/oportunidades?novo=1" className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-slate-950">Nova oportunidade</a>
+      <a href="/atividades?novo=1" className="rounded-xl border border-cyan-500 px-4 py-2 text-sm font-semibold text-cyan-300">Nova atividade</a>
+      <a href="/propostas?novo=1" className="rounded-xl border border-cyan-500 px-4 py-2 text-sm font-semibold text-cyan-300">Nova proposta</a>
+    </div>
+  </div>
 ) : (
   <div className="grid grid-cols-6 gap-4 p-6 overflow-x-auto min-h-[600px]">
 
-    {/* PROSPECÇÃO */}
+    {/* OPORTUNIDADE */}
     <div className="bg-[#071028] rounded-xl border border-[#13203f]">
       <div className="p-4 border-b border-[#13203f]">
         <h3 className="text-cyan-400 font-bold">
-          PROSPECÇÃO
+          OPORTUNIDADE
         </h3>
       </div>
 
       <div className="p-3 space-y-3">
         {dados
-          .filter(item => item.etapa === "PROSPECCAO")
+          .filter(item => item.etapa === "OPORTUNIDADE")
           .map(item => (
             <div
               key={item.id}
@@ -182,17 +196,17 @@ console.log("PAGINA PIPELINE CARREGADA")
       </div>
     </div>
 
-    {/* QUALIFICAÇÃO */}
+    {/* ATIVIDADES */}
     <div className="bg-[#071028] rounded-xl border border-[#13203f]">
       <div className="p-4 border-b border-[#13203f]">
         <h3 className="text-blue-400 font-bold">
-          QUALIFICAÇÃO
+          ATIVIDADES
         </h3>
       </div>
 
       <div className="p-3 space-y-3">
         {dados
-          .filter(item => item.etapa === "QUALIFICACAO")
+          .filter(item => item.etapa === "ATIVIDADES")
           .map(item => (
             <div
               key={item.id}
@@ -278,17 +292,17 @@ console.log("PAGINA PIPELINE CARREGADA")
       </div>
     </div>
 
-    {/* FECHADO GANHO */}
+    {/* GANHO */}
     <div className="bg-[#071028] rounded-xl border border-[#13203f]">
       <div className="p-4 border-b border-[#13203f]">
         <h3 className="text-green-400 font-bold">
-          FECHADO GANHO
+          GANHO
         </h3>
       </div>
 
       <div className="p-3 space-y-3">
         {dados
-          .filter(item => item.etapa === "FECHADO_GANHO")
+          .filter(item => item.etapa === "GANHO")
           .map(item => (
             <div
               key={item.id}
@@ -310,17 +324,17 @@ console.log("PAGINA PIPELINE CARREGADA")
       </div>
     </div>
 
-    {/* FECHADO PERDIDO */}
+    {/* PERDIDO */}
     <div className="bg-[#071028] rounded-xl border border-[#13203f]">
       <div className="p-4 border-b border-[#13203f]">
         <h3 className="text-red-400 font-bold">
-          FECHADO PERDIDO
+          PERDIDO
         </h3>
       </div>
 
       <div className="p-3 space-y-3">
         {dados
-          .filter(item => item.etapa === "FECHADO_PERDIDO")
+          .filter(item => item.etapa === "PERDIDO")
           .map(item => (
             <div
               key={item.id}
