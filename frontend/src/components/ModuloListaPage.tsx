@@ -27,12 +27,15 @@ export default function ModuloListaPage({
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
-    setErro("")
-    carregar(queryString)
-      .then((resultado) => { if (ativo) setDados(resultado) })
-      .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do módulo.") })
-      .finally(() => { if (ativo) setLoading(false) })
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoading(true)
+      setErro("")
+      carregar(queryString)
+        .then((resultado) => { if (ativo) setDados(resultado) })
+        .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do módulo.") })
+        .finally(() => { if (ativo) setLoading(false) })
+    })
     return () => { ativo = false }
   }, [carregar, queryString])
 
