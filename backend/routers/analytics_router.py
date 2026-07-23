@@ -11,6 +11,7 @@ from services.commercial_intelligence import consolidar_inteligencia, opcoes_fil
 from services.operational_filters import filtrar_registros, opcoes_contexto
 
 router = APIRouter()
+CONTEXT_PATTERN = r"^(brasil|viena-sp|outros-dealers|uf-[a-z]{2}|ddd-\d{3})$"
 
 
 def _datas(periodo: str, inicio: date | None, fim: date | None):
@@ -59,7 +60,7 @@ def context_options():
 
 @router.get("/analytics/dashboard")
 def dashboard(
-    contexto: str = "brasil", periodo: str = "TODO_HISTORICO",
+    contexto: str = Query("brasil", pattern=CONTEXT_PATTERN), periodo: str = "TODO_HISTORICO",
     inicio: date | None = None, fim: date | None = None, uf: str | None = None, ddd: str | None = None,
 ):
     registros, inicio_efetivo, fim_efetivo = _registros(contexto, periodo, inicio, fim, uf, ddd)
@@ -75,7 +76,7 @@ def dashboard(
 
 @router.get("/analytics/intelligence")
 def intelligence(
-    contexto: str = "brasil", segmento: str = Query("GERAL", pattern="^(GERAL|TR|DT|DD|UNKNOWN)$"),
+    contexto: str = Query("brasil", pattern=CONTEXT_PATTERN), segmento: str = Query("GERAL", pattern="^(GERAL|TR|DT|DD|UNKNOWN)$"),
     periodo: str = "ULTIMOS_90_DIAS", inicio: date | None = None, fim: date | None = None,
     comparacao: str = "PERIODO_ANTERIOR", comparacao_inicio: date | None = None, comparacao_fim: date | None = None,
     regiao: str | None = None, uf: str | None = None, ddd: str | None = None, dealer: str | None = None,
@@ -92,7 +93,7 @@ def intelligence(
 
 @router.get("/analytics/intelligence/filter-options")
 def filter_options(
-    contexto: str = "brasil", segmento: str = "GERAL", periodo: str = "ULTIMOS_90_DIAS",
+    contexto: str = Query("brasil", pattern=CONTEXT_PATTERN), segmento: str = "GERAL", periodo: str = "ULTIMOS_90_DIAS",
     inicio: date | None = None, fim: date | None = None, regiao: str | None = None, uf: str | None = None,
     ddd: str | None = None, dealer: str | None = None, implementadora: str | None = None,
     cliente: str | None = None, linha: str | None = None, familia: str | None = None, produto: str | None = None,
