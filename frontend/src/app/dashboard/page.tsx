@@ -16,24 +16,13 @@ type DashboardContextual = {
   ticket_medio?: number
   ranking_implementadoras?: Array<{ nome: string; quantidade: number }>
   ranking_clientes?: Array<{ nome: string; quantidade: number }>
+  metadata?: { contexto?: string; periodo?: string; inicio?: string | null; fim?: string | null; total_registros_filtrados?: number }
 }
 
-type DashboardCRM = {
-  oportunidades?: number
-  propostas?: number
-  pedidos?: number
-  atividades?: number
-  contexto?: {
-    origem?: string
-    periodo?: string
-    significado?: string
-    criterio_calculo?: string
-    finalidade_operacional?: string
-  }
-}
+type DashboardCRM = { oportunidades?: number; propostas?: number; pedidos?: number; atividades?: number }
 
 export default function DashboardHub() {
-  const { contexto, contextoAtual } = useOperationalContext()
+  const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [dashboard, setDashboard] = useState<DashboardContextual | null>(null)
   const [crm, setCrm] = useState<DashboardCRM | null>(null)
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("")
@@ -42,30 +31,28 @@ export default function DashboardHub() {
 
   useEffect(() => {
     let ativo = true
-    queueMicrotask(() => {
-      setLoading(true)
-      setErro("")
-      Promise.all([
-        getDashboardExecutivoContextual(contexto),
-        fetch(`${API_URL}/crm/dashboard`).then((response) => response.json()),
-      ])
+    setLoading(true)
+    setErro("")
+    Promise.all([
+      getDashboardExecutivoContextual(queryString),
+      fetch(`${API_URL}/crm/dashboard`, { cache: "no-store" }).then((response) => response.json()),
+    ])
       .then(([dadosHistoricos, dadosCrm]) => {
         if (!ativo) return
         setDashboard(dadosHistoricos)
         setCrm(dadosCrm)
         setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
       })
-      .catch(() => {
-        if (ativo) setErro("Erro ao carregar o Dashboard Executivo contextualizado.")
-      })
-      .finally(() => {
-        if (ativo) setLoading(false)
-      })
-    })
+      .catch(() => { if (ativo) setErro("Erro ao carregar o Dashboard Executivo contextualizado.") })
+      .finally(() => { if (ativo) setLoading(false) })
     return () => { ativo = false }
-  }, [contexto])
+  }, [queryString])
 
-  const contextoCrm = crm?.contexto
+  const periodoExibido = periodo === "TODO_HISTORICO"
+    ? "Todo o histórico disponível"
+    : periodo === "PERSONALIZADO"
+      ? `${dataInicio || "início não definido"} até ${dataFim || "fim não definido"}`
+      : periodo.replaceAll("_", " ").toLowerCase()
 
   return (
     <main className="flex min-h-screen bg-[#020817]">
@@ -75,17 +62,16 @@ export default function DashboardHub() {
         <div className="p-8 space-y-8">
           <div>
             <h1 className="text-3xl font-bold text-white">Dashboard Executivo</h1>
-            <p className="text-gray-400 mt-2">Indicadores reais carregados conforme o Contexto Operacional Global e o CRM Operacional.</p>
+            <p className="text-gray-400 mt-2">Indicadores históricos filtrados pelo território e período globais; CRM operacional apresentado separadamente.</p>
             <p className="text-cyan-300 text-sm mt-2">Contexto ativo: {contextoAtual.label} — {contextoAtual.description}</p>
           </div>
 
           <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-sm text-gray-300">
-            <h2 className="text-white text-xl font-semibold mb-4">Contexto permanente do Dashboard Executivo</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <Info titulo="Período analisado" valor={contextoCrm?.periodo || "Registros disponíveis no contexto operacional selecionado."} />
+              <Info titulo="Período analisado" valor={periodoExibido} />
               <Info titulo="Última atualização" valor={ultimaAtualizacao || "Aguardando carga dos dados."} />
-              <Info titulo="Origem dos dados" valor={contextoCrm?.origem || "Backend CTI já disponível para o Dashboard Executivo."} />
-              <Info titulo="Critério de cálculo" valor={contextoCrm?.criterio_calculo || "Indicadores carregados do backend sem novos cálculos no frontend."} />
+              <Info titulo="Origem dos dados" valor="Base histórica CTI/ANFIR e CRM operacional" />
+              <Info titulo="Registros após filtros" valor={String(dashboard?.metadata?.total_registros_filtrados ?? 0)} />
             </div>
           </section>
 
@@ -100,19 +86,10 @@ export default function DashboardHub() {
             <Kpi titulo="Ticket histórico" valor={loading ? "..." : `R$ ${(dashboard?.ticket_medio ?? 0).toLocaleString("pt-BR")}`} />
           </section>
 
-          <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-sm text-gray-300">
-            <h2 className="text-white font-semibold mb-2">Contexto dos indicadores</h2>
-            <p><strong>Origem dos indicadores:</strong> CRM Operacional para indicadores de CRM; Inteligência Histórica apenas para rankings históricos já disponibilizados pelo backend.</p>
-            <p><strong>Período considerado:</strong> {contextoCrm?.periodo || "contexto operacional ativo e registros carregados do backend."}</p>
-            <p><strong>Significado operacional:</strong> {contextoCrm?.significado || "operações futuras do CRM separadas da base histórica de operações concluídas."}</p>
-            <p><strong>Critério de cálculo:</strong> {contextoCrm?.criterio_calculo || "contagens recebidas dos endpoints existentes, sem novos cálculos no frontend."}</p>
-            <p><strong>Finalidade operacional:</strong> {contextoCrm?.finalidade_operacional || "acompanhar criação, avanço e conversão de oportunidades comerciais."}</p>
-          </section>
-
           {loading ? (
             <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-gray-300">Carregando indicadores reais...</div>
           ) : !dashboard || (dashboard.total_registros ?? 0) === 0 ? (
-            <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-gray-300 space-y-2"><p><strong>Por que não existem registros:</strong> não há dados históricos disponíveis para o contexto operacional ativo.</p><p><strong>O que esta área representa:</strong> rankings históricos já consolidados pelo backend.</p><p><strong>Próximo passo esperado:</strong> selecionar outro contexto operacional ou realizar upload homologado quando aplicável.</p></div>
+            <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-gray-300">Não há dados históricos com a combinação atual de território e período.</div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6"><Ranking titulo="Implementadoras" itens={dashboard.ranking_implementadoras ?? []} /><Ranking titulo="Clientes" itens={dashboard.ranking_clientes ?? []} /></div>
           )}
