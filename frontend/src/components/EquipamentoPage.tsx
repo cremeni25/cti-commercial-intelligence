@@ -7,29 +7,26 @@ import { useOperationalContext } from "@/context/OperationalContext"
 import { getEquipamento, type EquipamentoResumo, type RankingItem } from "@/services/modulos-api"
 
 export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string; fallbackTitulo: string }) {
-  const { contexto, contextoAtual } = useOperationalContext()
+  const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [dados, setDados] = useState<EquipamentoResumo | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
 
   useEffect(() => {
     let ativo = true
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoading(true)
+      setErro("")
+      getEquipamento(slug, queryString)
+        .then((resultado) => { if (ativo) setDados(resultado) })
+        .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do equipamento.") })
+        .finally(() => { if (ativo) setLoading(false) })
+    })
+    return () => { ativo = false }
+  }, [slug, queryString])
 
-    getEquipamento(slug, contexto)
-      .then((resultado) => {
-        if (ativo) setDados(resultado)
-      })
-      .catch(() => {
-        if (ativo) setErro("Erro ao carregar dados reais do equipamento.")
-      })
-      .finally(() => {
-        if (ativo) setLoading(false)
-      })
-
-    return () => {
-      ativo = false
-    }
-  }, [slug, contexto])
+  const periodoExibido = periodo === "TODO_HISTORICO" ? "Todo o histórico" : periodo === "PERSONALIZADO" ? `${dataInicio || "?"} a ${dataFim || "?"}` : periodo.replaceAll("_", " ")
 
   return (
     <main className="flex min-h-screen bg-[#020817]">
@@ -40,7 +37,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
           <div>
             <h1 className="text-4xl font-bold text-white">{dados?.nome ?? fallbackTitulo}</h1>
             <p className="text-gray-400 mt-2">Visão operacional baseada nos registros reais persistidos no CTI.</p>
-            <p className="text-cyan-300 text-sm mt-2">Contexto ativo: {contextoAtual.label}</p>
+            <p className="text-cyan-300 text-sm mt-2">Contexto: {contextoAtual.label} • Período: {periodoExibido}</p>
           </div>
 
           {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
@@ -51,12 +48,8 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
             <Kpi titulo="Linhas" valor={loading ? "..." : String(dados?.linhas.length ?? 0)} />
           </div>
 
-          {loading ? (
-            <p className="text-gray-400">Carregando dados reais...</p>
-          ) : !dados || dados.total_registros === 0 ? (
-            <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6 text-gray-300">
-              Nenhum registro encontrado para este equipamento na base CTI atual.
-            </div>
+          {loading ? <p className="text-gray-400">Carregando dados reais...</p> : !dados || dados.total_registros === 0 ? (
+            <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6 text-gray-300">Nenhum registro encontrado para este equipamento no território e período selecionados.</div>
           ) : (
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
               <Ranking titulo="Linhas de produto" itens={dados.linhas} />
@@ -71,27 +64,5 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
   )
 }
 
-function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
-  return (
-    <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6">
-      <p className="text-gray-400 text-sm">{titulo}</p>
-      <p className="text-3xl text-cyan-400 font-bold mt-2">{valor}</p>
-    </div>
-  )
-}
-
-function Ranking({ titulo, itens }: { titulo: string; itens: RankingItem[] }) {
-  return (
-    <section className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6">
-      <h2 className="text-white text-xl font-semibold">{titulo}</h2>
-      <div className="mt-4 space-y-3">
-        {itens.map((item) => (
-          <div key={item.nome} className="flex justify-between gap-4 rounded-xl bg-[#071028] p-4 text-gray-200">
-            <span>{item.nome}</span>
-            <strong className="text-cyan-400">{item.quantidade_registros}</strong>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
-}
+function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl text-cyan-400 font-bold mt-2">{valor}</p></div> }
+function Ranking({ titulo, itens }: { titulo: string; itens: RankingItem[] }) { return <section className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6"><h2 className="text-white text-xl font-semibold">{titulo}</h2><div className="mt-4 space-y-3">{itens.map((item) => <div key={item.nome} className="flex justify-between gap-4 rounded-xl bg-[#071028] p-4 text-gray-200"><span>{item.nome}</span><strong className="text-cyan-400">{item.quantidade_registros}</strong></div>)}</div></section> }
