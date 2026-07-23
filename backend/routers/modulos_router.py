@@ -4,7 +4,7 @@ from datetime import date
 from fastapi import APIRouter, HTTPException
 
 from repositories.cti_repository import repository
-from services.base_analytics import valor_float
+from services.base_analytics import consolidar_implementadoras, valor_float
 from services.operational_filters import filtrar_registros, resolver_periodo
 
 router = APIRouter(prefix="/modulos", tags=["Módulos CTI"])
@@ -61,6 +61,12 @@ def listar_empresas(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", u
 @router.get("/transportadoras")
 def listar_transportadoras(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
     return _consolidar_empresas(contexto, periodo, uf, ddd, inicio, fim)
+
+
+@router.get("/implementadoras")
+def listar_implementadoras(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
+    base, _, _ = _todos_registros(contexto, periodo, uf, ddd, inicio, fim)
+    return consolidar_implementadoras(base)
 
 
 @router.get("/equipamentos/{slug}")
