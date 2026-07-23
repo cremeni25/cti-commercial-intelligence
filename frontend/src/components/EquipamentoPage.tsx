@@ -14,12 +14,15 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
-    setErro("")
-    getEquipamento(slug, queryString)
-      .then((resultado) => { if (ativo) setDados(resultado) })
-      .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do equipamento.") })
-      .finally(() => { if (ativo) setLoading(false) })
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoading(true)
+      setErro("")
+      getEquipamento(slug, queryString)
+        .then((resultado) => { if (ativo) setDados(resultado) })
+        .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do equipamento.") })
+        .finally(() => { if (ativo) setLoading(false) })
+    })
     return () => { ativo = false }
   }, [slug, queryString])
 
