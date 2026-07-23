@@ -1,11 +1,11 @@
 from collections import Counter
 from datetime import date
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 
 from repositories.cti_repository import repository
 from services.base_analytics import valor_float
-from services.operational_filters import filtrar_registros
+from services.operational_filters import filtrar_registros, resolver_periodo
 
 router = APIRouter(prefix="/modulos", tags=["Módulos CTI"])
 
@@ -16,8 +16,9 @@ EQUIPAMENTOS = {
 }
 
 
-def _todos_registros(contexto="brasil", uf=None, ddd=None, inicio=None, fim=None):
-    return filtrar_registros(repository.buscar_cti_anfir(), contexto=contexto, uf=uf, ddd=ddd, inicio=inicio, fim=fim)
+def _todos_registros(contexto="brasil", periodo="TODO_HISTORICO", uf=None, ddd=None, inicio=None, fim=None):
+    inicio, fim = resolver_periodo(periodo, inicio, fim)
+    return filtrar_registros(repository.buscar_cti_anfir(), contexto=contexto, uf=uf, ddd=ddd, inicio=inicio, fim=fim), inicio, fim
 
 
 def _texto_registro(registro):
@@ -34,8 +35,9 @@ def _nome_empresa(registro):
     return ""
 
 
-def _consolidar_empresas(contexto="brasil", uf=None, ddd=None, inicio=None, fim=None):
-    registros = [r for r in _todos_registros(contexto, uf, ddd, inicio, fim) if _nome_empresa(r)]
+def _consolidar_empresas(contexto="brasil", periodo="TODO_HISTORICO", uf=None, ddd=None, inicio=None, fim=None):
+    base, _, _ = _todos_registros(contexto, periodo, uf, ddd, inicio, fim)
+    registros = [r for r in base if _nome_empresa(r)]
     agrupado = {}
     for registro in registros:
         nome = _nome_empresa(registro)
@@ -52,24 +54,25 @@ def _consolidar_empresas(contexto="brasil", uf=None, ddd=None, inicio=None, fim=
 
 
 @router.get("/empresas")
-def listar_empresas(contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
-    return _consolidar_empresas(contexto, uf, ddd, inicio, fim)
+def listar_empresas(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
+    return _consolidar_empresas(contexto, periodo, uf, ddd, inicio, fim)
 
 
 @router.get("/transportadoras")
-def listar_transportadoras(contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
-    return _consolidar_empresas(contexto, uf, ddd, inicio, fim)
+def listar_transportadoras(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
+    return _consolidar_empresas(contexto, periodo, uf, ddd, inicio, fim)
 
 
 @router.get("/equipamentos/{slug}")
-def detalhe_equipamento(slug: str, contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
+def detalhe_equipamento(slug: str, contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
     config = EQUIPAMENTOS.get(slug)
     if not config: raise HTTPException(status_code=404, detail="Equipamento não configurado")
-    registros = [r for r in _todos_registros(contexto, uf, ddd, inicio, fim) if any(t in _texto_registro(r) for t in config["termos"])]
+    base, inicio_efetivo, fim_efetivo = _todos_registros(contexto, periodo, uf, ddd, inicio, fim)
+    registros = [r for r in base if any(t in _texto_registro(r) for t in config["termos"])]
     estados = Counter(r.get("estado") for r in registros if r.get("estado")); implementadoras = Counter(r.get("implementadora") for r in registros if r.get("implementadora")); linhas = Counter(r.get("linha") for r in registros if r.get("linha")); empresas = Counter(_nome_empresa(r) for r in registros if _nome_empresa(r)); valor_total = sum(valor_float(r.get("valor")) for r in registros)
     return {
         "slug": slug, "nome": config["nome"], "total_registros": len(registros), "valor_total": round(valor_total, 2),
-        "metadata": {"contexto": contexto, "uf": uf, "ddd": ddd, "inicio": inicio.isoformat() if inicio else None, "fim": fim.isoformat() if fim else None},
+        "metadata": {"contexto": contexto, "periodo": periodo, "uf": uf, "ddd": ddd, "inicio": inicio_efetivo.isoformat() if inicio_efetivo else None, "fim": fim_efetivo.isoformat() if fim_efetivo else None},
         "estados": [{"nome": n, "quantidade_registros": q} for n, q in estados.most_common()],
         "implementadoras": [{"nome": n, "quantidade_registros": q} for n, q in implementadoras.most_common()],
         "linhas": [{"nome": n, "quantidade_registros": q} for n, q in linhas.most_common()],
