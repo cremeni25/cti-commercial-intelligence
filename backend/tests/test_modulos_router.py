@@ -49,6 +49,57 @@ def test_empresas_consolida_campo_canonico_e_legado(monkeypatch):
     assert body[1]["valor_total"] == 0
 
 
+def test_clientes_consolida_multiplos_chassis_placas_e_origens_comerciais(monkeypatch):
+    monkeypatch.setattr(
+        modulos_router.repository,
+        "buscar_cti_anfir",
+        lambda: [
+            {
+                "nome_proprietario": "Cliente Frota",
+                "origem_base": "BRASIL",
+                "chassi": "CHASSI-001",
+                "placa": "ABC1D23",
+                "implementadora": "Implementadora A",
+                "modelo_equipamento": "VECTOR 8500",
+                "valor": 100,
+            },
+            {
+                "nome_proprietario": "cliente frota",
+                "origem_base": "BRASIL",
+                "chassi": "CHASSI-002",
+                "placa": "EFG4H56",
+                "implementadora": "Implementadora B",
+                "modelo_equipamento": "SUPRA 850",
+                "valor": 200,
+            },
+            {
+                "nome_proprietario": "Cliente Frota",
+                "origem_base": "BRASIL",
+                "chassi": "CHASSI-002",
+                "placa": "EFG4H56",
+                "implementadora": "Implementadora B",
+                "modelo_equipamento": "SUPRA 850",
+                "valor": 0,
+            },
+        ],
+    )
+
+    response = client.get("/modulos/clientes")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["nome"] == "Cliente Frota"
+    assert body[0]["quantidade_registros"] == 3
+    assert body[0]["quantidade_chassis"] == 2
+    assert body[0]["quantidade_placas"] == 2
+    assert body[0]["chassis"] == ["CHASSI-001", "CHASSI-002"]
+    assert body[0]["placas"] == ["ABC1D23", "EFG4H56"]
+    assert body[0]["implementadoras"] == ["Implementadora A", "Implementadora B"]
+    assert body[0]["equipamentos"] == ["SUPRA 850", "VECTOR 8500"]
+    assert body[0]["valor_total"] == 300
+
+
 def test_transportadoras_permanece_alias_compativel(monkeypatch):
     monkeypatch.setattr(
         modulos_router.repository,
