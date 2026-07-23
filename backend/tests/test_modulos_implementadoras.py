@@ -33,7 +33,7 @@ def test_listar_implementadoras_respeita_contexto(monkeypatch):
     viena = modulos_router.listar_implementadoras(contexto="viena-sp")
     bahia = modulos_router.listar_implementadoras(contexto="uf-ba")
 
-    assert {item["nome"] for item in brasil} == {"IMPLEMENTADORA BAHIA", "IMPLEMENTADORA VIENA"}
+    assert {item["nome"] for item in brasil} == {"BAHIA IMPLEMENTADORA", "IMPLEMENTADORA VIENA"}
     assert [item["nome"] for item in viena] == ["IMPLEMENTADORA VIENA"]
-    assert [item["nome"] for item in bahia] == ["IMPLEMENTADORA BAHIA"]
+    assert [item["nome"] for item in bahia] == ["BAHIA IMPLEMENTADORA"]
     assert bahia[0]["valor_total"] == 1000
