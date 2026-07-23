@@ -31,20 +31,23 @@ export default function DashboardHub() {
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
-    setErro("")
-    Promise.all([
-      getDashboardExecutivoContextual(queryString),
-      fetch(`${API_URL}/crm/dashboard`, { cache: "no-store" }).then((response) => response.json()),
-    ])
-      .then(([dadosHistoricos, dadosCrm]) => {
-        if (!ativo) return
-        setDashboard(dadosHistoricos)
-        setCrm(dadosCrm)
-        setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
-      })
-      .catch(() => { if (ativo) setErro("Erro ao carregar o Dashboard Executivo contextualizado.") })
-      .finally(() => { if (ativo) setLoading(false) })
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoading(true)
+      setErro("")
+      Promise.all([
+        getDashboardExecutivoContextual(queryString),
+        fetch(`${API_URL}/crm/dashboard`, { cache: "no-store" }).then((response) => response.json()),
+      ])
+        .then(([dadosHistoricos, dadosCrm]) => {
+          if (!ativo) return
+          setDashboard(dadosHistoricos)
+          setCrm(dadosCrm)
+          setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
+        })
+        .catch(() => { if (ativo) setErro("Erro ao carregar o Dashboard Executivo contextualizado.") })
+        .finally(() => { if (ativo) setLoading(false) })
+    })
     return () => { ativo = false }
   }, [queryString])
 
