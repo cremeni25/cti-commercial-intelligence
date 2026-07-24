@@ -15,5 +15,17 @@ def test_classifica_linhas_por_nomenclatura_veicular_nacional():
     assert classificar_linha({"familia": "Acoplado ao motor"}) == "DD"
 
 
+def test_prioriza_linha_persistida_e_aliases_nacionais():
+    assert classificar_linha({"linha": "TR - Trailer", "modelo": "não informado"}) == "TR"
+    assert classificar_linha({"linha": "Caminhão", "modelo": "não informado"}) == "DT"
+    assert classificar_linha({"linha": "Truck", "modelo": "não informado"}) == "DT"
+    assert classificar_linha({"linha": "Van", "modelo": "não informado"}) == "DD"
+    assert classificar_linha({"linha": "Furgão", "modelo": "não informado"}) == "DD"
+
+
+def test_nao_confunde_tr_com_truck():
+    assert classificar_linha({"linha": "Diesel Truck"}) == "DT"
+
+
 def test_nao_forca_classificacao_sem_evidencia():
     assert classificar_linha({"tipo_veiculo": "Não informado"}) is None
