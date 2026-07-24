@@ -69,20 +69,20 @@ export default function DashboardHub() {
       setLoading(true)
       setAvisos([])
 
-      const consultasPrincipais = await Promise.allSettled([
-        getDashboardExecutivoContextual(queryString),
-        buscarJson<DashboardCRM>(`${API_URL}/crm/dashboard`),
-        buscarJson<AgendaResponse>(`${API_URL}/crm/agenda`),
-        buscarJson<PipelineResponse>(`${API_URL}/crm/pipeline/quadro`),
+      const consultasPrincipais = await Promise.all([
+        seguro<DashboardContextual>(getDashboardExecutivoContextual(queryString)),
+        seguro<DashboardCRM>(buscarJson<DashboardCRM>(`${API_URL}/crm/dashboard`)),
+        seguro<AgendaResponse>(buscarJson<AgendaResponse>(`${API_URL}/crm/agenda`)),
+        seguro<PipelineResponse>(buscarJson<PipelineResponse>(`${API_URL}/crm/pipeline/quadro`)),
       ])
 
       if (!ativo) return
 
       const novosAvisos: string[] = []
-      const historico = valorResolvido<DashboardContextual>(consultasPrincipais[0])
-      const dadosCrm = valorResolvido<DashboardCRM>(consultasPrincipais[1])
-      const dadosAgenda = valorResolvido<AgendaResponse>(consultasPrincipais[2])
-      const dadosPipeline = valorResolvido<PipelineResponse>(consultasPrincipais[3])
+      const historico = consultasPrincipais[0]
+      const dadosCrm = consultasPrincipais[1]
+      const dadosAgenda = consultasPrincipais[2]
+      const dadosPipeline = consultasPrincipais[3]
 
       if (historico) setDashboard(historico)
       else novosAvisos.push("Base histórica indisponível.")
@@ -96,10 +96,12 @@ export default function DashboardHub() {
       if (dadosPipeline) setPipeline(dadosPipeline)
       else novosAvisos.push("Resumo do pipeline indisponível.")
 
-      const respostasLinhas = await Promise.allSettled(
+      const respostasLinhas = await Promise.all(
         LINHAS.map((linha) =>
-          buscarJson<IntelligenceResponse>(
-            `${API_URL}/analytics/intelligence?${parametrosLinha(queryString, linha.codigo)}`
+          seguro<IntelligenceResponse>(
+            buscarJson<IntelligenceResponse>(
+              `${API_URL}/analytics/intelligence?${parametrosLinha(queryString, linha.codigo)}`
+            )
           )
         )
       )
@@ -107,9 +109,9 @@ export default function DashboardHub() {
       if (!ativo) return
 
       const linhasNormalizadas = LINHAS.map((linha, index) => {
-        const resposta = valorResolvido<IntelligenceResponse>(respostasLinhas[index])
+        const resposta = respostasLinhas[index]
         if (!resposta) novosAvisos.push(`Indicador ${linha.nome} indisponível.`)
-        return normalizarLinha(linha, resposta)
+        return normalizarLinha(linha, resposta ?? undefined)
       })
 
       setLinhasProduto(linhasNormalizadas)
@@ -277,8 +279,12 @@ async function buscarJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function valorResolvido<T>(resultado: PromiseSettledResult<unknown>): T | null {
-  return resultado.status === "fulfilled" ? resultado.value as T : null
+async function seguro<T>(promessa: Promise<T>): Promise<T | null> {
+  try {
+    return await promessa
+  } catch {
+    return null
+  }
 }
 
 function percentual(parte?: number, total?: number) {
