@@ -61,8 +61,10 @@ export default function AtividadesPage() {
   }
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("novo") === "1") setMostrarFormulario(true)
-    void carregar()
+    queueMicrotask(() => {
+      if (new URLSearchParams(window.location.search).get("novo") === "1") setMostrarFormulario(true)
+      void carregar()
+    })
   }, [])
 
   async function criarAtividade(event: FormEvent<HTMLFormElement>) {
