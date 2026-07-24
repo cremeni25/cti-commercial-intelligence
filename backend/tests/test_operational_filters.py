@@ -11,13 +11,22 @@ REGISTROS = [
 ]
 
 
-def test_contexto_brasil_retorna_base_completa():
-    assert len(filtrar_registros(REGISTROS, contexto="brasil")) == 4
+def test_contexto_brasil_retorna_somente_base_nacional():
+    resultado = filtrar_registros(REGISTROS, contexto="brasil")
+    assert {item["cliente"] for item in resultado} == {"RJ", "OUTRO SP"}
+    assert all(item["origem_base"] == "BRASIL" for item in resultado)
 
 
 def test_contexto_viena_retorna_apenas_registros_do_autorizado():
     resultado = filtrar_registros(REGISTROS, contexto="viena-sp")
     assert {item["cliente"] for item in resultado} == {"VIENA 11", "VIENA 13"}
+    assert all(item["origem_base"] == "VIENA_SP" for item in resultado)
+
+
+def test_brasil_e_viena_sao_conjuntos_independentes():
+    brasil = filtrar_registros(REGISTROS, contexto="brasil")
+    viena = filtrar_registros(REGISTROS, contexto="viena-sp")
+    assert {item["cliente"] for item in brasil}.isdisjoint({item["cliente"] for item in viena})
 
 
 def test_contexto_uf_aplica_unidade_federativa():
