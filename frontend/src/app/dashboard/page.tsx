@@ -91,6 +91,14 @@ export default function DashboardHub() {
     return Array.from(contagem, ([nome, valor]) => ({ nome, valor })).sort((a, b) => b.valor - a.valor)
   }, [pipeline])
 
+  const topClientes = useMemo<SerieItem[]>(() =>
+    (dashboard?.ranking_clientes ?? []).slice(0, 5).map((item) => ({ nome: item.nome, valor: item.quantidade })),
+  [dashboard])
+
+  const topImplementadoras = useMemo<SerieItem[]>(() =>
+    (dashboard?.ranking_implementadoras ?? []).slice(0, 5).map((item) => ({ nome: item.nome, valor: item.quantidade })),
+  [dashboard])
+
   const conversaoProposta = percentual(crm?.pedidos, crm?.propostas)
   const conversaoOportunidade = percentual(crm?.pedidos, crm?.oportunidades)
 
@@ -145,10 +153,10 @@ export default function DashboardHub() {
           </section>
 
           {!loading && dashboard && (dashboard.total_registros ?? 0) > 0 && (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <Ranking titulo="Onde vender: clientes com maior presença histórica" itens={dashboard.ranking_clientes ?? []} />
-              <Ranking titulo="Origem comercial: implementadoras mais presentes" itens={dashboard.ranking_implementadoras ?? []} />
-            </div>
+            <section className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              <GraficoBarras titulo="Top 5 clientes" subtitulo="Maiores presenças históricas; detalhes completos disponíveis em Clientes." itens={topClientes} />
+              <GraficoBarras titulo="Top 5 implementadoras" subtitulo="Maiores origens comerciais; detalhes completos disponíveis em Implementadoras." itens={topImplementadoras} />
+            </section>
           )}
         </div>
       </section>
@@ -179,7 +187,7 @@ function GraficoBarras({ titulo, subtitulo, itens }: { titulo: string; subtitulo
       <div className="mt-6 space-y-4">
         {itens.length === 0 ? <p className="text-gray-400">Nenhum dado disponível.</p> : itens.map((item) => (
           <div key={item.nome}>
-            <div className="mb-2 flex justify-between gap-4 text-sm"><span className="text-gray-300">{item.nome}</span><strong className="text-cyan-300">{item.valor}</strong></div>
+            <div className="mb-2 flex justify-between gap-4 text-sm"><span className="truncate text-gray-300" title={item.nome}>{item.nome}</span><strong className="shrink-0 text-cyan-300">{item.valor}</strong></div>
             <div className="h-3 overflow-hidden rounded-full bg-[#020817]"><div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.max((item.valor / maximo) * 100, item.valor > 0 ? 4 : 0)}%` }} /></div>
           </div>
         ))}
@@ -198,8 +206,4 @@ function Info({ titulo, valor }: { titulo: string; valor: string }) {
 
 function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) {
   return <div className="rounded-2xl bg-[#071226] border border-[#13203f] p-5"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl font-bold text-cyan-400 mt-2">{valor}</p></div>
-}
-
-function Ranking({ titulo, itens }: { titulo: string; itens: RankingItem[] }) {
-  return <section className="rounded-2xl bg-[#071226] border border-[#13203f] p-6"><h2 className="text-xl font-bold text-white">{titulo}</h2>{itens.length === 0 ? <p className="text-gray-400 mt-4">Nenhum dado disponível.</p> : <div className="mt-4 space-y-3">{itens.slice(0, 10).map((item) => <div key={item.nome} className="flex justify-between rounded-xl bg-[#091a33] p-4 text-gray-200"><span>{item.nome}</span><strong className="text-cyan-400">{item.quantidade}</strong></div>)}</div>}</section>
 }
