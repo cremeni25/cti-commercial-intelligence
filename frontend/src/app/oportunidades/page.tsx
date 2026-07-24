@@ -61,8 +61,12 @@ export default function OportunidadesPage() {
   }
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("novo") === "1") setMostrarFormulario(true)
-    void carregar()
+    queueMicrotask(() => {
+      if (new URLSearchParams(window.location.search).get("novo") === "1") {
+        setMostrarFormulario(true)
+      }
+      void carregar()
+    })
   }, [])
 
   async function criarOportunidade(event: FormEvent<HTMLFormElement>) {
