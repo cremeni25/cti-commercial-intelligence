@@ -28,6 +28,7 @@ export default function ModuloListaPage({
   const [erro, setErro] = useState("")
   const [detalhe, setDetalhe] = useState<ClienteDetalheComercial | null>(null)
   const [detalheLoading, setDetalheLoading] = useState(false)
+  const [clienteEmAbertura, setClienteEmAbertura] = useState<string | null>(null)
 
   useEffect(() => {
     let ativo = true
@@ -44,16 +45,26 @@ export default function ModuloListaPage({
     return () => { ativo = false }
   }, [carregar, queryString])
 
+  useEffect(() => {
+    if (!detalhe && !detalheLoading) return
+    const anterior = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => { document.body.style.overflow = anterior }
+  }, [detalhe, detalheLoading])
+
   const abrirCliente = async (nome: string) => {
-    if (!cadastroMestre) return
+    if (!cadastroMestre || detalheLoading) return
+    setClienteEmAbertura(nome)
     setDetalheLoading(true)
     setErro("")
     try {
-      setDetalhe(await getClienteDetalhe(nome, queryString))
+      const resultado = await getClienteDetalhe(nome, queryString)
+      setDetalhe(resultado)
     } catch {
-      setErro("Não foi possível abrir a visão comercial do cliente.")
+      setErro(`Não foi possível abrir a visão comercial de ${nome}.`)
     } finally {
       setDetalheLoading(false)
+      setClienteEmAbertura(null)
     }
   }
 
@@ -97,16 +108,22 @@ export default function ModuloListaPage({
               <div className="mt-6 overflow-x-auto">
                 <table className="w-full text-left">
                   <thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-3">Nome</th><th className="p-3">Registros</th>{cadastroMestre && <><th className="p-3">Chassis</th><th className="p-3">Placas</th><th className="p-3">Origem comercial</th></>}<th className="p-3">Valor</th><th className="p-3">Estados</th><th className="p-3">Linhas</th>{cadastroMestre && <th className="p-3">Ação</th>}</tr></thead>
-                  <tbody>{lista.map((item) => <tr key={item.nome} className="border-b border-[#13203f] text-gray-200"><td className="p-3 font-semibold">{item.nome}</td><td className="p-3">{item.quantidade_registros}</td>{cadastroMestre && <><td className="p-3">{item.quantidade_chassis ?? 0}</td><td className="p-3">{item.quantidade_placas ?? 0}</td><td className="p-3">{item.implementadoras?.join(", ") || "-"}</td></>}<td className="p-3">R$ {(item.valor_total ?? 0).toLocaleString("pt-BR")}</td><td className="p-3">{item.estados?.join(", ") || "-"}</td><td className="p-3">{item.linhas?.join(", ") || "-"}</td>{cadastroMestre && <td className="p-3"><button onClick={() => abrirCliente(item.nome)} className="rounded-lg border border-cyan-500 px-3 py-2 text-cyan-300 hover:bg-cyan-500/10">Abrir visão comercial</button></td>}</tr>)}</tbody>
+                  <tbody>{lista.map((item) => <tr key={item.nome} onDoubleClick={() => abrirCliente(item.nome)} className={`border-b border-[#13203f] text-gray-200 ${cadastroMestre ? "hover:bg-cyan-500/5" : ""}`}><td className="p-3 font-semibold">{item.nome}</td><td className="p-3">{item.quantidade_registros}</td>{cadastroMestre && <><td className="p-3">{item.quantidade_chassis ?? 0}</td><td className="p-3">{item.quantidade_placas ?? 0}</td><td className="p-3">{item.implementadoras?.join(", ") || "-"}</td></>}<td className="p-3">R$ {(item.valor_total ?? 0).toLocaleString("pt-BR")}</td><td className="p-3">{item.estados?.join(", ") || "-"}</td><td className="p-3">{item.linhas?.join(", ") || "-"}</td>{cadastroMestre && <td className="p-3"><button type="button" disabled={detalheLoading} onClick={() => abrirCliente(item.nome)} className="min-w-[170px] rounded-lg border border-cyan-500 px-3 py-2 text-cyan-300 hover:bg-cyan-500/10 disabled:cursor-wait disabled:opacity-60">{clienteEmAbertura === item.nome ? "Abrindo..." : "Abrir visão comercial"}</button></td>}</tr>)}</tbody>
                 </table>
               </div>
             )}
           </section>
-
-          {detalheLoading && <section className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6 text-gray-400">Carregando visão comercial...</section>}
-          {detalhe && <ClienteComercial detalhe={detalhe} fechar={() => setDetalhe(null)} />}
         </div>
       </section>
+
+      {(detalheLoading || detalhe) && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label="Visão comercial do cliente">
+          <div className="max-h-[92vh] w-full max-w-6xl overflow-y-auto rounded-2xl border border-cyan-700 bg-[#091a33] shadow-2xl">
+            {detalheLoading && <div className="p-10 text-center text-cyan-300">Carregando visão comercial...</div>}
+            {detalhe && <ClienteComercial detalhe={detalhe} fechar={() => setDetalhe(null)} />}
+          </div>
+        </div>
+      )}
     </main>
   )
 }
@@ -114,10 +131,10 @@ export default function ModuloListaPage({
 function ClienteComercial({ detalhe, fechar }: { detalhe: ClienteDetalheComercial; fechar: () => void }) {
   const { cliente, inteligencia, oportunidades, atividades } = detalhe
   return (
-    <section className="rounded-2xl bg-[#091a33] border border-cyan-700 p-6 space-y-6">
+    <section className="p-6 space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div><p className="text-cyan-300 text-sm">Visão comercial 360</p><h2 className="text-3xl font-bold text-white">{cliente.nome}</h2><p className="text-gray-400 mt-1">{cliente.municipios?.join(", ") || "Município não identificado"} • {cliente.estados?.join(", ") || "UF não identificada"}</p></div>
-        <button onClick={fechar} className="text-gray-400 hover:text-white">Fechar</button>
+        <button type="button" onClick={fechar} className="rounded-lg border border-[#28456f] px-4 py-2 text-gray-300 hover:border-cyan-500 hover:text-white">Fechar</button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Kpi titulo="Prioridade" valor={inteligencia.prioridade} />
