@@ -51,6 +51,13 @@ def _registro_viena(origem: str, autorizado: str) -> bool:
     return origem == "VIENA_SP" or autorizado == "VIENA"
 
 
+def _registro_brasil(origem: str, autorizado: str) -> bool:
+    # As planilhas Brasil e Viena são bases independentes. Registros Viena não
+    # podem ser somados ao contexto Brasil, mesmo quando compartilham clientes,
+    # chassis ou regiões com a base nacional.
+    return origem == "BRASIL" and autorizado != "VIENA"
+
+
 def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None) -> list[dict]:
     uf_normalizada = str(uf).strip().upper() if uf else None
     ddd_normalizado = normalizar_ddd(ddd)
@@ -61,7 +68,9 @@ def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: s
         autorizado = str(registro.get("autorizado") or registro.get("dealer") or "").strip().upper()
         registro_ddd = normalizar_ddd(registro.get("ddd") or registro.get("codigo_ddd"))
         pertence_viena = _registro_viena(origem, autorizado)
+        pertence_brasil = _registro_brasil(origem, autorizado)
 
+        if contexto == "brasil" and not pertence_brasil: continue
         if contexto == "viena-sp" and not pertence_viena: continue
         if contexto.startswith("uf-") and estado != contexto[3:].upper(): continue
         if contexto.startswith("ddd-"):
