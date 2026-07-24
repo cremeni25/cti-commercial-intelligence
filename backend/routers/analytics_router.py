@@ -53,6 +53,14 @@ def _filtros(segmento, periodo, inicio, fim, regiao, uf, dealer, implementadora,
     return {"segmento": segmento, "inicio": inicio, "fim": fim, "regiao": regiao, "uf": uf, "dealer": dealer, "implementadora": implementadora, "cliente": cliente, "linha": linha, "familia": familia, "produto": produto}
 
 
+def _periodo_linhas(periodo: str, inicio: date | None, fim: date | None):
+    if periodo == "TODO_HISTORICO" or (periodo == "PERSONALIZADO" and (not inicio or not fim)):
+        return "ULTIMOS_90_DIAS", None, None, "Últimos 90 dias comparados aos 90 dias anteriores"
+    inicio_efetivo, fim_efetivo = _datas(periodo, inicio, fim)
+    descricao = f"{inicio_efetivo.isoformat()} a {fim_efetivo.isoformat()} comparado ao período imediatamente anterior" if inicio_efetivo and fim_efetivo else "Período selecionado comparado ao período imediatamente anterior"
+    return periodo, inicio, fim, descricao
+
+
 @router.get("/analytics/context-options")
 def context_options():
     return opcoes_contexto(repository.buscar_cti_anfir())
@@ -72,6 +80,43 @@ def dashboard(
         "total_registros_filtrados": len(registros),
     }
     return payload
+
+
+@router.get("/analytics/product-lines")
+def product_lines(
+    contexto: str = Query("brasil", pattern=CONTEXT_PATTERN), periodo: str = "ULTIMOS_90_DIAS",
+    inicio: date | None = None, fim: date | None = None, uf: str | None = None, ddd: str | None = None,
+):
+    periodo_efetivo, inicio_efetivo, fim_efetivo, descricao = _periodo_linhas(periodo, inicio, fim)
+    base_territorial, _, _ = _registros(contexto, "TODO_HISTORICO", uf=uf, ddd=ddd)
+    linhas = []
+    nomes = {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}
+    for segmento in ("TR", "DT", "DD"):
+        filtros = _filtros(segmento, periodo_efetivo, inicio_efetivo, fim_efetivo, None, uf, None, None, None, None, None, None)
+        comparativo = _comparacao("PERIODO_ANTERIOR", filtros["inicio"], filtros["fim"], None, None, filtros)
+        resultado = consolidar_inteligencia(base_territorial, contexto, segmento, filtros, comparativo)
+        comparacao = resultado.get("kpis", {}).get("comparacoes", {}).get("volume", {})
+        linhas.append({
+            "codigo": segmento,
+            "nome": nomes[segmento],
+            "atual": comparacao.get("atual", resultado.get("kpis", {}).get("volume", 0)),
+            "anterior": comparacao.get("anterior", 0),
+            "variacao": comparacao.get("percentual", 0),
+            "direcao": comparacao.get("direcao", "estavel"),
+            "modelos": resultado.get("rankings", {}).get("produto", [])[:3],
+        })
+    return {
+        "metadata": {
+            "contexto": contexto,
+            "periodo_solicitado": periodo,
+            "periodo_efetivo": periodo_efetivo,
+            "inicio": _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[0].isoformat() if _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[0] else None,
+            "fim": _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[1].isoformat() if _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[1] else None,
+            "descricao": descricao,
+            "total_registros_territorio": len(base_territorial),
+        },
+        "linhas": linhas,
+    }
 
 
 @router.get("/analytics/intelligence")
