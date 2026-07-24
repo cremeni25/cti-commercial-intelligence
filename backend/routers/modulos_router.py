@@ -1,8 +1,10 @@
 from collections import Counter
-from datetime import date
+from datetime import date, datetime, timezone
+from urllib.parse import unquote
 
 from fastapi import APIRouter, HTTPException
 
+from core.supabase_client import supabase
 from repositories.cti_repository import repository
 from services.base_analytics import consolidar_implementadoras, valor_float
 from services.operational_filters import filtrar_registros, resolver_periodo
@@ -42,6 +44,42 @@ def _valor_texto(registro, *campos):
         if valor is not None and str(valor).strip():
             return str(valor).strip()
     return ""
+
+
+def _lista_segura(tabela):
+    try:
+        return supabase.table(tabela).select("*").execute().data or []
+    except Exception:
+        return []
+
+
+def _data_iso(valor):
+    if not valor:
+        return None
+    try:
+        return datetime.fromisoformat(str(valor).replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(str(valor)[:10])
+        except ValueError:
+            return None
+
+
+def _situacao_atividade(atividade):
+    status = str(atividade.get("status") or "PENDENTE").upper()
+    if status in {"CONCLUIDA", "CONCLUÍDA"}:
+        return "CONCLUIDA"
+    if status == "CANCELADA":
+        return "CANCELADA"
+    data_atividade = _data_iso(atividade.get("data"))
+    hoje = datetime.now(timezone.utc).date()
+    if not data_atividade:
+        return "SEM_DATA"
+    if data_atividade < hoje:
+        return "ATRASADA"
+    if data_atividade == hoje:
+        return "HOJE"
+    return "FUTURA"
 
 
 def _consolidar_empresas(contexto="brasil", periodo="TODO_HISTORICO", uf=None, ddd=None, inicio=None, fim=None):
@@ -90,8 +128,6 @@ def _consolidar_empresas(contexto="brasil", periodo="TODO_HISTORICO", uf=None, d
         if placa:
             item["placas"].add(placa)
         if implementadora:
-            # Origem comercial observada no registro da venda do implemento.
-            # Não representa propriedade nem vínculo permanente com o cliente.
             item["implementadoras"].add(implementadora)
         if equipamento:
             item["equipamentos"].add(equipamento)
@@ -122,8 +158,57 @@ def listar_empresas(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", u
 
 @router.get("/clientes")
 def listar_clientes(contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
-    """Cadastro mestre derivado dos registros reais já carregados no CTI."""
     return _consolidar_empresas(contexto, periodo, uf, ddd, inicio, fim)
+
+
+@router.get("/clientes/{nome_cliente}")
+def detalhe_comercial_cliente(nome_cliente: str, contexto: str = "brasil", periodo: str = "TODO_HISTORICO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None):
+    nome = unquote(nome_cliente).strip()
+    clientes = _consolidar_empresas(contexto, periodo, uf, ddd, inicio, fim)
+    cliente = next((item for item in clientes if item["nome"].casefold() == nome.casefold()), None)
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado")
+
+    oportunidades = [
+        item for item in _lista_segura("cti_oportunidades")
+        if str(item.get("cliente_id") or item.get("cliente") or item.get("nome_cliente") or "").casefold() == nome.casefold()
+    ]
+    ids_oportunidades = {item.get("id") for item in oportunidades if item.get("id")}
+    atividades = [
+        item for item in _lista_segura("cti_atividades")
+        if item.get("oportunidade_id") in ids_oportunidades
+        or str(item.get("cliente_id") or item.get("cliente") or "").casefold() == nome.casefold()
+    ]
+    for atividade in atividades:
+        atividade["situacao"] = _situacao_atividade(atividade)
+
+    abertas = [item for item in oportunidades if str(item.get("status") or "").upper() not in {"GANHO", "PERDIDO", "CANCELADO"}]
+    atrasadas = [item for item in atividades if item["situacao"] == "ATRASADA"]
+    futuras = [item for item in atividades if item["situacao"] in {"HOJE", "FUTURA"}]
+    futuras.sort(key=lambda item: (item.get("data") or "9999-12-31", item.get("horario") or "23:59"))
+
+    if atrasadas:
+        prioridade = "ALTA"
+        proxima_acao = atrasadas[0]
+    elif abertas:
+        prioridade = "MEDIA"
+        proxima_acao = futuras[0] if futuras else {"titulo": "Agendar próximo follow-up", "situacao": "SEM_DATA"}
+    else:
+        prioridade = "BAIXA"
+        proxima_acao = futuras[0] if futuras else None
+
+    return {
+        "cliente": cliente,
+        "inteligencia": {
+            "prioridade": prioridade,
+            "oportunidades_abertas": len(abertas),
+            "atividades_atrasadas": len(atrasadas),
+            "valor_pipeline": round(sum(valor_float(item.get("valor_estimado")) for item in abertas), 2),
+            "proxima_acao": proxima_acao,
+        },
+        "oportunidades": sorted(oportunidades, key=lambda item: item.get("updated_at") or item.get("created_at") or "", reverse=True),
+        "atividades": sorted(atividades, key=lambda item: item.get("data") or "9999-12-31"),
+    }
 
 
 @router.get("/transportadoras")
