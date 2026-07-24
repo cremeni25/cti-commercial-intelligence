@@ -19,19 +19,10 @@ type DashboardContextual = {
   ranking_clientes?: RankingItem[]
   metadata?: { total_registros_filtrados?: number }
 }
-
 type DashboardCRM = { oportunidades?: number; propostas?: number; pedidos?: number; atividades?: number }
 type AgendaResponse = { resumo?: { atrasadas?: number; hoje?: number; futuras?: number; sem_data?: number; concluidas?: number } }
 type PipelineCard = { etapa?: string; valor_estimado?: number; valor_ponderado?: number }
 type PipelineResponse = { cards?: PipelineCard[]; resumo?: { total_oportunidades?: number; valor_total?: number; valor_ponderado?: number } }
-type IntelligenceResponse = {
-  kpis?: {
-    volume?: number
-    comparacoes?: { volume?: { atual?: number; anterior?: number; percentual?: number; direcao?: string } }
-  }
-  rankings?: { produto?: RankingItem[] }
-}
-
 type SerieItem = { nome: string; valor: number }
 type LinhaProduto = {
   codigo: "TR" | "DT" | "DD"
@@ -42,6 +33,18 @@ type LinhaProduto = {
   direcao: string
   modelos: RankingItem[]
   disponivel: boolean
+}
+type ProductLinesResponse = {
+  metadata?: {
+    contexto?: string
+    periodo_solicitado?: string
+    periodo_efetivo?: string
+    inicio?: string | null
+    fim?: string | null
+    descricao?: string
+    total_registros_territorio?: number
+  }
+  linhas?: Omit<LinhaProduto, "disponivel">[]
 }
 
 const LINHAS = [
@@ -57,83 +60,63 @@ export default function DashboardHub() {
   const [agenda, setAgenda] = useState<AgendaResponse>({})
   const [pipeline, setPipeline] = useState<PipelineResponse>({})
   const [linhasProduto, setLinhasProduto] = useState<LinhaProduto[]>([])
+  const [referenciaLinhas, setReferenciaLinhas] = useState("")
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("")
   const [loading, setLoading] = useState(true)
   const [avisos, setAvisos] = useState<string[]>([])
 
   useEffect(() => {
     let ativo = true
-
     queueMicrotask(async () => {
       if (!ativo) return
       setLoading(true)
       setAvisos([])
+      setLinhasProduto([])
 
-      const consultasPrincipais = await Promise.all([
+      const consultas = await Promise.all([
         seguro<DashboardContextual>(getDashboardExecutivoContextual(queryString)),
         seguro<DashboardCRM>(buscarJson<DashboardCRM>(`${API_URL}/crm/dashboard`)),
         seguro<AgendaResponse>(buscarJson<AgendaResponse>(`${API_URL}/crm/agenda`)),
         seguro<PipelineResponse>(buscarJson<PipelineResponse>(`${API_URL}/crm/pipeline/quadro`)),
+        seguro<ProductLinesResponse>(buscarJson<ProductLinesResponse>(`${API_URL}/analytics/product-lines?${queryString}`)),
       ])
 
       if (!ativo) return
-
       const novosAvisos: string[] = []
-      const historico = consultasPrincipais[0]
-      const dadosCrm = consultasPrincipais[1]
-      const dadosAgenda = consultasPrincipais[2]
-      const dadosPipeline = consultasPrincipais[3]
+      const [historico, dadosCrm, dadosAgenda, dadosPipeline, dadosLinhas] = consultas
 
       if (historico) setDashboard(historico)
       else novosAvisos.push("Base histórica indisponível.")
-
       if (dadosCrm) setCrm(dadosCrm)
       else novosAvisos.push("Resumo do CRM indisponível.")
-
       if (dadosAgenda) setAgenda(dadosAgenda)
       else novosAvisos.push("Resumo da agenda indisponível.")
-
       if (dadosPipeline) setPipeline(dadosPipeline)
       else novosAvisos.push("Resumo do pipeline indisponível.")
 
-      const respostasLinhas = await Promise.all(
-        LINHAS.map((linha) =>
-          seguro<IntelligenceResponse>(
-            buscarJson<IntelligenceResponse>(
-              `${API_URL}/analytics/intelligence?${parametrosLinha(queryString, linha.codigo)}`
-            )
-          )
-        )
-      )
+      if (dadosLinhas?.linhas) {
+        setLinhasProduto(dadosLinhas.linhas.map((linha) => ({ ...linha, disponivel: true })))
+        const territorio = contextoAtual.label
+        const periodoUsado = dadosLinhas.metadata?.descricao || "Período não informado"
+        setReferenciaLinhas(`${territorio} — ${periodoUsado}`)
+      } else {
+        novosAvisos.push("Indicadores por linha indisponíveis.")
+        setLinhasProduto(LINHAS.map((linha) => ({ ...linha, atual: 0, anterior: 0, variacao: 0, direcao: "estavel", modelos: [], disponivel: false })))
+        setReferenciaLinhas(`${contextoAtual.label} — referência temporal indisponível`)
+      }
 
-      if (!ativo) return
-
-      const linhasNormalizadas = LINHAS.map((linha, index) => {
-        const resposta = respostasLinhas[index]
-        if (!resposta) novosAvisos.push(`Indicador ${linha.nome} indisponível.`)
-        return normalizarLinha(linha, resposta ?? undefined)
-      })
-
-      setLinhasProduto(linhasNormalizadas)
       setAvisos(novosAvisos)
       setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
       setLoading(false)
     })
-
     return () => { ativo = false }
-  }, [queryString])
+  }, [queryString, contextoAtual.label])
 
   const periodoExibido = periodo === "TODO_HISTORICO"
     ? "Todo o histórico disponível"
     : periodo === "PERSONALIZADO"
-      ? dataInicio && dataFim
-        ? `${dataInicio} até ${dataFim}`
-        : "Personalizado sem datas — análise de linhas usa últimos 90 dias"
+      ? dataInicio && dataFim ? `${dataInicio} até ${dataFim}` : "Personalizado sem datas — relógios usam últimos 90 dias"
       : periodo.replaceAll("_", " ").toLowerCase()
-
-  const referenciaRelogios = periodo === "TODO_HISTORICO" || (periodo === "PERSONALIZADO" && (!dataInicio || !dataFim))
-    ? "Últimos 90 dias comparados aos 90 dias anteriores"
-    : "Período selecionado comparado ao período imediatamente anterior"
 
   const funilCrm = useMemo<SerieItem[]>(() => [
     { nome: "Oportunidades", valor: crm?.oportunidades ?? 0 },
@@ -160,7 +143,6 @@ export default function DashboardHub() {
   const topClientes = useMemo<SerieItem[]>(() =>
     (dashboard?.ranking_clientes ?? []).slice(0, 5).map((item) => ({ nome: item.nome, valor: item.quantidade })),
   [dashboard])
-
   const topImplementadoras = useMemo<SerieItem[]>(() =>
     (dashboard?.ranking_implementadoras ?? []).slice(0, 5).map((item) => ({ nome: item.nome, valor: item.quantidade })),
   [dashboard])
@@ -189,11 +171,7 @@ export default function DashboardHub() {
             </div>
           </section>
 
-          {avisos.length > 0 && (
-            <div className="rounded-xl border border-amber-500/60 bg-amber-500/5 p-4 text-sm text-amber-200">
-              Carregamento parcial: {avisos.join(" ")}
-            </div>
-          )}
+          {avisos.length > 0 && <div className="rounded-xl border border-amber-500/60 bg-amber-500/5 p-4 text-sm text-amber-200">Carregamento parcial: {avisos.join(" ")}</div>}
 
           <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
             <Kpi titulo="Clientes históricos" valor={loading ? "..." : dashboard?.total_clientes ?? 0} />
@@ -207,12 +185,10 @@ export default function DashboardHub() {
           <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6">
             <div className="mb-6">
               <h2 className="text-2xl font-bold text-white">Desempenho por linha de produto</h2>
-              <p className="mt-1 text-sm text-gray-400">{referenciaRelogios}. O ponteiro resume crescimento, estabilidade ou retração do volume.</p>
+              <p className="mt-1 text-sm text-gray-400">{referenciaLinhas}. O ponteiro resume crescimento, estabilidade ou retração do volume.</p>
             </div>
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-              {loading
-                ? LINHAS.map((linha) => <div key={linha.codigo} className="h-72 animate-pulse rounded-2xl bg-[#020817]" />)
-                : linhasProduto.map((linha) => <RelogioComercial key={linha.codigo} linha={linha} />)}
+              {loading ? LINHAS.map((linha) => <div key={linha.codigo} className="h-72 animate-pulse rounded-2xl bg-[#020817]" />) : linhasProduto.map((linha) => <RelogioComercial key={linha.codigo} linha={linha} />)}
             </div>
           </section>
 
@@ -244,35 +220,6 @@ export default function DashboardHub() {
   )
 }
 
-function parametrosLinha(queryString: string, segmento: LinhaProduto["codigo"]) {
-  const params = new URLSearchParams(queryString)
-  const personalizadoIncompleto = params.get("periodo") === "PERSONALIZADO" && (!params.get("inicio") || !params.get("fim"))
-
-  if (params.get("periodo") === "TODO_HISTORICO" || personalizadoIncompleto) {
-    params.set("periodo", "ULTIMOS_90_DIAS")
-    params.delete("inicio")
-    params.delete("fim")
-  }
-
-  params.set("segmento", segmento)
-  params.set("comparacao", "PERIODO_ANTERIOR")
-  return params.toString()
-}
-
-function normalizarLinha(linha: typeof LINHAS[number], resposta?: IntelligenceResponse): LinhaProduto {
-  const comparacao = resposta?.kpis?.comparacoes?.volume
-  return {
-    codigo: linha.codigo,
-    nome: linha.nome,
-    atual: comparacao?.atual ?? resposta?.kpis?.volume ?? 0,
-    anterior: comparacao?.anterior ?? 0,
-    variacao: comparacao?.percentual ?? 0,
-    direcao: comparacao?.direcao ?? "estavel",
-    modelos: (resposta?.rankings?.produto ?? []).slice(0, 3),
-    disponivel: Boolean(resposta),
-  }
-}
-
 async function buscarJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" })
   if (!response.ok) throw new Error(`${response.status} ${url}`)
@@ -280,11 +227,7 @@ async function buscarJson<T>(url: string): Promise<T> {
 }
 
 async function seguro<T>(promessa: Promise<T>): Promise<T | null> {
-  try {
-    return await promessa
-  } catch {
-    return null
-  }
+  try { return await promessa } catch { return null }
 }
 
 function percentual(parte?: number, total?: number) {
@@ -292,72 +235,36 @@ function percentual(parte?: number, total?: number) {
   return Math.round((parte / total) * 100)
 }
 
-function moeda(valor?: number) {
-  return `R$ ${(valor ?? 0).toLocaleString("pt-BR")}`
-}
+function moeda(valor?: number) { return `R$ ${(valor ?? 0).toLocaleString("pt-BR")}` }
 
 function RelogioComercial({ linha }: { linha: LinhaProduto }) {
   const variacaoLimitada = Math.max(-50, Math.min(50, linha.variacao))
   const angulo = (variacaoLimitada / 50) * 90
   const status = !linha.disponivel ? "Indisponível" : linha.direcao === "alta" ? "Crescimento" : linha.direcao === "queda" ? "Retração" : "Estabilidade"
-
   return (
     <article className="rounded-2xl border border-[#13203f] bg-[#020817] p-5">
       <div className="flex items-start justify-between gap-4">
         <div><p className="text-sm font-semibold text-cyan-300">{linha.codigo}</p><h3 className="text-xl font-bold text-white">{linha.nome}</h3></div>
         <span className="rounded-full border border-[#20345f] px-3 py-1 text-xs text-gray-300">{status}</span>
       </div>
-
-      {!linha.disponivel ? (
-        <div className="flex h-56 items-center justify-center text-center text-sm text-gray-400">
-          Indicador temporariamente indisponível. Os demais blocos do Dashboard permanecem ativos.
+      {!linha.disponivel ? <div className="flex h-56 items-center justify-center text-center text-sm text-gray-400">Indicador temporariamente indisponível.</div> : <>
+        <div className="relative mx-auto mt-5 h-32 w-64 overflow-hidden">
+          <div className="absolute left-1/2 top-4 h-48 w-48 -translate-x-1/2 rounded-full border-[18px] border-[#13203f] border-b-transparent border-l-red-500/70 border-r-emerald-500/70" />
+          <div className="absolute bottom-3 left-1/2 h-2 w-24 origin-left rounded-full bg-cyan-300 transition-transform" style={{ transform: `rotate(${angulo - 90}deg)` }} />
+          <div className="absolute bottom-1 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border-4 border-cyan-300 bg-[#071226]" />
         </div>
-      ) : (
-        <>
-          <div className="relative mx-auto mt-5 h-32 w-64 overflow-hidden">
-            <div className="absolute left-1/2 top-4 h-48 w-48 -translate-x-1/2 rounded-full border-[18px] border-[#13203f] border-b-transparent border-l-red-500/70 border-r-emerald-500/70" />
-            <div className="absolute bottom-3 left-1/2 h-2 w-24 origin-left rounded-full bg-cyan-300 transition-transform" style={{ transform: `rotate(${angulo - 90}deg)` }} />
-            <div className="absolute bottom-1 left-1/2 h-5 w-5 -translate-x-1/2 rounded-full border-4 border-cyan-300 bg-[#071226]" />
-          </div>
-          <div className="text-center"><p className="text-4xl font-bold text-cyan-400">{linha.variacao > 0 ? "+" : ""}{linha.variacao.toLocaleString("pt-BR")}%</p><p className="mt-1 text-sm text-gray-400">{linha.atual} atuais · {linha.anterior} anteriores</p></div>
-          <div className="mt-5 border-t border-[#13203f] pt-4">
-            <p className="text-xs uppercase tracking-widest text-gray-500">Modelos mais presentes</p>
-            {linha.modelos.length === 0
-              ? <p className="mt-2 text-sm text-gray-400">Sem modelos no período.</p>
-              : <div className="mt-2 space-y-2">{linha.modelos.map((modelo) => <div key={modelo.nome} className="flex justify-between gap-3 text-sm"><span className="truncate text-gray-300" title={modelo.nome}>{modelo.nome}</span><strong className="text-cyan-300">{modelo.quantidade}</strong></div>)}</div>}
-          </div>
-        </>
-      )}
+        <div className="text-center"><p className="text-4xl font-bold text-cyan-400">{linha.variacao > 0 ? "+" : ""}{linha.variacao.toLocaleString("pt-BR")}%</p><p className="mt-1 text-sm text-gray-400">{linha.atual} atuais · {linha.anterior} anteriores</p></div>
+        <div className="mt-5 border-t border-[#13203f] pt-4"><p className="text-xs uppercase tracking-widest text-gray-500">Modelos mais presentes</p>{linha.modelos.length === 0 ? <p className="mt-2 text-sm text-gray-400">Sem modelos no período.</p> : <div className="mt-2 space-y-2">{linha.modelos.map((modelo) => <div key={modelo.nome} className="flex justify-between gap-3 text-sm"><span className="truncate text-gray-300" title={modelo.nome}>{modelo.nome}</span><strong className="text-cyan-300">{modelo.quantidade}</strong></div>)}</div>}</div>
+      </>}
     </article>
   )
 }
 
 function GraficoBarras({ titulo, subtitulo, itens }: { titulo: string; subtitulo: string; itens: SerieItem[] }) {
   const maximo = Math.max(...itens.map((item) => item.valor), 1)
-  return (
-    <section className="rounded-2xl bg-[#071226] border border-[#13203f] p-6">
-      <h2 className="text-xl font-bold text-white">{titulo}</h2>
-      <p className="mt-1 text-sm text-gray-400">{subtitulo}</p>
-      <div className="mt-6 space-y-4">
-        {itens.length === 0 ? <p className="text-gray-400">Nenhum dado disponível.</p> : itens.map((item) => (
-          <div key={item.nome}>
-            <div className="mb-2 flex justify-between gap-4 text-sm"><span className="truncate text-gray-300" title={item.nome}>{item.nome}</span><strong className="shrink-0 text-cyan-300">{item.valor}</strong></div>
-            <div className="h-3 overflow-hidden rounded-full bg-[#020817]"><div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.max((item.valor / maximo) * 100, item.valor > 0 ? 4 : 0)}%` }} /></div>
-          </div>
-        ))}
-      </div>
-    </section>
-  )
+  return <section className="rounded-2xl bg-[#071226] border border-[#13203f] p-6"><h2 className="text-xl font-bold text-white">{titulo}</h2><p className="mt-1 text-sm text-gray-400">{subtitulo}</p><div className="mt-6 space-y-4">{itens.length === 0 ? <p className="text-gray-400">Nenhum dado disponível.</p> : itens.map((item) => <div key={item.nome}><div className="mb-2 flex justify-between gap-4 text-sm"><span className="truncate text-gray-300" title={item.nome}>{item.nome}</span><strong className="shrink-0 text-cyan-300">{item.valor}</strong></div><div className="h-3 overflow-hidden rounded-full bg-[#020817]"><div className="h-full rounded-full bg-cyan-500" style={{ width: `${Math.max((item.valor / maximo) * 100, item.valor > 0 ? 4 : 0)}%` }} /></div></div>)}</div></section>
 }
 
-function IndicadorAnalitico({ titulo, valor, descricao }: { titulo: string; valor: string; descricao: string }) {
-  return <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6"><p className="text-gray-400 text-sm">{titulo}</p><p className="mt-2 text-4xl font-bold text-cyan-400">{valor}</p><p className="mt-3 text-sm text-gray-400">{descricao}</p></section>
-}
-
-function Info({ titulo, valor }: { titulo: string; valor: string }) {
-  return <div className="rounded-xl border border-[#13203f] bg-[#020817] p-4"><p className="text-cyan-300 font-semibold">{titulo}</p><p className="mt-2 text-gray-300">{valor}</p></div>
-}
-
-function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) {
-  return <div className="rounded-2xl bg-[#071226] border border-[#13203f] p-5"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl font-bold text-cyan-400 mt-2">{valor}</p></div>
-}
+function IndicadorAnalitico({ titulo, valor, descricao }: { titulo: string; valor: string; descricao: string }) { return <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6"><p className="text-gray-400 text-sm">{titulo}</p><p className="mt-2 text-4xl font-bold text-cyan-400">{valor}</p><p className="mt-3 text-sm text-gray-400">{descricao}</p></section> }
+function Info({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-xl border border-[#13203f] bg-[#020817] p-4"><p className="text-cyan-300 font-semibold">{titulo}</p><p className="mt-2 text-gray-300">{valor}</p></div> }
+function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) { return <div className="rounded-2xl bg-[#071226] border border-[#13203f] p-5"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl font-bold text-cyan-400 mt-2">{valor}</p></div> }
