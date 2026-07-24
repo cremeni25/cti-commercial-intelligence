@@ -37,11 +37,11 @@ type Prioridade = {
 
 const etapasEncerradas = new Set(["GANHO", "PERDIDO"])
 
-function diasSemMovimento(valor?: string) {
-  if (!valor) return 999
+function diasSemMovimento(valor: string | undefined, agoraMs: number) {
+  if (!valor || agoraMs <= 0) return 999
   const data = new Date(valor)
   if (Number.isNaN(data.getTime())) return 999
-  return Math.max(0, Math.floor((Date.now() - data.getTime()) / 86400000))
+  return Math.max(0, Math.floor((agoraMs - data.getTime()) / 86400000))
 }
 
 export default function DashboardHub() {
@@ -51,6 +51,7 @@ export default function DashboardHub() {
   const [agenda, setAgenda] = useState<AgendaResponse>({})
   const [pipeline, setPipeline] = useState<PipelineResponse>({})
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("")
+  const [agoraMs, setAgoraMs] = useState(0)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
 
@@ -77,11 +78,13 @@ export default function DashboardHub() {
       ])
         .then(([dadosHistoricos, dadosCrm, dadosAgenda, dadosPipeline]) => {
           if (!ativo) return
+          const referenciaTemporal = Date.now()
           setDashboard(dadosHistoricos)
           setCrm(dadosCrm)
           setAgenda(dadosAgenda)
           setPipeline(dadosPipeline)
-          setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
+          setAgoraMs(referenciaTemporal)
+          setUltimaAtualizacao(new Date(referenciaTemporal).toLocaleString("pt-BR"))
         })
         .catch(() => { if (ativo) setErro("Erro ao carregar a Central de Prioridades Comerciais.") })
         .finally(() => { if (ativo) setLoading(false) })
@@ -109,9 +112,9 @@ export default function DashboardHub() {
 
     cards.filter((card) => !etapasEncerradas.has(card.etapa || "")).forEach((card, index) => {
       const temAgenda = agendaItens.some((item) => item.oportunidade_id === card.id && ["ATRASADA", "HOJE", "FUTURA"].includes(item.situacao || ""))
-      const semMovimento = diasSemMovimento(card.ultima_movimentacao)
+      const semMovimento = diasSemMovimento(card.ultima_movimentacao, agoraMs)
       const fechamento = card.data_fechamento_prevista ? new Date(`${card.data_fechamento_prevista}T00:00:00`) : null
-      const fechamentoVencido = fechamento && !Number.isNaN(fechamento.getTime()) && fechamento.getTime() < Date.now()
+      const fechamentoVencido = Boolean(fechamento && agoraMs > 0 && !Number.isNaN(fechamento.getTime()) && fechamento.getTime() < agoraMs)
 
       if (!temAgenda) {
         itens.push({
@@ -142,7 +145,7 @@ export default function DashboardHub() {
 
     const peso = { ALTA: 0, MEDIA: 1, BAIXA: 2 }
     return itens.sort((a, b) => peso[a.nivel] - peso[b.nivel] || (b.valor ?? 0) - (a.valor ?? 0))
-  }, [agenda, pipeline])
+  }, [agenda, pipeline, agoraMs])
 
   const periodoExibido = periodo === "TODO_HISTORICO"
     ? "Todo o histórico disponível"
