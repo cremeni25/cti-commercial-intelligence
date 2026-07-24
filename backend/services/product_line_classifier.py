@@ -20,6 +20,23 @@ CAMPOS_LINHA = (
     "fabricante_equipamento",
 )
 
+# O campo persistido `linha` é a fonte primária. Estes aliases cobrem
+# nomenclaturas nacionais sem depender de busca parcial em texto livre.
+ALIASES_LINHA = {
+    "TR": {
+        "TR", "TRAILER", "CARRETA", "SEMI REBOQUE", "SEMIREBOQUE",
+        "SEMI-REBOQUE", "REBOQUE FRIGORIFICO", "CARRETA FRIGORIFICA",
+    },
+    "DT": {
+        "DT", "DIESEL TRUCK", "DIESEL-TRUCK", "TRUCK", "CAMINHAO",
+        "CAMINHAO PESADO", "CAMINHAO MEDIO", "UNIDADE DIESEL",
+    },
+    "DD": {
+        "DD", "DIRECT DRIVE", "DIRECT-DRIVE", "ACIONAMENTO DIRETO",
+        "ACOPLADO AO MOTOR", "VAN", "FURGAO", "UTILITARIO", "VUC",
+    },
+}
+
 TERMOS = {
     "DT": (
         "DIESEL TRUCK", "DIESEL-TRUCK", "SUPRA 750", "SUPRA 850", "SUPRA 1150",
@@ -47,11 +64,31 @@ def _codigo_isolado(texto: str, codigo: str) -> bool:
     return re.search(rf"(?:^|\s){re.escape(codigo)}(?:\s|$)", texto) is not None
 
 
+def _classificar_linha_persistida(registro: dict) -> str | None:
+    valor = normalizar_entidade(str(registro.get("linha") or "")).strip()
+    if not valor:
+        return None
+
+    for codigo, aliases in ALIASES_LINHA.items():
+        if valor in aliases:
+            return codigo
+
+    # Alguns arquivos armazenam código + descrição, por exemplo "TR - Trailer".
+    for codigo in CODIGOS:
+        if _codigo_isolado(valor.replace("-", " "), codigo):
+            return codigo
+
+    return None
+
+
 def classificar_linha(registro: dict) -> str | None:
+    codigo_persistido = _classificar_linha_persistida(registro)
+    if codigo_persistido:
+        return codigo_persistido
+
     texto = texto_linha(registro)
 
-    # Primeiro reconhece nomenclaturas e modelos completos, evitando que
-    # códigos curtos sejam encontrados dentro de palavras como TRUCK.
+    # Depois da fonte persistida, reconhece nomenclaturas e modelos completos.
     for codigo, termos in TERMOS.items():
         if any(normalizar_entidade(termo) in texto for termo in termos):
             return codigo
