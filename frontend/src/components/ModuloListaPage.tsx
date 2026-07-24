@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
@@ -135,5 +135,5 @@ function ClienteComercial({ detalhe, fechar }: { detalhe: ClienteDetalheComercia
   )
 }
 
-function Painel({ titulo, children }: { titulo: string; children: React.ReactNode }) { return <div className="rounded-xl bg-[#071028] border border-[#13203f] p-5 text-gray-300"><h3 className="text-lg font-bold text-white mb-3">{titulo}</h3>{children}</div> }
+function Painel({ titulo, children }: { titulo: string; children: ReactNode }) { return <div className="rounded-xl bg-[#071028] border border-[#13203f] p-5 text-gray-300"><h3 className="text-lg font-bold text-white mb-3">{titulo}</h3>{children}</div> }
 function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl text-cyan-400 font-bold mt-2">{valor}</p></div> }
