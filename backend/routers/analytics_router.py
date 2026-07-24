@@ -1,3 +1,4 @@
+from collections import Counter
 from datetime import date, timedelta
 from io import BytesIO, StringIO
 import csv
@@ -8,7 +9,8 @@ from fastapi.responses import StreamingResponse
 from repositories.cti_repository import repository
 from services.base_analytics import consolidar_dashboard
 from services.commercial_intelligence import consolidar_inteligencia, opcoes_filtros
-from services.operational_filters import filtrar_registros, opcoes_contexto
+from services.operational_filters import data_registro, filtrar_registros, opcoes_contexto
+from services.product_line_classifier import classificar_linha, modelo_linha
 
 router = APIRouter()
 CONTEXT_PATTERN = r"^(brasil|viena-sp|outros-dealers|uf-[a-z]{2}|ddd-\d{3})$"
@@ -61,6 +63,18 @@ def _periodo_linhas(periodo: str, inicio: date | None, fim: date | None):
     return periodo, inicio, fim, descricao
 
 
+def _janela_anterior(inicio: date, fim: date):
+    duracao = (fim - inicio).days + 1
+    return inicio - timedelta(days=duracao), inicio - timedelta(days=1)
+
+
+def _variacao(atual: int, anterior: int):
+    diferenca = atual - anterior
+    percentual = round(diferenca / anterior * 100, 2) if anterior else (100.0 if atual else 0.0)
+    direcao = "alta" if diferenca > 0 else "queda" if diferenca < 0 else "estavel"
+    return percentual, direcao
+
+
 @router.get("/analytics/context-options")
 def context_options():
     return opcoes_contexto(repository.buscar_cti_anfir())
@@ -87,33 +101,59 @@ def product_lines(
     contexto: str = Query("brasil", pattern=CONTEXT_PATTERN), periodo: str = "ULTIMOS_90_DIAS",
     inicio: date | None = None, fim: date | None = None, uf: str | None = None, ddd: str | None = None,
 ):
-    periodo_efetivo, inicio_efetivo, fim_efetivo, descricao = _periodo_linhas(periodo, inicio, fim)
+    periodo_efetivo, inicio_solicitado, fim_solicitado, descricao = _periodo_linhas(periodo, inicio, fim)
+    inicio_efetivo, fim_efetivo = _datas(periodo_efetivo, inicio_solicitado, fim_solicitado)
+    if not inicio_efetivo or not fim_efetivo:
+        inicio_efetivo, fim_efetivo = _datas("ULTIMOS_90_DIAS", None, None)
+    anterior_inicio, anterior_fim = _janela_anterior(inicio_efetivo, fim_efetivo)
+
     base_territorial, _, _ = _registros(contexto, "TODO_HISTORICO", uf=uf, ddd=ddd)
-    linhas = []
+    atuais = {codigo: [] for codigo in ("TR", "DT", "DD")}
+    anteriores = {codigo: [] for codigo in ("TR", "DT", "DD")}
+    desconhecidos = 0
+
+    for registro in base_territorial:
+        codigo = classificar_linha(registro)
+        if not codigo:
+            desconhecidos += 1
+            continue
+        data = data_registro(registro)
+        if not data:
+            continue
+        if inicio_efetivo <= data <= fim_efetivo:
+            atuais[codigo].append(registro)
+        elif anterior_inicio <= data <= anterior_fim:
+            anteriores[codigo].append(registro)
+
     nomes = {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}
-    for segmento in ("TR", "DT", "DD"):
-        filtros = _filtros(segmento, periodo_efetivo, inicio_efetivo, fim_efetivo, None, uf, None, None, None, None, None, None)
-        comparativo = _comparacao("PERIODO_ANTERIOR", filtros["inicio"], filtros["fim"], None, None, filtros)
-        resultado = consolidar_inteligencia(base_territorial, contexto, segmento, filtros, comparativo)
-        comparacao = resultado.get("kpis", {}).get("comparacoes", {}).get("volume", {})
+    linhas = []
+    for codigo in ("TR", "DT", "DD"):
+        atual = len(atuais[codigo])
+        anterior = len(anteriores[codigo])
+        percentual, direcao = _variacao(atual, anterior)
+        modelos = Counter(modelo_linha(registro) for registro in atuais[codigo])
         linhas.append({
-            "codigo": segmento,
-            "nome": nomes[segmento],
-            "atual": comparacao.get("atual", resultado.get("kpis", {}).get("volume", 0)),
-            "anterior": comparacao.get("anterior", 0),
-            "variacao": comparacao.get("percentual", 0),
-            "direcao": comparacao.get("direcao", "estavel"),
-            "modelos": resultado.get("rankings", {}).get("produto", [])[:3],
+            "codigo": codigo,
+            "nome": nomes[codigo],
+            "atual": atual,
+            "anterior": anterior,
+            "variacao": percentual,
+            "direcao": direcao,
+            "modelos": [{"nome": nome, "quantidade": quantidade} for nome, quantidade in modelos.most_common(3)],
         })
+
     return {
         "metadata": {
             "contexto": contexto,
             "periodo_solicitado": periodo,
             "periodo_efetivo": periodo_efetivo,
-            "inicio": _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[0].isoformat() if _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[0] else None,
-            "fim": _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[1].isoformat() if _datas(periodo_efetivo, inicio_efetivo, fim_efetivo)[1] else None,
+            "inicio": inicio_efetivo.isoformat(),
+            "fim": fim_efetivo.isoformat(),
+            "comparacao_inicio": anterior_inicio.isoformat(),
+            "comparacao_fim": anterior_fim.isoformat(),
             "descricao": descricao,
             "total_registros_territorio": len(base_territorial),
+            "registros_sem_linha_classificada": desconhecidos,
         },
         "linhas": linhas,
     }
