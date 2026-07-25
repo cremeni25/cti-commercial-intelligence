@@ -4,7 +4,7 @@ import re
 
 from core.entity_normalizer import normalizar_entidade
 
-CAMPOS_LINHA = (
+CAMPOS_EQUIPAMENTO = (
     "segmento",
     "produto",
     "linha",
@@ -12,49 +12,50 @@ CAMPOS_LINHA = (
     "familia",
     "categoria",
     "modelo",
+    "modelo_carrier",
     "modelo_equipamento",
     "equipamento",
     "tipo_equipamento",
-    "tipo_veiculo",
     "descricao",
     "fabricante_equipamento",
 )
 
-ALIASES_LINHA = {
+MODELOS_OFICIAIS = {
     "TR": {
-        "TR", "TRAILER", "CARRETA", "SEMI REBOQUE", "SEMIREBOQUE",
-        "SEMI-REBOQUE", "REBOQUE FRIGORIFICO", "CARRETA FRIGORIFICA",
+        "X4-7500": ("X4 7500", "X4-7500", "X47500"),
+        "X4-7700": ("X4 7700", "X4-7700", "X47700"),
+        "VECTOR HE19": ("VECTOR HE19", "HE19", "HE 19"),
     },
     "DT": {
-        "DT", "DIESEL TRUCK", "DIESEL-TRUCK", "TRUCK", "CAMINHAO",
-        "CAMINHAO PESADO", "CAMINHAO MEDIO", "UNIDADE DIESEL",
+        "SUPRA 750": ("SUPRA 750", "SUPRA750"),
+        "SUPRA 850": ("SUPRA 850", "SUPRA850"),
+        "SUPRA 1150": ("SUPRA 1150", "SUPRA1150"),
     },
     "DD": {
-        "DD", "DIRECT DRIVE", "DIRECT-DRIVE", "ACIONAMENTO DIRETO",
-        "ACOPLADO AO MOTOR", "VAN", "FURGAO", "UTILITARIO", "VUC",
+        "CM280": ("CM280", "CM 280", "CM-280"),
+        "CM400": ("CM400", "CM 400", "CM-400"),
+        "CM500": ("CM500", "CM 500", "CM-500"),
+        "CM500AE": ("CM500AE", "CM 500 AE", "CM-500-AE", "CM500 AE"),
+        "D6": ("D6", "D 6"),
+        "D6AE": ("D6AE", "D6 AE", "D 6 AE"),
+        "D7": ("D7", "D 7"),
+        "D7AE": ("D7AE", "D7 AE", "D 7 AE"),
+        "XARIOS 350": ("XARIOS 350", "XARIOS350"),
+        "XARIOS 600": ("XARIOS 600", "XARIOS600"),
     },
 }
 
-TERMOS = {
-    "DT": (
-        "DIESEL TRUCK", "DIESEL-TRUCK", "SUPRA 750", "SUPRA 850", "SUPRA 1150",
-        "SUPRA", "UNIDADE DIESEL",
-    ),
-    "DD": (
-        "DIRECT DRIVE", "DIRECT-DRIVE", "CITIMAX", "XARIOS", "D6", "D7",
-        "ACOPLADO AO MOTOR", "ACIONAMENTO DIRETO",
-    ),
-    "TR": (
-        "TRAILER", "SEMI REBOQUE", "SEMIREBOQUE", "SEMI-REBOQUE",
-        "REBOQUE FRIGORIFICO", "CARRETA FRIGORIFICA", "VECTOR", "X4 7500", "X4 7700",
-    ),
+ALIASES_LINHA = {
+    "TR": {"TR", "TRAILER", "LINHA TRAILER"},
+    "DT": {"DT", "DIESEL TRUCK", "DIESEL-TRUCK", "LINHA DIESEL TRUCK", "UNIDADE DIESEL"},
+    "DD": {"DD", "DIRECT DRIVE", "DIRECT-DRIVE", "ACIONAMENTO DIRETO", "ACOPLADO AO MOTOR"},
 }
 
 CODIGOS = ("DT", "DD", "TR")
 
 
-def texto_linha(registro: dict) -> str:
-    partes = [str(registro.get(campo) or "") for campo in CAMPOS_LINHA]
+def _texto_equipamento(registro: dict) -> str:
+    partes = [str(registro.get(campo) or "") for campo in CAMPOS_EQUIPAMENTO]
     return normalizar_entidade(" ".join(partes))
 
 
@@ -62,47 +63,55 @@ def _codigo_isolado(texto: str, codigo: str) -> bool:
     return re.search(rf"(?:^|\s){re.escape(codigo)}(?:\s|$)", texto) is not None
 
 
-def _classificar_valor_exato(valor_bruto) -> str | None:
-    valor = normalizar_entidade(str(valor_bruto or "")).strip()
-    if not valor:
+def _contem_alias(texto: str, alias: str) -> bool:
+    alias_normalizado = normalizar_entidade(alias)
+    return re.search(rf"(?:^|\s){re.escape(alias_normalizado)}(?:\s|$)", texto) is not None
+
+
+def _aliases_modelos_ordenados() -> list[tuple[int, str, str, str]]:
+    candidatos: list[tuple[int, str, str, str]] = []
+    for linha, modelos in MODELOS_OFICIAIS.items():
+        for canonico, aliases in modelos.items():
+            for alias in aliases:
+                alias_normalizado = normalizar_entidade(alias)
+                candidatos.append((len(alias_normalizado), linha, canonico, alias))
+    return sorted(candidatos, key=lambda item: item[0], reverse=True)
+
+
+ALIASES_MODELOS_ORDENADOS = _aliases_modelos_ordenados()
+
+
+def modelo_oficial(registro: dict) -> tuple[str, str] | None:
+    """Retorna (linha, modelo canônico) apenas quando há evidência de equipamento."""
+    texto = _texto_equipamento(registro)
+    if not texto:
         return None
-    for codigo, aliases in ALIASES_LINHA.items():
-        if valor in aliases:
-            return codigo
-    for codigo in CODIGOS:
-        if _codigo_isolado(valor.replace("-", " "), codigo):
-            return codigo
+    # Modelos com sufixos ou variantes específicas devem ser avaliados antes dos
+    # modelos-base. Ex.: D6AE antes de D6, D7AE antes de D7 e CM500AE antes de CM500.
+    for _, linha, canonico, alias in ALIASES_MODELOS_ORDENADOS:
+        if _contem_alias(texto, alias):
+            return linha, canonico
     return None
 
 
-def _classificar_campos_estruturados(registro: dict) -> str | None:
-    # A base nacional usa frequentemente tipo_veiculo enquanto a Viena usa linha.
-    # Todos os campos estruturados devem aceitar a mesma taxonomia controlada.
-    for campo in CAMPOS_LINHA:
-        codigo = _classificar_valor_exato(registro.get(campo))
-        if codigo:
-            return codigo
+def _classificar_linha_explicita(registro: dict) -> str | None:
+    for campo in ("linha", "linha_produto", "familia", "categoria", "segmento"):
+        valor = normalizar_entidade(str(registro.get(campo) or "")).strip()
+        if not valor:
+            continue
+        for codigo, aliases in ALIASES_LINHA.items():
+            if valor in aliases or _codigo_isolado(valor.replace("-", " "), codigo):
+                return codigo
     return None
 
 
 def classificar_linha(registro: dict) -> str | None:
-    codigo_estruturado = _classificar_campos_estruturados(registro)
-    if codigo_estruturado:
-        return codigo_estruturado
-
-    texto = texto_linha(registro)
-    for codigo, termos in TERMOS.items():
-        if any(normalizar_entidade(termo) in texto for termo in termos):
-            return codigo
-    for codigo in CODIGOS:
-        if _codigo_isolado(texto, codigo):
-            return codigo
-    return None
+    modelo = modelo_oficial(registro)
+    if modelo:
+        return modelo[0]
+    return _classificar_linha_explicita(registro)
 
 
 def modelo_linha(registro: dict) -> str:
-    for campo in ("modelo_equipamento", "modelo", "produto", "linha", "equipamento", "tipo_equipamento", "tipo_veiculo"):
-        valor = registro.get(campo)
-        if valor not in (None, ""):
-            return str(valor).strip()
-    return "NÃO INFORMADO"
+    modelo = modelo_oficial(registro)
+    return modelo[1] if modelo else "NÃO INFORMADO"
