@@ -8,16 +8,17 @@ REGISTROS = [
     {"origem_base": "VIENA_SP", "autorizado": "VIENA", "estado": "SP", "ddd": "011", "data_venda": "2026-02-10", "cliente": "VIENA 11", "chassi": "SP-1"},
     {"origem_base": "VIENA_SP", "autorizado": "VIENA", "estado": "SP", "ddd": "013", "data_venda": "2025-02-10", "cliente": "VIENA 13", "chassi": "SP-2"},
     {"origem_base": "BRASIL", "estado": "SP", "ddd": "011", "data_venda": "2026-02-10", "cliente": "OUTRO SP", "chassi": "SP-3"},
-    # Mesmo evento em duas origens: deve contar apenas uma vez no Brasil e em SP.
     {"origem_base": "BRASIL", "estado": "SP", "ddd": "011", "data_venda": "2026-03-10", "cliente": "DUP BR", "chassi": "DUP-1"},
     {"origem_base": "VIENA_SP", "autorizado": "VIENA", "estado": "SP", "ddd": "011", "data_venda": "2026-03-10", "cliente": "DUP VIENA", "chassi": "DUP-1"},
 ]
 
 
-def test_contexto_brasil_retorna_visao_total_deduplicada():
+def test_contexto_brasil_retorna_soma_total_de_todas_as_origens():
     resultado = filtrar_registros(REGISTROS, contexto="brasil")
-    assert len(resultado) == 5
-    assert {item["chassi"] for item in resultado} == {"RJ-1", "SP-1", "SP-2", "SP-3", "DUP-1"}
+    assert len(resultado) == 6
+    assert {item["cliente"] for item in resultado} == {
+        "RJ", "VIENA 11", "VIENA 13", "OUTRO SP", "DUP BR", "DUP VIENA"
+    }
 
 
 def test_contexto_viena_retorna_apenas_registros_do_autorizado():
@@ -28,8 +29,10 @@ def test_contexto_viena_retorna_apenas_registros_do_autorizado():
 
 def test_contexto_uf_consolida_todas_as_origens_da_unidade():
     resultado = filtrar_registros(REGISTROS, contexto="uf-sp")
-    assert len(resultado) == 4
-    assert {item["chassi"] for item in resultado} == {"SP-1", "SP-2", "SP-3", "DUP-1"}
+    assert len(resultado) == 5
+    assert {item["cliente"] for item in resultado} == {
+        "VIENA 11", "VIENA 13", "OUTRO SP", "DUP BR", "DUP VIENA"
+    }
 
 
 def test_contexto_uf_rj_retorna_apenas_rj():
