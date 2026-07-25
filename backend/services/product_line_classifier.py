@@ -68,15 +68,29 @@ def _contem_alias(texto: str, alias: str) -> bool:
     return re.search(rf"(?:^|\s){re.escape(alias_normalizado)}(?:\s|$)", texto) is not None
 
 
+def _aliases_modelos_ordenados() -> list[tuple[int, str, str, str]]:
+    candidatos: list[tuple[int, str, str, str]] = []
+    for linha, modelos in MODELOS_OFICIAIS.items():
+        for canonico, aliases in modelos.items():
+            for alias in aliases:
+                alias_normalizado = normalizar_entidade(alias)
+                candidatos.append((len(alias_normalizado), linha, canonico, alias))
+    return sorted(candidatos, key=lambda item: item[0], reverse=True)
+
+
+ALIASES_MODELOS_ORDENADOS = _aliases_modelos_ordenados()
+
+
 def modelo_oficial(registro: dict) -> tuple[str, str] | None:
     """Retorna (linha, modelo canônico) apenas quando há evidência de equipamento."""
     texto = _texto_equipamento(registro)
     if not texto:
         return None
-    for linha, modelos in MODELOS_OFICIAIS.items():
-        for canonico, aliases in modelos.items():
-            if any(_contem_alias(texto, alias) for alias in aliases):
-                return linha, canonico
+    # Modelos com sufixos ou variantes específicas devem ser avaliados antes dos
+    # modelos-base. Ex.: D6AE antes de D6, D7AE antes de D7 e CM500AE antes de CM500.
+    for _, linha, canonico, alias in ALIASES_MODELOS_ORDENADOS:
+        if _contem_alias(texto, alias):
+            return linha, canonico
     return None
 
 
