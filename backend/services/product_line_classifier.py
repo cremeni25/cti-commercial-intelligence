@@ -20,8 +20,6 @@ CAMPOS_LINHA = (
     "fabricante_equipamento",
 )
 
-# O campo persistido `linha` é a fonte primária. Estes aliases cobrem
-# nomenclaturas nacionais sem depender de busca parcial em texto livre.
 ALIASES_LINHA = {
     "TR": {
         "TR", "TRAILER", "CARRETA", "SEMI REBOQUE", "SEMIREBOQUE",
@@ -64,44 +62,46 @@ def _codigo_isolado(texto: str, codigo: str) -> bool:
     return re.search(rf"(?:^|\s){re.escape(codigo)}(?:\s|$)", texto) is not None
 
 
-def _classificar_linha_persistida(registro: dict) -> str | None:
-    valor = normalizar_entidade(str(registro.get("linha") or "")).strip()
+def _classificar_valor_exato(valor_bruto) -> str | None:
+    valor = normalizar_entidade(str(valor_bruto or "")).strip()
     if not valor:
         return None
-
     for codigo, aliases in ALIASES_LINHA.items():
         if valor in aliases:
             return codigo
-
-    # Alguns arquivos armazenam código + descrição, por exemplo "TR - Trailer".
     for codigo in CODIGOS:
         if _codigo_isolado(valor.replace("-", " "), codigo):
             return codigo
+    return None
 
+
+def _classificar_campos_estruturados(registro: dict) -> str | None:
+    # A base nacional usa frequentemente tipo_veiculo enquanto a Viena usa linha.
+    # Todos os campos estruturados devem aceitar a mesma taxonomia controlada.
+    for campo in CAMPOS_LINHA:
+        codigo = _classificar_valor_exato(registro.get(campo))
+        if codigo:
+            return codigo
     return None
 
 
 def classificar_linha(registro: dict) -> str | None:
-    codigo_persistido = _classificar_linha_persistida(registro)
-    if codigo_persistido:
-        return codigo_persistido
+    codigo_estruturado = _classificar_campos_estruturados(registro)
+    if codigo_estruturado:
+        return codigo_estruturado
 
     texto = texto_linha(registro)
-
-    # Depois da fonte persistida, reconhece nomenclaturas e modelos completos.
     for codigo, termos in TERMOS.items():
         if any(normalizar_entidade(termo) in texto for termo in termos):
             return codigo
-
     for codigo in CODIGOS:
         if _codigo_isolado(texto, codigo):
             return codigo
-
     return None
 
 
 def modelo_linha(registro: dict) -> str:
-    for campo in ("modelo_equipamento", "modelo", "produto", "linha", "equipamento", "tipo_equipamento"):
+    for campo in ("modelo_equipamento", "modelo", "produto", "linha", "equipamento", "tipo_equipamento", "tipo_veiculo"):
         valor = registro.get(campo)
         if valor not in (None, ""):
             return str(valor).strip()
