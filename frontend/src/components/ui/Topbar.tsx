@@ -24,6 +24,14 @@ const paginas = {
   "/configuracoes": { titulo: "Configurações", descricao: "Configurações administrativas do CTI" },
 };
 
+const PERIODOS: Array<{ value: PeriodPreset; label: string }> = [
+  { value: "TODO_HISTORICO", label: "Todo o histórico" },
+  { value: "ULTIMOS_30_DIAS", label: "Últimos 30 dias" },
+  { value: "ULTIMOS_90_DIAS", label: "Últimos 90 dias" },
+  { value: "ANO_ATUAL", label: "Ano atual" },
+  { value: "PERSONALIZADO", label: "Personalizado" },
+];
+
 export default function Topbar() {
   const pathname = usePathname();
   const { contexto, setContexto, contextoAtual, periodo, setPeriodo, dataInicio, setDataInicio, dataFim, setDataFim } = useOperationalContext();
@@ -42,8 +50,8 @@ export default function Topbar() {
         </label>
         <label className="flex flex-col gap-1 bg-[#0b1730] border border-[#13203f] rounded-xl px-3 py-2 text-xs text-gray-400">
           Período
-          <select value={periodo} onChange={(e) => setPeriodo(e.target.value as PeriodPreset)} className="bg-transparent text-sm text-white outline-none">
-            <option value="TODO_HISTORICO">Todo o histórico</option><option value="ULTIMOS_30_DIAS">Últimos 30 dias</option><option value="ULTIMOS_90_DIAS">Últimos 90 dias</option><option value="ANO_ATUAL">Ano atual</option><option value="PERSONALIZADO">Personalizado</option>
+          <select value={periodo} onChange={(e) => setPeriodo(e.target.value as PeriodPreset)} className="bg-[#071028] text-sm text-white outline-none" aria-label="Período global">
+            {PERIODOS.map((item) => <option key={item.value} value={item.value} className="bg-[#071028] text-white">{item.label}</option>)}
           </select>
         </label>
         {periodo === "PERSONALIZADO" && <><label className="flex flex-col gap-1 text-xs text-gray-400">Início<input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="rounded-lg border border-[#13203f] bg-[#0b1730] px-2 py-2 text-white" /></label><label className="flex flex-col gap-1 text-xs text-gray-400">Fim<input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="rounded-lg border border-[#13203f] bg-[#0b1730] px-2 py-2 text-white" /></label></>}
