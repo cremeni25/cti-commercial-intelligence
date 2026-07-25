@@ -15,10 +15,6 @@ def normalizar_ddd(valor) -> str | None:
     return digitos[-3:].zfill(3)
 
 
-def _normalizar_identificador(valor) -> str:
-    return "".join(c for c in str(valor or "").upper() if c.isalnum())
-
-
 def resolver_periodo(periodo: str = "TODO_HISTORICO", inicio: date | None = None, fim: date | None = None):
     hoje = date.today()
     if periodo == "TODO_HISTORICO": return None, None
@@ -55,42 +51,6 @@ def _registro_viena(origem: str, autorizado: str) -> bool:
     return origem == "VIENA_SP" or autorizado == "VIENA"
 
 
-def _chave_consolidacao(registro: dict) -> tuple:
-    """Identifica o mesmo evento comercial entre fontes sem usar origem_base."""
-    chassi = _normalizar_identificador(registro.get("chassi"))
-    placa = _normalizar_identificador(registro.get("placa"))
-    data = data_registro(registro)
-    if chassi:
-        return ("CHASSI", chassi, data)
-    if placa:
-        return ("PLACA", placa, data)
-    return (
-        "FALLBACK",
-        str(registro.get("cliente") or registro.get("empresa") or "").strip().upper(),
-        data,
-        str(registro.get("estado") or registro.get("uf") or "").strip().upper(),
-        str(registro.get("linha") or "").strip().upper(),
-        str(registro.get("modelo") or "").strip().upper(),
-    )
-
-
-def _deduplicar(registros: list[dict]) -> list[dict]:
-    consolidados: dict[tuple, dict] = {}
-    for registro in registros:
-        chave = _chave_consolidacao(registro)
-        existente = consolidados.get(chave)
-        # Quando o mesmo evento existe em mais de uma origem, preserva o registro
-        # mais completo, sem somá-lo duas vezes no Brasil ou na UF.
-        if existente is None:
-            consolidados[chave] = registro
-            continue
-        preenchidos_existente = sum(valor not in (None, "") for valor in existente.values())
-        preenchidos_novo = sum(valor not in (None, "") for valor in registro.values())
-        if preenchidos_novo > preenchidos_existente:
-            consolidados[chave] = registro
-    return list(consolidados.values())
-
-
 def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None) -> list[dict]:
     uf_normalizada = str(uf).strip().upper() if uf else None
     ddd_normalizado = normalizar_ddd(ddd)
@@ -117,7 +77,7 @@ def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: s
         if fim and (not data or data > fim): continue
         resultado.append(registro)
 
-    return _deduplicar(resultado)
+    return resultado
 
 
 def opcoes_contexto(registros: Iterable[dict]) -> dict:
