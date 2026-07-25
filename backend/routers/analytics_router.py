@@ -110,20 +110,39 @@ def product_lines(
     base_territorial, _, _ = _registros(contexto, "TODO_HISTORICO", uf=uf, ddd=ddd)
     atuais = {codigo: [] for codigo in ("TR", "DT", "DD")}
     anteriores = {codigo: [] for codigo in ("TR", "DT", "DD")}
-    desconhecidos = 0
+    total_periodo = 0
+    classificados_periodo = 0
+    sem_linha_periodo = 0
 
     for registro in base_territorial:
-        codigo = classificar_linha(registro)
-        if not codigo:
-            desconhecidos += 1
-            continue
         data = data_registro(registro)
         if not data:
             continue
-        if inicio_efetivo <= data <= fim_efetivo:
+        em_periodo_atual = inicio_efetivo <= data <= fim_efetivo
+        em_periodo_anterior = anterior_inicio <= data <= anterior_fim
+        if not em_periodo_atual and not em_periodo_anterior:
+            continue
+
+        if em_periodo_atual:
+            total_periodo += 1
+
+        codigo = classificar_linha(registro)
+        if not codigo:
+            if em_periodo_atual:
+                sem_linha_periodo += 1
+            continue
+
+        if em_periodo_atual:
+            classificados_periodo += 1
             atuais[codigo].append(registro)
-        elif anterior_inicio <= data <= anterior_fim:
+        elif em_periodo_anterior:
             anteriores[codigo].append(registro)
+
+    cobertura = round(classificados_periodo / total_periodo * 100, 1) if total_periodo else 0.0
+    descricao_cobertura = (
+        f"{descricao}. Base territorial no período: {total_periodo} registros; "
+        f"{classificados_periodo} classificados em TR, DT ou DD ({cobertura}% de cobertura)"
+    )
 
     nomes = {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}
     linhas = []
@@ -156,9 +175,12 @@ def product_lines(
             "fim": fim_efetivo.isoformat(),
             "comparacao_inicio": anterior_inicio.isoformat(),
             "comparacao_fim": anterior_fim.isoformat(),
-            "descricao": descricao,
+            "descricao": descricao_cobertura,
             "total_registros_territorio": len(base_territorial),
-            "registros_sem_linha_classificada": desconhecidos,
+            "total_registros_periodo": total_periodo,
+            "registros_classificados_periodo": classificados_periodo,
+            "registros_sem_linha_classificada": sem_linha_periodo,
+            "cobertura_classificacao_percentual": cobertura,
         },
         "linhas": linhas,
     }
