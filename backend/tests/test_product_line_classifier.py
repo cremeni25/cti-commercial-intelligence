@@ -11,6 +11,12 @@ def test_classifica_linhas_por_modelos_e_campos_alternativos():
 
 def test_classifica_linhas_por_nomenclatura_veicular_nacional():
     assert classificar_linha({"tipo_veiculo": "Semi-reboque frigorífico"}) == "TR"
+    assert classificar_linha({"tipo_veiculo": "Carreta"}) == "TR"
+    assert classificar_linha({"tipo_veiculo": "Caminhão"}) == "DT"
+    assert classificar_linha({"tipo_veiculo": "Truck"}) == "DT"
+    assert classificar_linha({"tipo_veiculo": "Van"}) == "DD"
+    assert classificar_linha({"tipo_veiculo": "Furgão"}) == "DD"
+    assert classificar_linha({"tipo_veiculo": "VUC"}) == "DD"
     assert classificar_linha({"linha_produto": "Unidade Diesel Truck"}) == "DT"
     assert classificar_linha({"familia": "Acoplado ao motor"}) == "DD"
 
