@@ -131,7 +131,12 @@ def product_lines(
         atual = len(atuais[codigo])
         anterior = len(anteriores[codigo])
         percentual, direcao = _variacao(atual, anterior)
-        modelos = Counter(modelo_linha(registro) for registro in atuais[codigo])
+        modelos_identificados = [
+            modelo
+            for registro in atuais[codigo]
+            if (modelo := modelo_linha(registro)) != "NÃO INFORMADO"
+        ]
+        modelos = Counter(modelos_identificados)
         linhas.append({
             "codigo": codigo,
             "nome": nomes[codigo],
