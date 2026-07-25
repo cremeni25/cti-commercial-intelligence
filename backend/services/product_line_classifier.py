@@ -4,7 +4,10 @@ import re
 
 from core.entity_normalizer import normalizar_entidade
 
-CAMPOS_LINHA = (
+# Somente campos que descrevem a linha, família, modelo ou equipamento frigorífico.
+# `tipo_veiculo` não participa da classificação: caminhão, van, furgão, VUC,
+# carreta e semirreboque descrevem o veículo, não determinam TR, DT ou DD.
+CAMPOS_EQUIPAMENTO = (
     "segmento",
     "produto",
     "linha",
@@ -15,23 +18,22 @@ CAMPOS_LINHA = (
     "modelo_equipamento",
     "equipamento",
     "tipo_equipamento",
-    "tipo_veiculo",
     "descricao",
     "fabricante_equipamento",
+    "modelo_carrier",
+    "modelo_concorrencia",
 )
 
 ALIASES_LINHA = {
     "TR": {
-        "TR", "TRAILER", "CARRETA", "SEMI REBOQUE", "SEMIREBOQUE",
-        "SEMI-REBOQUE", "REBOQUE FRIGORIFICO", "CARRETA FRIGORIFICA",
+        "TR", "TRAILER", "LINHA TRAILER", "EQUIPAMENTO TRAILER",
     },
     "DT": {
-        "DT", "DIESEL TRUCK", "DIESEL-TRUCK", "TRUCK", "CAMINHAO",
-        "CAMINHAO PESADO", "CAMINHAO MEDIO", "UNIDADE DIESEL",
+        "DT", "DIESEL TRUCK", "DIESEL-TRUCK", "UNIDADE DIESEL",
     },
     "DD": {
         "DD", "DIRECT DRIVE", "DIRECT-DRIVE", "ACIONAMENTO DIRETO",
-        "ACOPLADO AO MOTOR", "VAN", "FURGAO", "UTILITARIO", "VUC",
+        "ACOPLADO AO MOTOR",
     },
 }
 
@@ -41,12 +43,12 @@ TERMOS = {
         "SUPRA", "UNIDADE DIESEL",
     ),
     "DD": (
-        "DIRECT DRIVE", "DIRECT-DRIVE", "CITIMAX", "XARIOS", "D6", "D7",
-        "ACOPLADO AO MOTOR", "ACIONAMENTO DIRETO",
+        "DIRECT DRIVE", "DIRECT-DRIVE", "CITIMAX", "XARIOS", "CM 280", "CM 400",
+        "CM 500", "CM 600", "D6", "D7", "ACOPLADO AO MOTOR", "ACIONAMENTO DIRETO",
     ),
     "TR": (
-        "TRAILER", "SEMI REBOQUE", "SEMIREBOQUE", "SEMI-REBOQUE",
-        "REBOQUE FRIGORIFICO", "CARRETA FRIGORIFICA", "VECTOR", "X4 7500", "X4 7700",
+        "LINHA TRAILER", "EQUIPAMENTO TRAILER", "VECTOR", "X4 7500", "X4 7700",
+        "X4-7500", "X4-7700", "HE19",
     ),
 }
 
@@ -54,7 +56,7 @@ CODIGOS = ("DT", "DD", "TR")
 
 
 def texto_linha(registro: dict) -> str:
-    partes = [str(registro.get(campo) or "") for campo in CAMPOS_LINHA]
+    partes = [str(registro.get(campo) or "") for campo in CAMPOS_EQUIPAMENTO]
     return normalizar_entidade(" ".join(partes))
 
 
@@ -76,9 +78,7 @@ def _classificar_valor_exato(valor_bruto) -> str | None:
 
 
 def _classificar_campos_estruturados(registro: dict) -> str | None:
-    # A base nacional usa frequentemente tipo_veiculo enquanto a Viena usa linha.
-    # Todos os campos estruturados devem aceitar a mesma taxonomia controlada.
-    for campo in CAMPOS_LINHA:
+    for campo in CAMPOS_EQUIPAMENTO:
         codigo = _classificar_valor_exato(registro.get(campo))
         if codigo:
             return codigo
@@ -101,7 +101,10 @@ def classificar_linha(registro: dict) -> str | None:
 
 
 def modelo_linha(registro: dict) -> str:
-    for campo in ("modelo_equipamento", "modelo", "produto", "linha", "equipamento", "tipo_equipamento", "tipo_veiculo"):
+    for campo in (
+        "modelo_equipamento", "modelo_carrier", "modelo", "produto", "linha",
+        "equipamento", "tipo_equipamento",
+    ):
         valor = registro.get(campo)
         if valor not in (None, ""):
             return str(valor).strip()
