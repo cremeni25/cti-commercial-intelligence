@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import unicodedata
 from functools import lru_cache
 from typing import Any
 
@@ -16,7 +17,9 @@ TERMOS_GENERICOS_BLOQUEADOS = {
 
 
 def normalizar_alias(valor: str) -> str:
-    texto = re.sub(r"[^A-Za-z0-9]+", " ", str(valor or "").strip()).upper()
+    texto = unicodedata.normalize("NFKD", str(valor or "").strip())
+    texto = "".join(caractere for caractere in texto if not unicodedata.combining(caractere))
+    texto = re.sub(r"[^A-Za-z0-9]+", " ", texto).upper()
     return re.sub(r"\s+", " ", texto).strip()
 
 
