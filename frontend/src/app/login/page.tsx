@@ -77,6 +77,30 @@ export default function LoginPage() {
     }
   }
 
+  async function recuperarSenha() {
+    setErro("")
+    setMensagem("")
+
+    if (!email.trim()) {
+      setErro("Informe o e-mail cadastrado antes de solicitar a recuperação de senha.")
+      return
+    }
+
+    setEnviando(true)
+    try {
+      const supabase = getSupabaseClient()
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/redefinir-senha`,
+      })
+      if (error) throw error
+      setMensagem("Enviamos um link de recuperação para o e-mail informado. Abra a mensagem e defina uma nova senha.")
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível enviar o e-mail de recuperação.")
+    } finally {
+      setEnviando(false)
+    }
+  }
+
   async function criarPrimeiroAcesso(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErro("")
@@ -154,7 +178,10 @@ export default function LoginPage() {
             <Campo label="E-mail" type="email" value={email} onChange={setEmail} />
             <Campo label="Senha" type="password" value={senha} onChange={setSenha} />
             <button disabled={enviando} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">
-              {enviando ? "Entrando..." : "Entrar"}
+              {enviando ? "Processando..." : "Entrar"}
+            </button>
+            <button type="button" disabled={enviando} onClick={recuperarSenha} className="w-full text-sm font-semibold text-cyan-300 hover:text-cyan-200 disabled:opacity-60">
+              Esqueci minha senha / definir primeira senha
             </button>
             {!verificando && bootstrapDisponivel && (
               <button type="button" onClick={() => { setErro(""); setModoCadastro(true) }} className="w-full rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300 hover:bg-cyan-950/30">
@@ -171,7 +198,7 @@ export default function LoginPage() {
 function Campo({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (value: string) => void; type?: string }) {
   return (
     <label className="block text-sm text-slate-300">{label}
-      <input type={type} required autoComplete={type === "password" ? "new-password" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" />
+      <input type={type} required autoComplete={type === "password" ? "current-password" : undefined} value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" />
     </label>
   )
 }
