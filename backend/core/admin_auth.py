@@ -8,9 +8,16 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from core.supabase_client import supabase
 
 security = HTTPBearer(auto_error=False)
-
 PERFIS_LEITURA_CATALOGO = {"ADMIN_MASTER", "DIRETOR"}
 PERFIS_ESCRITA_CATALOGO = {"ADMIN_MASTER"}
+PERFIS_CONHECIDOS = {
+    "ADMIN_MASTER",
+    "DIRETOR",
+    "GESTOR_REGIONAL",
+    "VENDEDOR_REGIONAL",
+    "GERENTE",
+    "VENDEDOR",
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +36,47 @@ def _extrair_usuario_auth(resposta):
     dados = getattr(resposta, "data", None)
     if dados is not None:
         return getattr(dados, "user", None)
+    return None
+
+
+def _normalizar_perfil(perfil: dict) -> str:
+    for chave in ("tipo_usuario", "perfil", "role", "cargo"):
+        texto = str(perfil.get(chave) or "").strip().upper()
+        for permitido in PERFIS_CONHECIDOS:
+            if texto == permitido or permitido in texto:
+                return permitido
+    return ""
+
+
+def _extrair_primeiro_registro(dados) -> dict | None:
+    if isinstance(dados, dict):
+        return dados
+    if isinstance(dados, list) and dados:
+        primeiro = dados[0]
+        return primeiro if isinstance(primeiro, dict) else None
+    return None
+
+
+def _executar_busca_perfil(campo: str, valor: str, *, case_insensitive: bool = False) -> dict | None:
+    consulta = supabase.table("cti_users").select("*")
+    consulta = consulta.ilike(campo, valor) if case_insensitive else consulta.eq(campo, valor)
+    resposta = consulta.single().execute()
+    return _extrair_primeiro_registro(getattr(resposta, "data", None))
+
+
+def _buscar_perfil(auth_id: str, email: str) -> dict | None:
+    try:
+        perfil = _executar_busca_perfil("auth_id", auth_id)
+        if perfil:
+            return perfil
+    except Exception:
+        pass
+
+    if email:
+        try:
+            return _executar_busca_perfil("email", email, case_insensitive=True)
+        except Exception:
+            return None
     return None
 
 
@@ -57,27 +105,20 @@ def usuario_atual(
     if not auth_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário autenticado inválido.")
 
-    try:
-        perfil = (
-            supabase.table("cti_users")
-            .select("id,auth_id,nome,email,tipo_usuario,ativo")
-            .eq("auth_id", auth_id)
-            .single()
-            .execute()
-            .data
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI não autorizado.") from exc
-
-    if not perfil or not perfil.get("ativo", False):
+    perfil = _buscar_perfil(auth_id, email)
+    if not perfil or perfil.get("ativo") is False:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI inativo ou inexistente.")
 
+    tipo_usuario = _normalizar_perfil(perfil)
+    if not tipo_usuario:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI sem permissão definida.")
+
     return UsuarioAutenticado(
-        id=str(perfil.get("id") or ""),
+        id=str(perfil.get("id") or auth_id),
         auth_id=auth_id,
         email=str(perfil.get("email") or email),
         nome=str(perfil.get("nome") or perfil.get("email") or email),
-        tipo_usuario=str(perfil.get("tipo_usuario") or "").upper(),
+        tipo_usuario=tipo_usuario,
     )
 
 

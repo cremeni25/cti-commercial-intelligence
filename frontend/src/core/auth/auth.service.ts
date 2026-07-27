@@ -1,11 +1,7 @@
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 
-function normalizarTipoUsuario(valor: unknown, cargo: unknown): string {
-  const direto = String(valor || "").trim().toUpperCase()
-  if (direto) return direto
-
-  const textoCargo = String(cargo || "").trim().toUpperCase()
+function normalizarTipoUsuario(...valores: unknown[]): string {
   const perfis = [
     "ADMIN_MASTER",
     "DIRETOR",
@@ -15,31 +11,61 @@ function normalizarTipoUsuario(valor: unknown, cargo: unknown): string {
     "VENDEDOR",
   ]
 
-  return perfis.find((perfil) => textoCargo.includes(perfil)) || ""
+  for (const valor of valores) {
+    const texto = String(valor || "").trim().toUpperCase()
+    if (!texto) continue
+    const direto = perfis.find((perfil) => texto === perfil || texto.includes(perfil))
+    if (direto) return direto
+  }
+
+  return ""
 }
 
 export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
   const supabase = getSupabaseClient()
-
   const { data: authData } = await supabase.auth.getUser()
-  if (!authData.user) return null
+  const authUser = authData.user
+  if (!authUser) return null
 
-  const { data, error } = await supabase
+  let perfil: Record<string, unknown> | null = null
+
+  const porAuthId = await supabase
     .from("cti_users")
     .select("*")
-    .eq("auth_id", authData.user.id)
-    .single()
+    .eq("auth_id", authUser.id)
+    .maybeSingle()
 
-  if (error || !data) return null
+  if (porAuthId.data) {
+    perfil = porAuthId.data
+  } else if (authUser.email) {
+    const porEmail = await supabase
+      .from("cti_users")
+      .select("*")
+      .ilike("email", authUser.email)
+      .maybeSingle()
+    perfil = porEmail.data
+  }
+
+  if (!perfil) return null
+
+  const tipoUsuario = normalizarTipoUsuario(
+    perfil.tipo_usuario,
+    perfil.perfil,
+    perfil.role,
+    perfil.cargo,
+    authUser.user_metadata?.tipo_usuario,
+    authUser.app_metadata?.role,
+  )
 
   return {
-    ...data,
-    auth_id: String(data.auth_id || authData.user.id),
-    nome: String(data.nome || authData.user.user_metadata?.nome || authData.user.email || "Usuário CTI"),
-    email: String(data.email || authData.user.email || ""),
-    empresa: String(data.empresa || ""),
-    cargo: String(data.cargo || ""),
-    tipo_usuario: normalizarTipoUsuario(data.tipo_usuario, data.cargo),
-    ativo: data.ativo !== false,
+    ...perfil,
+    id: String(perfil.id || authUser.id),
+    auth_id: String(perfil.auth_id || authUser.id),
+    nome: String(perfil.nome || authUser.user_metadata?.nome || authUser.email || "Usuário CTI"),
+    email: String(perfil.email || authUser.email || ""),
+    empresa: String(perfil.empresa || ""),
+    cargo: String(perfil.cargo || ""),
+    tipo_usuario: tipoUsuario,
+    ativo: perfil.ativo !== false,
   } as UsuarioCTI
 }
