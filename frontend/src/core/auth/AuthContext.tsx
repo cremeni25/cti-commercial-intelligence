@@ -38,15 +38,25 @@ export function AuthProvider({
     useState(true)
 
   useEffect(() => {
-    async function carregar() {
-      const data =
-        await buscarUsuarioAtual()
+    let ativo = true
 
-      setUsuario(data)
-      setLoading(false)
+    async function carregar() {
+      try {
+        const data = await buscarUsuarioAtual()
+        if (ativo) setUsuario(data)
+      } catch (error) {
+        console.error("Falha ao resolver identidade CTI:", error)
+        if (ativo) setUsuario(null)
+      } finally {
+        if (ativo) setLoading(false)
+      }
     }
 
-    carregar()
+    void carregar()
+
+    return () => {
+      ativo = false
+    }
   }, [])
 
   return (
