@@ -35,7 +35,7 @@ const PERIODOS: Array<{ value: PeriodPreset; label: string }> = [
 
 export default function Topbar() {
   const pathname = usePathname();
-  const { usuario } = useAuth();
+  const { usuario, sair } = useAuth();
   const { contexto, setContexto, contextoAtual, periodo, setPeriodo, dataInicio, setDataInicio, dataFim, setDataFim } = useOperationalContext();
   const paginaAtual = paginas[pathname as keyof typeof paginas] || { titulo: "CTI", descricao: "Centro de Tecnologia e Inteligência Comercial" };
   const nome = usuario?.nome || "Usuário CTI";
@@ -62,7 +62,7 @@ export default function Topbar() {
         </label>
         {periodo === "PERSONALIZADO" && <><label className="flex flex-col gap-1 text-xs text-gray-400">Início<input type="date" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} className="rounded-lg border border-[#13203f] bg-[#0b1730] px-2 py-2 text-white" /></label><label className="flex flex-col gap-1 text-xs text-gray-400">Fim<input type="date" value={dataFim} onChange={(e) => setDataFim(e.target.value)} className="rounded-lg border border-[#13203f] bg-[#0b1730] px-2 py-2 text-white" /></label></>}
         <div className="flex items-center gap-2 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-3"><div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"></div><span className="text-sm text-green-400 font-medium">CTI Online</span></div>
-        <div className="flex items-center gap-3 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-2"><div className="w-11 h-11 rounded-full bg-cyan-500 flex items-center justify-center font-bold text-black">{inicial}</div><div><p className="text-sm font-semibold text-white">{nome}</p><p className="text-xs text-gray-400">{cargo} • {perfil}</p></div></div>
+        <div className="flex items-center gap-3 bg-[#0b1730] border border-[#13203f] rounded-xl px-4 py-2"><div className="w-11 h-11 rounded-full bg-cyan-500 flex items-center justify-center font-bold text-black">{inicial}</div><div><p className="text-sm font-semibold text-white">{nome}</p><p className="text-xs text-gray-400">{cargo} • {perfil}</p></div><button type="button" onClick={() => void sair()} className="ml-2 rounded-lg border border-[#29456f] px-3 py-2 text-xs font-semibold text-slate-300 hover:border-cyan-400 hover:text-white">Sair</button></div>
       </div>
     </header>
   );
