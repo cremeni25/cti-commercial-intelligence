@@ -18,6 +18,8 @@ const AuthContext = createContext<AuthContextType>({
   sair: async () => undefined,
 })
 
+const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha"])
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
@@ -31,10 +33,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         const supabase = getSupabaseClient()
         const { data } = await supabase.auth.getSession()
+        const rotaPublica = ROTAS_PUBLICAS.has(pathname)
 
         if (!data.session) {
           if (ativo) setUsuario(null)
-          if (pathname !== "/login") router.replace("/login")
+          if (!rotaPublica) router.replace("/login")
+          return
+        }
+
+        // O Supabase cria uma sessão temporária durante PASSWORD_RECOVERY.
+        // Essa rota deve permanecer aberta até a nova senha ser salva.
+        if (pathname === "/redefinir-senha") {
+          if (ativo) setUsuario(null)
           return
         }
 
