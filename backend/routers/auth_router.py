@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
@@ -20,26 +20,31 @@ PerfilCTI = Literal[
 ]
 
 
-class UsuarioNovo(BaseModel):
+class DadosBaseUsuario(BaseModel):
     nome: str = Field(min_length=3, max_length=120)
-    email: EmailStr
+    email: str = Field(min_length=5, max_length=254)
     senha: str = Field(min_length=8, max_length=128)
     empresa: str = Field(min_length=2, max_length=120)
     cargo: str = Field(min_length=2, max_length=120)
-    tipo_usuario: PerfilCTI
     territorio: str | None = Field(default=None, max_length=120)
     ddds: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("email")
+    @classmethod
+    def validar_email(cls, valor: str) -> str:
+        email = valor.strip().lower()
+        if "@" not in email or "." not in email.rsplit("@", 1)[-1]:
+            raise ValueError("E-mail inválido.")
+        return email
+
+
+class UsuarioNovo(DadosBaseUsuario):
+    tipo_usuario: PerfilCTI
     superior_id: str | None = None
 
 
-class BootstrapAdmin(BaseModel):
-    nome: str = Field(min_length=3, max_length=120)
-    email: EmailStr
-    senha: str = Field(min_length=8, max_length=128)
-    empresa: str = Field(min_length=2, max_length=120)
-    cargo: str = Field(min_length=2, max_length=120)
+class BootstrapAdmin(DadosBaseUsuario):
     territorio: str = Field(default="Brasil", min_length=2, max_length=120)
-    ddds: list[str] = Field(default_factory=list, max_length=20)
 
 
 def _dados(resposta):
@@ -78,7 +83,7 @@ def _criar_auth_user(email: str, senha: str, nome: str, tipo_usuario: str) -> st
 def _inserir_perfil(auth_id: str, payload: UsuarioNovo | BootstrapAdmin, tipo_usuario: str):
     registro = {
         "auth_id": auth_id,
-        "email": str(payload.email).strip().lower(),
+        "email": payload.email,
         "nome": payload.nome.strip(),
         "empresa": payload.empresa.strip(),
         "cargo": payload.cargo.strip(),
@@ -107,7 +112,7 @@ def criar_primeiro_admin(payload: BootstrapAdmin):
     try:
         if not _bootstrap_disponivel():
             raise HTTPException(status_code=409, detail="O cadastro inicial já foi concluído.")
-        auth_id = _criar_auth_user(str(payload.email).lower(), payload.senha, payload.nome, "ADMIN_MASTER")
+        auth_id = _criar_auth_user(payload.email, payload.senha, payload.nome, "ADMIN_MASTER")
         perfil = _inserir_perfil(auth_id, payload, "ADMIN_MASTER")
         return {"status": "criado", "usuario": perfil}
     except HTTPException:
@@ -153,7 +158,7 @@ def criar_usuario_cti(payload: UsuarioNovo, usuario: UsuarioAutenticado = Depend
 
     auth_id = ""
     try:
-        auth_id = _criar_auth_user(str(payload.email).lower(), payload.senha, payload.nome, payload.tipo_usuario)
+        auth_id = _criar_auth_user(payload.email, payload.senha, payload.nome, payload.tipo_usuario)
         return _inserir_perfil(auth_id, payload, payload.tipo_usuario)
     except Exception as exc:
         if auth_id:
