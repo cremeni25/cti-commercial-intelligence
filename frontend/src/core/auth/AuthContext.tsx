@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   sair: async () => undefined,
 })
 
-const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha"])
+const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login"])
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -34,10 +34,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const supabase = getSupabaseClient()
         const { data } = await supabase.auth.getSession()
         const rotaPublica = ROTAS_PUBLICAS.has(pathname)
+        const rotaCrm = pathname.startsWith("/crm-app")
 
         if (!data.session) {
           if (ativo) setUsuario(null)
-          if (!rotaPublica) router.replace("/login")
+          if (!rotaPublica) {
+            router.replace(rotaCrm ? "/crm-app/login" : "/login")
+          }
           return
         }
 
@@ -50,7 +53,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const perfil = await buscarUsuarioAtual()
         if (ativo) setUsuario(perfil)
-        if (pathname === "/login" && perfil) router.replace("/dashboard")
+
+        if (perfil) {
+          if (pathname === "/login") router.replace("/dashboard")
+          if (pathname === "/crm-app/login") router.replace("/crm-app")
+        }
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
         if (ativo) setUsuario(null)
@@ -68,9 +75,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function sair() {
     const supabase = getSupabaseClient()
+    const rotaCrm = pathname.startsWith("/crm-app")
+
     await supabase.auth.signOut()
     setUsuario(null)
-    router.replace("/login")
+    router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
   }
 
