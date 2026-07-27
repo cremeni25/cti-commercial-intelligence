@@ -48,27 +48,35 @@ def _normalizar_perfil(perfil: dict) -> str:
     return ""
 
 
+def _extrair_primeiro_registro(dados) -> dict | None:
+    if isinstance(dados, dict):
+        return dados
+    if isinstance(dados, list) and dados:
+        primeiro = dados[0]
+        return primeiro if isinstance(primeiro, dict) else None
+    return None
+
+
+def _executar_busca_perfil(campo: str, valor: str, *, case_insensitive: bool = False) -> dict | None:
+    consulta = supabase.table("cti_users").select("*")
+    consulta = consulta.ilike(campo, valor) if case_insensitive else consulta.eq(campo, valor)
+    resposta = consulta.single().execute()
+    return _extrair_primeiro_registro(getattr(resposta, "data", None))
+
+
 def _buscar_perfil(auth_id: str, email: str) -> dict | None:
-    resposta = (
-        supabase.table("cti_users")
-        .select("*")
-        .eq("auth_id", auth_id)
-        .limit(1)
-        .execute()
-    )
-    if resposta.data:
-        return resposta.data[0]
+    try:
+        perfil = _executar_busca_perfil("auth_id", auth_id)
+        if perfil:
+            return perfil
+    except Exception:
+        pass
 
     if email:
-        resposta = (
-            supabase.table("cti_users")
-            .select("*")
-            .ilike("email", email)
-            .limit(1)
-            .execute()
-        )
-        if resposta.data:
-            return resposta.data[0]
+        try:
+            return _executar_busca_perfil("email", email, case_insensitive=True)
+        except Exception:
+            return None
     return None
 
 
@@ -97,11 +105,7 @@ def usuario_atual(
     if not auth_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário autenticado inválido.")
 
-    try:
-        perfil = _buscar_perfil(auth_id, email)
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI não autorizado.") from exc
-
+    perfil = _buscar_perfil(auth_id, email)
     if not perfil or perfil.get("ativo") is False:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI inativo ou inexistente.")
 
