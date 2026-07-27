@@ -1,71 +1,39 @@
+import { API_URL } from "@/lib/api"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 
-function normalizarTipoUsuario(...valores: unknown[]): string {
-  const perfis = [
-    "ADMIN_MASTER",
-    "DIRETOR",
-    "GESTOR_REGIONAL",
-    "VENDEDOR_REGIONAL",
-    "GERENTE",
-    "VENDEDOR",
-  ]
-
-  for (const valor of valores) {
-    const texto = String(valor || "").trim().toUpperCase()
-    if (!texto) continue
-    const direto = perfis.find((perfil) => texto === perfil || texto.includes(perfil))
-    if (direto) return direto
-  }
-
-  return ""
-}
-
 export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
   const supabase = getSupabaseClient()
-  const { data: authData } = await supabase.auth.getUser()
-  const authUser = authData.user
-  if (!authUser) return null
+  const { data, error } = await supabase.auth.getSession()
+  const session = data.session
 
-  let perfil: Record<string, unknown> | null = null
+  if (error || !session?.access_token) return null
 
-  const porAuthId = await supabase
-    .from("cti_users")
-    .select("*")
-    .eq("auth_id", authUser.id)
-    .maybeSingle()
+  const response = await fetch(`${API_URL}/auth/me`, {
+    method: "GET",
+    cache: "no-store",
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+    },
+  })
 
-  if (porAuthId.data) {
-    perfil = porAuthId.data
-  } else if (authUser.email) {
-    const porEmail = await supabase
-      .from("cti_users")
-      .select("*")
-      .ilike("email", authUser.email)
-      .maybeSingle()
-    perfil = porEmail.data
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null)
+    const detail = payload?.detail || `Falha ao resolver o perfil CTI (${response.status}).`
+    throw new Error(detail)
   }
 
-  if (!perfil) return null
-
-  const tipoUsuario = normalizarTipoUsuario(
-    perfil.tipo_usuario,
-    perfil.perfil,
-    perfil.role,
-    perfil.cargo,
-    authUser.user_metadata?.tipo_usuario,
-    authUser.app_metadata?.role,
-  )
+  const perfil = await response.json()
 
   return {
-    ...perfil,
-    id: String(perfil.id || authUser.id),
-    auth_id: String(perfil.auth_id || authUser.id),
-    nome: String(perfil.nome || authUser.user_metadata?.nome || authUser.email || "Usuário CTI"),
-    email: String(perfil.email || authUser.email || ""),
+    id: String(perfil.id || session.user.id),
+    auth_id: String(perfil.auth_id || session.user.id),
+    nome: String(perfil.nome || session.user.email || "Usuário CTI"),
+    email: String(perfil.email || session.user.email || ""),
     empresa: String(perfil.empresa || ""),
     cargo: String(perfil.cargo || ""),
-    tipo_usuario: tipoUsuario,
+    tipo_usuario: String(perfil.tipo_usuario || "").trim().toUpperCase(),
     ativo: perfil.ativo !== false,
-  } as UsuarioCTI
+  }
 }
