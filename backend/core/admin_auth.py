@@ -8,9 +8,16 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from core.supabase_client import supabase
 
 security = HTTPBearer(auto_error=False)
-
 PERFIS_LEITURA_CATALOGO = {"ADMIN_MASTER", "DIRETOR"}
 PERFIS_ESCRITA_CATALOGO = {"ADMIN_MASTER"}
+PERFIS_CONHECIDOS = {
+    "ADMIN_MASTER",
+    "DIRETOR",
+    "GESTOR_REGIONAL",
+    "VENDEDOR_REGIONAL",
+    "GERENTE",
+    "VENDEDOR",
+}
 
 
 @dataclass(frozen=True)
@@ -29,6 +36,39 @@ def _extrair_usuario_auth(resposta):
     dados = getattr(resposta, "data", None)
     if dados is not None:
         return getattr(dados, "user", None)
+    return None
+
+
+def _normalizar_perfil(perfil: dict) -> str:
+    for chave in ("tipo_usuario", "perfil", "role", "cargo"):
+        texto = str(perfil.get(chave) or "").strip().upper()
+        for permitido in PERFIS_CONHECIDOS:
+            if texto == permitido or permitido in texto:
+                return permitido
+    return ""
+
+
+def _buscar_perfil(auth_id: str, email: str) -> dict | None:
+    resposta = (
+        supabase.table("cti_users")
+        .select("*")
+        .eq("auth_id", auth_id)
+        .limit(1)
+        .execute()
+    )
+    if resposta.data:
+        return resposta.data[0]
+
+    if email:
+        resposta = (
+            supabase.table("cti_users")
+            .select("*")
+            .ilike("email", email)
+            .limit(1)
+            .execute()
+        )
+        if resposta.data:
+            return resposta.data[0]
     return None
 
 
@@ -58,26 +98,23 @@ def usuario_atual(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuário autenticado inválido.")
 
     try:
-        perfil = (
-            supabase.table("cti_users")
-            .select("id,auth_id,nome,email,tipo_usuario,ativo")
-            .eq("auth_id", auth_id)
-            .single()
-            .execute()
-            .data
-        )
+        perfil = _buscar_perfil(auth_id, email)
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI não autorizado.") from exc
 
-    if not perfil or not perfil.get("ativo", False):
+    if not perfil or perfil.get("ativo") is False:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI inativo ou inexistente.")
 
+    tipo_usuario = _normalizar_perfil(perfil)
+    if not tipo_usuario:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Perfil CTI sem permissão definida.")
+
     return UsuarioAutenticado(
-        id=str(perfil.get("id") or ""),
+        id=str(perfil.get("id") or auth_id),
         auth_id=auth_id,
         email=str(perfil.get("email") or email),
         nome=str(perfil.get("nome") or perfil.get("email") or email),
-        tipo_usuario=str(perfil.get("tipo_usuario") or "").upper(),
+        tipo_usuario=tipo_usuario,
     )
 
 
