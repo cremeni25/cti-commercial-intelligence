@@ -1,11 +1,19 @@
 "use client"
 
 import Link from "next/link"
-import { FormEvent, useState } from "react"
+import { FormEvent, Suspense, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getSupabaseClient } from "@/core/database/supabase"
 
 export default function CrmLoginPage() {
+  return (
+    <Suspense fallback={<CrmLoginFallback />}>
+      <CrmLoginContent />
+    </Suspense>
+  )
+}
+
+function CrmLoginContent() {
   const router = useRouter()
   const params = useSearchParams()
   const [email, setEmail] = useState("")
@@ -49,6 +57,14 @@ export default function CrmLoginPage() {
           <Link href="/solicitar-acesso?canal=CRM" className="mt-3 inline-flex rounded-xl border border-cyan-800 px-4 py-2 text-sm font-semibold text-cyan-300">Solicitar acesso ao CRM</Link>
         </div>
       </section>
+    </main>
+  )
+}
+
+function CrmLoginFallback() {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#020817] p-5 text-white">
+      <div className="rounded-2xl border border-[#16325c] bg-[#091a33] px-6 py-5 text-sm text-slate-300">Carregando acesso ao CRM...</div>
     </main>
   )
 }
