@@ -12,13 +12,10 @@ interface AuthContextType {
   sair: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType>({
-  usuario: null,
-  loading: true,
-  sair: async () => undefined,
-})
+const AuthContext = createContext<AuthContextType>({ usuario: null, loading: true, sair: async () => undefined })
+const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
 
-const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login"])
+type UsuarioComCanais = UsuarioCTI & { acesso_portal?: boolean; acesso_crm?: boolean; status_acesso?: string }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -38,26 +35,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!data.session) {
           if (ativo) setUsuario(null)
-          if (!rotaPublica) {
-            router.replace(rotaCrm ? "/crm-app/login" : "/login")
-          }
+          if (!rotaPublica) router.replace(rotaCrm ? "/crm-app/login" : "/login")
           return
         }
 
-        // O Supabase cria uma sessão temporária durante PASSWORD_RECOVERY.
-        // Essa rota deve permanecer aberta até a nova senha ser salva.
         if (pathname === "/redefinir-senha") {
           if (ativo) setUsuario(null)
           return
         }
 
-        const perfil = await buscarUsuarioAtual()
-        if (ativo) setUsuario(perfil)
-
-        if (perfil) {
-          if (pathname === "/login") router.replace("/dashboard")
-          if (pathname === "/crm-app/login") router.replace("/crm-app")
+        const perfilBase = await buscarUsuarioAtual()
+        if (!perfilBase) {
+          await supabase.auth.signOut()
+          if (ativo) setUsuario(null)
+          router.replace(rotaCrm ? "/crm-app/login?acesso=negado" : "/login?acesso=negado")
+          return
         }
+
+        const perfil = perfilBase as UsuarioComCanais
+        const ativoNoSistema = perfil.ativo !== false && !["INATIVO", "BLOQUEADO", "REJEITADO"].includes(String(perfil.status_acesso || ""))
+        const acessoPermitido = ativoNoSistema && (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false)
+
+        if (!acessoPermitido && !rotaPublica) {
+          await supabase.auth.signOut()
+          if (ativo) setUsuario(null)
+          router.replace(`${rotaCrm ? "/crm-app/login" : "/login"}?acesso=negado`)
+          return
+        }
+
+        if (ativo) setUsuario(perfil)
+        if (pathname === "/login") router.replace(perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : "/dashboard")
+        if (pathname === "/crm-app/login") router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? "/dashboard" : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
         if (ativo) setUsuario(null)
@@ -67,29 +75,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     void carregar()
-
-    return () => {
-      ativo = false
-    }
+    return () => { ativo = false }
   }, [pathname, router])
 
   async function sair() {
     const supabase = getSupabaseClient()
     const rotaCrm = pathname.startsWith("/crm-app")
-
     await supabase.auth.signOut()
     setUsuario(null)
     router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
   }
 
-  return (
-    <AuthContext.Provider value={{ usuario, loading, sair }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  return useContext(AuthContext)
-}
+export function useAuth() { return useContext(AuthContext) }
