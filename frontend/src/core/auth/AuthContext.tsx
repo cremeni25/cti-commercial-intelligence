@@ -17,11 +17,41 @@ const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login", 
 
 type UsuarioComCanais = UsuarioCTI & { acesso_portal?: boolean; acesso_crm?: boolean; status_acesso?: string }
 
+type ScreenOrientationComUnlock = ScreenOrientation & { unlock?: () => void }
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [usuario, setUsuario] = useState<UsuarioCTI | null>(null)
   const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!pathname.startsWith("/crm-app")) return
+
+    const desbloquearOrientacao = () => {
+      try {
+        const orientacao = window.screen.orientation as ScreenOrientationComUnlock | undefined
+        orientacao?.unlock?.()
+      } catch (error) {
+        console.warn("Não foi possível desbloquear a orientação do dispositivo:", error)
+      }
+    }
+
+    desbloquearOrientacao()
+    window.addEventListener("orientationchange", desbloquearOrientacao)
+    window.addEventListener("resize", desbloquearOrientacao)
+
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => void registration.update())
+      })
+    }
+
+    return () => {
+      window.removeEventListener("orientationchange", desbloquearOrientacao)
+      window.removeEventListener("resize", desbloquearOrientacao)
+    }
+  }, [pathname])
 
   useEffect(() => {
     let ativo = true
