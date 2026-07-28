@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/core/database/supabase"
@@ -183,6 +184,9 @@ export default function LoginPage() {
             <button type="button" disabled={enviando} onClick={recuperarSenha} className="w-full text-sm font-semibold text-cyan-300 hover:text-cyan-200 disabled:opacity-60">
               Esqueci minha senha / definir primeira senha
             </button>
+            <Link href="/solicitar-acesso" className="block w-full rounded-xl border border-[#1d3b67] px-4 py-3 text-center text-sm font-semibold text-slate-300 hover:border-cyan-700 hover:text-cyan-200">
+              Solicitar acesso ao CTI
+            </Link>
             {!verificando && bootstrapDisponivel && (
               <button type="button" onClick={() => { setErro(""); setModoCadastro(true) }} className="w-full rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300 hover:bg-cyan-950/30">
                 Configurar primeiro acesso
