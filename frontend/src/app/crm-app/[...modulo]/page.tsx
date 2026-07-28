@@ -20,9 +20,9 @@ const configs: Record<string, ModuloConfig> = {
 }
 
 const produtosPorLinha: Record<string, string[]> = {
-  TRAILER: ["X4-7500", "X4-7700", "Vector HE19"],
-  "DIESEL TRUCK": ["Supra 1150", "Supra 850", "Supra 750"],
-  "DIRECT DRIVE": ["CM600", "CM500", "CM400", "CM280", "Xarios 350", "Xarios 600", "D7", "D7 AE"],
+  TRAILER: ["X4-7500", "X4-7700", "Vector HE19", "Vector 8600MT"],
+  "DIESEL TRUCK": ["Supra 1150", "Supra 850", "Supra 850MT", "Supra 750"],
+  "DIRECT DRIVE": ["CM500", "CM400", "CM280", "Xarios 350", "Xarios 600", "D7", "D7 AE", "D6", "D6 AE"],
 }
 
 function texto(valor: unknown): string {
