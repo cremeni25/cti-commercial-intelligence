@@ -2,11 +2,11 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from core.supabase_client import supabase
 
-router = APIRouter()
+from routers.clientes_oportunidade_router import router as cliente_oportunidade_router
 
-# ------------------------------
-# MODEL
-# ------------------------------
+router = APIRouter()
+router.include_router(cliente_oportunidade_router)
+
 
 class Cliente(BaseModel):
     nome: str
@@ -15,19 +15,11 @@ class Cliente(BaseModel):
     segmento: str
 
 
-# ------------------------------
-# CREATE CLIENTE
-# ------------------------------
-
 @router.post("/clientes")
 def criar_cliente(cliente: Cliente):
-
     try:
-        data = cliente.dict()
-
+        data = cliente.model_dump()
         response = supabase.table("clientes").insert(data).execute()
-
         return response.data
-
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Falha ao criar cliente: {e}") from e
