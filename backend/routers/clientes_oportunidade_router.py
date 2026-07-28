@@ -136,8 +136,6 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
             "equipamento": oportunidade.equipamento,
             "municipio": oportunidade.municipio or cliente.get("cidade"),
             "estado": oportunidade.estado or cliente.get("estado"),
-            "ddd": oportunidade.ddd or dados.cliente.ddd,
-            "sub_regiao": oportunidade.sub_regiao or dados.cliente.sub_regiao,
         }
         criado = supabase.table("cti_oportunidades").insert(payload).execute().data or []
         if not criado:
@@ -170,13 +168,27 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
                 "tipo": "OPORTUNIDADE",
                 "descricao": "Oportunidade criada pelo App CRM.",
                 "usuario_id": oportunidade.responsavel_id,
-                "payload": oportunidade_criada,
+                "payload": {
+                    **oportunidade_criada,
+                    "territorio_cliente": {
+                        "ddd": dados.cliente.ddd,
+                        "sub_regiao": dados.cliente.sub_regiao,
+                    },
+                },
                 "created_at": _now(),
             }).execute()
         except Exception as erro_historico:
             avisos.append(f"histórico: {erro_historico}")
 
-        return {"cliente": cliente, "oportunidade": oportunidade_criada, "avisos": avisos}
+        return {
+            "cliente": cliente,
+            "oportunidade": oportunidade_criada,
+            "territorio": {
+                "ddd": dados.cliente.ddd,
+                "sub_regiao": dados.cliente.sub_regiao,
+            },
+            "avisos": avisos,
+        }
     except HTTPException:
         raise
     except Exception as erro:
