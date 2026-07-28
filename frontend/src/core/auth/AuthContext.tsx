@@ -12,13 +12,10 @@ interface AuthContextType {
   sair: () => Promise<void>
 }
 
-const AuthContext = createContext<AuthContextType>({
-  usuario: null,
-  loading: true,
-  sair: async () => undefined,
-})
-
+const AuthContext = createContext<AuthContextType>({ usuario: null, loading: true, sair: async () => undefined })
 const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
+
+type UsuarioComCanais = UsuarioCTI & { acesso_portal?: boolean; acesso_crm?: boolean; status_acesso?: string }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -47,13 +44,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        const perfil = await buscarUsuarioAtual()
-        if (ativo) setUsuario(perfil)
+        const perfil = await buscarUsuarioAtual() as UsuarioComCanais
+        const ativoNoSistema = perfil.ativo !== false && !["INATIVO", "BLOQUEADO", "REJEITADO"].includes(String(perfil.status_acesso || ""))
+        const acessoPermitido = ativoNoSistema && (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false)
 
-        if (perfil) {
-          if (pathname === "/login") router.replace("/dashboard")
-          if (pathname === "/crm-app/login") router.replace("/crm-app")
+        if (!acessoPermitido && !rotaPublica) {
+          await supabase.auth.signOut()
+          if (ativo) setUsuario(null)
+          router.replace(`${rotaCrm ? "/crm-app/login" : "/login"}?acesso=negado`)
+          return
         }
+
+        if (ativo) setUsuario(perfil)
+        if (pathname === "/login") router.replace(perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : "/dashboard")
+        if (pathname === "/crm-app/login") router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? "/dashboard" : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
         if (ativo) setUsuario(null)
@@ -78,6 +82,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return <AuthContext.Provider value={{ usuario, loading, sair }}>{children}</AuthContext.Provider>
 }
 
-export function useAuth() {
-  return useContext(AuthContext)
-}
+export function useAuth() { return useContext(AuthContext) }
