@@ -18,7 +18,7 @@ const AuthContext = createContext<AuthContextType>({
   sair: async () => undefined,
 })
 
-const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login"])
+const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -38,14 +38,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!data.session) {
           if (ativo) setUsuario(null)
-          if (!rotaPublica) {
-            router.replace(rotaCrm ? "/crm-app/login" : "/login")
-          }
+          if (!rotaPublica) router.replace(rotaCrm ? "/crm-app/login" : "/login")
           return
         }
 
-        // O Supabase cria uma sessão temporária durante PASSWORD_RECOVERY.
-        // Essa rota deve permanecer aberta até a nova senha ser salva.
         if (pathname === "/redefinir-senha") {
           if (ativo) setUsuario(null)
           return
@@ -67,27 +63,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     void carregar()
-
-    return () => {
-      ativo = false
-    }
+    return () => { ativo = false }
   }, [pathname, router])
 
   async function sair() {
     const supabase = getSupabaseClient()
     const rotaCrm = pathname.startsWith("/crm-app")
-
     await supabase.auth.signOut()
     setUsuario(null)
     router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
   }
 
-  return (
-    <AuthContext.Provider value={{ usuario, loading, sair }}>
-      {children}
-    </AuthContext.Provider>
-  )
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
