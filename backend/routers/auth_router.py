@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -9,6 +11,7 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 PerfilCTI = Literal[
     "ADMIN_MASTER",
@@ -94,6 +97,10 @@ def _auth_user_id(resposta) -> str:
     if not auth_id:
         raise RuntimeError("Supabase Auth não retornou o identificador do usuário.")
     return auth_id
+
+
+def _agora_iso() -> str:
+    return datetime.now(UTC).isoformat()
 
 
 def _exigir_admin(usuario: UsuarioAutenticado) -> None:
@@ -239,6 +246,7 @@ def aprovar_solicitacao(
         raise HTTPException(status_code=400, detail="Libere ao menos um ambiente para o usuário.")
 
     auth_id = ""
+    etapa = "envio do convite"
     try:
         auth_id = _enviar_convite(
             solicitacao["email"], solicitacao["nome"], payload.tipo_usuario, payload.acesso_crm
@@ -258,7 +266,9 @@ def aprovar_solicitacao(
             "acesso_portal": payload.acesso_portal,
             "acesso_crm": payload.acesso_crm,
         }
+        etapa = "criação do perfil CTI"
         usuario_criado = supabase.table("cti_users").insert(perfil).execute()
+        etapa = "atualização da solicitação"
         atualizado = (
             supabase.table("cti_access_requests")
             .update(
@@ -269,7 +279,7 @@ def aprovar_solicitacao(
                     "ddds": perfil["ddds"],
                     "superior_id": payload.superior_id,
                     "aprovado_por": usuario.id,
-                    "decidido_em": "now()",
+                    "decidido_em": _agora_iso(),
                     "motivo_decisao": payload.motivo_decisao,
                     "auth_id": auth_id,
                 }
@@ -279,12 +289,21 @@ def aprovar_solicitacao(
         )
         return {"status": "CONVITE_ENVIADO", "usuario": _dados(usuario_criado), "solicitacao": _dados(atualizado)}
     except Exception as exc:
+        logger.exception(
+            "Falha ao aprovar solicitação %s na etapa %s (%s)",
+            solicitacao_id,
+            etapa,
+            type(exc).__name__,
+        )
         if auth_id:
             try:
                 supabase.auth.admin.delete_user(auth_id)
             except Exception:
-                pass
-        raise HTTPException(status_code=500, detail="Não foi possível aprovar e convidar o usuário.") from exc
+                logger.exception("Falha ao remover usuário Auth após rollback da solicitação %s", solicitacao_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha na etapa: {etapa}. Consulte os logs do backend.",
+        ) from exc
 
 
 @router.post("/access-requests/{solicitacao_id}/reject")
@@ -300,7 +319,7 @@ def rejeitar_solicitacao(
             {
                 "status": "REJEITADO",
                 "aprovado_por": usuario.id,
-                "decidido_em": "now()",
+                "decidido_em": _agora_iso(),
                 "motivo_decisao": payload.motivo_decisao,
             }
         )
