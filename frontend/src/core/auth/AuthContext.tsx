@@ -44,7 +44,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        const perfil = await buscarUsuarioAtual() as UsuarioComCanais
+        const perfilBase = await buscarUsuarioAtual()
+        if (!perfilBase) {
+          await supabase.auth.signOut()
+          if (ativo) setUsuario(null)
+          router.replace(rotaCrm ? "/crm-app/login?acesso=negado" : "/login?acesso=negado")
+          return
+        }
+
+        const perfil = perfilBase as UsuarioComCanais
         const ativoNoSistema = perfil.ativo !== false && !["INATIVO", "BLOQUEADO", "REJEITADO"].includes(String(perfil.status_acesso || ""))
         const acessoPermitido = ativoNoSistema && (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false)
 
