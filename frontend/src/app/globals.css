@@ -42,38 +42,90 @@ body {
   }
 }
 
-@media (orientation: landscape) and (max-height: 700px) {
+/* Mantém o celular em retrato na escala já aprovada. */
+@media (pointer: coarse) and (orientation: portrait) and (min-width: 700px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+/* Amplia toda a interface no celular em paisagem, evitando blocos minúsculos. */
+@media (pointer: coarse) and (orientation: landscape) and (max-width: 899px) {
+  html {
+    font-size: 18px;
+  }
+
   body {
-    text-size-adjust: 110%;
-    -webkit-text-size-adjust: 110%;
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
   }
 
   main {
-    padding-bottom: 76px;
+    padding-bottom: 84px;
   }
 
   header {
-    padding-top: 8px;
-    padding-bottom: 8px;
+    padding-top: 10px;
+    padding-bottom: 10px;
   }
 
   form,
   section {
-    scroll-margin-top: 72px;
+    scroll-margin-top: 76px;
   }
 }
 
-@media (orientation: landscape) and (min-width: 700px) {
+/* Tablet: escala maior e proporcional em retrato e paisagem. */
+@media (pointer: coarse) and (min-width: 900px) {
+  html {
+    font-size: 19px;
+  }
+
   input,
   select,
   textarea,
   button {
-    font-size: 17px;
+    font-size: 1rem;
+  }
+
+  input,
+  select,
+  button {
+    min-height: 56px;
+  }
+
+  textarea {
+    min-height: 150px;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) and (min-width: 900px) {
+  html {
+    font-size: 21px;
+  }
+
+  body {
+    text-size-adjust: 100%;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  main {
+    padding-bottom: 92px;
+  }
+
+  header {
+    padding-top: 12px;
+    padding-bottom: 12px;
   }
 
   label > span,
   article p,
   article span {
     font-size: 0.95rem;
+  }
+
+  form,
+  section {
+    scroll-margin-top: 84px;
   }
 }
