@@ -97,6 +97,17 @@ body {
   textarea {
     min-height: 150px;
   }
+
+  body:has(a[href="/crm-app/visitas/nova"]) main > header > div,
+  body:has(a[href="/crm-app/visitas/nova"]) main > div {
+    width: min(94vw, 92rem);
+    max-width: none;
+  }
+
+  body:has(a[href="/crm-app/visitas/nova"]) nav > div {
+    width: min(78vw, 64rem);
+    max-width: none;
+  }
 }
 
 @media (pointer: coarse) and (orientation: landscape) and (min-width: 900px) {
@@ -127,5 +138,14 @@ body {
   form,
   section {
     scroll-margin-top: 84px;
+  }
+
+  body:has(a[href="/crm-app/visitas/nova"]) main > div > div {
+    gap: 2rem;
+    grid-template-columns: minmax(0, 1.5fr) minmax(24rem, 0.8fr);
+  }
+
+  body:has(a[href="/crm-app/visitas/nova"]) main section a {
+    min-height: 6.5rem;
   }
 }
