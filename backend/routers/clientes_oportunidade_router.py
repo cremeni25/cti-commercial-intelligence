@@ -12,6 +12,7 @@ router = APIRouter(prefix="/crm-app", tags=["CRM App"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+CRM_APP_BACKEND_VERSION = "2026.07.29-opportunity-deterministic-v1"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase não configurado")
@@ -139,6 +140,15 @@ def _registrar_auxiliar(table: str, payload: dict[str, Any], avisos: list[str], 
         avisos.append(f"{nome}: {erro}")
 
 
+@router.get("/version")
+def versao_crm_app():
+    return {
+        "version": CRM_APP_BACKEND_VERSION,
+        "status": "ready",
+        "opportunity_write_mode": "deterministic",
+    }
+
+
 @router.post("/cliente-oportunidade")
 def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
     etapa = "cliente"
@@ -151,6 +161,10 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
         etapa = "oportunidade"
         oportunidade = dados.oportunidade
         contexto = _contexto_comercial(dados)
+
+        # Grava somente o núcleo já comprovado como compatível com cti_oportunidades.
+        # Linhas, equipamentos e território permanecem integralmente na descrição
+        # e no histórico, evitando novas falhas PGRST204 em produção.
         payload = {
             "cliente_id": cliente_id,
             "responsavel_id": oportunidade.responsavel_id,
@@ -161,11 +175,8 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
             "valor_estimado": oportunidade.valor_estimado,
             "probabilidade": _normalizar_probabilidade(oportunidade.probabilidade),
             "data_fechamento_prevista": oportunidade.data_fechamento_prevista,
-            "linha_equipamentos": oportunidade.linha_equipamentos,
-            "equipamento": oportunidade.equipamento,
-            "municipio": oportunidade.municipio or cliente.get("cidade"),
-            "estado": oportunidade.estado or cliente.get("estado"),
         }
+
         criado, compat_oportunidade = insert_schema_compatible(
             supabase,
             "cti_oportunidades",
@@ -180,36 +191,51 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
         avisos: list[str] = []
 
         if compat_cliente["removed_fields"]:
-            avisos.append(f"cliente: campos não existentes preservados no contexto {list(compat_cliente['removed_fields'])}")
+            avisos.append(
+                f"cliente: campos não existentes preservados no contexto {list(compat_cliente['removed_fields'])}"
+            )
         if compat_oportunidade["removed_fields"]:
-            avisos.append(f"oportunidade: campos não existentes preservados no histórico {list(compat_oportunidade['removed_fields'])}")
+            avisos.append(
+                f"oportunidade: campos não existentes preservados no histórico {list(compat_oportunidade['removed_fields'])}"
+            )
 
         agora = datetime.now(timezone.utc)
         etapa = "pipeline"
-        _registrar_auxiliar("cti_pipeline", {
-            "oportunidade_id": oportunidade_id,
-            "etapa_anterior": None,
-            "nova_etapa": "OPORTUNIDADE",
-            "etapa": "OPORTUNIDADE",
-            "usuario_id": oportunidade.responsavel_id,
-            "observacao": "Primeira movimentação automática da oportunidade.",
-            "data": agora.date().isoformat(),
-            "hora": agora.time().replace(microsecond=0).isoformat(),
-        }, avisos, "pipeline")
+        _registrar_auxiliar(
+            "cti_pipeline",
+            {
+                "oportunidade_id": oportunidade_id,
+                "etapa_anterior": None,
+                "nova_etapa": "OPORTUNIDADE",
+                "etapa": "OPORTUNIDADE",
+                "usuario_id": oportunidade.responsavel_id,
+                "observacao": "Primeira movimentação automática da oportunidade.",
+                "data": agora.date().isoformat(),
+                "hora": agora.time().replace(microsecond=0).isoformat(),
+            },
+            avisos,
+            "pipeline",
+        )
 
         etapa = "historico"
-        _registrar_auxiliar("cti_oportunidade_historico", {
-            "oportunidade_id": oportunidade_id,
-            "tipo": "OPORTUNIDADE",
-            "descricao": "Oportunidade criada pelo App CRM.",
-            "usuario_id": oportunidade.responsavel_id,
-            "payload": {
-                "oportunidade": oportunidade_criada,
-                "contexto_comercial": contexto,
-                "campos_nao_persistidos": compat_oportunidade["removed_fields"],
+        _registrar_auxiliar(
+            "cti_oportunidade_historico",
+            {
+                "oportunidade_id": oportunidade_id,
+                "tipo": "OPORTUNIDADE",
+                "descricao": "Oportunidade criada pelo App CRM.",
+                "usuario_id": oportunidade.responsavel_id,
+                "payload": {
+                    "oportunidade": oportunidade_criada,
+                    "contexto_comercial": contexto,
+                    "campos_nao_persistidos": compat_oportunidade["removed_fields"],
+                    "backend_version": CRM_APP_BACKEND_VERSION,
+                },
+                "created_at": _now(),
             },
-            "created_at": _now(),
-        }, avisos, "histórico")
+            avisos,
+            "histórico",
+        )
 
         return {
             "cliente": cliente,
@@ -219,9 +245,13 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
                 "cliente": compat_cliente,
                 "oportunidade": compat_oportunidade,
             },
+            "backend_version": CRM_APP_BACKEND_VERSION,
             "avisos": avisos,
         }
     except HTTPException:
         raise
     except Exception as erro:
-        raise HTTPException(status_code=500, detail=f"Falha na etapa {etapa}: {erro}") from erro
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha na etapa {etapa}: {erro} | backend={CRM_APP_BACKEND_VERSION}",
+        ) from erro
