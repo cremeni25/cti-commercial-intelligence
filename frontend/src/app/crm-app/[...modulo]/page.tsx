@@ -1062,7 +1062,7 @@ function Card({
 
       {["agenda", "atividades", "visitas"].includes(slug) &&
       estado !== "CONCLUIDA" &&
-      item.id ? (
+      Boolean(item.id) ? (
         <button
           type="button"
           onClick={() => concluir(String(item.id))}
