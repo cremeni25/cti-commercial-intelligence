@@ -6,6 +6,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from supabase import create_client
 
+from backend.services.schema_compat import insert_schema_compatible, update_schema_compatible
+
 router = APIRouter(prefix="/crm-app", tags=["CRM App"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -60,73 +62,100 @@ def _normalizar_probabilidade(valor: Any) -> float:
     return numero / 100 if numero > 1 else numero
 
 
-def _criar_ou_atualizar_cliente(cliente: ClienteContexto) -> dict[str, Any]:
+def _contexto_comercial(dados: ClienteOportunidadeCreate) -> dict[str, Any]:
+    return {
+        "linhas": dados.oportunidade.linha_equipamentos,
+        "equipamentos": dados.oportunidade.equipamento,
+        "municipio": dados.oportunidade.municipio or dados.cliente.cidade,
+        "uf": dados.oportunidade.estado or dados.cliente.estado,
+        "ddd": dados.cliente.ddd or dados.oportunidade.ddd,
+        "sub_regiao": dados.cliente.sub_regiao or dados.oportunidade.sub_regiao,
+        "segmento": dados.cliente.segmento,
+    }
+
+
+def _descricao_com_contexto(descricao: Optional[str], contexto: dict[str, Any]) -> str:
+    base = (descricao or "").strip()
+    linhas = [base] if base else []
+    linhas.append("[CONTEXTO CTI]")
+    for chave, valor in contexto.items():
+        if valor:
+            linhas.append(f"{chave}: {valor}")
+    return "\n".join(linhas)
+
+
+def _criar_ou_atualizar_cliente(cliente: ClienteContexto) -> tuple[dict[str, Any], dict[str, Any]]:
     nome = cliente.nome.strip()
     if not nome:
         raise HTTPException(status_code=422, detail="Informe o nome do cliente.")
 
-    base = {
+    payload = {
         "nome": nome,
         "cidade": (cliente.cidade or "").strip() or None,
         "estado": (cliente.estado or "").strip().upper() or None,
         "segmento": (cliente.segmento or "TRANSPORTADOR").strip().upper(),
+        "ddd": (cliente.ddd or "").strip() or None,
+        "sub_regiao": (cliente.sub_regiao or "").strip() or None,
     }
 
     if cliente.id:
         existente = supabase.table("clientes").select("*").eq("id", cliente.id).execute().data or []
         if existente:
             atuais = existente[0]
-            atualizacao = {chave: valor for chave, valor in base.items() if valor and not atuais.get(chave)}
+            atualizacao = {chave: valor for chave, valor in payload.items() if valor and not atuais.get(chave)}
             if atualizacao:
-                try:
-                    atualizacao.update({
-                        "ddd": (cliente.ddd or "").strip() or None,
-                        "sub_regiao": (cliente.sub_regiao or "").strip() or None,
-                    })
-                    resposta = supabase.table("clientes").update(atualizacao).eq("id", cliente.id).execute().data or []
-                except Exception:
-                    atualizacao.pop("ddd", None)
-                    atualizacao.pop("sub_regiao", None)
-                    resposta = supabase.table("clientes").update(atualizacao).eq("id", cliente.id).execute().data or []
+                resposta, compat = update_schema_compatible(supabase, "clientes", cliente.id, atualizacao)
                 if resposta:
-                    return resposta[0]
-            return atuais
+                    return resposta[0], compat
+            return atuais, {"removed_fields": {}, "persisted_fields": []}
 
     candidatos = supabase.table("clientes").select("*").ilike("nome", nome).limit(1).execute().data or []
     if candidatos:
-        return candidatos[0]
+        existente = candidatos[0]
+        atualizacao = {chave: valor for chave, valor in payload.items() if valor and not existente.get(chave)}
+        if atualizacao and existente.get("id"):
+            resposta, compat = update_schema_compatible(supabase, "clientes", str(existente["id"]), atualizacao)
+            if resposta:
+                return resposta[0], compat
+        return existente, {"removed_fields": {}, "persisted_fields": []}
 
-    try:
-        payload = {
-            **base,
-            "ddd": (cliente.ddd or "").strip() or None,
-            "sub_regiao": (cliente.sub_regiao or "").strip() or None,
-        }
-        criado = supabase.table("clientes").insert(payload).execute().data or []
-    except Exception:
-        criado = supabase.table("clientes").insert(base).execute().data or []
-
+    criado, compat = insert_schema_compatible(
+        supabase,
+        "clientes",
+        payload,
+        protected_fields={"nome"},
+    )
     if not criado:
         raise HTTPException(status_code=500, detail="O cliente não foi criado no banco de dados.")
-    return criado[0]
+    return criado[0], compat
+
+
+def _registrar_auxiliar(table: str, payload: dict[str, Any], avisos: list[str], nome: str) -> None:
+    try:
+        _, compat = insert_schema_compatible(supabase, table, payload)
+        if compat["removed_fields"]:
+            avisos.append(f"{nome}: campos não existentes ignorados {list(compat['removed_fields'])}")
+    except Exception as erro:
+        avisos.append(f"{nome}: {erro}")
 
 
 @router.post("/cliente-oportunidade")
 def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
     etapa = "cliente"
     try:
-        cliente = _criar_ou_atualizar_cliente(dados.cliente)
+        cliente, compat_cliente = _criar_ou_atualizar_cliente(dados.cliente)
         cliente_id = str(cliente.get("id") or "")
         if not cliente_id:
             raise RuntimeError("Cliente criado sem identificador.")
 
         etapa = "oportunidade"
         oportunidade = dados.oportunidade
+        contexto = _contexto_comercial(dados)
         payload = {
             "cliente_id": cliente_id,
             "responsavel_id": oportunidade.responsavel_id,
             "titulo": oportunidade.titulo.strip(),
-            "descricao": oportunidade.descricao,
+            "descricao": _descricao_com_contexto(oportunidade.descricao, contexto),
             "origem": "CRM_APP",
             "status": "OPORTUNIDADE",
             "valor_estimado": oportunidade.valor_estimado,
@@ -137,7 +166,12 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
             "municipio": oportunidade.municipio or cliente.get("cidade"),
             "estado": oportunidade.estado or cliente.get("estado"),
         }
-        criado = supabase.table("cti_oportunidades").insert(payload).execute().data or []
+        criado, compat_oportunidade = insert_schema_compatible(
+            supabase,
+            "cti_oportunidades",
+            payload,
+            protected_fields={"cliente_id", "titulo"},
+        )
         if not criado:
             raise RuntimeError("A oportunidade não retornou registro após a inserção.")
 
@@ -145,47 +179,45 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
         oportunidade_id = oportunidade_criada.get("id")
         avisos: list[str] = []
 
+        if compat_cliente["removed_fields"]:
+            avisos.append(f"cliente: campos não existentes preservados no contexto {list(compat_cliente['removed_fields'])}")
+        if compat_oportunidade["removed_fields"]:
+            avisos.append(f"oportunidade: campos não existentes preservados no histórico {list(compat_oportunidade['removed_fields'])}")
+
+        agora = datetime.now(timezone.utc)
         etapa = "pipeline"
-        try:
-            agora = datetime.now(timezone.utc)
-            supabase.table("cti_pipeline").insert({
-                "oportunidade_id": oportunidade_id,
-                "etapa_anterior": None,
-                "nova_etapa": "OPORTUNIDADE",
-                "etapa": "OPORTUNIDADE",
-                "usuario_id": oportunidade.responsavel_id,
-                "observacao": "Primeira movimentação automática da oportunidade.",
-                "data": agora.date().isoformat(),
-                "hora": agora.time().replace(microsecond=0).isoformat(),
-            }).execute()
-        except Exception as erro_pipeline:
-            avisos.append(f"pipeline: {erro_pipeline}")
+        _registrar_auxiliar("cti_pipeline", {
+            "oportunidade_id": oportunidade_id,
+            "etapa_anterior": None,
+            "nova_etapa": "OPORTUNIDADE",
+            "etapa": "OPORTUNIDADE",
+            "usuario_id": oportunidade.responsavel_id,
+            "observacao": "Primeira movimentação automática da oportunidade.",
+            "data": agora.date().isoformat(),
+            "hora": agora.time().replace(microsecond=0).isoformat(),
+        }, avisos, "pipeline")
 
         etapa = "historico"
-        try:
-            supabase.table("cti_oportunidade_historico").insert({
-                "oportunidade_id": oportunidade_id,
-                "tipo": "OPORTUNIDADE",
-                "descricao": "Oportunidade criada pelo App CRM.",
-                "usuario_id": oportunidade.responsavel_id,
-                "payload": {
-                    **oportunidade_criada,
-                    "territorio_cliente": {
-                        "ddd": dados.cliente.ddd,
-                        "sub_regiao": dados.cliente.sub_regiao,
-                    },
-                },
-                "created_at": _now(),
-            }).execute()
-        except Exception as erro_historico:
-            avisos.append(f"histórico: {erro_historico}")
+        _registrar_auxiliar("cti_oportunidade_historico", {
+            "oportunidade_id": oportunidade_id,
+            "tipo": "OPORTUNIDADE",
+            "descricao": "Oportunidade criada pelo App CRM.",
+            "usuario_id": oportunidade.responsavel_id,
+            "payload": {
+                "oportunidade": oportunidade_criada,
+                "contexto_comercial": contexto,
+                "campos_nao_persistidos": compat_oportunidade["removed_fields"],
+            },
+            "created_at": _now(),
+        }, avisos, "histórico")
 
         return {
             "cliente": cliente,
             "oportunidade": oportunidade_criada,
-            "territorio": {
-                "ddd": dados.cliente.ddd,
-                "sub_regiao": dados.cliente.sub_regiao,
+            "contexto_comercial": contexto,
+            "compatibilidade": {
+                "cliente": compat_cliente,
+                "oportunidade": compat_oportunidade,
             },
             "avisos": avisos,
         }
