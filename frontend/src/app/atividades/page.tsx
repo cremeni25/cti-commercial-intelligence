@@ -46,7 +46,7 @@ export default function AtividadesPage() {
       const [agendaResponse, clientesResponse, oportunidadesResponse] = await Promise.all([
         fetch(`${API_URL}/crm/agenda`),
         fetch(`${API_URL}/modulos/clientes?contexto=brasil&periodo=TODO_HISTORICO`),
-        fetch(`${API_URL}/crm/oportunidades`),
+        fetch(`${API_URL}/crm/oportunidades?origem=CRM_APP`),
       ])
       if (!agendaResponse.ok || !clientesResponse.ok || !oportunidadesResponse.ok) throw new Error("Falha de carregamento")
       const [agendaJson, clientesJson, oportunidadesJson] = await Promise.all([agendaResponse.json(), clientesResponse.json(), oportunidadesResponse.json()])
