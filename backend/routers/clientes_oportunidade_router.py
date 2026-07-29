@@ -12,7 +12,7 @@ router = APIRouter(prefix="/crm-app", tags=["CRM App"])
 
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
-CRM_APP_BACKEND_VERSION = "2026.07.29-opportunity-deterministic-v1"
+CRM_APP_BACKEND_VERSION = "2026.07.29-opportunity-contract-v2"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase não configurado")
@@ -54,13 +54,35 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _normalizar_probabilidade(valor: Any) -> float:
+def _normalizar_probabilidade(valor: Any) -> int:
+    """Retorna percentual inteiro entre 0 e 100, conforme o schema do Supabase."""
     try:
         numero = float(valor or 0)
     except (TypeError, ValueError):
         return 0
-    numero = max(0, min(100, numero))
-    return numero / 100 if numero > 1 else numero
+
+    # Compatibilidade com consumidores antigos que possam enviar fração (0.5 = 50%).
+    if 0 < numero <= 1:
+        numero *= 100
+
+    return int(round(max(0, min(100, numero))))
+
+
+def _normalizar_valor(valor: Any) -> float:
+    try:
+        numero = float(valor or 0)
+    except (TypeError, ValueError) as erro:
+        raise HTTPException(status_code=422, detail="Valor estimado inválido.") from erro
+    if numero < 0:
+        raise HTTPException(status_code=422, detail="O valor estimado não pode ser negativo.")
+    return round(numero, 2)
+
+
+def _validar_titulo(titulo: str) -> str:
+    titulo_normalizado = (titulo or "").strip()
+    if not titulo_normalizado:
+        raise HTTPException(status_code=422, detail="Informe o título da oportunidade.")
+    return titulo_normalizado
 
 
 def _contexto_comercial(dados: ClienteOportunidadeCreate) -> dict[str, Any]:
@@ -145,7 +167,8 @@ def versao_crm_app():
     return {
         "version": CRM_APP_BACKEND_VERSION,
         "status": "ready",
-        "opportunity_write_mode": "deterministic",
+        "opportunity_write_mode": "integer-percentage-contract",
+        "probability_storage": "integer-0-100",
     }
 
 
@@ -161,19 +184,18 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
         etapa = "oportunidade"
         oportunidade = dados.oportunidade
         contexto = _contexto_comercial(dados)
+        probabilidade = _normalizar_probabilidade(oportunidade.probabilidade)
+        valor_estimado = _normalizar_valor(oportunidade.valor_estimado)
 
-        # Grava somente o núcleo já comprovado como compatível com cti_oportunidades.
-        # Linhas, equipamentos e território permanecem integralmente na descrição
-        # e no histórico, evitando novas falhas PGRST204 em produção.
         payload = {
             "cliente_id": cliente_id,
             "responsavel_id": oportunidade.responsavel_id,
-            "titulo": oportunidade.titulo.strip(),
+            "titulo": _validar_titulo(oportunidade.titulo),
             "descricao": _descricao_com_contexto(oportunidade.descricao, contexto),
             "origem": "CRM_APP",
             "status": "OPORTUNIDADE",
-            "valor_estimado": oportunidade.valor_estimado,
-            "probabilidade": _normalizar_probabilidade(oportunidade.probabilidade),
+            "valor_estimado": valor_estimado,
+            "probabilidade": probabilidade,
             "data_fechamento_prevista": oportunidade.data_fechamento_prevista,
         }
 
@@ -241,6 +263,10 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
             "cliente": cliente,
             "oportunidade": oportunidade_criada,
             "contexto_comercial": contexto,
+            "normalizacao": {
+                "valor_estimado": valor_estimado,
+                "probabilidade": probabilidade,
+            },
             "compatibilidade": {
                 "cliente": compat_cliente,
                 "oportunidade": compat_oportunidade,
@@ -253,5 +279,5 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
     except Exception as erro:
         raise HTTPException(
             status_code=500,
-            detail=f"Falha na etapa {etapa}: {erro} | backend={CRM_APP_BACKEND_VERSION}",
+            detail=f"Não foi possível gravar a oportunidade na etapa {etapa}. backend={CRM_APP_BACKEND_VERSION}",
         ) from erro
