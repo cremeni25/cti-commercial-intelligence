@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from core.supabase_client import supabase
 
 router = APIRouter()
-
+ORIGEM_OPERACIONAL_CRM = "CRM_APP"
 ETAPAS_PIPELINE = [
     "OPORTUNIDADE",
     "ATIVIDADES",
@@ -34,6 +34,15 @@ def _lista(tabela: str, ordem: str = "created_at") -> list[dict[str, Any]]:
         return supabase.table(tabela).select("*").order(ordem, desc=True).execute().data or []
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Falha ao consultar {tabela}: {exc}") from exc
+
+
+def _oportunidades_operacionais() -> list[dict[str, Any]]:
+    """Mantém os módulos operacionais isolados de cargas legadas, testes e integrações externas."""
+    return [
+        oportunidade
+        for oportunidade in _lista("cti_oportunidades")
+        if str(oportunidade.get("origem") or "").strip().upper() == ORIGEM_OPERACIONAL_CRM
+    ]
 
 
 def _fator_probabilidade(valor: Any) -> float:
@@ -88,9 +97,14 @@ def listar_negociacoes():
 
 @router.get("/crm/pipeline/quadro")
 def quadro_pipeline():
-    """Retorna uma fotografia atual do pipeline, sem duplicar movimentações históricas."""
-    oportunidades = _lista("cti_oportunidades")
-    movimentacoes = _lista("cti_pipeline")
+    """Retorna somente a fotografia operacional CRM_APP, sem dados legados ou de teste."""
+    oportunidades = _oportunidades_operacionais()
+    oportunidades_ids = {item.get("id") for item in oportunidades if item.get("id")}
+    movimentacoes = [
+        movimento
+        for movimento in _lista("cti_pipeline")
+        if movimento.get("oportunidade_id") in oportunidades_ids
+    ]
 
     ultima_movimentacao: dict[str, dict[str, Any]] = {}
     for movimento in movimentacoes:
@@ -150,8 +164,12 @@ def quadro_pipeline():
 @router.get("/crm/agenda")
 def agenda_comercial():
     """Consolida atividades existentes em uma agenda operacional, sem duplicar dados."""
-    atividades = _lista("cti_atividades")
-    oportunidades = {item.get("id"): item for item in _lista("cti_oportunidades")}
+    oportunidades = {item.get("id"): item for item in _oportunidades_operacionais()}
+    atividades = [
+        atividade
+        for atividade in _lista("cti_atividades")
+        if not atividade.get("oportunidade_id") or atividade.get("oportunidade_id") in oportunidades
+    ]
 
     itens = []
     for atividade in atividades:
@@ -187,6 +205,8 @@ def timeline_oportunidade(oportunidade_id: str):
     oportunidade = supabase.table("cti_oportunidades").select("*").eq("id", oportunidade_id).execute().data or []
     if not oportunidade:
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
+    if str(oportunidade[0].get("origem") or "").strip().upper() != ORIGEM_OPERACIONAL_CRM:
+        raise HTTPException(status_code=404, detail="Oportunidade operacional não encontrada")
 
     fontes = [
         ("HISTORICO", "cti_oportunidade_historico"),
@@ -194,7 +214,6 @@ def timeline_oportunidade(oportunidade_id: str):
         ("PIPELINE", "cti_pipeline"),
         ("PROPOSTA", "cti_propostas"),
         ("PEDIDO", "cti_pedidos"),
-        ("PERDA", "cti_perdas"),
     ]
     eventos: list[dict[str, Any]] = []
     for tipo, tabela in fontes:
