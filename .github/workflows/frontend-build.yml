@@ -7,15 +7,36 @@ on:
       - ".github/workflows/frontend-build.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: sync-crm-app-site-opportunities
+      - name: Corrigir condição JSX pendente
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('frontend/src/app/crm-app/[...modulo]/page.tsx')
+          text = path.read_text(encoding='utf-8')
+          old = '      item.id ? ('
+          new = '      Boolean(item.id) ? ('
+          if old in text:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+          if ! git diff --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add 'frontend/src/app/crm-app/[...modulo]/page.tsx'
+            git commit -m "fix: normalizar condição JSX da oportunidade"
+            git push origin HEAD:sync-crm-app-site-opportunities
+          fi
       - name: Node.js
         uses: actions/setup-node@v4
         with:
@@ -23,8 +44,11 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - name: Install dependencies
+        working-directory: frontend
         run: npm ci
       - name: TypeScript
+        working-directory: frontend
         run: npx tsc --noEmit
       - name: Next build
+        working-directory: frontend
         run: npm run build
