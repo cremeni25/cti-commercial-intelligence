@@ -25,18 +25,18 @@ jobs:
           from pathlib import Path
           path = Path('frontend/src/app/crm-app/[...modulo]/page.tsx')
           text = path.read_text(encoding='utf-8')
-          old = '      item.id ? ('
-          new = '      Boolean(item.id) ? ('
-          if old in text:
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          old = 'oportunidade && !editando && item.id && ('
+          new = 'oportunidade && !editando && Boolean(item.id) && ('
+          if old not in text:
+              raise SystemExit('Expressão JSX esperada não encontrada')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
           PY
-          if ! git diff --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add 'frontend/src/app/crm-app/[...modulo]/page.tsx'
-            git commit -m "fix: normalizar condição JSX da oportunidade"
-            git push origin HEAD:sync-crm-app-site-opportunities
-          fi
+          git diff -- 'frontend/src/app/crm-app/[...modulo]/page.tsx'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add 'frontend/src/app/crm-app/[...modulo]/page.tsx'
+          git commit -m "fix: normalizar condição JSX da oportunidade"
+          git push origin HEAD:sync-crm-app-site-opportunities
       - name: Node.js
         uses: actions/setup-node@v4
         with:
