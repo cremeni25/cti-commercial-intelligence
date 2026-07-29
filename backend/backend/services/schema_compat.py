@@ -5,6 +5,14 @@ O serviço inicia com `backend/` como diretório raiz. O código histórico tamb
 os modos sem duplicar implementação.
 """
 
-from services.schema_compat import insert_schema_compatible, update_schema_compatible
+from services.schema_compat import (
+    insert_schema_compatible,
+    missing_column_from_error,
+    update_schema_compatible,
+)
 
-__all__ = ["insert_schema_compatible", "update_schema_compatible"]
+__all__ = [
+    "missing_column_from_error",
+    "insert_schema_compatible",
+    "update_schema_compatible",
+]
