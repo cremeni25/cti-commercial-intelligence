@@ -143,7 +143,8 @@ export default function CrmModuloPage() {
 
   async function salvar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault(); setSalvando(true); setErro(""); setSucesso("")
-    const dados = new FormData(evento.currentTarget)
+    const formulario = evento.currentTarget
+    const dados = new FormData(formulario)
     const userId = String(usuario?.id || usuario?.auth_id || "")
     if (!userId) { setErro("Não foi possível confirmar o usuário autenticado."); setSalvando(false); return }
 
@@ -184,7 +185,7 @@ export default function CrmModuloPage() {
         const resposta = await api("/crm-app/cliente-oportunidade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
         const detalhe = await resposta.json().catch(() => ({}))
         if (!resposta.ok) throw new Error(String(detalhe.detail || `Falha ${resposta.status}`))
-        evento.currentTarget.reset()
+        formulario.reset()
         setClienteBusca(""); setClienteSelecionado(null); setCadastroNovo(false)
         setNovoCliente({ nome: "", cidade: "", estado: "", segmento: "TRANSPORTADOR", ddd: "", subRegiao: "" })
         setMunicipio(""); setUf(""); setDdd(""); setSubRegiao("")
@@ -211,7 +212,7 @@ export default function CrmModuloPage() {
       const resposta = await api("/crm/atividades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const detalhe = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(detalhe.detail || `Falha ${resposta.status}`))
-      evento.currentTarget.reset(); setClienteBusca(""); setClienteSelecionado(null); setSucesso("Registro salvo com sucesso."); await carregar()
+      formulario.reset(); setClienteBusca(""); setClienteSelecionado(null); setSucesso("Registro salvo com sucesso."); await carregar()
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Não foi possível salvar o registro.") }
     finally { setSalvando(false) }
   }
