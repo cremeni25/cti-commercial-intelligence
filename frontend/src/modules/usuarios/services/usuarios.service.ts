@@ -27,6 +27,18 @@ export type DecisaoSolicitacao = {
   motivo_decisao?: string
 }
 
+export type UsuarioNovo = {
+  nome: string
+  email: string
+  senha: string
+  empresa: string
+  cargo: string
+  tipo_usuario: PerfilCTI
+  territorio?: string
+  ddds: string[]
+  superior_id?: string
+}
+
 async function tokenAtual() {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.auth.getSession()
@@ -50,6 +62,10 @@ async function requisicao<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function listarUsuarios(): Promise<UsuarioCTI[]> {
   return requisicao<UsuarioCTI[]>("/auth/users")
+}
+
+export function criarUsuario(payload: UsuarioNovo): Promise<UsuarioCTI> {
+  return requisicao<UsuarioCTI>("/auth/users", { method: "POST", body: JSON.stringify(payload) })
 }
 
 export function listarSolicitacoes(): Promise<SolicitacaoAcesso[]> {
