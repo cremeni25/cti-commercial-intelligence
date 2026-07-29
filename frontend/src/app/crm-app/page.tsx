@@ -26,7 +26,7 @@ export default function CrmAppPage() {
     try {
       const [agendaResposta, oportunidadesResposta, atividadesResposta, clientesResposta] = await Promise.all([
         fetch("/api/crm-proxy/crm/agenda", { cache: "no-store" }),
-        fetch("/api/crm-proxy/crm/oportunidades", { cache: "no-store" }),
+        fetch("/api/crm-proxy/crm/oportunidades?origem=CRM_APP", { cache: "no-store" }),
         fetch("/api/crm-proxy/crm/atividades", { cache: "no-store" }),
         fetch("/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO", { cache: "no-store" }),
       ])
@@ -47,7 +47,7 @@ export default function CrmAppPage() {
     } catch { setOnline(false) } finally { setSincronizando(false) }
   }, [])
 
-  useEffect(() => { void sincronizar() }, [sincronizar])
+  useEffect(() => { queueMicrotask(() => void sincronizar()) }, [sincronizar])
 
   const analises = [
     { href: "/crm-app/agenda", label: "Agenda", valor: resumo.pendencias, descricao: "ações pendentes", icon: CalendarDays },

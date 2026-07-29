@@ -75,7 +75,7 @@ export default function OportunidadesPage() {
     setErro("")
     try {
       const [oportunidadesResponse, clientesResponse] = await Promise.all([
-        fetch(`${API_URL}/crm/oportunidades`, { cache: "no-store" }),
+        fetch(`${API_URL}/crm/oportunidades?origem=CRM_APP`, { cache: "no-store" }),
         fetch(
           `${API_URL}/modulos/clientes?contexto=brasil&periodo=TODO_HISTORICO`,
           { cache: "no-store" },
@@ -145,7 +145,7 @@ export default function OportunidadesPage() {
       responsavel_id: String(form.get("responsavel_id") || ""),
       titulo: String(form.get("titulo") || ""),
       descricao,
-      origem: String(form.get("origem") || "CRM"),
+      origem: String(form.get("origem") || "CRM_APP"),
       linha_equipamentos: linhas.join(", ") || undefined,
       equipamento: equipamentos.join(", ") || undefined,
       implementadora: String(form.get("implementadora") || "") || undefined,
@@ -299,7 +299,7 @@ export default function OportunidadesPage() {
                 </label>
                 <Campo nome="responsavel_id" label="Responsável comercial" obrigatorio />
                 <Campo nome="titulo" label="Título" obrigatorio />
-                <Campo nome="origem" label="Origem" padrao="CRM" />
+                <Campo nome="origem" label="Origem" padrao="CRM_APP" />
                 <Campo nome="linha_equipamentos" label="Linhas de produto" />
                 <Campo nome="equipamento" label="Equipamentos" />
                 <Campo nome="quantidade" label="Quantidade total" tipo="number" padrao="1" />

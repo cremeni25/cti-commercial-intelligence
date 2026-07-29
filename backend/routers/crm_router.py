@@ -316,8 +316,11 @@ def listar_etapas():
 
 
 @router.get("/oportunidades")
-def listar_oportunidades():
-    return supabase.table("cti_oportunidades").select("*").order("created_at", desc=True).execute().data
+def listar_oportunidades(origem: Optional[str] = None):
+    consulta = supabase.table("cti_oportunidades").select("*")
+    if origem:
+        consulta = consulta.eq("origem", origem.strip().upper())
+    return consulta.order("created_at", desc=True).execute().data
 
 
 @router.get("/oportunidades/{oportunidade_id}")
