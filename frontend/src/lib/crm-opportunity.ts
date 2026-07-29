@@ -23,7 +23,8 @@ export function textoSeguro(valor: unknown): string {
   return ""
 }
 
-export function lerContextoOportunidade(item: RegistroOportunidade): ContextoOportunidade {
+export function lerContextoOportunidade(registro: object): ContextoOportunidade {
+  const item = registro as RegistroOportunidade
   const bruto = textoSeguro(item.descricao)
   const [descricaoBase, contextoBruto = ""] = bruto.split(MARCADOR)
   const contexto = new Map<string, string>()
