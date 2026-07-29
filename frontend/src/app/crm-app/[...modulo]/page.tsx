@@ -1050,7 +1050,7 @@ function Card({
         </p>
       )}
 
-      {oportunidade && !editando && item.id && (
+      {oportunidade && !editando && Boolean(item.id) && (
         <button
           type="button"
           onClick={() => setEditando(true)}
