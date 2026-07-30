@@ -2,7 +2,13 @@ import { API_URL } from "@/lib/api"
 import { getSupabaseClient } from "@/core/database/supabase"
 import { UsuarioCTI } from "../types/usuario.types"
 
-export type PerfilCTI = "DIRETOR" | "GESTOR_REGIONAL" | "VENDEDOR_REGIONAL" | "GERENTE" | "VENDEDOR"
+export type PerfilCTI =
+  | "DIRETOR_VIENA_SP"
+  | "ADMIN_COMERCIAL_VIENA_SP"
+  | "ADMIN_FINANCEIRO_VIENA_SP"
+  | "INDICADOR_VIENA_SP"
+  | "REPRES_REGIAO_01"
+  | "REPRES_REGIAO_02"
 
 export type SolicitacaoAcesso = {
   id: string
@@ -30,13 +36,11 @@ export type DecisaoSolicitacao = {
 export type UsuarioNovo = {
   nome: string
   email: string
-  senha: string
+  senha_temporaria: string
   empresa: string
-  cargo: string
   tipo_usuario: PerfilCTI
   territorio?: string
   ddds: string[]
-  superior_id?: string
 }
 
 async function tokenAtual() {
@@ -61,11 +65,11 @@ async function requisicao<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export function listarUsuarios(): Promise<UsuarioCTI[]> {
-  return requisicao<UsuarioCTI[]>("/auth/users")
+  return requisicao<UsuarioCTI[]>("/governanca/usuarios")
 }
 
 export function criarUsuario(payload: UsuarioNovo): Promise<UsuarioCTI> {
-  return requisicao<UsuarioCTI>("/auth/users", { method: "POST", body: JSON.stringify(payload) })
+  return requisicao<UsuarioCTI>("/governanca/usuarios", { method: "POST", body: JSON.stringify(payload) })
 }
 
 export function listarSolicitacoes(): Promise<SolicitacaoAcesso[]> {
