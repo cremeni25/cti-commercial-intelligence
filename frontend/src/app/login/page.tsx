@@ -17,6 +17,11 @@ type BootstrapForm = {
   ddds: string
 }
 
+type PrimeiroAcessoStatus = {
+  primeiro_acesso_pendente?: boolean
+  cadastro_completo?: boolean
+}
+
 const bootstrapInicial: BootstrapForm = {
   nome: "",
   email: "",
@@ -44,14 +49,14 @@ export default function LoginPage() {
     let ativo = true
     fetch(`${API_URL}/auth/bootstrap/status`, { cache: "no-store" })
       .then(async (response) => {
-        if (!response.ok) throw new Error("Não foi possível verificar o primeiro acesso.")
+        if (!response.ok) return { disponivel: false }
         return response.json()
       })
       .then((data) => {
         if (ativo) setBootstrapDisponivel(Boolean(data.disponivel))
       })
-      .catch((error) => {
-        if (ativo) setErro(error instanceof Error ? error.message : "Falha ao verificar o primeiro acesso.")
+      .catch(() => {
+        if (ativo) setBootstrapDisponivel(false)
       })
       .finally(() => {
         if (ativo) setVerificando(false)
@@ -67,9 +72,32 @@ export default function LoginPage() {
 
     try {
       const supabase = getSupabaseClient()
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: email.trim().toLowerCase(),
+        password: senha,
+      })
       if (error) throw error
-      router.replace("/dashboard")
+      if (!data.session?.access_token) throw new Error("Sessão autenticada não foi criada.")
+
+      let statusPrimeiroAcesso: PrimeiroAcessoStatus | null = null
+      try {
+        const resposta = await fetch(`${API_URL}/governanca/primeiro-acesso/status`, {
+          cache: "no-store",
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        })
+        if (resposta.ok) statusPrimeiroAcesso = await resposta.json()
+      } catch {
+        statusPrimeiroAcesso = null
+      }
+
+      if (
+        statusPrimeiroAcesso?.primeiro_acesso_pendente ||
+        statusPrimeiroAcesso?.cadastro_completo === false
+      ) {
+        router.replace("/primeiro-acesso")
+      } else {
+        router.replace("/dashboard")
+      }
       router.refresh()
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível entrar no CTI.")
