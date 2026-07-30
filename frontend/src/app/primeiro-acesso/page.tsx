@@ -25,10 +25,6 @@ export default function PrimeiroAcessoPage() {
   const [erro, setErro] = useState("")
   const [salvando, setSalvando] = useState(false)
 
-  useEffect(() => {
-    void carregarStatus()
-  }, [])
-
   async function tokenAtual() {
     const supabase = getSupabaseClient()
     const { data, error } = await supabase.auth.getSession()
@@ -51,6 +47,10 @@ export default function PrimeiroAcessoPage() {
       setErro(error instanceof Error ? error.message : "Falha ao verificar o primeiro acesso.")
     }
   }
+
+  useEffect(() => {
+    void carregarStatus()
+  }, [])
 
   async function concluir(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
