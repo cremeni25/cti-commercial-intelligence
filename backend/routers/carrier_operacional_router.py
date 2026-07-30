@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from core.supabase_client import supabase
 
@@ -18,6 +18,37 @@ class PrepararEnvioRequest(BaseModel):
     corpo: str | None = None
 
 
+class DestinatarioCreate(BaseModel):
+    nome: str
+    email: EmailStr
+    cargo: str | None = None
+    regiao: str | None = None
+    linhas_produto: list[str] = Field(default_factory=list)
+    recebe_oportunidades: bool = False
+    recebe_propostas: bool = False
+    recebe_pedidos: bool = True
+    copia_obrigatoria: bool = False
+    ativo: bool = True
+
+
+class DestinatarioUpdate(BaseModel):
+    nome: str | None = None
+    email: EmailStr | None = None
+    cargo: str | None = None
+    regiao: str | None = None
+    linhas_produto: list[str] | None = None
+    recebe_oportunidades: bool | None = None
+    recebe_propostas: bool | None = None
+    recebe_pedidos: bool | None = None
+    copia_obrigatoria: bool | None = None
+    ativo: bool | None = None
+
+
+class AtualizarEnvioRequest(BaseModel):
+    status: str
+    erro: str | None = None
+
+
 def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -29,6 +60,47 @@ def _mapa_clientes() -> dict[str, str]:
         for item in dados
         if item.get("id")
     }
+
+
+@router.get("/destinatarios")
+def listar_destinatarios():
+    return supabase.table("cti_destinatarios_carrier").select("*").order("nome").execute().data or []
+
+
+@router.post("/destinatarios")
+def criar_destinatario(dados: DestinatarioCreate):
+    payload = dados.model_dump()
+    payload["nome"] = payload["nome"].strip()
+    payload["email"] = str(payload["email"]).strip().lower()
+    payload["linhas_produto"] = [str(item).strip().upper() for item in payload["linhas_produto"] if str(item).strip()]
+    existente = supabase.table("cti_destinatarios_carrier").select("id").eq("email", payload["email"]).limit(1).execute().data or []
+    if existente:
+        raise HTTPException(status_code=409, detail="Já existe destinatário Carrier com este e-mail.")
+    return supabase.table("cti_destinatarios_carrier").insert(payload).execute().data or []
+
+
+@router.put("/destinatarios/{destinatario_id}")
+def atualizar_destinatario(destinatario_id: str, dados: DestinatarioUpdate):
+    existente = supabase.table("cti_destinatarios_carrier").select("id").eq("id", destinatario_id).limit(1).execute().data or []
+    if not existente:
+        raise HTTPException(status_code=404, detail="Destinatário Carrier não encontrado.")
+    payload = dados.model_dump(exclude_none=True)
+    if "nome" in payload:
+        payload["nome"] = payload["nome"].strip()
+    if "email" in payload:
+        payload["email"] = str(payload["email"]).strip().lower()
+    if "linhas_produto" in payload:
+        payload["linhas_produto"] = [str(item).strip().upper() for item in payload["linhas_produto"] if str(item).strip()]
+    payload["updated_at"] = _agora()
+    return supabase.table("cti_destinatarios_carrier").update(payload).eq("id", destinatario_id).execute().data or []
+
+
+@router.delete("/destinatarios/{destinatario_id}")
+def desativar_destinatario(destinatario_id: str):
+    existente = supabase.table("cti_destinatarios_carrier").select("id").eq("id", destinatario_id).limit(1).execute().data or []
+    if not existente:
+        raise HTTPException(status_code=404, detail="Destinatário Carrier não encontrado.")
+    return supabase.table("cti_destinatarios_carrier").update({"ativo": False, "updated_at": _agora()}).eq("id", destinatario_id).execute().data or []
 
 
 @router.get("/pedidos")
@@ -116,6 +188,36 @@ def preparar_envio_carrier(pedido_id: str, dados: PrepararEnvioRequest):
     envio = supabase.table("cti_envios_carrier").insert(payload).execute().data or []
     supabase.table("cti_pedidos").update({"status_envio_carrier": "PREPARANDO", "updated_at": _agora()}).eq("id", pedido_id).execute()
     return envio
+
+
+@router.get("/envios-pendentes")
+def listar_envios_pendentes():
+    return supabase.table("cti_envios_carrier").select("*").in_("status", ["PENDENTE", "FALHA"]).order("created_at").execute().data or []
+
+
+@router.post("/envios/{envio_id}/status")
+def atualizar_status_envio(envio_id: str, dados: AtualizarEnvioRequest):
+    status = dados.status.strip().upper()
+    if status not in {"PENDENTE", "ENVIANDO", "ENVIADO", "FALHA", "CANCELADO"}:
+        raise HTTPException(status_code=422, detail="Status de envio inválido.")
+    envios = supabase.table("cti_envios_carrier").select("*").eq("id", envio_id).limit(1).execute().data or []
+    if not envios:
+        raise HTTPException(status_code=404, detail="Envio Carrier não encontrado.")
+    atual = envios[0]
+    payload: dict[str, Any] = {
+        "status": status,
+        "erro": dados.erro,
+        "tentativas": int(atual.get("tentativas") or 0) + (1 if status in {"ENVIANDO", "FALHA"} else 0),
+    }
+    if status == "ENVIADO":
+        payload["enviado_em"] = _agora()
+    atualizado = supabase.table("cti_envios_carrier").update(payload).eq("id", envio_id).execute().data or []
+    pedido_id = atual.get("pedido_id")
+    if pedido_id:
+        status_pedido = {"ENVIADO": "ENVIADO", "FALHA": "FALHA", "ENVIANDO": "PREPARANDO", "PENDENTE": "PREPARANDO"}.get(status)
+        if status_pedido:
+            supabase.table("cti_pedidos").update({"status_envio_carrier": status_pedido, "updated_at": _agora()}).eq("id", pedido_id).execute()
+    return atualizado
 
 
 @router.get("/funil")
