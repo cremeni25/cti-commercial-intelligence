@@ -49,7 +49,7 @@ export default function PrimeiroAcessoPage() {
   }
 
   useEffect(() => {
-    void carregarStatus()
+    queueMicrotask(() => void carregarStatus())
   }, [])
 
   async function concluir(evento: FormEvent<HTMLFormElement>) {
