@@ -5,6 +5,7 @@ from routers.auth_router import router as auth_router
 from routers.access_diagnostics_router import router as access_diagnostics_router
 from routers.governanca_usuarios_router import router as governanca_usuarios_router
 from routers.crm_visao_router import router as crm_visao_router
+from routers.propostas_pedidos_router import router as propostas_pedidos_router
 
 router = APIRouter()
 router.include_router(product_catalog_router)
@@ -12,6 +13,7 @@ router.include_router(auth_router)
 router.include_router(access_diagnostics_router)
 router.include_router(governanca_usuarios_router)
 router.include_router(crm_visao_router)
+router.include_router(propostas_pedidos_router)
 
 
 @router.post("/upload")
