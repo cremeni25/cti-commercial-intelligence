@@ -212,6 +212,8 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     snapshot["condicoes_adicionais"] = dados.condicoes_adicionais or item.get("condicao_pagamento")
     snapshot["produto"] = item.get("linha_produto")
     snapshot["equipamento"] = item.get("equipamento")
+    snapshot["validade"] = dados.validade or item.get("validade_condicao")
+    snapshot["observacoes"] = dados.observacoes
     hash_documento = sha256(repr(snapshot).encode("utf-8")).hexdigest()
     payload = {
         "numero": _numero_proposta(),
@@ -224,8 +226,6 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
         "status": "ELABORACAO",
         "status_documento": "RASCUNHO",
         "versao": versao,
-        "validade": dados.validade or item.get("validade_condicao"),
-        "observacoes": dados.observacoes,
         "snapshot_dados": snapshot,
         "hash_documento": hash_documento,
     }
