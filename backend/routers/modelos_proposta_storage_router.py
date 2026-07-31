@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
 
@@ -24,6 +24,17 @@ class HomologacaoTemplate(BaseModel):
     sha256_confirmado: str
     validacao_visual_integral: bool
     observacao: str | None = None
+
+
+class HomologacaoLoteItem(BaseModel):
+    modelo_id: str
+    sha256_confirmado: str
+    validacao_visual_integral: bool
+    observacao: str | None = None
+
+
+class HomologacaoLote(BaseModel):
+    itens: list[HomologacaoLoteItem] = Field(min_length=1, max_length=50)
 
 
 def _agora() -> str:
@@ -87,6 +98,70 @@ def _baixar_e_validar_arquivo_armazenado(modelo: dict) -> tuple[bytes, str]:
     return conteudo, hash_storage
 
 
+def _url_temporaria(caminho: str, validade_segundos: int = 900) -> str:
+    try:
+        resposta = supabase.storage.from_(BUCKET).create_signed_url(caminho, validade_segundos)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível criar o acesso temporário ao arquivo mestre.",
+        ) from exc
+
+    if isinstance(resposta, dict):
+        url = resposta.get("signedURL") or resposta.get("signed_url")
+    else:
+        url = getattr(resposta, "signed_url", None) or getattr(resposta, "signedURL", None)
+
+    if not url:
+        raise HTTPException(status_code=502, detail="O Supabase não retornou a URL temporária do arquivo.")
+    return str(url)
+
+
+def _homologar_modelo(modelo: dict, dados: HomologacaoTemplate) -> dict:
+    modelo_id = str(modelo.get("id"))
+    if modelo.get("homologado_em"):
+        raise HTTPException(status_code=409, detail="Este modelo já está homologado.")
+    if not dados.validacao_visual_integral:
+        raise HTTPException(status_code=422, detail="A validação visual integral é obrigatória.")
+
+    _, hash_storage = _baixar_e_validar_arquivo_armazenado(modelo)
+    hash_confirmado = dados.sha256_confirmado.lower()
+    if not hmac.compare_digest(hash_confirmado, hash_storage):
+        raise HTTPException(status_code=422, detail="SHA-256 de confirmação divergente.")
+
+    agora = _agora()
+    atualizado = (
+        supabase.table("cti_modelos_proposta")
+        .update({"homologado_em": agora, "updated_at": agora})
+        .eq("id", modelo_id)
+        .is_("homologado_em", "null")
+        .execute()
+        .data
+        or []
+    )
+    if not atualizado:
+        raise HTTPException(status_code=409, detail="O modelo foi homologado ou alterado por outro processo.")
+
+    supabase.table("cti_modelos_proposta_auditoria").insert({
+        "modelo_proposta_id": modelo_id,
+        "operacao": "HOMOLOGACAO",
+        "versao": int(modelo.get("versao") or 1),
+        "arquivo_template_storage": modelo.get("arquivo_template_storage"),
+        "arquivo_template_nome_original": modelo.get("arquivo_template_nome_original"),
+        "arquivo_template_hash_sha256": hash_storage,
+        "conteudo_template": modelo.get("conteudo_template") or {},
+        "justificativa": dados.observacao or "Validação visual integral confirmada sem alteração do padrão Carrier, após nova conferência do binário armazenado no bucket privado.",
+    }).execute()
+
+    return {
+        "ok": True,
+        "modelo_id": modelo_id,
+        "homologado_em": agora,
+        "sha256_storage_validado": hash_storage,
+        "registro": atualizado,
+    }
+
+
 @router.get("/status")
 def status_modelos(x_cti_template_token: str | None = Header(default=None)):
     _validar_token(x_cti_template_token)
@@ -110,6 +185,84 @@ def status_modelos(x_cti_template_token: str | None = Header(default=None)):
         "armazenados": sum(1 for item in modelos if item.get("arquivo_template_storage")),
         "homologados": sum(1 for item in modelos if item.get("homologado_em")),
         "modelos": modelos,
+    }
+
+
+@router.get("/fila-homologacao")
+def fila_homologacao(
+    validade_segundos: int = 900,
+    x_cti_template_token: str | None = Header(default=None),
+):
+    _validar_token(x_cti_template_token)
+    validade = max(60, min(validade_segundos, 1800))
+    modelos = (
+        supabase.table("cti_modelos_proposta")
+        .select(
+            "id,linha_produto,equipamento,versao,arquivo_template_nome_original,"
+            "arquivo_template_tamanho_bytes,arquivo_template_hash_sha256,"
+            "arquivo_template_storage,homologado_em,ativo"
+        )
+        .eq("ativo", True)
+        .not_.is_("arquivo_template_storage", "null")
+        .is_("homologado_em", "null")
+        .order("linha_produto")
+        .order("equipamento")
+        .execute()
+        .data
+        or []
+    )
+
+    fila = []
+    for modelo in modelos:
+        caminho = str(modelo.get("arquivo_template_storage") or "")
+        fila.append({
+            **modelo,
+            "url_temporaria": _url_temporaria(caminho, validade),
+            "url_valida_por_segundos": validade,
+            "situacao": "PENDENTE_VALIDACAO_VISUAL",
+        })
+
+    return {"total_pendente": len(fila), "fila": fila}
+
+
+@router.post("/homologar-lote")
+def homologar_lote(
+    dados: HomologacaoLote,
+    x_cti_template_token: str | None = Header(default=None),
+):
+    _validar_token(x_cti_template_token)
+    resultados = []
+    erros = []
+
+    ids = [item.modelo_id for item in dados.itens]
+    if len(ids) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="O lote contém modelo_id duplicado.")
+
+    for item in dados.itens:
+        try:
+            modelo = _modelo(item.modelo_id)
+            resultado = _homologar_modelo(
+                modelo,
+                HomologacaoTemplate(
+                    sha256_confirmado=item.sha256_confirmado,
+                    validacao_visual_integral=item.validacao_visual_integral,
+                    observacao=item.observacao,
+                ),
+            )
+            resultados.append(resultado)
+        except HTTPException as exc:
+            erros.append({
+                "modelo_id": item.modelo_id,
+                "status_code": exc.status_code,
+                "detail": exc.detail,
+            })
+
+    return {
+        "ok": not erros,
+        "homologados": len(resultados),
+        "falhas": len(erros),
+        "resultados": resultados,
+        "erros": erros,
     }
 
 
@@ -205,42 +358,4 @@ def homologar_template(
 ):
     _validar_token(x_cti_template_token)
     modelo = _modelo(modelo_id)
-
-    if modelo.get("homologado_em"):
-        raise HTTPException(status_code=409, detail="Este modelo já está homologado.")
-    if not dados.validacao_visual_integral:
-        raise HTTPException(status_code=422, detail="A validação visual integral é obrigatória.")
-
-    _, hash_storage = _baixar_e_validar_arquivo_armazenado(modelo)
-    hash_confirmado = dados.sha256_confirmado.lower()
-    if not hmac.compare_digest(hash_confirmado, hash_storage):
-        raise HTTPException(status_code=422, detail="SHA-256 de confirmação divergente.")
-
-    agora = _agora()
-    atualizado = (
-        supabase.table("cti_modelos_proposta")
-        .update({"homologado_em": agora, "updated_at": agora})
-        .eq("id", modelo_id)
-        .execute()
-        .data
-        or []
-    )
-
-    supabase.table("cti_modelos_proposta_auditoria").insert({
-        "modelo_proposta_id": modelo_id,
-        "operacao": "HOMOLOGACAO",
-        "versao": int(modelo.get("versao") or 1),
-        "arquivo_template_storage": modelo.get("arquivo_template_storage"),
-        "arquivo_template_nome_original": modelo.get("arquivo_template_nome_original"),
-        "arquivo_template_hash_sha256": hash_storage,
-        "conteudo_template": modelo.get("conteudo_template") or {},
-        "justificativa": dados.observacao or "Validação visual integral confirmada sem alteração do padrão Carrier, após nova conferência do binário armazenado no bucket privado.",
-    }).execute()
-
-    return {
-        "ok": True,
-        "modelo_id": modelo_id,
-        "homologado_em": agora,
-        "sha256_storage_validado": hash_storage,
-        "registro": atualizado,
-    }
+    return _homologar_modelo(modelo, dados)
