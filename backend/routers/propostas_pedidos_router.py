@@ -246,7 +246,7 @@ def emitir_proposta(proposta_id: str):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada")
     if proposta.get("status_documento") not in {"RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"}:
         raise HTTPException(status_code=409, detail="A proposta não está em condição de emissão.")
-    return supabase.table("cti_propostas").update({"status_documento": "EMITIDA", "status": "ENVIADA", "emitida_em": _agora(), "updated_at": _agora()}).eq("id", proposta_id).execute().data
+    return supabase.table("cti_propostas").update({"status_documento": "EMITIDA", "status": "ENVIADA", "emitida_em": _agora()}).eq("id", proposta_id).execute().data
 
 
 @router.post("/propostas/{proposta_id}/aceites")
@@ -281,7 +281,7 @@ def confirmar_aceite(aceite_id: str, dados: ConfirmarAceiteRequest):
     }
     atualizado = supabase.table("cti_proposta_aceites").update(payload).eq("id", aceite_id).execute().data or []
     proposta = _primeiro("cti_propostas", str(aceite["proposta_id"]), "Proposta não encontrada")
-    supabase.table("cti_propostas").update({"status_documento": "ACEITA", "status": "APROVADA", "aceita_em": _agora(), "updated_at": _agora()}).eq("id", proposta["id"]).execute()
+    supabase.table("cti_propostas").update({"status_documento": "ACEITA", "status": "APROVADA", "aceita_em": _agora()}).eq("id", proposta["id"]).execute()
     if proposta.get("item_oportunidade_id"):
         supabase.table("cti_oportunidade_itens").update({"status": "ACEITO", "updated_at": _agora()}).eq("id", proposta["item_oportunidade_id"]).execute()
     return atualizado
@@ -317,7 +317,7 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         ],
     }
     pedido = supabase.table("cti_pedidos").insert(payload).execute().data or []
-    supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO", "updated_at": _agora()}).eq("id", proposta_id).execute()
+    supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO"}).eq("id", proposta_id).execute()
     if proposta.get("item_oportunidade_id"):
         supabase.table("cti_oportunidade_itens").update({"status": "CONVERTIDO_PEDIDO", "updated_at": _agora()}).eq("id", proposta["item_oportunidade_id"]).execute()
     if proposta.get("oportunidade_id"):
