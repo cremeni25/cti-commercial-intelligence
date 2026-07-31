@@ -53,6 +53,40 @@ def _modelo(modelo_id: str) -> dict:
     return dados[0]
 
 
+def _baixar_e_validar_arquivo_armazenado(modelo: dict) -> tuple[bytes, str]:
+    caminho = str(modelo.get("arquivo_template_storage") or "").strip()
+    if not caminho:
+        raise HTTPException(status_code=409, detail="O arquivo mestre ainda não foi armazenado.")
+
+    try:
+        conteudo = supabase.storage.from_(BUCKET).download(caminho)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foi possível recuperar o arquivo mestre do bucket privado.",
+        ) from exc
+
+    if not conteudo:
+        raise HTTPException(status_code=502, detail="O arquivo mestre armazenado está vazio ou indisponível.")
+
+    hash_storage = hashlib.sha256(conteudo).hexdigest().lower()
+    hash_esperado = str(modelo.get("arquivo_template_hash_sha256") or "").lower()
+    tamanho_esperado = int(modelo.get("arquivo_template_tamanho_bytes") or 0)
+
+    if len(conteudo) != tamanho_esperado:
+        raise HTTPException(
+            status_code=409,
+            detail="O tamanho do arquivo armazenado diverge do original Carrier registrado.",
+        )
+    if not hmac.compare_digest(hash_storage, hash_esperado):
+        raise HTTPException(
+            status_code=409,
+            detail="O SHA-256 do arquivo armazenado diverge do original Carrier registrado.",
+        )
+
+    return conteudo, hash_storage
+
+
 @router.get("/status")
 def status_modelos(x_cti_template_token: str | None = Header(default=None)):
     _validar_token(x_cti_template_token)
@@ -107,7 +141,10 @@ async def carregar_template(
         raise HTTPException(status_code=422, detail="Tipo de arquivo não permitido.")
     if tamanho != int(modelo.get("arquivo_template_tamanho_bytes") or 0):
         raise HTTPException(status_code=422, detail="Tamanho do arquivo divergente do original registrado.")
-    if hash_recebido.lower() != str(modelo.get("arquivo_template_hash_sha256") or "").lower():
+    if not hmac.compare_digest(
+        hash_recebido.lower(),
+        str(modelo.get("arquivo_template_hash_sha256") or "").lower(),
+    ):
         raise HTTPException(status_code=422, detail="SHA-256 divergente. O arquivo não corresponde ao original Carrier.")
 
     linha = str(modelo.get("linha_produto") or "").lower().replace(" ", "-")
@@ -169,15 +206,14 @@ def homologar_template(
     _validar_token(x_cti_template_token)
     modelo = _modelo(modelo_id)
 
-    if not modelo.get("arquivo_template_storage"):
-        raise HTTPException(status_code=409, detail="O arquivo mestre ainda não foi armazenado.")
     if modelo.get("homologado_em"):
         raise HTTPException(status_code=409, detail="Este modelo já está homologado.")
     if not dados.validacao_visual_integral:
         raise HTTPException(status_code=422, detail="A validação visual integral é obrigatória.")
 
-    hash_esperado = str(modelo.get("arquivo_template_hash_sha256") or "").lower()
-    if dados.sha256_confirmado.lower() != hash_esperado:
+    _, hash_storage = _baixar_e_validar_arquivo_armazenado(modelo)
+    hash_confirmado = dados.sha256_confirmado.lower()
+    if not hmac.compare_digest(hash_confirmado, hash_storage):
         raise HTTPException(status_code=422, detail="SHA-256 de confirmação divergente.")
 
     agora = _agora()
@@ -196,9 +232,15 @@ def homologar_template(
         "versao": int(modelo.get("versao") or 1),
         "arquivo_template_storage": modelo.get("arquivo_template_storage"),
         "arquivo_template_nome_original": modelo.get("arquivo_template_nome_original"),
-        "arquivo_template_hash_sha256": hash_esperado,
+        "arquivo_template_hash_sha256": hash_storage,
         "conteudo_template": modelo.get("conteudo_template") or {},
-        "justificativa": dados.observacao or "Validação visual integral confirmada sem alteração do padrão Carrier.",
+        "justificativa": dados.observacao or "Validação visual integral confirmada sem alteração do padrão Carrier, após nova conferência do binário armazenado no bucket privado.",
     }).execute()
 
-    return {"ok": True, "modelo_id": modelo_id, "homologado_em": agora, "registro": atualizado}
+    return {
+        "ok": True,
+        "modelo_id": modelo_id,
+        "homologado_em": agora,
+        "sha256_storage_validado": hash_storage,
+        "registro": atualizado,
+    }
