@@ -28,7 +28,7 @@ on conflict (tabela_codigo, equipamento_codigo, vigencia_inicio) do update set
   updated_at = now();
 
 update public.cti_tabela_precos
-set preco_cheio = 31000, updated_at = now()
+set preco_cheio = 41000, updated_at = now()
 where tabela_codigo = 'TABELA-INICIAL-2026'
   and equipamento_codigo = 'CITIMAX-500-AE'
   and vigencia_inicio = '2026-07-30';
