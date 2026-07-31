@@ -11,6 +11,7 @@ from routers.carrier_operacional_router import router as carrier_operacional_rou
 from routers.catalogo_comercial_router import router as catalogo_comercial_router
 from routers.modelos_proposta_storage_router import router as modelos_proposta_storage_router
 from routers.modelos_proposta_importacao_router import router as modelos_proposta_importacao_router
+from routers.modelos_proposta_homologacao_router import router as modelos_proposta_homologacao_router
 
 router = APIRouter()
 router.include_router(product_catalog_router)
@@ -24,6 +25,7 @@ router.include_router(carrier_operacional_router)
 router.include_router(catalogo_comercial_router)
 router.include_router(modelos_proposta_storage_router)
 router.include_router(modelos_proposta_importacao_router)
+router.include_router(modelos_proposta_homologacao_router)
 
 
 @router.post("/upload")
