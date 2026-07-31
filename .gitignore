@@ -20,3 +20,21 @@ build/
 
 # Node
 node_modules/
+
+# Documentos comerciais proprietários
+# Nunca versionar templates Carrier ou cópias de propostas no repositório público.
+backend/templates/carrier/
+backend/modelos-propostas-carrier/
+modelos-propostas-carrier/
+**/CITIMAX*.doc
+**/CITIMAX*.docx
+**/SUPRA*.doc
+**/SUPRA*.docx
+**/XARIOS*.doc
+**/XARIOS*.docx
+**/S 8*.doc
+**/S 8*.docx
+**/S 9*.doc
+**/S 9*.docx
+**/*proposta*carrier*.doc
+**/*proposta*carrier*.docx
