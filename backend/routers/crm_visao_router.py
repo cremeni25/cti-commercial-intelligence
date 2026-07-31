@@ -16,30 +16,57 @@ def _lista(tabela: str, ordem: str = "created_at") -> list[dict[str, Any]]:
     return supabase.table(tabela).select("*").order(ordem, desc=True).execute().data or []
 
 
+def _nome_registro_cliente(cliente: dict[str, Any] | None) -> str:
+    if not cliente:
+        return ""
+    return str(
+        cliente.get("nome")
+        or cliente.get("razao_social")
+        or cliente.get("nome_fantasia")
+        or cliente.get("empresa")
+        or ""
+    ).strip()
+
+
 def _clientes_por_id() -> dict[str, str]:
-    clientes = _lista("clientes")
     resultado: dict[str, str] = {}
-    for cliente in clientes:
+    for cliente in _lista("clientes"):
         identificador = str(cliente.get("id") or "").strip()
-        nome = str(
-            cliente.get("nome")
-            or cliente.get("razao_social")
-            or cliente.get("nome_fantasia")
-            or ""
-        ).strip()
+        nome = _nome_registro_cliente(cliente)
         if identificador and nome:
             resultado[identificador] = nome
     return resultado
 
 
-def _nome_cliente(oportunidade: dict[str, Any], clientes: dict[str, str]) -> str:
-    cliente_id = str(oportunidade.get("cliente_id") or "").strip()
-    return (
-        str(oportunidade.get("cliente_nome") or "").strip()
-        or clientes.get(cliente_id, "")
-        or cliente_id
-        or "Cliente não informado"
+def _cliente_por_id(cliente_id: str) -> dict[str, Any] | None:
+    if not cliente_id:
+        return None
+    registros = (
+        supabase.table("clientes")
+        .select("*")
+        .eq("id", cliente_id)
+        .limit(1)
+        .execute()
+        .data
+        or []
     )
+    return registros[0] if registros else None
+
+
+def _nome_cliente(oportunidade: dict[str, Any], clientes: dict[str, str] | None = None) -> str:
+    cliente_id = str(oportunidade.get("cliente_id") or "").strip()
+    nome_embutido = str(
+        oportunidade.get("cliente_nome")
+        or oportunidade.get("nome_cliente")
+        or oportunidade.get("empresa_nome")
+        or ""
+    ).strip()
+    if nome_embutido:
+        return nome_embutido
+    if clientes and cliente_id in clientes:
+        return clientes[cliente_id]
+    cliente = _cliente_por_id(cliente_id)
+    return _nome_registro_cliente(cliente)
 
 
 def _fator(valor: Any) -> float:
@@ -90,6 +117,17 @@ def _data_evento(registro: dict[str, Any]) -> str:
     )
 
 
+def _contexto_historico(historico: list[dict[str, Any]]) -> dict[str, Any]:
+    for registro in historico:
+        payload = registro.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        contexto = payload.get("contexto_comercial")
+        if isinstance(contexto, dict):
+            return contexto
+    return {}
+
+
 @router.get("/oportunidades")
 def oportunidades_visao(inicio: date | None = None, fim: date | None = None):
     clientes = _clientes_por_id()
@@ -120,13 +158,24 @@ def detalhes_oportunidade(oportunidade_id: str):
     if str(oportunidade.get("origem") or "").strip().upper() != "CRM_APP":
         raise HTTPException(status_code=404, detail="Oportunidade operacional não encontrada.")
 
-    clientes = _clientes_por_id()
-    oportunidade = {**oportunidade, "cliente_nome": _nome_cliente(oportunidade, clientes)}
     atividades = _registros_vinculados("cti_atividades", oportunidade_id)
     pipeline = _registros_vinculados("cti_pipeline", oportunidade_id)
     historico = _registros_vinculados("cti_oportunidade_historico", oportunidade_id)
     propostas = _registros_vinculados("cti_propostas", oportunidade_id)
     pedidos = _registros_vinculados("cti_pedidos", oportunidade_id)
+    contexto = _contexto_historico(historico)
+
+    cliente_id = str(oportunidade.get("cliente_id") or "").strip()
+    cliente = _cliente_por_id(cliente_id)
+    cliente_nome = _nome_cliente(oportunidade)
+
+    oportunidade = {
+        **oportunidade,
+        "cliente_id": cliente_id or None,
+        "cliente_nome": cliente_nome,
+        "cliente": cliente,
+        "contexto_comercial": contexto,
+    }
 
     eventos: list[dict[str, Any]] = []
     for tipo, registros in (
@@ -158,6 +207,8 @@ def detalhes_oportunidade(oportunidade_id: str):
 
     return {
         "oportunidade": oportunidade,
+        "cliente": cliente,
+        "itens": [],
         "resumo": {
             "atividades": len(atividades),
             "movimentacoes_pipeline": len(pipeline),
