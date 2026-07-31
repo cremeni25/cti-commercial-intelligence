@@ -298,12 +298,12 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
     existente = supabase.table("cti_pedidos").select("*").eq("proposta_aceita_id", proposta_id).limit(1).execute().data or []
     if existente:
         return existente
+    oportunidade_id = proposta.get("oportunidade_id")
     payload = {
         "numero": dados.numero or _numero_pedido(),
         "cliente_id": proposta.get("cliente_id"),
         "proposta_id": proposta_id,
         "proposta_aceita_id": proposta_id,
-        "oportunidade_id": proposta.get("oportunidade_id"),
         "item_oportunidade_id": proposta.get("item_oportunidade_id"),
         "aceite_id": aceites[0]["id"],
         "responsavel_id": dados.responsavel_id or (proposta.get("snapshot_dados") or {}).get("responsavel_id"),
@@ -314,14 +314,15 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         "dossie_documentos": [
             {"tipo": "PROPOSTA", "id": proposta_id, "hash": proposta.get("hash_documento")},
             {"tipo": "ACEITE", "id": aceites[0]["id"]},
+            {"tipo": "OPORTUNIDADE", "id": oportunidade_id},
         ],
     }
     pedido = supabase.table("cti_pedidos").insert(payload).execute().data or []
     supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO"}).eq("id", proposta_id).execute()
     if proposta.get("item_oportunidade_id"):
         supabase.table("cti_oportunidade_itens").update({"status": "CONVERTIDO_PEDIDO", "updated_at": _agora()}).eq("id", proposta["item_oportunidade_id"]).execute()
-    if proposta.get("oportunidade_id"):
-        _atualizar_status_oportunidade(str(proposta["oportunidade_id"]))
+    if oportunidade_id:
+        _atualizar_status_oportunidade(str(oportunidade_id))
     return pedido
 
 
