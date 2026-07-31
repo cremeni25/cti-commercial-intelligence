@@ -133,9 +133,11 @@ create table if not exists public.cti_destinatarios_carrier (
   cargo text,
   ativo boolean not null default true,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (lower(email))
+  updated_at timestamptz not null default now()
 );
+
+create unique index if not exists cti_destinatarios_carrier_email_unique
+  on public.cti_destinatarios_carrier (lower(email));
 
 create table if not exists public.cti_envios_carrier (
   id uuid primary key default gen_random_uuid(),
