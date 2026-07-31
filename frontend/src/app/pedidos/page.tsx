@@ -1,217 +1,118 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { useEffect, useState } from "react"
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
 
-interface Pedido {
+type Pedido = {
   id: string
-  cliente: string
-  pedido_numero: string
-  valor: number
-  status: string
-  data_pedido: string
-  responsavel: string
- }
+  numero?: string
+  cliente_nome?: string
+  valor?: number
+  status?: string
+  data_pedido?: string
+  linha_produto?: string
+  equipamento?: string
+  quantidade?: number
+  proposta_numero?: string
+  status_envio_carrier?: string
+  aceite?: { nome_signatario?: string; metodo?: string; aceito_em?: string; status?: string }
+}
+
+function moeda(valor: unknown) {
+  return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function data(valor?: string) {
+  if (!valor) return "-"
+  const d = new Date(valor)
+  return Number.isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR")
+}
 
 export default function PedidosPage() {
   const [dados, setDados] = useState<Pedido[]>([])
   const [loading, setLoading] = useState(true)
-
-  async function carregarPedidos() {
-    try {
-      const response = await fetch(
-        `${API_URL}/crm/pedidos`
-      )
-
-      const json = await response.json()
-
-      setDados(json)
-    } catch (error) {
-      console.error(error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const [erro, setErro] = useState("")
+  const [busca, setBusca] = useState("")
 
   useEffect(() => {
-    queueMicrotask(() => void carregarPedidos())
+    let ativo = true
+    setLoading(true)
+    fetch(`${API_URL}/carrier-operacional/pedidos`, { cache: "no-store" })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => [])
+        if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar os pedidos.")
+        return Array.isArray(payload) ? payload : []
+      })
+      .then((payload) => { if (ativo) setDados(payload) })
+      .catch((falha) => { if (ativo) setErro(falha instanceof Error ? falha.message : "Falha ao carregar pedidos.") })
+      .finally(() => { if (ativo) setLoading(false) })
+    return () => { ativo = false }
   }, [])
 
-  const valorTotal = dados.reduce(
-    (acc, item) => acc + (item.valor || 0),
-    0
-  )
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLocaleLowerCase("pt-BR")
+    if (!termo) return dados
+    return dados.filter((item) => JSON.stringify(item).toLocaleLowerCase("pt-BR").includes(termo))
+  }, [busca, dados])
 
-  const emProducao = dados.filter(
-    (item) => item.status === "EM_PRODUCAO"
-  ).length
+  const valorTotal = dados.reduce((total, item) => total + Number(item.valor || 0), 0)
+  const enviados = dados.filter((item) => ["ENVIADO", "REENVIADO", "CONFIRMADO"].includes(String(item.status_envio_carrier))).length
+  const preparando = dados.filter((item) => String(item.status_envio_carrier) === "PREPARANDO").length
 
-  const faturados = dados.filter(
-    (item) => item.status === "FATURADO"
-  ).length
+  return <main className="flex min-h-screen bg-[#020817] text-white">
+    <Sidebar />
+    <section className="min-w-0 flex-1">
+      <Topbar />
+      <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+        <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Operação comercial</p>
+              <h1 className="mt-2 text-3xl font-bold">Pedidos e dossiês Carrier</h1>
+              <p className="mt-2 text-sm text-slate-400">Pedidos gerados exclusivamente a partir de propostas aceitas.</p>
+            </div>
+            <Link href="/funil-carrier" className="rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300">Abrir Funil Carrier</Link>
+          </div>
+        </header>
 
-  const entregues = dados.filter(
-    (item) => item.status === "ENTREGUE"
-  ).length
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Kpi titulo="Pedidos" valor={String(dados.length)} />
+          <Kpi titulo="Valor total" valor={moeda(valorTotal)} />
+          <Kpi titulo="Dossiês em preparação" valor={String(preparando)} />
+          <Kpi titulo="Enviados à Carrier" valor={String(enviados)} />
+        </section>
 
-  function formatarData(data?: string) {
-    if (!data) return "-"
-
-    return new Date(data).toLocaleDateString(
-      "pt-BR"
-    )
-  }
-
-  return (
-    <main className="flex min-h-screen bg-[#020817]">
-      <Sidebar />
-
-      <section className="flex-1">
-        <Topbar />
-
-        <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-4xl font-bold text-white">
-              CRM • Pedidos
-            </h1>
-
-            <p className="text-gray-400 mt-2">
-              VIENA SP + CARRIER
-            </p>
+        <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+            <div><h2 className="text-xl font-bold">Gestão de pedidos</h2><p className="mt-1 text-sm text-slate-400">Proposta, aceite, pedido e encaminhamento em uma única trilha.</p></div>
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente, pedido ou equipamento" className="w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3 text-sm text-white md:max-w-md" />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
-            <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
-              <p className="text-gray-400 text-sm">
-                Total Pedidos
-              </p>
+          {erro && <div className="mt-5 rounded-xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
+          {loading ? <p className="mt-6 text-slate-400">Carregando pedidos...</p> : filtrados.length === 0 ? <p className="mt-6 text-slate-500">Nenhum pedido encontrado.</p> : <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead><tr className="border-b border-[#16325c] text-left text-slate-400"><th className="p-3">Cliente</th><th className="p-3">Pedido</th><th className="p-3">Equipamento</th><th className="p-3">Valor</th><th className="p-3">Aceite</th><th className="p-3">Carrier</th><th className="p-3">Ação</th></tr></thead>
+              <tbody>{filtrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] align-top">
+                <td className="p-3"><p className="font-semibold text-white">{item.cliente_nome || "Cliente"}</p><p className="mt-1 text-xs text-slate-500">{data(item.data_pedido)}</p></td>
+                <td className="p-3"><p className="text-cyan-300">{item.numero || "Pedido"}</p><p className="mt-1 text-xs text-slate-500">Proposta {item.proposta_numero || "-"}</p></td>
+                <td className="p-3"><p>{item.equipamento || "-"}</p><p className="mt-1 text-xs text-slate-500">{item.linha_produto || "-"} • {item.quantidade || 1} un.</p></td>
+                <td className="p-3 font-semibold text-emerald-300">{moeda(item.valor)}</td>
+                <td className="p-3"><p>{item.aceite?.nome_signatario || "Registrado"}</p><p className="mt-1 text-xs text-slate-500">{item.aceite?.metodo || "-"}</p></td>
+                <td className="p-3"><span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{item.status_envio_carrier || "NAO_ENVIADO"}</span></td>
+                <td className="p-3"><Link href={`/pedidos/${item.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Abrir dossiê</Link></td>
+              </tr>)}</tbody>
+            </table>
+          </div>}
+        </section>
+      </div>
+    </section>
+  </main>
+}
 
-              <h2 className="text-3xl text-cyan-400 font-bold mt-2">
-                {dados.length}
-              </h2>
-            </div>
-
-            <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
-              <p className="text-gray-400 text-sm">
-                Valor Total
-              </p>
-
-              <h2 className="text-3xl text-green-400 font-bold mt-2">
-                R$ {valorTotal.toLocaleString()}
-              </h2>
-            </div>
-
-            <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
-              <p className="text-gray-400 text-sm">
-                Em Produção 
-              </p>
-
-              <h2 className="text-3xl text-yellow-400 font-bold mt-2">
-                {emProducao}
-              </h2>
-            </div>
-
-            <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
-              <p className="text-gray-400 text-sm">
-                Faturados
-              </p>
-
-              <h2 className="text-3xl text-green-400 font-bold mt-2">
-                {faturados}
-              </h2>
-            </div>
-
-            <div className="bg-[#091a33] p-6 rounded-2xl border border-[#13203f]">
-              <p className="text-gray-400 text-sm">
-                Entregues
-              </p>
-
-              <h2 className="text-3xl text-red-400 font-bold mt-2">
-                {entregues}
-              </h2>
-            </div>
-          </div>
-
-          <div className="bg-[#091a33] rounded-2xl border border-[#13203f] overflow-hidden">
-            <div className="p-6 border-b border-[#13203f]">
-              <h2 className="text-white text-xl font-semibold">
-                Gestão de Pedidos
-              </h2>
-            </div>
-
-            {loading ? (
-              <div className="p-10 text-gray-400">
-                Carregando...
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[#13203f]">
-                    <th className="p-4 text-left text-gray-400">
-                      Cliente
-                    </th>
-
-                    <th className="p-4 text-left text-gray-400">
-                      Pedido
-                    </th>
-
-                    <th className="p-4 text-left text-gray-400">
-                      Valor
-                    </th>
-
-                    <th className="p-4 text-left text-gray-400">
-                      Status
-                    </th>
-
-                    <th className="p-4 text-left text-gray-400">
-                      Data
-                    </th>
-
-                    <th className="p-4 text-left text-gray-400">
-                      Responsável
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {dados.map((item) => (
-                    <tr
-                      key={item.id}
-                      className="border-b border-[#13203f]"
-                    >
-                      <td className="p-4 text-white">
-                        {item.cliente}
-                      </td>
-
-                      <td className="p-4 text-white">
-                        {item.pedido_numero}
-                      </td>
-
-                      <td className="p-4 text-green-400">
-                        R$ {item.valor.toLocaleString("pt-BR")}
-                      </td>
-
-                      <td className="p-4 text-cyan-400">
-                        {item.status}
-                      </td>
-
-                      <td className="p-4 text-white">
-                        {formatarData(item.data_pedido)}
-                      </td>
-
-                      <td className="p-4 text-gray-300">
-                        {item.responsavel}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
-      </section>
-    </main>
-  )
+function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
+  return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div>
 }
