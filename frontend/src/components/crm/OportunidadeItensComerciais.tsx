@@ -62,6 +62,15 @@ type Proposta = {
   validade?: string
 }
 
+type AceiteCriado = {
+  aceite?: {
+    id?: string
+    nome_signatario?: string
+    status?: string
+  } | null
+  link_token?: string | null
+}
+
 function moeda(valor: unknown) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -208,14 +217,46 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
   async function solicitarAceite(proposta: Proposta, metodo: "PRESENCIAL_TELA" | "REMOTO_LINK") {
     const nome = window.prompt("Nome completo do signatário")?.trim()
     if (!nome) return
+    const documento = metodo === "PRESENCIAL_TELA" ? window.prompt("CPF ou documento do signatário (opcional)")?.trim() : undefined
     const email = metodo === "REMOTO_LINK" ? window.prompt("E-mail do signatário")?.trim() : undefined
     try {
       const retorno = await acao(`/crm-documentos/propostas/${proposta.id}/aceites`, {
         metodo,
         nome_signatario: nome,
+        documento_signatario: documento || null,
         email_signatario: email || null,
-      }, metodo === "PRESENCIAL_TELA" ? "Aceite presencial iniciado." : "Link de aceite remoto gerado.")
-      if (retorno?.link_token) window.prompt("Copie o identificador do link de aceite", String(retorno.link_token))
+      }, metodo === "PRESENCIAL_TELA" ? "Aceite presencial iniciado." : "Link de aceite remoto gerado.") as AceiteCriado
+
+      if (metodo === "REMOTO_LINK") {
+        if (retorno?.link_token) window.prompt("Copie o identificador do link de aceite", String(retorno.link_token))
+        return
+      }
+
+      const aceiteId = retorno?.aceite?.id
+      if (!aceiteId) throw new Error("O aceite foi iniciado, mas o identificador de confirmação não foi retornado.")
+
+      const confirmou = window.confirm(
+        `CONFIRMAÇÃO DE ACEITE\n\n${nome} declara que leu e aceita integralmente a proposta ${proposta.numero || "comercial"}, no valor de ${moeda(proposta.valor)}.\n\nConfirmar o aceite presencial?`,
+      )
+      if (!confirmou) {
+        setMensagem("Aceite presencial iniciado e mantido como pendente de confirmação.")
+        return
+      }
+
+      await acao(`/crm-documentos/aceites/${aceiteId}/confirmar`, {
+        aceite_termos: true,
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        evidencias: {
+          origem: "CTI_OPORTUNIDADE",
+          metodo: "PRESENCIAL_TELA",
+          proposta_id: proposta.id,
+          proposta_numero: proposta.numero || null,
+          nome_signatario: nome,
+          documento_signatario: documento || null,
+          confirmado_na_tela: true,
+          confirmado_em: new Date().toISOString(),
+        },
+      }, "Aceite presencial confirmado. A proposta foi aceita.")
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao solicitar aceite.") }
   }
 
