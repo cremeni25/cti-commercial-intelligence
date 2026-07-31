@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import os
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, File, Header, HTTPException, UploadFile
+from pydantic import BaseModel
 
 from core.supabase_client import supabase
 
@@ -18,6 +20,12 @@ ALLOWED_MIME = {
 }
 
 
+class HomologacaoTemplate(BaseModel):
+    sha256_confirmado: str
+    validacao_visual_integral: bool
+    observacao: str | None = None
+
+
 def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -25,9 +33,9 @@ def _agora() -> str:
 def _validar_token(token: str | None) -> None:
     esperado = os.getenv("CTI_TEMPLATE_UPLOAD_TOKEN", "").strip()
     if not esperado:
-        raise HTTPException(status_code=503, detail="Carregamento de templates ainda não habilitado no servidor.")
-    if not token or token != esperado:
-        raise HTTPException(status_code=401, detail="Credencial de carregamento inválida.")
+        raise HTTPException(status_code=503, detail="Gestão de templates ainda não habilitada no servidor.")
+    if not token or not hmac.compare_digest(token, esperado):
+        raise HTTPException(status_code=401, detail="Credencial de gestão de templates inválida.")
 
 
 def _modelo(modelo_id: str) -> dict:
@@ -46,7 +54,8 @@ def _modelo(modelo_id: str) -> dict:
 
 
 @router.get("/status")
-def status_modelos():
+def status_modelos(x_cti_template_token: str | None = Header(default=None)):
+    _validar_token(x_cti_template_token)
     modelos = (
         supabase.table("cti_modelos_proposta")
         .select(
@@ -79,6 +88,9 @@ async def carregar_template(
     _validar_token(x_cti_template_token)
     modelo = _modelo(modelo_id)
 
+    if modelo.get("arquivo_template_storage"):
+        raise HTTPException(status_code=409, detail="Este modelo já possui arquivo mestre armazenado.")
+
     conteudo = await arquivo.read()
     if not conteudo:
         raise HTTPException(status_code=422, detail="Arquivo vazio.")
@@ -103,9 +115,6 @@ async def carregar_template(
     versao = int(modelo.get("versao") or 1)
     caminho = f"{linha}/{equipamento}/v{versao}/{nome_recebido}"
 
-    if modelo.get("arquivo_template_storage"):
-        raise HTTPException(status_code=409, detail="Este modelo já possui arquivo mestre armazenado.")
-
     resposta = supabase.storage.from_(BUCKET).upload(
         caminho,
         conteudo,
@@ -118,7 +127,7 @@ async def carregar_template(
         supabase.table("cti_modelos_proposta")
         .update({
             "arquivo_template_storage": caminho,
-            "homologado_em": _agora(),
+            "homologado_em": None,
             "layout_preservado": True,
             "conteudo_integral_obrigatorio": True,
             "imutavel": True,
@@ -132,13 +141,13 @@ async def carregar_template(
 
     supabase.table("cti_modelos_proposta_auditoria").insert({
         "modelo_proposta_id": modelo_id,
-        "operacao": "HOMOLOGACAO",
+        "operacao": "ATIVACAO",
         "versao": versao,
         "arquivo_template_storage": caminho,
         "arquivo_template_nome_original": nome_recebido,
         "arquivo_template_hash_sha256": hash_recebido,
         "conteudo_template": modelo.get("conteudo_template") or {},
-        "justificativa": "Arquivo original Carrier validado por nome, MIME, tamanho e SHA-256 antes do armazenamento privado.",
+        "justificativa": "Arquivo original Carrier validado por nome, MIME, tamanho e SHA-256 e armazenado em bucket privado. Homologação visual ainda pendente.",
     }).execute()
 
     return {
@@ -146,5 +155,50 @@ async def carregar_template(
         "modelo_id": modelo_id,
         "caminho": caminho,
         "sha256": hash_recebido,
+        "homologado": False,
         "registro": atualizado,
     }
+
+
+@router.post("/{modelo_id}/homologar")
+def homologar_template(
+    modelo_id: str,
+    dados: HomologacaoTemplate,
+    x_cti_template_token: str | None = Header(default=None),
+):
+    _validar_token(x_cti_template_token)
+    modelo = _modelo(modelo_id)
+
+    if not modelo.get("arquivo_template_storage"):
+        raise HTTPException(status_code=409, detail="O arquivo mestre ainda não foi armazenado.")
+    if modelo.get("homologado_em"):
+        raise HTTPException(status_code=409, detail="Este modelo já está homologado.")
+    if not dados.validacao_visual_integral:
+        raise HTTPException(status_code=422, detail="A validação visual integral é obrigatória.")
+
+    hash_esperado = str(modelo.get("arquivo_template_hash_sha256") or "").lower()
+    if dados.sha256_confirmado.lower() != hash_esperado:
+        raise HTTPException(status_code=422, detail="SHA-256 de confirmação divergente.")
+
+    agora = _agora()
+    atualizado = (
+        supabase.table("cti_modelos_proposta")
+        .update({"homologado_em": agora, "updated_at": agora})
+        .eq("id", modelo_id)
+        .execute()
+        .data
+        or []
+    )
+
+    supabase.table("cti_modelos_proposta_auditoria").insert({
+        "modelo_proposta_id": modelo_id,
+        "operacao": "HOMOLOGACAO",
+        "versao": int(modelo.get("versao") or 1),
+        "arquivo_template_storage": modelo.get("arquivo_template_storage"),
+        "arquivo_template_nome_original": modelo.get("arquivo_template_nome_original"),
+        "arquivo_template_hash_sha256": hash_esperado,
+        "conteudo_template": modelo.get("conteudo_template") or {},
+        "justificativa": dados.observacao or "Validação visual integral confirmada sem alteração do padrão Carrier.",
+    }).execute()
+
+    return {"ok": True, "modelo_id": modelo_id, "homologado_em": agora, "registro": atualizado}
