@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, datetime
 from typing import Any
+import unicodedata
 
 from fastapi import APIRouter, HTTPException
 
@@ -131,6 +132,119 @@ def _contexto_historico(historico: list[dict[str, Any]]) -> dict[str, Any]:
     return {}
 
 
+def _contexto_descricao(descricao: Any) -> dict[str, Any]:
+    texto = str(descricao or "")
+    if "[CONTEXTO CTI]" not in texto:
+        return {}
+    resultado: dict[str, Any] = {}
+    depois = texto.split("[CONTEXTO CTI]", 1)[1]
+    for linha in depois.splitlines():
+        if ":" not in linha:
+            continue
+        chave, valor = linha.split(":", 1)
+        chave = chave.strip().lower()
+        valor = valor.strip()
+        if chave and valor:
+            resultado[chave] = valor
+    return resultado
+
+
+def _normalizar_texto(valor: Any) -> str:
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(caractere for caractere in texto if not unicodedata.combining(caractere))
+    return " ".join(texto.upper().replace("-", " ").split())
+
+
+def _preco_vigente(codigo: str) -> dict[str, Any] | None:
+    try:
+        registros = (
+            supabase.table("cti_tabela_precos")
+            .select("*")
+            .eq("equipamento_codigo", codigo)
+            .eq("ativo", True)
+            .lte("vigencia_inicio", date.today().isoformat())
+            .order("vigencia_inicio", desc=True)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        return registros[0] if registros else None
+    except Exception:
+        return None
+
+
+def _sincronizar_item_contexto(oportunidade: dict[str, Any], contexto: dict[str, Any]) -> list[dict[str, Any]]:
+    oportunidade_id = str(oportunidade.get("id") or "")
+    itens = _registros_vinculados("cti_oportunidade_itens", oportunidade_id)
+    if itens:
+        return itens
+
+    equipamento_contexto = str(
+        contexto.get("equipamentos")
+        or contexto.get("equipamento")
+        or oportunidade.get("equipamento")
+        or oportunidade.get("linha_equipamentos")
+        or ""
+    ).strip()
+    if not equipamento_contexto:
+        return []
+
+    alvo = _normalizar_texto(equipamento_contexto.split(",", 1)[0])
+    try:
+        catalogo = supabase.table("cti_catalogo_equipamentos").select("*").eq("ativo", True).execute().data or []
+    except Exception:
+        return []
+
+    equipamento = next(
+        (
+            item
+            for item in catalogo
+            if alvo
+            in {
+                _normalizar_texto(item.get("nome_comercial")),
+                _normalizar_texto(item.get("modelo_base")),
+                _normalizar_texto(item.get("codigo")),
+            }
+        ),
+        None,
+    )
+    if not equipamento:
+        return []
+
+    preco = _preco_vigente(str(equipamento.get("codigo") or ""))
+    preco_cheio = float((preco or {}).get("preco_cheio") or oportunidade.get("valor_estimado") or 0)
+    try:
+        quantidade = max(1, int(float(contexto.get("quantidade") or 1)))
+    except (TypeError, ValueError):
+        quantidade = 1
+
+    payload = {
+        "oportunidade_id": oportunidade_id,
+        "equipamento_codigo": equipamento.get("codigo"),
+        "linha_produto": equipamento.get("linha_produto") or "DIESEL TRUCK",
+        "modelo_base": equipamento.get("modelo_base"),
+        "nome_comercial": equipamento.get("nome_comercial"),
+        "equipamento": equipamento.get("nome_comercial") or equipamento_contexto,
+        "configuracao": equipamento.get("configuracao"),
+        "compressor": equipamento.get("compressor"),
+        "possui_eletrico": bool(equipamento.get("possui_eletrico")),
+        "preco_tabela": preco_cheio,
+        "preco_unitario": preco_cheio,
+        "tabela_preco_codigo": (preco or {}).get("tabela_codigo"),
+        "tabela_preco_vigencia": (preco or {}).get("vigencia_inicio"),
+        "quantidade": quantidade,
+        "desconto_percentual": 0,
+        "observacoes_comerciais": "Item inicial sincronizado a partir do contexto comercial da oportunidade.",
+        "ordem": 0,
+    }
+    try:
+        criado = supabase.table("cti_oportunidade_itens").insert(payload).execute().data or []
+        return criado
+    except Exception:
+        return []
+
+
 @router.get("/oportunidades")
 def oportunidades_visao(inicio: date | None = None, fim: date | None = None):
     clientes = _clientes_por_id()
@@ -166,7 +280,8 @@ def detalhes_oportunidade(oportunidade_id: str):
     historico = _registros_vinculados("cti_oportunidade_historico", oportunidade_id)
     propostas = _registros_vinculados("cti_propostas", oportunidade_id)
     pedidos = _registros_vinculados("cti_pedidos", oportunidade_id)
-    contexto = _contexto_historico(historico)
+    contexto = _contexto_historico(historico) or _contexto_descricao(oportunidade.get("descricao"))
+    itens = _sincronizar_item_contexto(oportunidade, contexto)
 
     cliente_id = str(oportunidade.get("cliente_id") or "").strip()
     cliente = _cliente_por_id(cliente_id)
@@ -211,7 +326,7 @@ def detalhes_oportunidade(oportunidade_id: str):
     return {
         "oportunidade": oportunidade,
         "cliente": cliente,
-        "itens": [],
+        "itens": itens,
         "resumo": {
             "atividades": len(atividades),
             "movimentacoes_pipeline": len(pipeline),
