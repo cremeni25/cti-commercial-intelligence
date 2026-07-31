@@ -40,7 +40,27 @@ export default function Page() {
   }
 
   useEffect(() => {
-    if (!authLoading) void load()
+    if (authLoading) return
+    if (!canManage) return
+
+    let active = true
+    carregarFilaHomologacao()
+      .then((result) => {
+        if (!active) return
+        setFila(result.fila)
+        setChecked({})
+      })
+      .catch((err) => {
+        if (!active) return
+        setError(err instanceof Error ? err.message : "Não foi possível carregar a fila.")
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
   }, [authLoading, canManage])
 
   async function submit() {
