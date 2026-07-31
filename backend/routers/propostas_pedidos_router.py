@@ -214,6 +214,7 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     snapshot["equipamento"] = item.get("equipamento")
     snapshot["validade"] = dados.validade or item.get("validade_condicao")
     snapshot["observacoes"] = dados.observacoes
+    snapshot["responsavel_id"] = dados.responsavel_id
     hash_documento = sha256(repr(snapshot).encode("utf-8")).hexdigest()
     payload = {
         "numero": _numero_proposta(),
@@ -221,7 +222,6 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
         "oportunidade_id": oportunidade["id"],
         "item_oportunidade_id": item_id,
         "modelo_proposta_id": modelo.get("id") if modelo else None,
-        "responsavel_id": dados.responsavel_id,
         "valor": _valor_item(item),
         "status": "ELABORACAO",
         "status_documento": "RASCUNHO",
@@ -306,7 +306,7 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         "oportunidade_id": proposta.get("oportunidade_id"),
         "item_oportunidade_id": proposta.get("item_oportunidade_id"),
         "aceite_id": aceites[0]["id"],
-        "responsavel_id": dados.responsavel_id or proposta.get("responsavel_id"),
+        "responsavel_id": dados.responsavel_id or (proposta.get("snapshot_dados") or {}).get("responsavel_id"),
         "valor": proposta.get("valor") or 0,
         "status": "ABERTO",
         "data_pedido": dados.data_pedido or datetime.now(timezone.utc).date().isoformat(),
