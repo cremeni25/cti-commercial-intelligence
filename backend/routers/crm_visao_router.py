@@ -96,15 +96,18 @@ def _dentro_periodo(item: dict[str, Any], inicio: date | None, fim: date | None)
 
 
 def _registros_vinculados(tabela: str, oportunidade_id: str) -> list[dict[str, Any]]:
-    return (
-        supabase.table(tabela)
-        .select("*")
-        .eq("oportunidade_id", oportunidade_id)
-        .order("created_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    try:
+        return (
+            supabase.table(tabela)
+            .select("*")
+            .eq("oportunidade_id", oportunidade_id)
+            .order("created_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
 
 
 def _data_evento(registro: dict[str, Any]) -> str:
