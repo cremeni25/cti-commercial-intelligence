@@ -1,0 +1,2 @@
+Redeploy de produção solicitado em 2026-07-31 para publicar a rota /configuracoes/modelos-proposta já incorporada à main pelo PR 80.
+Nenhuma regra funcional, dado ou layout foi alterado neste gatilho.
