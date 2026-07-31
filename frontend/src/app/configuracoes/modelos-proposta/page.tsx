@@ -1,6 +1,7 @@
 "use client"
 
 import { ChangeEvent, useMemo, useState } from "react"
+import Link from "next/link"
 
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -69,56 +70,39 @@ export default function Page() {
         <Topbar />
         <div className="space-y-6 p-6 lg:p-8">
           <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">
-              Modelos de proposta
-            </p>
-            <h1 className="mt-3 text-3xl font-bold lg:text-4xl">Importação única dos documentos originais</h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
-              Selecione somente o pacote ZIP oficial. O CTI extrai, confere os 11 documentos,
-              valida nome, tamanho e SHA-256, grava no Storage privado e registra a auditoria.
-            </p>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">Modelos de proposta</p>
+            <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+              <div>
+                <h1 className="text-3xl font-bold lg:text-4xl">Importação única dos documentos originais</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">
+                  Selecione somente o pacote ZIP oficial. O CTI extrai, confere os 11 documentos,
+                  valida nome, tamanho e SHA-256, grava no Storage privado e registra a auditoria.
+                </p>
+              </div>
+              <Link href="/configuracoes/modelos-proposta/homologacao" className="rounded-2xl border border-violet-700 bg-violet-500/10 px-5 py-3 text-center text-sm font-bold text-violet-200">
+                Abrir homologação visual
+              </Link>
+            </div>
           </header>
 
           {authLoading ? (
-            <div className="rounded-3xl border border-[#13203f] bg-[#071427] p-8 text-slate-300">
-              Validando sessão administrativa...
-            </div>
+            <div className="rounded-3xl border border-[#13203f] bg-[#071427] p-8 text-slate-300">Validando sessão administrativa...</div>
           ) : !canImport ? (
             <div className="rounded-3xl border border-red-900/60 bg-red-950/20 p-8">
               <h2 className="text-xl font-bold text-red-300">Acesso restrito</h2>
-              <p className="mt-2 text-sm text-red-100/70">
-                Somente o perfil ADMIN_MASTER pode executar esta importação.
-              </p>
+              <p className="mt-2 text-sm text-red-100/70">Somente o perfil ADMIN_MASTER pode executar esta importação.</p>
             </div>
           ) : (
             <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6 lg:p-8">
               <div className="rounded-2xl border border-dashed border-cyan-800 bg-[#040d1c] p-6">
-                <label className="block text-sm font-semibold text-cyan-300" htmlFor="pacote-modelos">
-                  Pacote ZIP oficial
-                </label>
-                <input
-                  id="pacote-modelos"
-                  type="file"
-                  accept=".zip,application/zip"
-                  onChange={selectFile}
-                  disabled={sending}
-                  className="mt-4 block w-full text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-400 file:px-4 file:py-3 file:font-bold file:text-slate-950"
-                />
+                <label className="block text-sm font-semibold text-cyan-300" htmlFor="pacote-modelos">Pacote ZIP oficial</label>
+                <input id="pacote-modelos" type="file" accept=".zip,application/zip" onChange={selectFile} disabled={sending} className="mt-4 block w-full text-sm text-slate-300 file:mr-4 file:rounded-xl file:border-0 file:bg-cyan-400 file:px-4 file:py-3 file:font-bold file:text-slate-950" />
                 <p className="mt-3 text-xs text-slate-500">{fileLabel}</p>
               </div>
 
-              {error && (
-                <div className="mt-5 rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">
-                  {error}
-                </div>
-              )}
+              {error && <div className="mt-5 rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">{error}</div>}
 
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!file || sending}
-                className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
-              >
+              <button type="button" onClick={submit} disabled={!file || sending} className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-4 text-sm font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
                 {sending ? "Validando e importando..." : "Importar pacote e preparar homologação"}
               </button>
 
@@ -140,9 +124,9 @@ export default function Page() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-5 text-sm text-emerald-100/70">
-                    Os documentos estão prontos para a fila de homologação visual.
-                  </p>
+                  <Link href="/configuracoes/modelos-proposta/homologacao" className="mt-6 block w-full rounded-2xl bg-violet-400 px-5 py-4 text-center text-sm font-bold text-slate-950">
+                    Seguir para homologação visual
+                  </Link>
                 </div>
               )}
             </section>
