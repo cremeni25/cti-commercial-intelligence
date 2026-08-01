@@ -298,7 +298,22 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
     existente = supabase.table("cti_pedidos").select("*").eq("proposta_aceita_id", proposta_id).limit(1).execute().data or []
     if existente:
         return existente
+
     oportunidade_id = proposta.get("oportunidade_id")
+    data_pedido = dados.data_pedido or datetime.now(timezone.utc).date().isoformat()
+    responsavel_id = dados.responsavel_id or (proposta.get("snapshot_dados") or {}).get("responsavel_id")
+    dossie_documentos = [
+        {"tipo": "PROPOSTA", "id": proposta_id, "hash": proposta.get("hash_documento")},
+        {"tipo": "ACEITE", "id": aceites[0]["id"]},
+        {"tipo": "OPORTUNIDADE", "id": oportunidade_id},
+        {
+            "tipo": "METADADOS_PEDIDO",
+            "origem_comercial": dados.origem_comercial,
+            "responsavel_id": responsavel_id,
+            "data_pedido": data_pedido,
+            "registrado_em": _agora(),
+        },
+    ]
     payload = {
         "numero": dados.numero or _numero_pedido(),
         "cliente_id": proposta.get("cliente_id"),
@@ -306,16 +321,9 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         "proposta_aceita_id": proposta_id,
         "item_oportunidade_id": proposta.get("item_oportunidade_id"),
         "aceite_id": aceites[0]["id"],
-        "responsavel_id": dados.responsavel_id or (proposta.get("snapshot_dados") or {}).get("responsavel_id"),
         "valor": proposta.get("valor") or 0,
         "status": "ABERTO",
-        "data_pedido": dados.data_pedido or datetime.now(timezone.utc).date().isoformat(),
-        "origem_comercial": dados.origem_comercial,
-        "dossie_documentos": [
-            {"tipo": "PROPOSTA", "id": proposta_id, "hash": proposta.get("hash_documento")},
-            {"tipo": "ACEITE", "id": aceites[0]["id"]},
-            {"tipo": "OPORTUNIDADE", "id": oportunidade_id},
-        ],
+        "dossie_documentos": dossie_documentos,
     }
     pedido = supabase.table("cti_pedidos").insert(payload).execute().data or []
     supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO"}).eq("id", proposta_id).execute()
