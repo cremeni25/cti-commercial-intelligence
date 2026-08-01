@@ -8,23 +8,8 @@ from .crm_router import router, supabase, _normalizar_probabilidade
 STATUS_OPORTUNIDADE_ENCERRADA = {"GANHO", "PERDIDO", "CANCELADO", "CONCLUIDO", "ENCERRADO"}
 STATUS_PROPOSTA_INATIVA = {"SUBSTITUIDA", "CANCELADA", "EXPIRADA", "REJEITADA", "OBSOLETA"}
 STATUS_PROPOSTA_FINAL = {"ACEITA", "CONVERTIDA_PEDIDO"}
-
-PROBABILIDADE_POR_ETAPA = {
-    "OPORTUNIDADE": 0.10,
-    "ATIVIDADE": 0.20,
-    "ATIVIDADES": 0.20,
-    "PROPOSTA": 0.50,
-    "ACEITE": 0.80,
-    "PEDIDO": 1.00,
-    "DOSSIÊ": 1.00,
-    "DOSSIE": 1.00,
-    "CARRIER": 1.00,
-    "FATURADO": 1.00,
-    "GANHO": 1.00,
-    "ENCERRADO": 1.00,
-    "PERDIDO": 0.00,
-    "CANCELADO": 0.00,
-}
+ETAPAS_PROBABILIDADE_TOTAL = {"PEDIDO", "DOSSIÊ", "DOSSIE", "CARRIER", "FATURADO", "GANHO", "ENCERRADO"}
+ETAPAS_PROBABILIDADE_ZERO = {"PERDIDO", "CANCELADO"}
 
 
 def _texto(valor: Any) -> str:
@@ -67,13 +52,13 @@ def _etapa_comercial(
     pedidos: list[dict[str, Any]],
 ) -> str:
     status_oportunidade = _status(oportunidade.get("status")) or "OPORTUNIDADE"
-    if status_oportunidade in {"PERDIDO", "CANCELADO"}:
+    if status_oportunidade in ETAPAS_PROBABILIDADE_ZERO:
         return status_oportunidade
     if status_oportunidade in {"FATURADO", "ENCERRADO", "CONCLUIDO"}:
         return "ENCERRADO" if status_oportunidade == "CONCLUIDO" else status_oportunidade
     if pedidos:
         status_pedidos = {_status(item.get("status")) for item in pedidos}
-        if status_pedidos & {"FATURADO"}:
+        if "FATURADO" in status_pedidos:
             return "FATURADO"
         if status_pedidos & {"ENVIADO_CARRIER", "CARRIER", "APROVADO_CARRIER"}:
             return "CARRIER"
@@ -94,8 +79,10 @@ def _etapa_comercial(
 
 
 def _probabilidade(etapa: str, oportunidade: dict[str, Any]) -> float:
-    if etapa in PROBABILIDADE_POR_ETAPA:
-        return PROBABILIDADE_POR_ETAPA[etapa]
+    if etapa in ETAPAS_PROBABILIDADE_TOTAL:
+        return 1.0
+    if etapa in ETAPAS_PROBABILIDADE_ZERO:
+        return 0.0
     return _normalizar_probabilidade(oportunidade.get("probabilidade"))
 
 
@@ -139,7 +126,7 @@ def nucleo_comercial():
         valor_itens = round(sum(
             _valor_item(item)
             for item in itens_oportunidade
-            if _status(item.get("status")) not in {"CANCELADO", "PERDIDO"}
+            if _status(item.get("status")) not in ETAPAS_PROBABILIDADE_ZERO
         ), 2)
         valor = float(
             (pedidos_oportunidade[0].get("valor") if pedidos_oportunidade else None)
