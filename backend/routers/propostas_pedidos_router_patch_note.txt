@@ -1,0 +1,1 @@
+Remove origem_comercial do payload de criação de cti_pedidos; o campo não existe no schema atual.
