@@ -7,7 +7,18 @@ import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
 
-type Pedido = {
+type RegistroNucleo = {
+  oportunidade_id: string
+  cliente_nome?: string
+  etapa?: string
+  valor?: number
+  proposta_numero?: string
+  pedido_id?: string
+  pedido_numero?: string
+  status_pedido?: string
+}
+
+type PedidoOperacional = {
   id: string
   numero?: string
   cliente_nome?: string
@@ -22,6 +33,11 @@ type Pedido = {
   aceite?: { nome_signatario?: string; metodo?: string; aceito_em?: string; status?: string }
 }
 
+type Pedido = PedidoOperacional & {
+  oportunidade_id?: string
+  etapa_comercial?: string
+}
+
 function moeda(valor: unknown) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
 }
@@ -30,6 +46,13 @@ function data(valor?: string) {
   if (!valor) return "-"
   const d = new Date(valor)
   return Number.isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR")
+}
+
+async function buscarJson<T>(url: string): Promise<T> {
+  const response = await fetch(url, { cache: "no-store" })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar os pedidos.")
+  return payload as T
 }
 
 export default function PedidosPage() {
@@ -41,15 +64,38 @@ export default function PedidosPage() {
   useEffect(() => {
     let ativo = true
     setLoading(true)
-    fetch(`${API_URL}/carrier-operacional/pedidos`, { cache: "no-store" })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => [])
-        if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar os pedidos.")
-        return Array.isArray(payload) ? payload : []
+    setErro("")
+
+    Promise.all([
+      buscarJson<RegistroNucleo[]>(`${API_URL}/crm/nucleo-comercial`),
+      buscarJson<PedidoOperacional[]>(`${API_URL}/carrier-operacional/pedidos`).catch(() => []),
+    ])
+      .then(([nucleo, operacionais]) => {
+        if (!ativo) return
+        const operacionalPorId = new Map(operacionais.map((item) => [String(item.id), item]))
+        const pedidos = nucleo
+          .filter((item) => Boolean(item.pedido_id))
+          .map((item) => {
+            const operacional = operacionalPorId.get(String(item.pedido_id))
+            return {
+              ...(operacional || { id: String(item.pedido_id) }),
+              id: String(item.pedido_id),
+              numero: item.pedido_numero || operacional?.numero,
+              cliente_nome: item.cliente_nome || operacional?.cliente_nome,
+              valor: Number(item.valor || 0),
+              status: item.status_pedido || operacional?.status,
+              proposta_numero: item.proposta_numero || operacional?.proposta_numero,
+              oportunidade_id: item.oportunidade_id,
+              etapa_comercial: item.etapa,
+            }
+          })
+        setDados(pedidos)
       })
-      .then((payload) => { if (ativo) setDados(payload) })
-      .catch((falha) => { if (ativo) setErro(falha instanceof Error ? falha.message : "Falha ao carregar pedidos.") })
+      .catch((falha) => {
+        if (ativo) setErro(falha instanceof Error ? falha.message : "Falha ao carregar pedidos.")
+      })
       .finally(() => { if (ativo) setLoading(false) })
+
     return () => { ativo = false }
   }, [])
 
@@ -60,8 +106,8 @@ export default function PedidosPage() {
   }, [busca, dados])
 
   const valorTotal = dados.reduce((total, item) => total + Number(item.valor || 0), 0)
-  const enviados = dados.filter((item) => ["ENVIADO", "REENVIADO", "CONFIRMADO"].includes(String(item.status_envio_carrier))).length
-  const preparando = dados.filter((item) => String(item.status_envio_carrier) === "PREPARANDO").length
+  const enviados = dados.filter((item) => ["ENVIADO", "REENVIADO", "CONFIRMADO", "ENVIADO_CARRIER", "APROVADO_CARRIER"].includes(String(item.status_envio_carrier || item.status))).length
+  const preparando = dados.filter((item) => String(item.status_envio_carrier) === "PREPARANDO" || item.etapa_comercial === "DOSSIÊ").length
 
   return <main className="flex min-h-screen bg-[#020817] text-white">
     <Sidebar />
@@ -73,7 +119,7 @@ export default function PedidosPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Operação comercial</p>
               <h1 className="mt-2 text-3xl font-bold">Pedidos e dossiês Carrier</h1>
-              <p className="mt-2 text-sm text-slate-400">Pedidos gerados exclusivamente a partir de propostas aceitas.</p>
+              <p className="mt-2 text-sm text-slate-400">Pedidos reconhecidos pelo núcleo comercial e complementados pelos dados operacionais do dossiê.</p>
             </div>
             <Link href="/funil-carrier" className="rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300">Abrir Funil Carrier</Link>
           </div>
@@ -97,12 +143,12 @@ export default function PedidosPage() {
             <table className="min-w-full text-sm">
               <thead><tr className="border-b border-[#16325c] text-left text-slate-400"><th className="p-3">Cliente</th><th className="p-3">Pedido</th><th className="p-3">Equipamento</th><th className="p-3">Valor</th><th className="p-3">Aceite</th><th className="p-3">Carrier</th><th className="p-3">Ação</th></tr></thead>
               <tbody>{filtrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] align-top">
-                <td className="p-3"><p className="font-semibold text-white">{item.cliente_nome || "Cliente"}</p><p className="mt-1 text-xs text-slate-500">{data(item.data_pedido)}</p></td>
+                <td className="p-3"><p className="font-semibold text-white">{item.cliente_nome || "Cliente não identificado"}</p><p className="mt-1 text-xs text-slate-500">{data(item.data_pedido)}</p></td>
                 <td className="p-3"><p className="text-cyan-300">{item.numero || "Pedido"}</p><p className="mt-1 text-xs text-slate-500">Proposta {item.proposta_numero || "-"}</p></td>
                 <td className="p-3"><p>{item.equipamento || "-"}</p><p className="mt-1 text-xs text-slate-500">{item.linha_produto || "-"} • {item.quantidade || 1} un.</p></td>
                 <td className="p-3 font-semibold text-emerald-300">{moeda(item.valor)}</td>
                 <td className="p-3"><p>{item.aceite?.nome_signatario || "Registrado"}</p><p className="mt-1 text-xs text-slate-500">{item.aceite?.metodo || "-"}</p></td>
-                <td className="p-3"><span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{item.status_envio_carrier || "NAO_ENVIADO"}</span></td>
+                <td className="p-3"><span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{item.status_envio_carrier || item.etapa_comercial || "PEDIDO"}</span></td>
                 <td className="p-3"><Link href={`/pedidos/${item.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Abrir dossiê</Link></td>
               </tr>)}</tbody>
             </table>
