@@ -12,6 +12,10 @@ from core.supabase_client import supabase
 
 router = APIRouter(prefix="/crm-documentos", tags=["CRM Documentos Comerciais"])
 
+STATUS_ITEM_FINAL = {"ACEITO", "CONVERTIDO_PEDIDO"}
+STATUS_PROPOSTA_FINAL = {"ACEITA", "CONVERTIDA_PEDIDO"}
+STATUS_PROPOSTA_INATIVA = {"SUBSTITUIDA", "CANCELADA", "EXPIRADA", "REJEITADA"}
+
 
 class ItemOportunidadeCreate(BaseModel):
     linha_produto: str
@@ -113,6 +117,23 @@ def _valor_item(item: dict[str, Any]) -> float:
     return round(quantidade * preco * (1 - desconto / 100), 2)
 
 
+def _sincronizar_valor_oportunidade(oportunidade_id: str) -> float:
+    itens = (
+        supabase.table("cti_oportunidade_itens")
+        .select("quantidade,preco_unitario,desconto_percentual,status")
+        .eq("oportunidade_id", oportunidade_id)
+        .execute()
+        .data
+        or []
+    )
+    valor = round(
+        sum(_valor_item(item) for item in itens if str(item.get("status") or "") not in {"CANCELADO", "PERDIDO"}),
+        2,
+    )
+    supabase.table("cti_oportunidades").update({"valor_estimado": valor, "updated_at": _agora()}).eq("id", oportunidade_id).execute()
+    return valor
+
+
 def _snapshot(oportunidade: dict[str, Any], item: dict[str, Any], modelo: dict[str, Any] | None) -> dict[str, Any]:
     return {
         "oportunidade": oportunidade,
@@ -138,6 +159,18 @@ def _modelo_ativo(item: dict[str, Any]) -> dict[str, Any] | None:
     return modelos[0] if modelos else None
 
 
+def _propostas_item(item_id: str) -> list[dict[str, Any]]:
+    return (
+        supabase.table("cti_propostas")
+        .select("*")
+        .eq("item_oportunidade_id", item_id)
+        .order("versao", desc=True)
+        .execute()
+        .data
+        or []
+    )
+
+
 def _atualizar_status_oportunidade(oportunidade_id: str) -> None:
     itens = supabase.table("cti_oportunidade_itens").select("status").eq("oportunidade_id", oportunidade_id).execute().data or []
     statuses = {str(item.get("status") or "EM_NEGOCIACAO") for item in itens}
@@ -148,7 +181,7 @@ def _atualizar_status_oportunidade(oportunidade_id: str) -> None:
     elif "PROPOSTA_EMITIDA" in statuses or "ACEITO" in statuses:
         status = "PROPOSTA"
     else:
-        return
+        status = "OPORTUNIDADE"
     supabase.table("cti_oportunidades").update({"status": status, "updated_at": _agora()}).eq("id", oportunidade_id).execute()
 
 
@@ -174,12 +207,19 @@ def criar_item(oportunidade_id: str, dados: ItemOportunidadeCreate):
     payload["oportunidade_id"] = oportunidade_id
     payload["linha_produto"] = payload["linha_produto"].strip().upper()
     payload["equipamento"] = payload["equipamento"].strip().upper()
-    return supabase.table("cti_oportunidade_itens").insert(payload).execute().data
+    criado = supabase.table("cti_oportunidade_itens").insert(payload).execute().data or []
+    _sincronizar_valor_oportunidade(oportunidade_id)
+    _atualizar_status_oportunidade(oportunidade_id)
+    return criado
 
 
 @router.put("/itens/{item_id}")
 def atualizar_item(item_id: str, dados: ItemOportunidadeUpdate):
     item = _primeiro("cti_oportunidade_itens", item_id, "Item da oportunidade não encontrado")
+    if str(item.get("status") or "") in STATUS_ITEM_FINAL:
+        campos_comerciais = {"linha_produto", "equipamento", "configuracao", "quantidade", "preco_unitario", "desconto_percentual"}
+        if campos_comerciais.intersection(dados.model_fields_set):
+            raise HTTPException(status_code=409, detail="Item aceito ou convertido não pode ter configuração ou valor alterados.")
     payload = dados.model_dump(exclude_none=True)
     if "linha_produto" in payload:
         payload["linha_produto"] = payload["linha_produto"].strip().upper()
@@ -187,7 +227,9 @@ def atualizar_item(item_id: str, dados: ItemOportunidadeUpdate):
         payload["equipamento"] = payload["equipamento"].strip().upper()
     payload["updated_at"] = _agora()
     atualizado = supabase.table("cti_oportunidade_itens").update(payload).eq("id", item_id).execute().data
-    _atualizar_status_oportunidade(str(item["oportunidade_id"]))
+    oportunidade_id = str(item["oportunidade_id"])
+    _sincronizar_valor_oportunidade(oportunidade_id)
+    _atualizar_status_oportunidade(oportunidade_id)
     return atualizado
 
 
@@ -197,17 +239,24 @@ def excluir_item(item_id: str):
     propostas = supabase.table("cti_propostas").select("id").eq("item_oportunidade_id", item_id).limit(1).execute().data or []
     if propostas:
         raise HTTPException(status_code=409, detail="Item com proposta vinculada não pode ser excluído; utilize cancelamento.")
+    oportunidade_id = str(item["oportunidade_id"])
     supabase.table("cti_oportunidade_itens").delete().eq("id", item_id).execute()
-    return {"success": True, "oportunidade_id": item["oportunidade_id"]}
+    _sincronizar_valor_oportunidade(oportunidade_id)
+    _atualizar_status_oportunidade(oportunidade_id)
+    return {"success": True, "oportunidade_id": oportunidade_id}
 
 
 @router.post("/itens/{item_id}/propostas")
 def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     item = _primeiro("cti_oportunidade_itens", item_id, "Item da oportunidade não encontrado")
+    if str(item.get("status") or "") in STATUS_ITEM_FINAL:
+        raise HTTPException(status_code=409, detail="Item aceito ou convertido não pode gerar nova proposta sem reabertura formal.")
+    propostas_anteriores = _propostas_item(item_id)
+    if any(str(proposta.get("status_documento") or "") in STATUS_PROPOSTA_FINAL for proposta in propostas_anteriores):
+        raise HTTPException(status_code=409, detail="Já existe proposta final para este item.")
     oportunidade = _primeiro("cti_oportunidades", str(item["oportunidade_id"]), "Oportunidade não encontrada")
     modelo = _modelo_ativo(item)
-    anteriores = supabase.table("cti_propostas").select("versao").eq("item_oportunidade_id", item_id).order("versao", desc=True).limit(1).execute().data or []
-    versao = int(anteriores[0]["versao"]) + 1 if anteriores else 1
+    versao = int(propostas_anteriores[0].get("versao") or 0) + 1 if propostas_anteriores else 1
     snapshot = _snapshot(oportunidade, item, modelo)
     snapshot["condicoes_adicionais"] = dados.condicoes_adicionais or item.get("condicao_pagamento")
     snapshot["produto"] = item.get("linha_produto")
@@ -231,6 +280,7 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     }
     proposta = supabase.table("cti_propostas").insert(payload).execute().data or []
     supabase.table("cti_oportunidade_itens").update({"status": "PROPOSTA_EMITIDA", "updated_at": _agora()}).eq("id", item_id).execute()
+    _sincronizar_valor_oportunidade(str(oportunidade["id"]))
     _atualizar_status_oportunidade(str(oportunidade["id"]))
     return proposta
 
@@ -238,7 +288,7 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
 @router.get("/itens/{item_id}/propostas")
 def listar_propostas_item(item_id: str):
     _primeiro("cti_oportunidade_itens", item_id, "Item da oportunidade não encontrado")
-    return supabase.table("cti_propostas").select("*").eq("item_oportunidade_id", item_id).order("versao", desc=True).execute().data or []
+    return _propostas_item(item_id)
 
 
 @router.post("/propostas/{proposta_id}/emitir")
@@ -246,6 +296,11 @@ def emitir_proposta(proposta_id: str):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada")
     if proposta.get("status_documento") not in {"RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"}:
         raise HTTPException(status_code=409, detail="A proposta não está em condição de emissão.")
+    item_id = proposta.get("item_oportunidade_id")
+    if item_id:
+        outras = [item for item in _propostas_item(str(item_id)) if str(item.get("id")) != proposta_id]
+        if any(str(item.get("status_documento") or "") in STATUS_PROPOSTA_FINAL for item in outras):
+            raise HTTPException(status_code=409, detail="Já existe proposta aceita ou convertida para este item.")
     return supabase.table("cti_propostas").update({"status_documento": "EMITIDA", "status": "ENVIADA", "emitida_em": _agora()}).eq("id", proposta_id).execute().data
 
 
@@ -281,9 +336,20 @@ def confirmar_aceite(aceite_id: str, dados: ConfirmarAceiteRequest):
     }
     atualizado = supabase.table("cti_proposta_aceites").update(payload).eq("id", aceite_id).execute().data or []
     proposta = _primeiro("cti_propostas", str(aceite["proposta_id"]), "Proposta não encontrada")
-    supabase.table("cti_propostas").update({"status_documento": "ACEITA", "status": "APROVADA", "aceita_em": _agora()}).eq("id", proposta["id"]).execute()
-    if proposta.get("item_oportunidade_id"):
-        supabase.table("cti_oportunidade_itens").update({"status": "ACEITO", "updated_at": _agora()}).eq("id", proposta["item_oportunidade_id"]).execute()
+    proposta_id = str(proposta["id"])
+    item_id = proposta.get("item_oportunidade_id")
+    supabase.table("cti_propostas").update({"status_documento": "ACEITA", "status": "APROVADA", "aceita_em": _agora()}).eq("id", proposta_id).execute()
+    if item_id:
+        outras = [item for item in _propostas_item(str(item_id)) if str(item.get("id")) != proposta_id]
+        for outra in outras:
+            status_documento = str(outra.get("status_documento") or "")
+            if status_documento not in STATUS_PROPOSTA_FINAL and status_documento not in STATUS_PROPOSTA_INATIVA:
+                supabase.table("cti_propostas").update({"status_documento": "SUBSTITUIDA", "status": "CANCELADA"}).eq("id", outra["id"]).execute()
+        supabase.table("cti_oportunidade_itens").update({"status": "ACEITO", "updated_at": _agora()}).eq("id", item_id).execute()
+    oportunidade_id = proposta.get("oportunidade_id")
+    if oportunidade_id:
+        _sincronizar_valor_oportunidade(str(oportunidade_id))
+        _atualizar_status_oportunidade(str(oportunidade_id))
     return atualizado
 
 
@@ -298,7 +364,6 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
     existente = supabase.table("cti_pedidos").select("*").eq("proposta_aceita_id", proposta_id).limit(1).execute().data or []
     if existente:
         return existente
-
     oportunidade_id = proposta.get("oportunidade_id")
     data_pedido = dados.data_pedido or datetime.now(timezone.utc).date().isoformat()
     responsavel_id = dados.responsavel_id or (proposta.get("snapshot_dados") or {}).get("responsavel_id")
@@ -306,13 +371,7 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         {"tipo": "PROPOSTA", "id": proposta_id, "hash": proposta.get("hash_documento")},
         {"tipo": "ACEITE", "id": aceites[0]["id"]},
         {"tipo": "OPORTUNIDADE", "id": oportunidade_id},
-        {
-            "tipo": "METADADOS_PEDIDO",
-            "origem_comercial": dados.origem_comercial,
-            "responsavel_id": responsavel_id,
-            "data_pedido": data_pedido,
-            "registrado_em": _agora(),
-        },
+        {"tipo": "METADADOS_PEDIDO", "origem_comercial": dados.origem_comercial, "responsavel_id": responsavel_id, "data_pedido": data_pedido, "registrado_em": _agora()},
     ]
     payload = {
         "numero": dados.numero or _numero_pedido(),
@@ -326,10 +385,11 @@ def converter_em_pedido(proposta_id: str, dados: ConverterPedidoRequest):
         "dossie_documentos": dossie_documentos,
     }
     pedido = supabase.table("cti_pedidos").insert(payload).execute().data or []
-    supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO"}).eq("id", proposta_id).execute()
+    supabase.table("cti_propostas").update({"status_documento": "CONVERTIDA_PEDIDO", "status": "APROVADA"}).eq("id", proposta_id).execute()
     if proposta.get("item_oportunidade_id"):
         supabase.table("cti_oportunidade_itens").update({"status": "CONVERTIDO_PEDIDO", "updated_at": _agora()}).eq("id", proposta["item_oportunidade_id"]).execute()
     if oportunidade_id:
+        _sincronizar_valor_oportunidade(str(oportunidade_id))
         _atualizar_status_oportunidade(str(oportunidade_id))
     return pedido
 
@@ -360,8 +420,8 @@ def funil_carrier():
             "quantidade": item.get("quantidade"),
             "valor_total": item.get("valor_total") or _valor_item(item),
             "status_item": item.get("status"),
-            "propostas": len(propostas_item.get(str(item.get("id")), [])),
-            "proposta_aceita": any(p.get("status_documento") in {"ACEITA", "CONVERTIDA_PEDIDO"} for p in propostas_item.get(str(item.get("id")), [])),
+            "propostas": len([p for p in propostas_item.get(str(item.get("id")), []) if str(p.get("status_documento") or "") not in STATUS_PROPOSTA_INATIVA]),
+            "proposta_aceita": any(p.get("status_documento") in STATUS_PROPOSTA_FINAL for p in propostas_item.get(str(item.get("id")), [])),
             "pedido_gerado": bool(pedidos_item.get(str(item.get("id")))),
             "previsao_fechamento": por_oportunidade.get(item.get("oportunidade_id"), {}).get("data_fechamento_prevista"),
             "probabilidade": por_oportunidade.get(item.get("oportunidade_id"), {}).get("probabilidade"),
