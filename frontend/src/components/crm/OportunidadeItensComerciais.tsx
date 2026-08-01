@@ -5,35 +5,22 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/core/auth"
 import { API_URL } from "@/lib/api"
 
-type PrecoVigente = {
-  tabela_codigo?: string
-  preco_cheio?: number
-  moeda?: string
-  vigencia_inicio?: string
-}
-
+type PrecoVigente = { tabela_codigo?: string; preco_cheio?: number; vigencia_inicio?: string }
 type EquipamentoCatalogo = {
   codigo: string
   linha_produto: string
-  modelo_base: string
   nome_comercial: string
   configuracao: string
   compressor?: string
-  possui_eletrico: boolean
-  template_disponivel: boolean
   preco_vigente?: PrecoVigente | null
 }
-
 type Item = {
   id: string
   linha_produto: string
   equipamento: string
-  equipamento_codigo?: string
-  modelo_base?: string
   nome_comercial?: string
   configuracao?: string
   compressor?: string
-  possui_eletrico?: boolean
   preco_tabela?: number
   tabela_preco_codigo?: string
   tabela_preco_vigencia?: string
@@ -44,32 +31,14 @@ type Item = {
   condicao_pagamento?: string
   prazo_entrega?: string
   validade_condicao?: string
-  frete?: string
-  local_entrega?: string
   garantia?: string
-  opcionais?: string[]
-  observacoes_comerciais?: string
-  observacoes_tecnicas?: string
   status: string
 }
+type Proposta = { id: string; numero?: string; versao?: number; valor?: number; status_documento?: string }
+type AceiteCriado = { aceite?: { id?: string } | null; link_token?: string | null }
 
-type Proposta = {
-  id: string
-  numero?: string
-  versao?: number
-  valor?: number
-  status_documento?: string
-  validade?: string
-}
-
-type AceiteCriado = {
-  aceite?: {
-    id?: string
-    nome_signatario?: string
-    status?: string
-  } | null
-  link_token?: string | null
-}
+const STATUS_ITEM_FECHADO = new Set(["ACEITO", "CONVERTIDO_PEDIDO", "CANCELADO", "PERDIDO"])
+const STATUS_PROPOSTA_FINAL = new Set(["ACEITA", "CONVERTIDA_PEDIDO", "CANCELADA", "SUBSTITUIDA", "OBSOLETA"])
 
 function moeda(valor: unknown) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -81,6 +50,25 @@ function configuracaoLabel(valor?: string) {
   return "Padrão"
 }
 
+function statusLabel(valor?: string) {
+  const mapa: Record<string, string> = {
+    EM_NEGOCIACAO: "Em negociação",
+    PROPOSTA_EMITIDA: "Proposta emitida",
+    ACEITO: "Aceito",
+    CONVERTIDO_PEDIDO: "Convertido em pedido",
+    RASCUNHO: "Rascunho",
+    EMITIDA: "Emitida",
+    ENVIADA: "Enviada",
+    APROVADA: "Aprovada",
+    ACEITA: "Aceita",
+    CONVERTIDA_PEDIDO: "Convertida em pedido",
+    SUBSTITUIDA: "Substituída",
+    OBSOLETA: "Obsoleta",
+    CANCELADA: "Cancelada",
+  }
+  return mapa[String(valor || "")] || String(valor || "")
+}
+
 export default function OportunidadeItensComerciais({ oportunidadeId }: { oportunidadeId: string }) {
   const { usuario } = useAuth()
   const [catalogo, setCatalogo] = useState<EquipamentoCatalogo[]>([])
@@ -88,6 +76,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
   const [propostas, setPropostas] = useState<Record<string, Proposta[]>>({})
   const [linha, setLinha] = useState("")
   const [equipamentoCodigo, setEquipamentoCodigo] = useState("")
+  const [formularioAberto, setFormularioAberto] = useState(false)
   const [mensagem, setMensagem] = useState("")
   const [erro, setErro] = useState("")
   const [carregando, setCarregando] = useState(true)
@@ -95,10 +84,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
 
   const linhas = useMemo(() => Array.from(new Set(catalogo.map((item) => item.linha_produto))), [catalogo])
   const equipamentos = useMemo(() => catalogo.filter((item) => item.linha_produto === linha), [catalogo, linha])
-  const equipamentoSelecionado = useMemo(
-    () => catalogo.find((item) => item.codigo === equipamentoCodigo),
-    [catalogo, equipamentoCodigo],
-  )
+  const equipamentoSelecionado = useMemo(() => catalogo.find((item) => item.codigo === equipamentoCodigo), [catalogo, equipamentoCodigo])
 
   const carregar = useCallback(async () => {
     if (!oportunidadeId) return
@@ -113,7 +99,6 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
       const dadosItens = await respostaItens.json().catch(() => [])
       if (!respostaCatalogo.ok) throw new Error(dadosCatalogo?.detail || "Não foi possível carregar o catálogo comercial.")
       if (!respostaItens.ok) throw new Error(dadosItens?.detail || "Não foi possível carregar os itens comerciais.")
-
       const listaCatalogo = Array.isArray(dadosCatalogo) ? dadosCatalogo : []
       const listaItens = Array.isArray(dadosItens) ? dadosItens : []
       setCatalogo(listaCatalogo)
@@ -122,7 +107,6 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
         setLinha(listaCatalogo[0].linha_produto)
         setEquipamentoCodigo(listaCatalogo[0].codigo)
       }
-
       const pares = await Promise.all(listaItens.map(async (item: Item) => {
         const resposta = await fetch(`${API_URL}/crm-documentos/itens/${item.id}/propostas`, { cache: "no-store" })
         return [item.id, resposta.ok ? await resposta.json() : []] as const
@@ -139,8 +123,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
 
   function alterarLinha(novaLinha: string) {
     setLinha(novaLinha)
-    const primeiro = catalogo.find((item) => item.linha_produto === novaLinha)
-    setEquipamentoCodigo(primeiro?.codigo || "")
+    setEquipamentoCodigo(catalogo.find((item) => item.linha_produto === novaLinha)?.codigo || "")
   }
 
   async function criarItem(evento: FormEvent<HTMLFormElement>) {
@@ -174,7 +157,8 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
       const retorno = await resposta.json().catch(() => null)
       if (!resposta.ok) throw new Error(retorno?.detail || "Não foi possível adicionar o item.")
       evento.currentTarget.reset()
-      setMensagem("Item adicionado com preço cheio e configuração do catálogo comercial.")
+      setFormularioAberto(false)
+      setMensagem("Item adicionado à oportunidade.")
       await carregar()
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Falha ao adicionar item.")
@@ -203,9 +187,8 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
       await acao(`/crm-documentos/itens/${item.id}/propostas`, {
         responsavel_id: String(usuario?.id || ""),
         validade: item.validade_condicao || null,
-        observacoes: item.observacoes_comerciais || null,
         condicoes_adicionais: item.condicao_pagamento || null,
-      }, "Proposta criada a partir dos dados do item, sem redigitação.")
+      }, "Proposta criada.")
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao gerar proposta.") }
   }
 
@@ -217,46 +200,23 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
   async function solicitarAceite(proposta: Proposta, metodo: "PRESENCIAL_TELA" | "REMOTO_LINK") {
     const nome = window.prompt("Nome completo do signatário")?.trim()
     if (!nome) return
-    const documento = metodo === "PRESENCIAL_TELA" ? window.prompt("CPF ou documento do signatário (opcional)")?.trim() : undefined
-    const email = metodo === "REMOTO_LINK" ? window.prompt("E-mail do signatário")?.trim() : undefined
     try {
       const retorno = await acao(`/crm-documentos/propostas/${proposta.id}/aceites`, {
         metodo,
         nome_signatario: nome,
-        documento_signatario: documento || null,
-        email_signatario: email || null,
-      }, metodo === "PRESENCIAL_TELA" ? "Aceite presencial iniciado." : "Link de aceite remoto gerado.") as AceiteCriado
-
+      }, metodo === "PRESENCIAL_TELA" ? "Aceite presencial iniciado." : "Link de aceite gerado.") as AceiteCriado
       if (metodo === "REMOTO_LINK") {
-        if (retorno?.link_token) window.prompt("Copie o identificador do link de aceite", String(retorno.link_token))
+        if (retorno?.link_token) window.prompt("Identificador do link de aceite", String(retorno.link_token))
         return
       }
-
       const aceiteId = retorno?.aceite?.id
-      if (!aceiteId) throw new Error("O aceite foi iniciado, mas o identificador de confirmação não foi retornado.")
-
-      const confirmou = window.confirm(
-        `CONFIRMAÇÃO DE ACEITE\n\n${nome} declara que leu e aceita integralmente a proposta ${proposta.numero || "comercial"}, no valor de ${moeda(proposta.valor)}.\n\nConfirmar o aceite presencial?`,
-      )
-      if (!confirmou) {
-        setMensagem("Aceite presencial iniciado e mantido como pendente de confirmação.")
-        return
-      }
-
+      if (!aceiteId) throw new Error("Aceite sem identificador de confirmação.")
+      if (!window.confirm(`${nome} confirma o aceite integral da proposta ${proposta.numero || "comercial"}?`)) return
       await acao(`/crm-documentos/aceites/${aceiteId}/confirmar`, {
         aceite_termos: true,
         user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
-        evidencias: {
-          origem: "CTI_OPORTUNIDADE",
-          metodo: "PRESENCIAL_TELA",
-          proposta_id: proposta.id,
-          proposta_numero: proposta.numero || null,
-          nome_signatario: nome,
-          documento_signatario: documento || null,
-          confirmado_na_tela: true,
-          confirmado_em: new Date().toISOString(),
-        },
-      }, "Aceite presencial confirmado. A proposta foi aceita.")
+        evidencias: { origem: "CTI_OPORTUNIDADE", proposta_id: proposta.id, nome_signatario: nome, confirmado_em: new Date().toISOString() },
+      }, "Proposta aceita.")
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao solicitar aceite.") }
   }
 
@@ -265,50 +225,20 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
       await acao(`/crm-documentos/propostas/${proposta.id}/converter-pedido`, {
         responsavel_id: String(usuario?.id || ""),
         origem_comercial: "CRM",
-      }, "Pedido gerado a partir da proposta aceita.")
+      }, "Pedido gerado.")
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao gerar pedido.") }
   }
 
-  return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6">
-    <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Negociação estruturada</p>
-        <h2 className="mt-2 text-2xl font-bold">Itens, propostas e pedidos</h2>
-        <p className="mt-2 text-sm text-slate-400">O preço cheio, a configuração e o nome comercial são herdados do catálogo vigente.</p>
-      </div>
-      <span className="text-sm text-cyan-300">{itens.length} item(ns)</span>
-    </div>
+  return <section className="space-y-5">
+    {erro && <div className="rounded-xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
+    {mensagem && <div className="rounded-xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm text-emerald-200">{mensagem}</div>}
 
-    {erro && <div className="mt-5 rounded-xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
-    {mensagem && <div className="mt-5 rounded-xl border border-emerald-900 bg-emerald-950/30 p-4 text-sm text-emerald-200">{mensagem}</div>}
-
-    <form onSubmit={criarItem} className="mt-6 grid gap-4 rounded-2xl border border-[#16325c] bg-[#091a33] p-5 md:grid-cols-2 xl:grid-cols-4">
-      <CampoSelect label="Linha" value={linha} onChange={alterarLinha} opcoes={linhas.map((valor) => ({ valor, texto: valor }))} />
-      <CampoSelect label="Equipamento" value={equipamentoCodigo} onChange={setEquipamentoCodigo} opcoes={equipamentos.map((item) => ({ valor: item.codigo, texto: item.nome_comercial }))} />
-      <Info label="Configuração" valor={configuracaoLabel(equipamentoSelecionado?.configuracao)} />
-      <Info label="Preço cheio vigente" valor={moeda(equipamentoSelecionado?.preco_vigente?.preco_cheio)} />
-      <Info label="Compressor" valor={equipamentoSelecionado?.compressor || "Não informado"} />
-      <Info label="Tabela" valor={equipamentoSelecionado?.preco_vigente?.tabela_codigo || "Sem tabela"} />
-      <Campo nome="quantidade" label="Quantidade" type="number" padrao="1" required />
-      <Campo nome="desconto_percentual" label="Desconto %" type="number" padrao="0" step="0.01" />
-      <Campo nome="condicao_pagamento" label="Condição de pagamento" />
-      <Campo nome="prazo_entrega" label="Prazo de entrega" />
-      <Campo nome="validade_condicao" label="Validade" type="date" />
-      <Campo nome="frete" label="Frete" />
-      <Campo nome="local_entrega" label="Local de entrega" />
-      <Campo nome="garantia" label="Garantia" />
-      <Campo nome="opcionais" label="Opcionais, separados por vírgula" classe="md:col-span-2" />
-      <Campo nome="observacoes_comerciais" label="Observações comerciais" classe="md:col-span-2" />
-      <Campo nome="observacoes_tecnicas" label="Observações técnicas" classe="md:col-span-2" />
-      <button disabled={salvando || !equipamentoCodigo} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60 md:col-span-2">
-        {salvando ? "Adicionando..." : "Adicionar item à oportunidade"}
-      </button>
-    </form>
-
-    <div className="mt-6 space-y-4">
-      {carregando ? <p className="text-slate-400">Carregando itens...</p> : itens.length === 0 ? <p className="text-slate-500">Nenhum item comercial cadastrado.</p> : itens.map((item) => {
+    <div className="space-y-4">
+      {carregando ? <p className="text-slate-400">Carregando negociação...</p> : itens.length === 0 ? <div className="rounded-2xl border border-[#16325c] bg-[#071427] p-6 text-slate-400">Nenhum item adicionado à oportunidade.</div> : itens.map((item) => {
         const lista = propostas[item.id] || []
-        return <article key={item.id} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-5">
+        const possuiPropostaFinal = lista.some((proposta) => STATUS_PROPOSTA_FINAL.has(String(proposta.status_documento)))
+        const podeGerarProposta = !STATUS_ITEM_FECHADO.has(String(item.status)) && !possuiPropostaFinal
+        return <article key={item.id} className="rounded-2xl border border-[#16325c] bg-[#071427] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">{item.linha_produto}</p>
@@ -319,8 +249,8 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
               {item.tabela_preco_codigo && <p className="mt-1 text-xs text-slate-500">{item.tabela_preco_codigo} • vigência {item.tabela_preco_vigencia || "não informada"}</p>}
             </div>
             <div className="flex flex-wrap gap-2">
-              <span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{item.status}</span>
-              <button onClick={() => void gerarProposta(item)} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950">Gerar proposta</button>
+              <span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{statusLabel(item.status)}</span>
+              {podeGerarProposta && <button onClick={() => void gerarProposta(item)} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-semibold text-slate-950">Gerar proposta</button>}
             </div>
           </div>
           <div className="mt-4 grid gap-2 text-sm text-slate-300 md:grid-cols-3">
@@ -329,16 +259,45 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
             <p>Garantia: {item.garantia || "A definir"}</p>
           </div>
           {lista.length > 0 && <div className="mt-5 space-y-2 border-t border-[#16325c] pt-4">{lista.map((proposta) => <div key={proposta.id} className="flex flex-col gap-3 rounded-xl bg-[#061326] p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div><p className="font-semibold text-white">{proposta.numero || "Proposta"} • versão {proposta.versao || 1}</p><p className="text-xs text-slate-400">{proposta.status_documento} • {moeda(proposta.valor)}</p></div>
+            <div><p className="font-semibold text-white">{proposta.numero || "Proposta"} • versão {proposta.versao || 1}</p><p className="text-xs text-slate-400">{statusLabel(proposta.status_documento)} • {moeda(proposta.valor)}</p></div>
             <div className="flex flex-wrap gap-2">
-              {["RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"].includes(String(proposta.status_documento)) && <button onClick={() => void emitir(proposta)} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Emitir</button>}
-              {["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(String(proposta.status_documento)) && <><button onClick={() => void solicitarAceite(proposta, "PRESENCIAL_TELA")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite presencial</button><button onClick={() => void solicitarAceite(proposta, "REMOTO_LINK")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite por link</button></>}
+              {!possuiPropostaFinal && ["RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"].includes(String(proposta.status_documento)) && <button onClick={() => void emitir(proposta)} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Emitir</button>}
+              {!possuiPropostaFinal && ["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(String(proposta.status_documento)) && <><button onClick={() => void solicitarAceite(proposta, "PRESENCIAL_TELA")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite presencial</button><button onClick={() => void solicitarAceite(proposta, "REMOTO_LINK")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite por link</button></>}
               {String(proposta.status_documento) === "ACEITA" && <button onClick={() => void converterPedido(proposta)} className="rounded-lg bg-emerald-500 px-3 py-2 text-xs font-semibold text-slate-950">Gerar pedido</button>}
             </div>
           </div>)}</div>}
         </article>
       })}
     </div>
+
+    {!formularioAberto && <button type="button" onClick={() => setFormularioAberto(true)} className="w-full rounded-2xl border border-cyan-700 bg-[#071427] px-5 py-4 font-semibold text-cyan-300 hover:bg-[#0a1b31]">Adicionar item à oportunidade</button>}
+
+    {formularioAberto && <div className="rounded-3xl border border-[#16325c] bg-[#071427] p-6">
+      <div className="flex items-center justify-between gap-4">
+        <div><h2 className="text-xl font-bold">Adicionar item à oportunidade</h2><p className="mt-1 text-sm text-slate-400">Selecione o equipamento e complete somente as condições desta negociação.</p></div>
+        <button type="button" onClick={() => setFormularioAberto(false)} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300">Cancelar</button>
+      </div>
+      <form onSubmit={criarItem} className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <CampoSelect label="Linha" value={linha} onChange={alterarLinha} opcoes={linhas.map((valor) => ({ valor, texto: valor }))} />
+        <CampoSelect label="Equipamento" value={equipamentoCodigo} onChange={setEquipamentoCodigo} opcoes={equipamentos.map((item) => ({ valor: item.codigo, texto: item.nome_comercial }))} />
+        <Info label="Configuração" valor={configuracaoLabel(equipamentoSelecionado?.configuracao)} />
+        <Info label="Preço cheio vigente" valor={moeda(equipamentoSelecionado?.preco_vigente?.preco_cheio)} />
+        <Info label="Compressor" valor={equipamentoSelecionado?.compressor || "Não informado"} />
+        <Info label="Tabela" valor={equipamentoSelecionado?.preco_vigente?.tabela_codigo || "Sem tabela"} />
+        <Campo nome="quantidade" label="Quantidade" type="number" padrao="1" required />
+        <Campo nome="desconto_percentual" label="Desconto %" type="number" padrao="0" step="0.01" />
+        <Campo nome="condicao_pagamento" label="Condição de pagamento" />
+        <Campo nome="prazo_entrega" label="Prazo de entrega" />
+        <Campo nome="validade_condicao" label="Validade" type="date" />
+        <Campo nome="frete" label="Frete" />
+        <Campo nome="local_entrega" label="Local de entrega" />
+        <Campo nome="garantia" label="Garantia" />
+        <Campo nome="opcionais" label="Opcionais, separados por vírgula" classe="md:col-span-2" />
+        <Campo nome="observacoes_comerciais" label="Observações comerciais" classe="md:col-span-2" />
+        <Campo nome="observacoes_tecnicas" label="Observações técnicas" classe="md:col-span-2" />
+        <button disabled={salvando || !equipamentoCodigo} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60 md:col-span-2">{salvando ? "Adicionando..." : "Confirmar item"}</button>
+      </form>
+    </div>}
   </section>
 }
 
