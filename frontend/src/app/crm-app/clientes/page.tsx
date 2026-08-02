@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react"
 import { AlertCircle, ArrowLeft, Building2, ChevronRight, Loader2, Search } from "lucide-react"
 
 type Registro = Record<string, unknown>
-type Cliente = { id: string; nome: string; codigo: string; cidade: string; estado: string }
-type Negocio = { oportunidade_id: string; cliente_id: string; titulo: string; etapa: string; valor: number }
+type Cliente = { id: string; chave: string; nome: string; codigo: string; cidade: string; estado: string }
+type Negocio = { oportunidade_id: string; cliente_id: string; cliente_chave: string; titulo: string; etapa: string; valor: number }
 
 function lista(payload: unknown): Registro[] {
   if (Array.isArray(payload)) return payload as Registro[]
@@ -23,27 +23,37 @@ function texto(valor: unknown) {
   return String(valor || "").trim()
 }
 
+function chaveNome(valor: unknown) {
+  return texto(valor).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR")
+}
+
+function primeiro(valor: unknown) {
+  return Array.isArray(valor) ? texto(valor[0]) : texto(valor)
+}
+
 function clienteDoCadastro(item: Registro): Cliente | null {
-  const id = texto(item.id || item.cliente_id)
-  const nome = texto(item.razao_social || item.nome_fantasia || item.nome || item.empresa)
-  if (!id || !nome) return null
+  const nome = texto(item.nome || item.empresa || item.razao_social || item.nome_fantasia || item.cliente)
+  if (!nome) return null
+  const id = texto(item.id || item.cliente_id || item.codigo || item.codigo_cliente) || nome
   return {
     id,
+    chave: chaveNome(nome),
     nome,
-    codigo: texto(item.codigo || item.codigo_cliente || item.id),
-    cidade: texto(item.cidade || item.municipio),
-    estado: texto(item.estado || item.uf).toUpperCase(),
+    codigo: texto(item.codigo || item.codigo_cliente || item.id) || nome,
+    cidade: texto(item.cidade || item.municipio) || primeiro(item.municipios),
+    estado: (texto(item.estado || item.uf) || primeiro(item.estados)).toUpperCase(),
   }
 }
 
 function clienteDoNegocio(item: Registro): Cliente | null {
-  const id = texto(item.cliente_id)
   const nome = texto(item.cliente_nome || item.razao_social || item.nome_cliente || item.cliente)
-  if (!id || !nome) return null
+  if (!nome) return null
+  const id = texto(item.cliente_id || item.cliente_codigo || item.codigo_cliente) || nome
   return {
     id,
+    chave: chaveNome(nome),
     nome,
-    codigo: texto(item.cliente_codigo || item.codigo_cliente || id),
+    codigo: texto(item.cliente_codigo || item.codigo_cliente || item.cliente_id) || nome,
     cidade: texto(item.cliente_cidade || item.municipio || item.cidade),
     estado: texto(item.cliente_estado || item.estado || item.uf).toUpperCase(),
   }
@@ -90,6 +100,7 @@ export default function ClientesCrmAppPage() {
       const negociosDados = registrosNegocios.map((item) => ({
         oportunidade_id: texto(item.oportunidade_id || item.id),
         cliente_id: texto(item.cliente_id),
+        cliente_chave: chaveNome(item.cliente_nome || item.razao_social || item.nome_cliente || item.cliente),
         titulo: texto(item.titulo || item.equipamento || "Oportunidade comercial"),
         etapa: texto(item.etapa || item.status_oportunidade || item.status || "OPORTUNIDADE"),
         valor: Number(item.valor || item.valor_estimado || 0),
@@ -100,7 +111,7 @@ export default function ClientesCrmAppPage() {
       if (clientesResultado.status === "fulfilled") {
         for (const item of lista(clientesResultado.value)) {
           const cliente = clienteDoCadastro(item)
-          if (cliente) mapaClientes.set(cliente.id, cliente)
+          if (cliente) mapaClientes.set(cliente.chave, cliente)
         }
       } else {
         setAviso("Cadastro histórico temporariamente indisponível. Exibindo clientes encontrados no núcleo comercial.")
@@ -108,7 +119,9 @@ export default function ClientesCrmAppPage() {
 
       for (const item of registrosNegocios) {
         const cliente = clienteDoNegocio(item)
-        if (cliente && !mapaClientes.has(cliente.id)) mapaClientes.set(cliente.id, cliente)
+        if (!cliente) continue
+        const existente = mapaClientes.get(cliente.chave)
+        mapaClientes.set(cliente.chave, existente ? { ...existente, id: texto(item.cliente_id) || existente.id } : cliente)
       }
 
       setClientes([...mapaClientes.values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")))
@@ -140,6 +153,7 @@ export default function ClientesCrmAppPage() {
           <div>
             <p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p>
             <h1 className="text-2xl font-bold">Clientes e histórico comercial</h1>
+            {!carregando && !erro ? <p className="mt-1 text-sm text-slate-400">{clientes.length} clientes na mesma carteira exibida na tela inicial</p> : null}
           </div>
         </header>
 
@@ -174,15 +188,18 @@ export default function ClientesCrmAppPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
             {filtrados.map((cliente) => {
-              const relacionados = negocios.filter((negocio) => negocio.cliente_id === cliente.id)
+              const relacionados = negocios.filter((negocio) =>
+                (negocio.cliente_id && negocio.cliente_id === cliente.id) ||
+                (negocio.cliente_chave && negocio.cliente_chave === cliente.chave),
+              )
               return (
-                <section key={cliente.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
+                <section key={cliente.chave} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
                   <div className="flex items-start gap-3">
                     <span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2 size={22} /></span>
                     <div className="min-w-0">
                       <h2 className="font-bold">{cliente.nome}</h2>
                       <p className="text-xs text-slate-400">
-                        {cliente.codigo}{cliente.cidade ? ` · ${cliente.cidade}/${cliente.estado}` : ""}
+                        {cliente.codigo}{cliente.cidade ? ` · ${cliente.cidade}${cliente.estado ? `/${cliente.estado}` : ""}` : ""}
                       </p>
                     </div>
                   </div>
