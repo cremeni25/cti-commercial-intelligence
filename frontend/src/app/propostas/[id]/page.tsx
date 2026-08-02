@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { API_URL } from "@/lib/api"
 
 interface PacoteProposta {
   proposta: Record<string, unknown>
@@ -33,9 +32,9 @@ export default function PropostaPage() {
   async function carregar() {
     setCarregando(true); setErro("")
     try {
-      const resposta = await fetch(`${API_URL}/crm-documentos/propostas/${id}`, { cache: "no-store" })
+      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}`, { cache: "no-store" })
       const payload = await resposta.json().catch(() => null)
-      if (!resposta.ok) throw new Error(payload?.detail || "Não foi possível carregar a proposta.")
+      if (!resposta.ok) throw new Error(payload?.detail || `Não foi possível carregar a proposta (${resposta.status}).`)
       setDados(payload)
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao carregar a proposta.") }
     finally { setCarregando(false) }
@@ -55,9 +54,9 @@ export default function PropostaPage() {
   async function executar(endpoint: string, body?: Record<string, unknown>) {
     setProcessando(true); setMensagem(""); setErro("")
     try {
-      const resposta = await fetch(`${API_URL}${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+      const resposta = await fetch(`/api/crm-proxy${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
       const payload = await resposta.json().catch(() => null)
-      if (!resposta.ok) throw new Error(payload?.detail || "A operação não pôde ser concluída.")
+      if (!resposta.ok) throw new Error(payload?.detail || `A operação não pôde ser concluída (${resposta.status}).`)
       setMensagem("Operação registrada com sucesso."); await carregar(); return payload
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha na operação."); return null }
     finally { setProcessando(false) }
