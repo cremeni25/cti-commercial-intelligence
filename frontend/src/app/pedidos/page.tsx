@@ -48,11 +48,27 @@ function data(valor?: string) {
   return Number.isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR")
 }
 
-async function buscarJson<T>(url: string): Promise<T> {
+async function buscarLista<T>(url: string, mensagem: string): Promise<T[]> {
   const response = await fetch(url, { cache: "no-store" })
-  const payload = await response.json().catch(() => null)
-  if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar os pedidos.")
-  return payload as T
+  const contentType = response.headers.get("content-type") || ""
+
+  if (!contentType.includes("application/json")) {
+    const trecho = (await response.text()).slice(0, 100).replace(/\s+/g, " ")
+    throw new Error(`API retornou conteúdo inválido (${response.status}): ${trecho || "sem conteúdo"}`)
+  }
+
+  const payload = await response.json()
+
+  if (!response.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String(payload.detail)
+      : mensagem
+    throw new Error(detalhe)
+  }
+
+  if (payload == null) return []
+  if (!Array.isArray(payload)) throw new Error("A API de pedidos retornou um formato inesperado.")
+  return payload as T[]
 }
 
 export default function PedidosPage() {
@@ -67,8 +83,8 @@ export default function PedidosPage() {
     setErro("")
 
     Promise.all([
-      buscarJson<RegistroNucleo[]>(`${API_URL}/crm/nucleo-comercial`),
-      buscarJson<PedidoOperacional[]>(`${API_URL}/carrier-operacional/pedidos`).catch(() => []),
+      buscarLista<RegistroNucleo>(`${API_URL}/crm/nucleo-comercial`, "Não foi possível carregar o núcleo comercial."),
+      buscarLista<PedidoOperacional>(`${API_URL}/carrier-operacional/pedidos`, "Não foi possível carregar os pedidos operacionais.").catch(() => []),
     ])
       .then(([nucleo, operacionais]) => {
         if (!ativo) return
