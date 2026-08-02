@@ -70,7 +70,7 @@ const configs: Record<string, ModuloConfig> = {
   },
   oportunidades: {
     titulo: "Oportunidades",
-    endpoint: "/crm/oportunidades?origem=CRM_APP",
+    endpoint: "/crm/oportunidades",
     icon: BriefcaseBusiness,
     extrair: (payload) =>
       Array.isArray(payload)
@@ -81,7 +81,7 @@ const configs: Record<string, ModuloConfig> = {
   },
   pipeline: {
     titulo: "Pipeline",
-    endpoint: "/crm/oportunidades?origem=CRM_APP",
+    endpoint: "/crm/oportunidades",
     icon: CircleDollarSign,
     extrair: (payload) =>
       Array.isArray(payload)
@@ -225,7 +225,7 @@ export default function CrmModuloPage() {
   }, [api, config])
 
   useEffect(() => {
-    queueMicrotask(() => void carregar())
+    void carregar()
   }, [carregar])
 
   const filtrados = useMemo(() => {
@@ -1050,7 +1050,7 @@ function Card({
         </p>
       )}
 
-      {oportunidade && !editando && Boolean(item.id) && (
+      {oportunidade && !editando && item.id && (
         <button
           type="button"
           onClick={() => setEditando(true)}
@@ -1062,7 +1062,7 @@ function Card({
 
       {["agenda", "atividades", "visitas"].includes(slug) &&
       estado !== "CONCLUIDA" &&
-      Boolean(item.id) ? (
+      item.id ? (
         <button
           type="button"
           onClick={() => concluir(String(item.id))}
