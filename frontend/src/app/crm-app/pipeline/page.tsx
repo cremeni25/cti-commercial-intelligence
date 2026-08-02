@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation"
+import NegociosNativos from "../_components/NegociosNativos"
 
 export default function CrmAppPipelinePage() {
-  redirect("/pipeline")
+  return <NegociosNativos modo="pipeline" />
 }
