@@ -2,10 +2,12 @@ import type { MetadataRoute } from "next"
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/crm-app/",
     name: "CTI / Viena São Paulo — CRM",
     short_name: "CTI CRM",
     description: "CRM comercial móvel integrado ao CTI Inteligência Comercial.",
-    start_url: "/crm-app?v=20260728-2",
+    start_url: "/crm-app/",
+    scope: "/crm-app/",
     display: "standalone",
     background_color: "#020817",
     theme_color: "#061126",

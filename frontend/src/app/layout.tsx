@@ -4,7 +4,6 @@ import "./globals.css"
 
 import { AuthProvider } from "@/core/auth"
 import { OperationalContextProvider } from "@/context/OperationalContext"
-import { PwaRegister } from "@/components/pwa/PwaRegister"
 
 export const metadata: Metadata = {
   title: {
@@ -12,13 +11,7 @@ export const metadata: Metadata = {
     template: "%s | CTI",
   },
   description: "Centro de Tecnologia e Inteligência Comercial",
-  manifest: "/manifest.webmanifest",
-  applicationName: "CTI / Viena São Paulo — CRM",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "CTI CRM",
-  },
+  applicationName: "CTI — Inteligência Comercial",
   formatDetection: {
     telephone: false,
   },
@@ -41,7 +34,6 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <PwaRegister />
         <AuthProvider>
           <OperationalContextProvider>{children}</OperationalContextProvider>
         </AuthProvider>
