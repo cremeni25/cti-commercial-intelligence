@@ -61,6 +61,26 @@ def _ler_tabela(nome: str, obrigatoria: bool = False) -> list[dict[str, Any]]:
         return []
 
 
+def _mesclar_clientes(*fontes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Combina cadastros das tabelas cti_clientes e clientes sem duplicar IDs.
+
+    O CTI principal historicamente usa cti_clientes, enquanto o CRM App grava na
+    tabela operacional clientes. O núcleo precisa resolver ambos até a
+    consolidação definitiva do schema.
+    """
+    por_id: dict[str, dict[str, Any]] = {}
+    sem_id: list[dict[str, Any]] = []
+    for fonte in fontes:
+        for cliente in fonte:
+            cliente_id = _texto(cliente.get("id"))
+            if cliente_id:
+                existente = por_id.get(cliente_id, {})
+                por_id[cliente_id] = {**cliente, **existente} if existente else cliente
+            else:
+                sem_id.append(cliente)
+    return [*por_id.values(), *sem_id]
+
+
 def _prioridade_proposta(proposta: dict[str, Any]) -> tuple[int, int, str]:
     status = _status(proposta.get("status_documento") or proposta.get("status"))
     prioridade = {
@@ -200,7 +220,10 @@ def nucleo_comercial():
     atividades = _ler_tabela("cti_atividades")
     propostas = _ler_tabela("cti_propostas")
     pedidos = _ler_tabela("cti_pedidos")
-    clientes = _ler_tabela("cti_clientes")
+    clientes = _mesclar_clientes(
+        _ler_tabela("cti_clientes"),
+        _ler_tabela("clientes"),
+    )
 
     itens_por_oportunidade: dict[str, list[dict[str, Any]]] = defaultdict(list)
     atividades_por_oportunidade: dict[str, list[dict[str, Any]]] = defaultdict(list)
