@@ -1,14 +1,13 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Activity,
   BriefcaseBusiness,
   Building2,
   CalendarDays,
   ChevronRight,
-  CircleDollarSign,
   ClipboardCheck,
   Plus,
   RefreshCw,
@@ -20,6 +19,14 @@ import {
 import { useAuth } from "@/core/auth"
 import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
 
+const ESTADOS_FINAIS = new Set([
+  "GANHO",
+  "PERDIDO",
+  "CANCELADO",
+  "FATURADO",
+  "ENCERRADO",
+])
+
 const atalhos = [
   {
     href: "/crm-app/atividades/nova",
@@ -30,16 +37,18 @@ const atalhos = [
   {
     href: "/crm-app/oportunidades/nova",
     titulo: "Nova oportunidade",
-    descricao: "Abrir negociação comercial",
+    descricao: "Abrir negociação comercial no núcleo único do CTI",
     icon: Target,
   },
   {
     href: "/crm-app/clientes",
     titulo: "Consultar cliente",
-    descricao: "Carteira, histórico e contatos",
+    descricao: "Carteira, histórico, contatos e negócios",
     icon: Building2,
   },
 ]
+
+type Registro = Record<string, unknown>
 
 type Resumo = {
   visitas: number
@@ -49,6 +58,28 @@ type Resumo = {
   clientes: number
   atividades: number
   destaque: string
+}
+
+function listaDo(payload: unknown): Registro[] {
+  if (Array.isArray(payload)) return payload as Registro[]
+  if (payload && typeof payload === "object") {
+    const objeto = payload as Registro
+    for (const chave of ["dados", "itens", "oportunidades", "resultado"]) {
+      if (Array.isArray(objeto[chave])) return objeto[chave] as Registro[]
+    }
+  }
+  return []
+}
+
+async function lerJson(resposta: Response): Promise<unknown> {
+  if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`)
+  return resposta.json()
+}
+
+function etapaDe(item: Registro) {
+  return String(item.etapa || item.status || item.status_oportunidade || "")
+    .trim()
+    .toUpperCase()
 }
 
 export default function CrmAppPage() {
@@ -64,134 +95,141 @@ export default function CrmAppPage() {
   })
   const [sincronizando, setSincronizando] = useState(false)
   const [online, setOnline] = useState(true)
+  const [aviso, setAviso] = useState("")
 
   const sincronizar = useCallback(async () => {
     setSincronizando(true)
-    try {
-      const [agendaResposta, oportunidadesResposta, atividadesResposta, clientesResposta] =
-        await Promise.all([
-          fetch("/api/crm-proxy/crm/agenda", { cache: "no-store" }),
-          fetch("/api/crm-proxy/crm/oportunidades?origem=CRM_APP", {
-            cache: "no-store",
-          }),
-          fetch("/api/crm-proxy/crm/atividades", { cache: "no-store" }),
-          fetch(
-            "/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO",
-            { cache: "no-store" },
-          ),
-        ])
+    setAviso("")
 
-      if (
-        !agendaResposta.ok ||
-        !oportunidadesResposta.ok ||
-        !atividadesResposta.ok
-      ) {
-        throw new Error()
-      }
+    const resultados = await Promise.allSettled([
+      fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" }).then(lerJson),
+      fetch("/api/crm-proxy/crm/agenda", { cache: "no-store" }).then(lerJson),
+      fetch("/api/crm-proxy/crm/atividades", { cache: "no-store" }).then(lerJson),
+      fetch(
+        "/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO",
+        { cache: "no-store" },
+      ).then(lerJson),
+    ])
 
-      const agenda = (await agendaResposta.json()) as {
-        resumo?: { hoje?: number; atrasadas?: number }
-      }
-      const oportunidades = (await oportunidadesResposta.json()) as Record<
-        string,
-        unknown
-      >[]
-      const atividades = (await atividadesResposta.json()) as Record<
-        string,
-        unknown
-      >[]
-      const clientes = clientesResposta.ok
-        ? ((await clientesResposta.json()) as Record<string, unknown>[])
+    const [nucleoResultado, agendaResultado, atividadesResultado, clientesResultado] = resultados
+
+    if (nucleoResultado.status === "rejected") {
+      setOnline(false)
+      setAviso("Não foi possível sincronizar o núcleo comercial. Tentaremos novamente automaticamente.")
+      setSincronizando(false)
+      return
+    }
+
+    const oportunidades = listaDo(nucleoResultado.value)
+    const agenda =
+      agendaResultado.status === "fulfilled" &&
+      agendaResultado.value &&
+      typeof agendaResultado.value === "object"
+        ? (agendaResultado.value as { resumo?: { hoje?: number; atrasadas?: number } })
+        : {}
+    const atividades =
+      atividadesResultado.status === "fulfilled"
+        ? listaDo(atividadesResultado.value)
+        : []
+    const clientes =
+      clientesResultado.status === "fulfilled"
+        ? listaDo(clientesResultado.value)
         : []
 
-      const oportunidadesApp = oportunidades.filter(
-        (item) => String(item.origem || "").toUpperCase() === "CRM_APP",
-      )
-      const hoje = new Date().toISOString().slice(0, 10)
-      const visitasHoje = atividades.filter(
-        (item) =>
-          String(item.tipo || "").toUpperCase().includes("VISITA") &&
-          String(item.data || "").slice(0, 10) === hoje,
-      ).length
-      const abertasLista = oportunidadesApp.filter(
-        (item) =>
-          !["GANHO", "PERDIDO", "CANCELADO"].includes(
-            String(item.status || "").toUpperCase(),
-          ),
-      )
-      const ultima = abertasLista[0]
-      const contexto = ultima ? lerContextoOportunidade(ultima) : null
-      const destaque = ultima
-        ? `${textoSeguro(ultima.titulo) || "Oportunidade"} · ${contexto?.quantidade || 1} un. · ${contexto?.equipamentos.join(", ") || "produto a definir"}`
-        : "Nenhuma oportunidade aberta"
+    const abertas = oportunidades.filter((item) => !ESTADOS_FINAIS.has(etapaDe(item)))
+    const hoje = new Date().toISOString().slice(0, 10)
+    const visitasHoje = atividades.filter(
+      (item) =>
+        String(item.tipo || "").toUpperCase().includes("VISITA") &&
+        String(item.data || item.data_atividade || item.created_at || "").slice(0, 10) === hoje,
+    ).length
 
-      setResumo({
-        visitas: visitasHoje,
-        pendencias:
-          Number(agenda.resumo?.atrasadas || 0) +
-          Number(agenda.resumo?.hoje || 0),
-        oportunidades: abertasLista.length,
-        pipeline: oportunidadesApp.length,
-        clientes: Array.isArray(clientes) ? clientes.length : 0,
-        atividades: atividades.length,
-        destaque,
-      })
-      setOnline(true)
-    } catch {
-      setOnline(false)
-    } finally {
-      setSincronizando(false)
-    }
+    const destaqueRegistro = abertas[0]
+    const contexto = destaqueRegistro ? lerContextoOportunidade(destaqueRegistro) : null
+    const titulo = destaqueRegistro
+      ? textoSeguro(destaqueRegistro.titulo) || textoSeguro(destaqueRegistro.equipamento) || "Oportunidade"
+      : ""
+    const cliente = destaqueRegistro
+      ? textoSeguro(destaqueRegistro.cliente_nome) || "Cliente em identificação"
+      : ""
+    const destaque = destaqueRegistro
+      ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.`
+      : "Nenhuma oportunidade aberta"
+
+    const falhasSecundarias = resultados.slice(1).filter((resultado) => resultado.status === "rejected").length
+
+    setResumo({
+      visitas: visitasHoje,
+      pendencias:
+        Number(agenda.resumo?.atrasadas || 0) + Number(agenda.resumo?.hoje || 0),
+      oportunidades: abertas.length,
+      pipeline: oportunidades.length,
+      clientes: clientes.length,
+      atividades: atividades.length,
+      destaque,
+    })
+    setOnline(true)
+    setAviso(
+      falhasSecundarias > 0
+        ? "Núcleo comercial sincronizado. Alguns módulos auxiliares serão atualizados na próxima sincronização."
+        : "",
+    )
+    setSincronizando(false)
   }, [])
 
   useEffect(() => {
     queueMicrotask(() => void sincronizar())
+    const intervalo = window.setInterval(() => void sincronizar(), 60_000)
+    return () => window.clearInterval(intervalo)
   }, [sincronizar])
 
-  const modulos = [
-    {
-      href: "/crm-app/agenda",
-      label: "Agenda",
-      valor: resumo.pendencias,
-      descricao: "ações pendentes",
-      icon: CalendarDays,
-    },
-    {
-      href: "/crm-app/clientes",
-      label: "Clientes",
-      valor: resumo.clientes,
-      descricao: "carteira e histórico",
-      icon: Users,
-    },
-    {
-      href: "/crm-app/visitas",
-      label: "Visitas",
-      valor: resumo.visitas,
-      descricao: "interações filtradas como visita",
-      icon: Route,
-    },
-    {
-      href: "/crm-app/oportunidades",
-      label: "Oportunidades",
-      valor: resumo.oportunidades,
-      descricao: resumo.destaque,
-      icon: BriefcaseBusiness,
-    },
-    {
-      href: "/crm-app/pipeline",
-      label: "Pipeline",
-      valor: resumo.pipeline,
-      descricao: "negociações e etapas",
-      icon: TrendingUp,
-    },
-    {
-      href: "/crm-app/atividades",
-      label: "Interações",
-      valor: resumo.atividades,
-      descricao: "visitas, ligações, reuniões e próximas ações",
-      icon: Activity,
-    },
-  ]
+  const modulos = useMemo(
+    () => [
+      {
+        href: "/crm-app/agenda",
+        label: "Agenda",
+        valor: resumo.pendencias,
+        descricao: "ações pendentes",
+        icon: CalendarDays,
+      },
+      {
+        href: "/crm-app/clientes",
+        label: "Clientes",
+        valor: resumo.clientes,
+        descricao: "carteira e histórico",
+        icon: Users,
+      },
+      {
+        href: "/crm-app/visitas",
+        label: "Visitas",
+        valor: resumo.visitas,
+        descricao: "interações de campo de hoje",
+        icon: Route,
+      },
+      {
+        href: "/crm-app/oportunidades",
+        label: "Oportunidades",
+        valor: resumo.oportunidades,
+        descricao: resumo.destaque,
+        icon: BriefcaseBusiness,
+      },
+      {
+        href: "/crm-app/pipeline",
+        label: "Pipeline",
+        valor: resumo.pipeline,
+        descricao: "todos os negócios do núcleo CTI",
+        icon: TrendingUp,
+      },
+      {
+        href: "/crm-app/atividades",
+        label: "Interações",
+        valor: resumo.atividades,
+        descricao: "visitas, ligações, reuniões e próximas ações",
+        icon: Activity,
+      },
+    ],
+    [resumo],
+  )
 
   return (
     <main className="min-h-[100dvh] bg-[#020817] pb-24 text-white">
@@ -216,31 +254,32 @@ export default function CrmAppPage() {
       </header>
 
       <div className="mx-auto w-full max-w-[94vw] px-4 py-4 sm:px-6 sm:py-6">
+        {aviso && (
+          <div className="mb-4 rounded-2xl border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-100">
+            {aviso}
+          </div>
+        )}
+
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,0.65fr)]">
           <div className="space-y-5">
             <section className="rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl sm:p-7">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm text-slate-400 sm:text-base">
-                    Operação comercial diária
-                  </p>
+                  <p className="text-sm text-slate-400 sm:text-base">Operação comercial diária</p>
                   <h2 className="mt-1 text-2xl font-bold sm:text-3xl">
                     Olá, {usuario?.nome?.split(" ")[0] || "usuário CTI"}
                   </h2>
                   <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">
-                    Registre todas as interações comerciais em um único fluxo.
-                    Visitas permanecem disponíveis como filtro e análise.
+                    Clientes, interações, oportunidades, propostas e pedidos utilizam o mesmo núcleo comercial da plataforma CTI.
                   </p>
                 </div>
                 <button
                   type="button"
                   onClick={() => void sincronizar()}
+                  aria-label="Sincronizar CRM"
                   className="rounded-2xl border border-cyan-800 bg-cyan-950/30 p-3 text-cyan-300"
                 >
-                  <RefreshCw
-                    size={20}
-                    className={sincronizando ? "animate-spin" : ""}
-                  />
+                  <RefreshCw size={20} className={sincronizando ? "animate-spin" : ""} />
                 </button>
               </div>
               <div className="mt-6 grid grid-cols-3 gap-3">
@@ -267,9 +306,7 @@ export default function CrmAppPage() {
                     </span>
                     <span className="min-w-0 flex-1">
                       <span className="block text-lg font-semibold">{titulo}</span>
-                      <span className="mt-1 block text-sm text-slate-400">
-                        {descricao}
-                      </span>
+                      <span className="mt-1 block text-sm text-slate-400">{descricao}</span>
                     </span>
                     <ChevronRight size={18} className="text-slate-600" />
                   </Link>
@@ -289,24 +326,17 @@ export default function CrmAppPage() {
                 >
                   <Icon className="text-cyan-300" size={24} />
                   <div>
-                    <strong className="mt-3 block text-2xl text-cyan-300">
-                      {valor}
-                    </strong>
+                    <strong className="mt-3 block text-2xl text-cyan-300">{valor}</strong>
                     <span className="block font-semibold">{label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-slate-400">
-                      {descricao}
-                    </span>
+                    <span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span>
                   </div>
                 </Link>
               ))}
             </div>
             <div className="mt-4 rounded-2xl border border-emerald-900/70 bg-emerald-950/20 p-4">
-              <p className="text-sm font-semibold text-emerald-200">
-                Operação conectada
-              </p>
+              <p className="text-sm font-semibold text-emerald-200">Núcleo único sincronizado</p>
               <p className="mt-1 text-xs leading-5 text-emerald-100/70">
-                Clientes, interações, oportunidades, pipeline e continuidade
-                comercial utilizam o mesmo núcleo do CTI.
+                A origem do registro é mantida apenas para auditoria e não limita a visibilidade dos negócios.
               </p>
             </div>
           </section>
@@ -318,12 +348,7 @@ export default function CrmAppPage() {
           <NavItem href="/crm-app" label="Início" icon={Building2} />
           <NavItem href="/crm-app/agenda" label="Agenda" icon={CalendarDays} />
           <NavItem href="/crm-app/oportunidades" label="Negócios" icon={Target} />
-          <NavItem
-            href="/crm-app/atividades/nova"
-            label="Nova interação"
-            icon={Plus}
-            destaque
-          />
+          <NavItem href="/crm-app/atividades/nova" label="Nova interação" icon={Plus} destaque />
         </div>
       </nav>
     </main>
@@ -354,9 +379,7 @@ function NavItem({
     <Link
       href={href}
       className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs ${
-        destaque
-          ? "bg-cyan-500 font-semibold text-slate-950"
-          : "text-slate-400"
+        destaque ? "bg-cyan-500 font-semibold text-slate-950" : "text-slate-400"
       }`}
     >
       <Icon size={20} />
