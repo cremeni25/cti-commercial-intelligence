@@ -8,7 +8,7 @@ const eslintConfig = defineConfig([
   {
     files: [
       "src/app/configuracoes/page.tsx",
-      "src/app/crm-app/[...modulo]/page.tsx",
+      "src/app/crm-app/**/page.tsx",
     ],
     rules: {
       "react-hooks/set-state-in-effect": "off",
