@@ -81,7 +81,7 @@ def test_quadro_pipeline_usa_ultima_movimentacao_e_calcula_valores(monkeypatch):
     assert body["cards"][0]["implementadora"] == "FACCHINI"
 
 
-def test_quadro_pipeline_ignora_origens_legadas_e_movimentacoes_orfas(monkeypatch):
+def test_quadro_pipeline_unifica_origens_e_ignora_movimentacoes_orfas(monkeypatch):
     monkeypatch.setattr(
         negociacoes_router,
         "supabase",
@@ -96,8 +96,8 @@ def test_quadro_pipeline_ignora_origens_legadas_e_movimentacoes_orfas(monkeypatc
                     "probabilidade": 50,
                 },
                 {
-                    "id": "opp-teste",
-                    "titulo": "Carga de teste",
+                    "id": "opp-web",
+                    "titulo": "Oportunidade criada no sistema",
                     "origem": "WEB",
                     "status": "PROSPECCAO",
                     "valor_estimado": 2800000,
@@ -106,7 +106,7 @@ def test_quadro_pipeline_ignora_origens_legadas_e_movimentacoes_orfas(monkeypatc
             ],
             "cti_pipeline": [
                 {"id": "mov-real", "oportunidade_id": "opp-real", "nova_etapa": "OPORTUNIDADE", "created_at": "2026-07-29T04:41:40"},
-                {"id": "mov-teste", "oportunidade_id": "opp-teste", "nova_etapa": "PROPOSTA", "created_at": "2026-06-03T00:31:28"},
+                {"id": "mov-web", "oportunidade_id": "opp-web", "nova_etapa": "PROPOSTA", "created_at": "2026-06-03T00:31:28"},
                 {"id": "mov-orfa", "oportunidade_id": "opp-inexistente", "nova_etapa": "PEDIDO", "created_at": "2026-06-01T00:00:00"},
             ],
         }),
@@ -116,10 +116,11 @@ def test_quadro_pipeline_ignora_origens_legadas_e_movimentacoes_orfas(monkeypatc
 
     assert response.status_code == 200
     body = response.json()
-    assert body["resumo"]["total_oportunidades"] == 1
-    assert body["resumo"]["valor_total"] == 94000
-    assert body["resumo"]["valor_ponderado"] == 47000
-    assert [card["id"] for card in body["cards"]] == ["opp-real"]
+    assert body["resumo"]["total_oportunidades"] == 2
+    assert body["resumo"]["valor_total"] == 2894000
+    assert body["resumo"]["valor_ponderado"] == 1167000
+    assert {card["id"] for card in body["cards"]} == {"opp-real", "opp-web"}
+    assert "opp-inexistente" not in {card["id"] for card in body["cards"]}
 
 
 def test_quadro_pipeline_retorna_estrutura_vazia(monkeypatch):

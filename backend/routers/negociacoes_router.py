@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from core.supabase_client import supabase
 
 router = APIRouter()
-ORIGEM_OPERACIONAL_CRM = "CRM_APP"
 ETAPAS_PIPELINE = [
     "OPORTUNIDADE",
     "ATIVIDADES",
@@ -36,13 +35,13 @@ def _lista(tabela: str, ordem: str = "created_at") -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=f"Falha ao consultar {tabela}: {exc}") from exc
 
 
-def _oportunidades_operacionais() -> list[dict[str, Any]]:
-    """Mantém os módulos operacionais isolados de cargas legadas, testes e integrações externas."""
-    return [
-        oportunidade
-        for oportunidade in _lista("cti_oportunidades")
-        if str(oportunidade.get("origem") or "").strip().upper() == ORIGEM_OPERACIONAL_CRM
-    ]
+def _oportunidades_comerciais() -> list[dict[str, Any]]:
+    """Retorna todas as oportunidades do núcleo comercial autorizado.
+
+    A origem permanece como metadado de auditoria e nunca como barreira de
+    visibilidade entre o CRM App e a plataforma principal.
+    """
+    return _lista("cti_oportunidades")
 
 
 def _fator_probabilidade(valor: Any) -> float:
@@ -97,8 +96,8 @@ def listar_negociacoes():
 
 @router.get("/crm/pipeline/quadro")
 def quadro_pipeline():
-    """Retorna somente a fotografia operacional CRM_APP, sem dados legados ou de teste."""
-    oportunidades = _oportunidades_operacionais()
+    """Retorna a fotografia comercial única usada pelo CTI e pelo CRM App."""
+    oportunidades = _oportunidades_comerciais()
     oportunidades_ids = {item.get("id") for item in oportunidades if item.get("id")}
     movimentacoes = [
         movimento
@@ -143,6 +142,7 @@ def quadro_pipeline():
             "estado": oportunidade.get("estado"),
             "data_fechamento_prevista": oportunidade.get("data_fechamento_prevista"),
             "ultima_movimentacao": movimento.get("created_at") or movimento.get("updated_at") or oportunidade.get("updated_at") or oportunidade.get("created_at"),
+            "origem": oportunidade.get("origem"),
         })
 
     contagem = Counter(card["etapa"] for card in cards)
@@ -163,13 +163,9 @@ def quadro_pipeline():
 
 @router.get("/crm/agenda")
 def agenda_comercial():
-    """Consolida atividades existentes em uma agenda operacional, sem duplicar dados."""
-    oportunidades = {item.get("id"): item for item in _oportunidades_operacionais()}
-    atividades = [
-        atividade
-        for atividade in _lista("cti_atividades")
-        if not atividade.get("oportunidade_id") or atividade.get("oportunidade_id") in oportunidades
-    ]
+    """Consolida todas as atividades autorizadas sem separar pela origem."""
+    oportunidades = {item.get("id"): item for item in _oportunidades_comerciais()}
+    atividades = _lista("cti_atividades")
 
     itens = []
     for atividade in atividades:
@@ -180,6 +176,7 @@ def agenda_comercial():
             "oportunidade_titulo": oportunidade.get("titulo"),
             "cliente_id": atividade.get("cliente_id") or oportunidade.get("cliente_id"),
             "responsavel_id": atividade.get("usuario_id") or oportunidade.get("responsavel_id"),
+            "origem_oportunidade": oportunidade.get("origem"),
         })
 
     ordem_situacao = {"ATRASADA": 0, "HOJE": 1, "FUTURA": 2, "SEM_DATA": 3, "CONCLUIDA": 4, "CANCELADA": 5}
@@ -201,12 +198,10 @@ def agenda_comercial():
 
 @router.get("/crm/timeline/{oportunidade_id}")
 def timeline_oportunidade(oportunidade_id: str):
-    """Monta a linha do tempo comercial a partir das tabelas operacionais já existentes."""
+    """Monta a linha do tempo para qualquer oportunidade do núcleo comercial."""
     oportunidade = supabase.table("cti_oportunidades").select("*").eq("id", oportunidade_id).execute().data or []
     if not oportunidade:
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
-    if str(oportunidade[0].get("origem") or "").strip().upper() != ORIGEM_OPERACIONAL_CRM:
-        raise HTTPException(status_code=404, detail="Oportunidade operacional não encontrada")
 
     fontes = [
         ("HISTORICO", "cti_oportunidade_historico"),
