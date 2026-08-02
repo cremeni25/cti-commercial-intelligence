@@ -25,6 +25,8 @@ function moeda(valor: number) { return Number(valor || 0).toLocaleString("pt-BR"
 function percentual(valor: number) { return `${Math.round(Number(valor || 0) * 100)}%` }
 function inicioMesAtual() { const agora = new Date(); return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01` }
 function fimMesAtual() { const agora = new Date(); return new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10) }
+function dataIsoValida(valor?: string | null) { return Boolean(valor && /^\d{4}-\d{2}-\d{2}$/.test(valor) && !Number.isNaN(new Date(`${valor}T12:00:00`).getTime())) }
+function dataPrevista(valor?: string | null) { return dataIsoValida(valor) ? new Date(`${valor}T12:00:00`).toLocaleDateString("pt-BR") : "Sem previsão" }
 
 export default function PipelinePage() {
   const [dados, setDados] = useState<LinhaNucleo[]>([])
@@ -46,7 +48,7 @@ export default function PipelinePage() {
   }, [])
 
   const filtrados = useMemo(() => dados.filter((item) => {
-    const data = String(item.data_fechamento_prevista || "")
+    const data = dataIsoValida(item.data_fechamento_prevista) ? String(item.data_fechamento_prevista) : ""
     if (!data) return true
     return data >= inicio && data <= fim
   }), [dados, fim, inicio])
@@ -64,7 +66,7 @@ export default function PipelinePage() {
   </div></section></main>
 }
 
-function Card({ card }: { card: LinhaNucleo }) { return <article className="rounded-xl border border-[#13203f] bg-[#091a33] p-4"><p className="text-sm font-semibold text-cyan-300">{card.cliente_nome}</p><h3 className="mt-1 font-semibold text-white">{card.titulo}</h3><div className="mt-3 space-y-1 text-xs text-gray-400"><p>{moeda(card.valor)} • {percentual(card.probabilidade)}</p>{card.data_fechamento_prevista && <p>Previsão: {new Date(`${card.data_fechamento_prevista}T12:00:00`).toLocaleDateString("pt-BR")}</p>}</div><Link href={`/oportunidades/${card.oportunidade_id}`} className="mt-4 inline-flex rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Ver detalhes</Link></article> }
+function Card({ card }: { card: LinhaNucleo }) { return <article className="rounded-xl border border-[#13203f] bg-[#091a33] p-4"><p className="text-sm font-semibold text-cyan-300">{card.cliente_nome || "Cliente não identificado"}</p><h3 className="mt-1 font-semibold text-white">{card.titulo || "Oportunidade comercial"}</h3><div className="mt-3 space-y-1 text-xs text-gray-400"><p>{moeda(card.valor)} • {percentual(card.probabilidade)}</p><p>Previsão: {dataPrevista(card.data_fechamento_prevista)}</p></div><Link href={`/oportunidades/${card.oportunidade_id}`} className="mt-4 inline-flex rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Ver detalhes</Link></article> }
 function CampoData({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="text-sm text-slate-300">{label}<input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3" /></label> }
 function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-6"><p className="text-sm text-gray-400">{titulo}</p><p className="mt-2 text-3xl font-bold text-cyan-400">{valor}</p></div> }
 function Aviso({ children }: { children: React.ReactNode }) { return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-10 text-gray-300">{children}</div> }
