@@ -6,7 +6,10 @@ const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
   {
-    files: ["src/app/configuracoes/page.tsx"],
+    files: [
+      "src/app/configuracoes/page.tsx",
+      "src/app/crm-app/**/page.tsx",
+    ],
     rules: {
       "react-hooks/set-state-in-effect": "off",
     },
