@@ -54,7 +54,9 @@ export default function HomologacaoCrmPage() {
     }
   }
 
-  useEffect(() => { void executarTeste() }, [])
+  useEffect(() => {
+    queueMicrotask(() => { void executarTeste() })
+  }, [])
 
   const resumo = useMemo(() => {
     const abertas = registros.filter((item) => !["PERDIDO", "CANCELADO", "FATURADO", "ENCERRADO"].includes(String(item.etapa || "")))
