@@ -10,6 +10,26 @@ function pertenceAoApp(item: Oportunidade): boolean {
   return origem === "CRM_APP" || descricao.includes("[CONTEXTO CTI]")
 }
 
+function extrairLista(payload: unknown): Oportunidade[] {
+  if (Array.isArray(payload)) return payload as Oportunidade[]
+  if (payload && typeof payload === "object") {
+    const registro = payload as Record<string, unknown>
+    for (const chave of ["dados", "itens", "resultado", "oportunidades"]) {
+      if (Array.isArray(registro[chave])) return registro[chave] as Oportunidade[]
+    }
+  }
+  return []
+}
+
+async function lerComFallback(destino: URL): Promise<Response> {
+  const principal = await fetch(destino, { method: "GET", cache: "no-store" })
+  if (principal.ok) return principal
+
+  const fallback = new URL(`${API_URL}/crm/nucleo-comercial`)
+  destino.searchParams.forEach((valor, chave) => fallback.searchParams.set(chave, valor))
+  return fetch(fallback, { method: "GET", cache: "no-store" })
+}
+
 async function encaminhar(request: NextRequest) {
   const destino = new URL(`${API_URL}/crm/oportunidades`)
   request.nextUrl.searchParams.forEach((valor, chave) => destino.searchParams.set(chave, valor))
@@ -18,12 +38,14 @@ async function encaminhar(request: NextRequest) {
   const contentType = request.headers.get("content-type")
   if (contentType) headers.set("content-type", contentType)
 
-  const resposta = await fetch(destino, {
-    method: request.method,
-    headers,
-    body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.text(),
-    cache: "no-store",
-  })
+  const resposta = request.method === "GET"
+    ? await lerComFallback(destino)
+    : await fetch(destino, {
+        method: request.method,
+        headers,
+        body: ["GET", "HEAD"].includes(request.method) ? undefined : await request.text(),
+        cache: "no-store",
+      })
 
   const texto = await resposta.text()
   if (!resposta.ok || request.method !== "GET") {
@@ -43,16 +65,11 @@ async function encaminhar(request: NextRequest) {
     })
   }
 
-  const normalizados = Array.isArray(dados)
-    ? dados.map((item) => {
-        const oportunidade = item as Oportunidade
-        return pertenceAoApp(oportunidade)
-          ? { ...oportunidade, origem: "CRM_APP" }
-          : oportunidade
-      })
-    : dados
+  const normalizados = extrairLista(dados).map((item) =>
+    pertenceAoApp(item) ? { ...item, origem: "CRM_APP" } : item,
+  )
 
-  return NextResponse.json(normalizados, { status: resposta.status })
+  return NextResponse.json(normalizados, { status: 200 })
 }
 
 export const GET = encaminhar
