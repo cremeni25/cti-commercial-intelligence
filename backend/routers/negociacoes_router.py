@@ -198,11 +198,35 @@ def agenda_comercial():
 
 @router.get("/crm/timeline/{oportunidade_id}")
 def timeline_oportunidade(oportunidade_id: str):
-    """Monta a linha do tempo para qualquer oportunidade do núcleo comercial."""
-    oportunidade = supabase.table("cti_oportunidades").select("*").eq("id", oportunidade_id).execute().data or []
+    """Monta uma timeline resiliente para qualquer oportunidade do núcleo."""
+    try:
+        oportunidade = (
+            supabase.table("cti_oportunidades")
+            .select("*")
+            .eq("id", oportunidade_id)
+            .execute()
+            .data
+            or []
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha ao consultar a oportunidade: {exc}",
+        ) from exc
+
     if not oportunidade:
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
 
+    oportunidade_atual = oportunidade[0]
+    eventos: list[dict[str, Any]] = [{
+        "tipo": "OPORTUNIDADE",
+        "data_hora": oportunidade_atual.get("created_at") or oportunidade_atual.get("updated_at"),
+        "titulo": oportunidade_atual.get("titulo") or "Oportunidade criada",
+        "status": oportunidade_atual.get("status") or "OPORTUNIDADE",
+        "responsavel_id": oportunidade_atual.get("responsavel_id"),
+        "registro": oportunidade_atual,
+    }]
+    fontes_indisponiveis: list[str] = []
     fontes = [
         ("HISTORICO", "cti_oportunidade_historico"),
         ("ATIVIDADE", "cti_atividades"),
@@ -210,9 +234,21 @@ def timeline_oportunidade(oportunidade_id: str):
         ("PROPOSTA", "cti_propostas"),
         ("PEDIDO", "cti_pedidos"),
     ]
-    eventos: list[dict[str, Any]] = []
+
     for tipo, tabela in fontes:
-        registros = supabase.table(tabela).select("*").eq("oportunidade_id", oportunidade_id).execute().data or []
+        try:
+            registros = (
+                supabase.table(tabela)
+                .select("*")
+                .eq("oportunidade_id", oportunidade_id)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            fontes_indisponiveis.append(tabela)
+            continue
+
         for registro in registros:
             eventos.append({
                 "tipo": tipo,
@@ -223,5 +259,10 @@ def timeline_oportunidade(oportunidade_id: str):
                 "registro": registro,
             })
 
-    eventos.sort(key=lambda item: item.get("data_hora") or "", reverse=True)
-    return {"oportunidade": oportunidade[0], "eventos": eventos}
+    eventos.sort(key=lambda item: str(item.get("data_hora") or ""), reverse=True)
+    return {
+        "oportunidade": oportunidade_atual,
+        "eventos": eventos,
+        "fontes_indisponiveis": fontes_indisponiveis,
+        "parcial": bool(fontes_indisponiveis),
+    }
