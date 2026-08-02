@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from datetime import datetime
+import json
 from typing import Any
 
 from .crm_router import router, supabase, _normalizar_probabilidade
@@ -10,6 +12,7 @@ STATUS_PROPOSTA_INATIVA = {"SUBSTITUIDA", "CANCELADA", "EXPIRADA", "REJEITADA", 
 STATUS_PROPOSTA_FINAL = {"ACEITA", "CONVERTIDA_PEDIDO"}
 ETAPAS_PROBABILIDADE_TOTAL = {"PEDIDO", "DOSSIÊ", "DOSSIE", "CARRIER", "FATURADO", "GANHO", "ENCERRADO"}
 ETAPAS_PROBABILIDADE_ZERO = {"PERDIDO", "CANCELADO"}
+TITULOS_GENERICOS = {"", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"}
 
 
 def _texto(valor: Any) -> str:
@@ -32,6 +35,18 @@ def _numero(valor: Any) -> float:
         return float(valor)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _data_iso(valor: Any) -> str | None:
+    texto = _texto(valor)
+    if not texto:
+        return None
+    candidato = texto[:10]
+    try:
+        datetime.strptime(candidato, "%Y-%m-%d")
+        return candidato
+    except ValueError:
+        return None
 
 
 def _ler_tabela(nome: str, obrigatoria: bool = False) -> list[dict[str, Any]]:
@@ -86,12 +101,21 @@ def _valor_item(item: dict[str, Any]) -> float:
 
 
 def _tem_dossie(pedido: dict[str, Any]) -> bool:
+    if _status(pedido.get("status")) in {"DOSSIÊ", "DOSSIE", "EM_PREPARACAO", "PREPARANDO_DOSSIE"}:
+        return True
     documentos = pedido.get("dossie_documentos")
     if isinstance(documentos, dict):
         return bool(documentos)
     if isinstance(documentos, list):
         return len(documentos) > 0
-    return bool(_texto(documentos))
+    texto = _texto(documentos)
+    if not texto or texto.lower() in {"null", "none", "[]", "{}", "false"}:
+        return False
+    try:
+        estrutura = json.loads(texto)
+        return bool(estrutura)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return False
 
 
 def _etapa_comercial(
@@ -135,16 +159,38 @@ def _probabilidade(etapa: str, oportunidade: dict[str, Any]) -> float:
     return _normalizar_probabilidade(oportunidade.get("probabilidade"))
 
 
-def _nome_cliente(cliente: dict[str, Any], oportunidade: dict[str, Any]) -> str:
+def _nome_cliente(cliente: dict[str, Any], *fontes: dict[str, Any] | None) -> str:
     for campo in ("razao_social", "nome_fantasia", "nome", "cliente_nome"):
         valor = cliente.get(campo)
         if _texto(valor):
             return _texto(valor)
-    for campo in ("cliente_nome", "titulo_cliente"):
-        valor = oportunidade.get(campo)
-        if _texto(valor):
-            return _texto(valor)
+    for fonte in fontes:
+        if not fonte:
+            continue
+        for campo in ("cliente_nome", "razao_social", "nome_fantasia", "nome", "titulo_cliente"):
+            valor = fonte.get(campo)
+            if _texto(valor):
+                return _texto(valor)
     return "Cliente não identificado"
+
+
+def _titulo_comercial(
+    oportunidade: dict[str, Any],
+    cliente_nome: str,
+    item: dict[str, Any] | None,
+    proposta: dict[str, Any] | None,
+) -> str:
+    titulo = _texto(oportunidade.get("titulo"))
+    if titulo.upper() not in TITULOS_GENERICOS:
+        return titulo
+    equipamento = _texto((item or {}).get("equipamento") or (item or {}).get("modelo_equipamento"))
+    numero_proposta = _texto((proposta or {}).get("numero"))
+    partes = [parte for parte in (equipamento, cliente_nome) if parte and parte != "Cliente não identificado"]
+    if partes:
+        return " • ".join(partes)
+    if numero_proposta:
+        return numero_proposta
+    return "Oportunidade comercial"
 
 
 @router.get("/nucleo-comercial")
@@ -205,6 +251,7 @@ def nucleo_comercial():
         ]
         proposta_vigente = max(propostas_ativas, key=_prioridade_proposta) if propostas_ativas else None
         pedido_vigente = max(pedidos_oportunidade, key=_prioridade_pedido) if pedidos_oportunidade else None
+        item_vigente = itens_oportunidade[0] if itens_oportunidade else None
 
         etapa = _etapa_comercial(
             oportunidade,
@@ -226,13 +273,22 @@ def nucleo_comercial():
             or _numero(oportunidade.get("valor_estimado"))
         )
 
-        cliente = cliente_por_id.get(str(oportunidade.get("cliente_id") or ""), {})
-        cliente_nome = _nome_cliente(cliente, oportunidade)
+        cliente_id = (
+            oportunidade.get("cliente_id")
+            or (proposta_vigente or {}).get("cliente_id")
+            or (item_vigente or {}).get("cliente_id")
+            or (pedido_vigente or {}).get("cliente_id")
+        )
+        cliente = cliente_por_id.get(str(cliente_id or ""), {})
+        cliente_nome = _nome_cliente(cliente, oportunidade, proposta_vigente, item_vigente, pedido_vigente)
+        data_prevista = _data_iso(oportunidade.get("data_fechamento_prevista"))
+        competencia = (data_prevista or _data_iso(oportunidade.get("created_at")) or "")[:7]
+        titulo = _titulo_comercial(oportunidade, cliente_nome, item_vigente, proposta_vigente)
 
         resultado.append({
             "oportunidade_id": oportunidade_id,
-            "titulo": oportunidade.get("titulo") or "Oportunidade sem título",
-            "cliente_id": oportunidade.get("cliente_id"),
+            "titulo": titulo,
+            "cliente_id": cliente_id,
             "cliente_nome": cliente_nome,
             "responsavel_id": oportunidade.get("responsavel_id"),
             "etapa": etapa,
@@ -240,8 +296,8 @@ def nucleo_comercial():
             "probabilidade": probabilidade,
             "valor": round(valor, 2),
             "valor_ponderado": round(valor * probabilidade, 2),
-            "competencia": _texto(oportunidade.get("data_fechamento_prevista") or oportunidade.get("created_at"))[:7],
-            "data_fechamento_prevista": oportunidade.get("data_fechamento_prevista"),
+            "competencia": competencia,
+            "data_fechamento_prevista": data_prevista,
             "proposta_id": proposta_vigente.get("id") if proposta_vigente else None,
             "proposta_numero": proposta_vigente.get("numero") if proposta_vigente else None,
             "status_proposta": (
