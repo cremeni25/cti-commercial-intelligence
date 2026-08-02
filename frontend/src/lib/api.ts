@@ -7,8 +7,9 @@ function resolverApiUrl() {
 
   try {
     const host = new URL(configurada).hostname.toLowerCase()
+    const dominioCtiFrontend = host === "cti-intelligence.com" || host === "www.cti-intelligence.com" || host === "app.cti-intelligence.com"
     const apontaParaFrontend =
-      host === "app.cti-intelligence.com" ||
+      dominioCtiFrontend ||
       host.endsWith(".vercel.app") ||
       host.includes("cti-commercial-intelligence")
 
