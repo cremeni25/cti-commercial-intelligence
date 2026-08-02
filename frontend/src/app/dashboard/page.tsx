@@ -21,6 +21,15 @@ type DashboardContextual = {
 }
 type DashboardCRM = { oportunidades?: number; propostas?: number; pedidos?: number; atividades?: number }
 type AgendaResponse = { resumo?: { atrasadas?: number; hoje?: number; futuras?: number; sem_data?: number; concluidas?: number } }
+type NucleoComercial = {
+  oportunidade_id: string
+  etapa?: string
+  valor?: number
+  valor_ponderado?: number
+  proposta_id?: string | null
+  pedido_id?: string | null
+  encerrada?: boolean
+}
 type PipelineCard = { etapa?: string; valor_estimado?: number; valor_ponderado?: number }
 type PipelineResponse = { cards?: PipelineCard[]; resumo?: { total_oportunidades?: number; valor_total?: number; valor_ponderado?: number } }
 type SerieItem = { nome: string; valor: number }
@@ -75,15 +84,34 @@ export default function DashboardHub() {
   useEffect(() => {
     let ativo = true
     queueMicrotask(async () => {
-      const [dadosCrm, dadosAgenda, dadosPipeline] = await Promise.all([
-        tentar<DashboardCRM>(() => buscarJson(`${API_URL}/crm/dashboard`)),
+      const [nucleo, dadosAgenda, dadosCrmLegado] = await Promise.all([
+        tentar<NucleoComercial[]>(() => buscarJson(`${API_URL}/crm/nucleo-comercial`)),
         tentar<AgendaResponse>(() => buscarJson(`${API_URL}/crm/agenda`)),
-        tentar<PipelineResponse>(() => buscarJson(`${API_URL}/crm/pipeline/quadro`)),
+        tentar<DashboardCRM>(() => buscarJson(`${API_URL}/crm/dashboard`)),
       ])
       if (!ativo) return
-      setCrm(dadosCrm ?? {})
+
+      const registros = nucleo ?? []
+      const abertos = registros.filter((item) => !item.encerrada)
+      setCrm({
+        oportunidades: registros.length,
+        propostas: registros.filter((item) => Boolean(item.proposta_id)).length,
+        pedidos: registros.filter((item) => Boolean(item.pedido_id)).length,
+        atividades: dadosCrmLegado?.atividades ?? 0,
+      })
       setAgenda(dadosAgenda ?? {})
-      setPipeline(dadosPipeline ?? {})
+      setPipeline({
+        cards: abertos.map((item) => ({
+          etapa: item.etapa,
+          valor_estimado: Number(item.valor || 0),
+          valor_ponderado: Number(item.valor_ponderado || 0),
+        })),
+        resumo: {
+          total_oportunidades: abertos.length,
+          valor_total: abertos.reduce((total, item) => total + Number(item.valor || 0), 0),
+          valor_ponderado: abertos.reduce((total, item) => total + Number(item.valor_ponderado || 0), 0),
+        },
+      })
     })
     return () => { ativo = false }
   }, [])
@@ -165,7 +193,7 @@ export default function DashboardHub() {
         <Topbar />
         <div className="p-8 space-y-8">
           <div><h1 className="text-3xl font-bold text-white">Dashboard Executivo</h1><p className="text-gray-400 mt-2">Visão exclusivamente analítica da base histórica e dos principais resultados consolidados do CRM.</p><p className="text-cyan-300 text-sm mt-2">Contexto ativo: {contextoAtual.label} — {contextoAtual.description}</p></div>
-          <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-sm text-gray-300"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><Info titulo="Período analisado" valor={periodoExibido} /><Info titulo="Última atualização" valor={ultimaAtualizacao || "Aguardando carga dos dados."} /><Info titulo="Origem dos dados" valor="Base histórica CTI/ANFIR + resumo consolidado do CRM" /><Info titulo="Registros após filtros" valor={loading ? "..." : String(dashboard?.metadata?.total_registros_filtrados ?? 0)} /></div></section>
+          <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6 text-sm text-gray-300"><div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"><Info titulo="Período analisado" valor={periodoExibido} /><Info titulo="Última atualização" valor={ultimaAtualizacao || "Aguardando carga dos dados."} /><Info titulo="Origem dos dados" valor="Base histórica CTI/ANFIR + núcleo comercial consolidado" /><Info titulo="Registros após filtros" valor={loading ? "..." : String(dashboard?.metadata?.total_registros_filtrados ?? 0)} /></div></section>
           {avisos.length > 0 && <div className="rounded-xl border border-amber-500/60 bg-amber-500/5 p-4 text-sm text-amber-200">Atualização incompleta: {avisos.join(" ")} Tente novamente em alguns segundos.</div>}
           <section className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4"><Kpi titulo="Clientes históricos" valor={loading ? "..." : dashboard?.total_clientes ?? 0} /><Kpi titulo="Estados atendidos" valor={loading ? "..." : dashboard?.total_estados ?? 0} /><Kpi titulo="Municípios" valor={loading ? "..." : dashboard?.total_municipios ?? 0} /><Kpi titulo="Ticket histórico" valor={loading ? "..." : moeda(dashboard?.ticket_medio)} /><Kpi titulo="Pipeline aberto" valor={moeda(pipeline.resumo?.valor_total)} /><Kpi titulo="Pipeline ponderado" valor={moeda(pipeline.resumo?.valor_ponderado)} /></section>
           <section className="rounded-2xl border border-[#13203f] bg-[#071226] p-6">
@@ -176,7 +204,7 @@ export default function DashboardHub() {
           </section>
           <section className="grid grid-cols-1 xl:grid-cols-3 gap-6"><GraficoBarras titulo="Funil resumido do CRM" subtitulo="Volumes consolidados, sem funções operacionais." itens={funilCrm} /><GraficoBarras titulo="Agenda comercial" subtitulo="Resumo do estado das atividades registradas no CRM." itens={agendaResumo} /><GraficoBarras titulo="Distribuição do pipeline" subtitulo="Quantidade de oportunidades por etapa atual." itens={pipelineEtapas} /></section>
           <section className="grid grid-cols-1 md:grid-cols-4 gap-4"><Kpi titulo="Oportunidades CRM" valor={crm?.oportunidades ?? 0} /><Kpi titulo="Propostas CRM" valor={crm?.propostas ?? 0} /><Kpi titulo="Pedidos CRM" valor={crm?.pedidos ?? 0} /><Kpi titulo="Atividades CRM" valor={crm?.atividades ?? 0} /></section>
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-6"><IndicadorAnalitico titulo="Conversão proposta → pedido" valor={`${conversaoProposta}%`} descricao="Pedidos divididos pelas propostas cadastradas no CRM." /><IndicadorAnalitico titulo="Conversão oportunidade → pedido" valor={`${conversaoOportunidade}%`} descricao="Pedidos divididos pelas oportunidades cadastradas no CRM." /></section>
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-6"><IndicadorAnalitico titulo="Conversão proposta → pedido" valor={`${conversaoProposta}%`} descricao="Pedidos divididos pelas oportunidades com proposta vigente no núcleo comercial." /><IndicadorAnalitico titulo="Conversão oportunidade → pedido" valor={`${conversaoOportunidade}%`} descricao="Pedidos reconhecidos pelo núcleo divididos pelas oportunidades consolidadas." /></section>
           <section className="grid grid-cols-1 xl:grid-cols-2 gap-6"><GraficoBarras titulo="Top 5 clientes" subtitulo="Maiores presenças históricas; detalhes completos disponíveis em Clientes." itens={topClientes} /><GraficoBarras titulo="Top 5 implementadoras" subtitulo="Maiores origens comerciais; detalhes completos disponíveis em Implementadoras." itens={topImplementadoras} /></section>
         </div>
       </section>
