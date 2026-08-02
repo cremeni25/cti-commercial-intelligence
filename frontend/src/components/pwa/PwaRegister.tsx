@@ -8,7 +8,13 @@ export function PwaRegister() {
 
     const register = async () => {
       try {
-        await navigator.serviceWorker.register("/sw.js", { scope: "/" })
+        const registros = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(
+          registros
+            .filter((registro) => registro.scope.endsWith("/"))
+            .map((registro) => registro.unregister()),
+        )
+        await navigator.serviceWorker.register("/sw.js", { scope: "/crm-app/" })
       } catch (error) {
         console.error("Falha ao registrar PWA CTI CRM:", error)
       }
