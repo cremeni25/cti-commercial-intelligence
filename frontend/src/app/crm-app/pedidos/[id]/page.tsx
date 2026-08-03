@@ -1,0 +1,50 @@
+"use client"
+
+import Link from "next/link"
+import { useEffect, useState } from "react"
+import { ArrowLeft, Building2, FileCheck2, Loader2, Mail, PackageCheck } from "lucide-react"
+import { useParams } from "next/navigation"
+
+type Registro = Record<string, unknown>
+type Pacote = { pedido: Registro; proposta: Registro | null; item: Registro | null; oportunidade: Registro | null; cliente: Registro | null; envio: Registro | null }
+
+function texto(valor: unknown, padrao = "—") { const v = String(valor ?? "").trim(); return v || padrao }
+function moeda(valor: unknown) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
+function dataBr(valor: unknown) { const v = texto(valor, ""); if (!v) return "—"; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString("pt-BR") }
+
+export default function PedidoCrmAppPage() {
+  const params = useParams<{ id: string }>()
+  const id = String(params.id || "")
+  const [dados, setDados] = useState<Pacote | null>(null)
+  const [carregando, setCarregando] = useState(true)
+  const [erro, setErro] = useState("")
+
+  useEffect(() => {
+    if (!id) return
+    fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then(async (resposta) => {
+        const payload = await resposta.json().catch(() => ({}))
+        if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível carregar o pedido (${resposta.status}).`))
+        setDados(payload)
+      })
+      .catch((falha) => setErro(falha instanceof Error ? falha.message : "Falha ao carregar o pedido."))
+      .finally(() => setCarregando(false))
+  }, [id])
+
+  const destinatarios = Array.isArray(dados?.envio?.destinatarios) ? dados?.envio?.destinatarios as string[] : []
+  const statusEnvio = texto(dados?.envio?.status_envio, "PENDENTE")
+
+  return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-4xl">
+    <header className="mb-5 flex items-center gap-3"><Link href="/crm-app/clientes" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Acompanhamento do pedido</h1><p className="text-sm text-slate-400">Documento, destinatários e situação operacional</p></div></header>
+    {carregando && <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>}
+    {erro && <div className="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
+    {dados && <div className="space-y-4">
+      <section className="rounded-3xl border border-emerald-800 bg-gradient-to-br from-emerald-950/50 to-[#07162b] p-5"><div className="flex items-start gap-3"><span className="rounded-2xl bg-emerald-900/40 p-3 text-emerald-300"><PackageCheck size={24}/></span><div><p className="text-sm text-slate-400">Pedido comercial</p><h2 className="mt-1 text-xl font-bold">{texto(dados.pedido.numero, "Pedido gerado")}</h2><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-emerald-700 px-3 py-1 text-emerald-200">{texto(dados.pedido.status, "ABERTO")}</span><span className="rounded-full border border-[#24466f] px-3 py-1">{moeda(dados.pedido.valor)}</span></div></div></div></section>
+      <section className="grid gap-3 sm:grid-cols-2"><Info icone={<Building2 size={18}/>} label="Cliente" valor={texto(dados.cliente?.razao_social || dados.cliente?.nome || dados.oportunidade?.cliente_nome)}/><Info icone={<PackageCheck size={18}/>} label="Equipamento" valor={texto(dados.item?.equipamento)}/><Info icone={<FileCheck2 size={18}/>} label="Proposta de origem" valor={texto(dados.proposta?.numero)}/><Info icone={<FileCheck2 size={18}/>} label="Pedido criado em" valor={dataBr(dados.pedido.created_at)}/></section>
+      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="flex items-center justify-between gap-3"><div><h3 className="font-bold">Destinatários responsáveis</h3><p className="text-sm text-slate-400">Pessoas que deverão receber o pedido</p></div><span className="rounded-full border border-amber-700 px-3 py-1 text-xs text-amber-300">ENVIO {statusEnvio}</span></div><div className="mt-4 space-y-2">{destinatarios.length ? destinatarios.map((email) => <div key={email} className="flex items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-3"><Mail size={18} className="text-cyan-300"/><span className="break-all text-sm">{email}</span></div>) : <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhum destinatário registrado.</p>}</div>{texto(dados.envio?.observacoes_envio, "") && <div className="mt-4 rounded-2xl bg-[#020817] p-4 text-sm text-slate-300"><strong className="block text-xs text-slate-500">Observações para o envio</strong>{texto(dados.envio?.observacoes_envio)}</div>}<p className="mt-4 text-xs text-amber-300">O pedido está gerado e os destinatários estão registrados. O envio real por e-mail ainda não foi executado.</p></section>
+      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><h3 className="font-bold">Dossiê comercial preservado</h3><p className="mt-2 text-sm leading-6 text-slate-400">O pedido mantém vínculo com a proposta aceita, o aceite registrado, a oportunidade, o item comercial e os metadados de origem do CRM App.</p></section>
+    </div>}
+  </div></main>
+}
+
+function Info({ icone, label, valor }: { icone: React.ReactNode; label: string; valor: string }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="flex items-center gap-2 text-cyan-300">{icone}<span className="text-xs text-slate-400">{label}</span></div><strong className="mt-2 block">{valor}</strong></div> }
