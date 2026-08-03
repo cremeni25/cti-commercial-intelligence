@@ -55,11 +55,17 @@ def _emails_validos(valores: list[str]) -> list[str]:
     return emails
 
 
+def _dossie_normalizado(valor: Any) -> list[dict[str, Any]]:
+    if not isinstance(valor, list):
+        return []
+    return [registro for registro in valor if isinstance(registro, dict)]
+
+
 def _registrar_destinatarios(pedido: dict[str, Any], destinatarios: list[str], observacoes: str | None) -> dict[str, Any]:
     dossie = [
         registro
-        for registro in list(pedido.get("dossie_documentos") or [])
-        if not (isinstance(registro, dict) and registro.get("tipo") == "DESTINATARIOS_PEDIDO")
+        for registro in _dossie_normalizado(pedido.get("dossie_documentos"))
+        if registro.get("tipo") != "DESTINATARIOS_PEDIDO"
     ]
     dossie.append(
         {
@@ -72,13 +78,15 @@ def _registrar_destinatarios(pedido: dict[str, Any], destinatarios: list[str], o
     )
     atualizado = (
         supabase.table("cti_pedidos")
-        .update({"dossie_documentos": dossie, "updated_at": _agora()})
+        .update({"dossie_documentos": dossie})
         .eq("id", pedido["id"])
         .execute()
         .data
         or []
     )
-    return atualizado[0] if atualizado else {**pedido, "dossie_documentos": dossie}
+    if not atualizado:
+        raise HTTPException(status_code=500, detail="O pedido não confirmou a gravação dos destinatários.")
+    return atualizado[0]
 
 
 @router.post("/propostas/{proposta_id}/converter-pedido-operacional")
@@ -135,7 +143,7 @@ def consultar_pedido_operacional(pedido_id: str):
         cliente = {"nome": nome_cliente, "razao_social": nome_cliente, "origem": "DOSSIE_COMERCIAL"}
 
     envio = next(
-        (registro for registro in reversed(list(pedido.get("dossie_documentos") or [])) if isinstance(registro, dict) and registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
+        (registro for registro in reversed(_dossie_normalizado(pedido.get("dossie_documentos"))) if registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
         None,
     )
     return {
