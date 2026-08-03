@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import httpx
 
@@ -30,7 +30,27 @@ def configuracao_email() -> dict[str, str | bool]:
     }
 
 
-def enviar_email(*, destinatarios: list[str], assunto: str, html: str, texto: str | None = None) -> EmailEnviado:
+def _attachments_payload(
+    attachments: Sequence[Mapping[str, str]] | None,
+) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    for item in attachments or []:
+        filename = str(item.get("filename") or "").strip()
+        content = str(item.get("content") or "").strip()
+        if not filename or not content:
+            raise ValueError("Todo anexo deve possuir filename e content em base64.")
+        result.append({"filename": filename, "content": content})
+    return result
+
+
+def enviar_email(
+    *,
+    destinatarios: list[str],
+    assunto: str,
+    html: str,
+    texto: str | None = None,
+    attachments: Sequence[Mapping[str, str]] | None = None,
+) -> EmailEnviado:
     api_key = os.getenv("RESEND_API_KEY", "").strip()
     remetente = os.getenv("CTI_EMAIL_FROM", "CTI Pedidos <pedidos@send.cti-intelligence.com>").strip()
     reply_to = os.getenv("CTI_EMAIL_REPLY_TO", "").strip()
@@ -49,6 +69,9 @@ def enviar_email(*, destinatarios: list[str], assunto: str, html: str, texto: st
         payload["text"] = texto
     if reply_to:
         payload["reply_to"] = reply_to
+    attachment_payload = _attachments_payload(attachments)
+    if attachment_payload:
+        payload["attachments"] = attachment_payload
 
     try:
         resposta = httpx.post(
