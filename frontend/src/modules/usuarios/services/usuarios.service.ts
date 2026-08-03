@@ -2,35 +2,23 @@ import { API_URL } from "@/lib/api"
 import { getSupabaseClient } from "@/core/database/supabase"
 import { UsuarioCTI } from "../types/usuario.types"
 
-export type PerfilCTI =
-  | "DIRETOR_VIENA_SP"
-  | "ADMIN_COMERCIAL_VIENA_SP"
-  | "ADMIN_FINANCEIRO_VIENA_SP"
-  | "INDICADOR_VIENA_SP"
-  | "REPRES_REGIAO_01"
-  | "REPRES_REGIAO_02"
-
-export type SolicitacaoAcesso = {
-  id: string
-  nome: string
-  email: string
-  telefone?: string | null
-  empresa: string
-  cargo: string
-  canal_solicitado: "PORTAL" | "CRM" | "AMBOS"
-  observacoes?: string | null
-  status: "PENDENTE" | "CONVITE_ENVIADO" | "APROVADO" | "REJEITADO"
-  created_at?: string
-}
-
-export type DecisaoSolicitacao = {
-  tipo_usuario: PerfilCTI
-  territorio?: string
-  ddds: string[]
-  superior_id?: string
+export type PermissoesUsuario = {
   acesso_portal: boolean
   acesso_crm: boolean
-  motivo_decisao?: string
+  dashboard_executivo: boolean
+  clientes_visualizar: boolean
+  clientes_editar: boolean
+  oportunidades_visualizar: boolean
+  oportunidades_editar: boolean
+  propostas_visualizar: boolean
+  propostas_emitir: boolean
+  pedidos_visualizar: boolean
+  pedidos_converter: boolean
+  pedidos_enviar: boolean
+  financeiro_visualizar: boolean
+  usuarios_administrar: boolean
+  configuracoes_administrar: boolean
+  acesso_total: boolean
 }
 
 export type UsuarioNovo = {
@@ -38,9 +26,11 @@ export type UsuarioNovo = {
   email: string
   senha_temporaria: string
   empresa: string
-  tipo_usuario: PerfilCTI
+  funcao: string
   territorio?: string
   ddds: string[]
+  superior_id?: string | null
+  permissoes: PermissoesUsuario
 }
 
 async function tokenAtual() {
@@ -72,14 +62,9 @@ export function criarUsuario(payload: UsuarioNovo): Promise<UsuarioCTI> {
   return requisicao<UsuarioCTI>("/governanca/usuarios", { method: "POST", body: JSON.stringify(payload) })
 }
 
-export function listarSolicitacoes(): Promise<SolicitacaoAcesso[]> {
-  return requisicao<SolicitacaoAcesso[]>("/auth/access-requests")
-}
-
-export function aprovarSolicitacao(id: string, payload: DecisaoSolicitacao) {
-  return requisicao(`/auth/access-requests/${id}/approve`, { method: "POST", body: JSON.stringify(payload) })
-}
-
-export function rejeitarSolicitacao(id: string, motivo_decisao: string) {
-  return requisicao(`/auth/access-requests/${id}/reject`, { method: "POST", body: JSON.stringify({ motivo_decisao }) })
+export function atualizarPermissoes(usuarioId: string, permissoes: PermissoesUsuario) {
+  return requisicao<PermissoesUsuario>(`/governanca/usuarios/${usuarioId}/permissoes`, {
+    method: "PUT",
+    body: JSON.stringify(permissoes),
+  })
 }
