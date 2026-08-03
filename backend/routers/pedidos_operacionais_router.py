@@ -1,0 +1,102 @@
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from core.supabase_client import supabase
+from routers.propostas_pedidos_router import ConverterPedidoRequest, converter_em_pedido
+
+router = APIRouter(prefix="/crm-documentos", tags=["CRM Pedidos Operacionais"])
+
+
+class ConverterPedidoOperacionalRequest(BaseModel):
+    destinatarios: list[str] = Field(min_length=1)
+    observacoes_envio: str | None = None
+    responsavel_id: str | None = None
+    data_pedido: str | None = None
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _primeiro(tabela: str, registro_id: str, detalhe: str) -> dict[str, Any]:
+    dados = supabase.table(tabela).select("*").eq("id", registro_id).limit(1).execute().data or []
+    if not dados:
+        raise HTTPException(status_code=404, detail=detalhe)
+    return dados[0]
+
+
+def _emails_validos(valores: list[str]) -> list[str]:
+    emails: list[str] = []
+    for valor in valores:
+        email = valor.strip().lower()
+        if not email or "@" not in email or "." not in email.split("@")[-1]:
+            raise HTTPException(status_code=422, detail=f"Destinatário inválido: {valor}")
+        if email not in emails:
+            emails.append(email)
+    if not emails:
+        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário do pedido.")
+    return emails
+
+
+@router.post("/propostas/{proposta_id}/converter-pedido-operacional")
+def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperacionalRequest):
+    destinatarios = _emails_validos(dados.destinatarios)
+    pedidos = converter_em_pedido(
+        proposta_id,
+        ConverterPedidoRequest(
+            responsavel_id=dados.responsavel_id,
+            data_pedido=dados.data_pedido,
+            origem_comercial="CRM_APP",
+        ),
+    )
+    pedido = pedidos[0] if isinstance(pedidos, list) and pedidos else pedidos
+    if not isinstance(pedido, dict) or not pedido.get("id"):
+        raise HTTPException(status_code=500, detail="Pedido criado sem identificação válida.")
+
+    dossie = list(pedido.get("dossie_documentos") or [])
+    dossie.append(
+        {
+            "tipo": "DESTINATARIOS_PEDIDO",
+            "destinatarios": destinatarios,
+            "observacoes_envio": dados.observacoes_envio,
+            "status_envio": "PENDENTE",
+            "registrado_em": _agora(),
+        }
+    )
+    atualizado = (
+        supabase.table("cti_pedidos")
+        .update({"dossie_documentos": dossie, "updated_at": _agora()})
+        .eq("id", pedido["id"])
+        .execute()
+        .data
+        or []
+    )
+    return atualizado[0] if atualizado else {**pedido, "dossie_documentos": dossie}
+
+
+@router.get("/pedidos/{pedido_id}")
+def consultar_pedido_operacional(pedido_id: str):
+    pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
+    proposta = _primeiro("cti_propostas", str(pedido["proposta_id"]), "Proposta não encontrada") if pedido.get("proposta_id") else None
+    item = _primeiro("cti_oportunidade_itens", str(pedido["item_oportunidade_id"]), "Item não encontrado") if pedido.get("item_oportunidade_id") else None
+    oportunidade = _primeiro("cti_oportunidades", str(proposta["oportunidade_id"]), "Oportunidade não encontrada") if proposta and proposta.get("oportunidade_id") else None
+    cliente_id = pedido.get("cliente_id") or (proposta or {}).get("cliente_id") or (oportunidade or {}).get("cliente_id")
+    cliente = _primeiro("cti_clientes", str(cliente_id), "Cliente não encontrado") if cliente_id else None
+
+    envio = next(
+        (registro for registro in reversed(list(pedido.get("dossie_documentos") or [])) if registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
+        None,
+    )
+    return {
+        "pedido": pedido,
+        "proposta": proposta,
+        "item": item,
+        "oportunidade": oportunidade,
+        "cliente": cliente,
+        "envio": envio,
+    }
