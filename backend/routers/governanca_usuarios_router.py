@@ -289,14 +289,45 @@ def excluir_usuario(usuario_id: str, payload: ConfirmacaoExclusao, usuario: Usua
             status_code=409,
             detail="Usuário com primeiro acesso concluído não pode ser excluído. Desative a conta para preservar o histórico comercial.",
         )
+
     auth_id = str(alvo.get("auth_id") or "")
+    permissoes = _dados(
+        supabase.table("cti_user_permissions")
+        .select("*")
+        .eq("user_id", usuario_id)
+        .limit(1)
+        .execute()
+    )
+    permissao_original = permissoes[0] if permissoes else None
+
     try:
-        if auth_id:
-            supabase.auth.admin.delete_user(auth_id)
         supabase.table("cti_user_permissions").delete().eq("user_id", usuario_id).execute()
         supabase.table("cti_users").delete().eq("id", usuario_id).execute()
+        if auth_id:
+            supabase.auth.admin.delete_user(auth_id)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Não foi possível excluir o usuário: {_mensagem_excecao(exc)}") from exc
+        rollback_erros: list[str] = []
+        try:
+            supabase.table("cti_users").upsert(alvo, on_conflict="id").execute()
+        except Exception as rollback_exc:
+            rollback_erros.append(f"perfil: {_mensagem_excecao(rollback_exc)}")
+        if permissao_original:
+            try:
+                supabase.table("cti_user_permissions").upsert(
+                    permissao_original,
+                    on_conflict="user_id",
+                ).execute()
+            except Exception as rollback_exc:
+                rollback_erros.append(f"permissões: {_mensagem_excecao(rollback_exc)}")
+
+        complemento = ""
+        if rollback_erros:
+            complemento = f" Rollback incompleto ({'; '.join(rollback_erros)})."
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível excluir o usuário: {_mensagem_excecao(exc)}.{complemento}",
+        ) from exc
+
     return {"excluido": True, "usuario_id": usuario_id, "email": email}
 
 
