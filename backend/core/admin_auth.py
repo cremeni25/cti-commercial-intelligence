@@ -8,16 +8,27 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from core.supabase_client import supabase
 
 security = HTTPBearer(auto_error=False)
-PERFIS_LEITURA_CATALOGO = {"ADMIN_MASTER", "DIRETOR"}
-PERFIS_ESCRITA_CATALOGO = {"ADMIN_MASTER"}
-PERFIS_CONHECIDOS = {
+
+PERFIS_OFICIAIS = {
     "ADMIN_MASTER",
-    "DIRETOR",
-    "GESTOR_REGIONAL",
-    "VENDEDOR_REGIONAL",
-    "GERENTE",
-    "VENDEDOR",
+    "DIRETOR_VIENA_SP",
+    "ADMIN_COMERCIAL_VIENA_SP",
+    "ADMIN_FINANCEIRO_VIENA_SP",
+    "INDICADOR_VIENA_SP",
+    "REPRES_REGIAO_01",
+    "REPRES_REGIAO_02",
 }
+
+PERFIS_LEGADOS = {
+    "DIRETOR": "DIRETOR_VIENA_SP",
+    "GESTOR_REGIONAL": "REPRES_REGIAO_01",
+    "VENDEDOR_REGIONAL": "REPRES_REGIAO_01",
+    "GERENTE": "ADMIN_COMERCIAL_VIENA_SP",
+    "VENDEDOR": "REPRES_REGIAO_01",
+}
+
+PERFIS_LEITURA_CATALOGO = {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}
+PERFIS_ESCRITA_CATALOGO = {"ADMIN_MASTER"}
 
 
 @dataclass(frozen=True)
@@ -42,9 +53,10 @@ def _extrair_usuario_auth(resposta):
 def _normalizar_perfil(perfil: dict) -> str:
     for chave in ("tipo_usuario", "perfil", "role", "cargo"):
         texto = str(perfil.get(chave) or "").strip().upper()
-        for permitido in PERFIS_CONHECIDOS:
-            if texto == permitido or permitido in texto:
-                return permitido
+        if texto in PERFIS_OFICIAIS:
+            return texto
+        if texto in PERFIS_LEGADOS:
+            return PERFIS_LEGADOS[texto]
     return ""
 
 
