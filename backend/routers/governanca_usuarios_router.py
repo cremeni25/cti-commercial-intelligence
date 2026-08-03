@@ -149,8 +149,6 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
             "superior_id": None,
             "ativo": True,
             "status_acesso": "PRIMEIRO_ACESSO_PENDENTE",
-            "acesso_portal": payload.permissoes.acesso_portal or payload.permissoes.acesso_total,
-            "acesso_crm": payload.permissoes.acesso_crm or payload.permissoes.acesso_total,
             "primeiro_acesso_pendente": True,
             "cadastro_completo": False,
             "senha_temporaria_criada_em": _agora(),
