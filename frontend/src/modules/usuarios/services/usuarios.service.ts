@@ -33,6 +33,8 @@ export type UsuarioNovo = {
   permissoes: PermissoesUsuario
 }
 
+export type UsuarioAtualizacao = Omit<UsuarioNovo, "email" | "senha_temporaria">
+
 async function tokenAtual() {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.auth.getSession()
@@ -62,9 +64,27 @@ export function criarUsuario(payload: UsuarioNovo): Promise<UsuarioCTI> {
   return requisicao<UsuarioCTI>("/governanca/usuarios", { method: "POST", body: JSON.stringify(payload) })
 }
 
+export function atualizarUsuario(usuarioId: string, payload: UsuarioAtualizacao): Promise<UsuarioCTI> {
+  return requisicao<UsuarioCTI>(`/governanca/usuarios/${usuarioId}`, { method: "PUT", body: JSON.stringify(payload) })
+}
+
 export function atualizarPermissoes(usuarioId: string, permissoes: PermissoesUsuario) {
   return requisicao<PermissoesUsuario>(`/governanca/usuarios/${usuarioId}/permissoes`, {
     method: "PUT",
     body: JSON.stringify(permissoes),
+  })
+}
+
+export function alterarEstadoUsuario(usuarioId: string, ativo: boolean): Promise<UsuarioCTI> {
+  return requisicao<UsuarioCTI>(`/governanca/usuarios/${usuarioId}/estado`, {
+    method: "PATCH",
+    body: JSON.stringify({ ativo }),
+  })
+}
+
+export function excluirUsuario(usuarioId: string, email: string): Promise<{ excluido: boolean }> {
+  return requisicao<{ excluido: boolean }>(`/governanca/usuarios/${usuarioId}`, {
+    method: "DELETE",
+    body: JSON.stringify({ email }),
   })
 }

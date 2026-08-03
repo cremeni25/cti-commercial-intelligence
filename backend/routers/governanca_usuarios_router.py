@@ -50,6 +50,29 @@ class UsuarioTemporario(BaseModel):
         return email
 
 
+class UsuarioAtualizacao(BaseModel):
+    nome: str = Field(min_length=3, max_length=120)
+    empresa: str = Field(min_length=2, max_length=120)
+    funcao: str = Field(min_length=2, max_length=120)
+    territorio: str | None = Field(default=None, max_length=120)
+    ddds: list[str] = Field(default_factory=list, max_length=20)
+    gestor_responsavel: str | None = Field(default=None, max_length=160)
+    permissoes: PermissoesUsuario
+
+
+class EstadoUsuario(BaseModel):
+    ativo: bool
+
+
+class ConfirmacaoExclusao(BaseModel):
+    email: str = Field(min_length=5, max_length=254)
+
+    @field_validator("email")
+    @classmethod
+    def normalizar_email(cls, valor: str) -> str:
+        return valor.strip().lower()
+
+
 class CadastroComplementar(BaseModel):
     nome: str = Field(min_length=3, max_length=120)
     telefone: str = Field(min_length=8, max_length=30)
@@ -88,6 +111,21 @@ def _permissoes_dict(payload: PermissoesUsuario) -> dict:
 def _mensagem_excecao(exc: Exception) -> str:
     mensagem = str(exc).strip() or exc.__class__.__name__
     return mensagem[:400]
+
+
+def _buscar_usuario(usuario_id: str) -> dict:
+    resposta = supabase.table("cti_users").select("*").eq("id", usuario_id).single().execute()
+    dados = getattr(resposta, "data", None) or {}
+    if not dados:
+        raise HTTPException(status_code=404, detail="Usuário CTI não encontrado.")
+    return dados
+
+
+def _proteger_admin_master(alvo: dict, usuario_atual_cti: UsuarioAutenticado) -> None:
+    if str(alvo.get("tipo_usuario") or "").upper() == "ADMIN_MASTER":
+        raise HTTPException(status_code=409, detail="O ADMIN_MASTER não pode ser desativado ou excluído.")
+    if str(alvo.get("id")) == usuario_atual_cti.id:
+        raise HTTPException(status_code=409, detail="Você não pode desativar ou excluir a própria conta.")
 
 
 @router.get("/usuarios")
@@ -176,9 +214,6 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
         if usuario_cti_id:
             try:
                 supabase.table("cti_user_permissions").delete().eq("user_id", usuario_cti_id).execute()
-            except Exception:
-                pass
-            try:
                 supabase.table("cti_users").delete().eq("id", usuario_cti_id).execute()
             except Exception:
                 pass
@@ -187,10 +222,33 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
                 supabase.auth.admin.delete_user(auth_id)
             except Exception:
                 pass
-        raise HTTPException(
-            status_code=500,
-            detail=f"Não foi possível criar o usuário na etapa '{etapa}': {_mensagem_excecao(exc)}",
-        ) from exc
+        raise HTTPException(status_code=500, detail=f"Não foi possível criar o usuário na etapa '{etapa}': {_mensagem_excecao(exc)}") from exc
+
+
+@router.put("/usuarios/{usuario_id}")
+def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    alvo = _buscar_usuario(usuario_id)
+    dados_cadastrais = {
+        "nome": payload.nome.strip(),
+        "empresa": payload.empresa.strip(),
+        "cargo": payload.funcao.strip(),
+        "funcao": payload.funcao.strip(),
+        "territorio": (payload.territorio or "").strip() or None,
+        "ddds": sorted({ddd.strip() for ddd in payload.ddds if ddd.strip()}),
+        "gestor_responsavel": (payload.gestor_responsavel or "").strip() or None,
+        "updated_at": _agora(),
+    }
+    resposta = supabase.table("cti_users").update(dados_cadastrais).eq("id", usuario_id).execute()
+    atualizados = _dados(resposta)
+    if not atualizados:
+        raise HTTPException(status_code=404, detail="Usuário CTI não encontrado para atualização.")
+    permissoes = {"user_id": usuario_id, **_permissoes_dict(payload.permissoes)}
+    supabase.table("cti_user_permissions").upsert(permissoes, on_conflict="user_id").execute()
+    resultado = atualizados[0]
+    resultado["permissoes"] = permissoes
+    resultado["email"] = alvo.get("email")
+    return resultado
 
 
 @router.put("/usuarios/{usuario_id}/permissoes")
@@ -199,6 +257,47 @@ def atualizar_permissoes(usuario_id: str, payload: PermissoesUsuario, usuario: U
     dados = {"user_id": usuario_id, **_permissoes_dict(payload)}
     resposta = supabase.table("cti_user_permissions").upsert(dados, on_conflict="user_id").execute()
     return _dados(resposta)[0] if _dados(resposta) else dados
+
+
+@router.patch("/usuarios/{usuario_id}/estado")
+def alterar_estado_usuario(usuario_id: str, payload: EstadoUsuario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    alvo = _buscar_usuario(usuario_id)
+    _proteger_admin_master(alvo, usuario)
+    status_acesso = "ATIVO" if payload.ativo else "INATIVO"
+    resposta = supabase.table("cti_users").update({
+        "ativo": payload.ativo,
+        "status_acesso": status_acesso,
+        "updated_at": _agora(),
+    }).eq("id", usuario_id).execute()
+    dados = _dados(resposta)
+    if not dados:
+        raise HTTPException(status_code=404, detail="Usuário CTI não encontrado.")
+    return dados[0]
+
+
+@router.delete("/usuarios/{usuario_id}")
+def excluir_usuario(usuario_id: str, payload: ConfirmacaoExclusao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    alvo = _buscar_usuario(usuario_id)
+    _proteger_admin_master(alvo, usuario)
+    email = str(alvo.get("email") or "").strip().lower()
+    if payload.email != email:
+        raise HTTPException(status_code=409, detail="O e-mail informado não corresponde ao usuário selecionado.")
+    if not bool(alvo.get("primeiro_acesso_pendente")) or bool(alvo.get("cadastro_completo")):
+        raise HTTPException(
+            status_code=409,
+            detail="Usuário com primeiro acesso concluído não pode ser excluído. Desative a conta para preservar o histórico comercial.",
+        )
+    auth_id = str(alvo.get("auth_id") or "")
+    try:
+        if auth_id:
+            supabase.auth.admin.delete_user(auth_id)
+        supabase.table("cti_user_permissions").delete().eq("user_id", usuario_id).execute()
+        supabase.table("cti_users").delete().eq("id", usuario_id).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Não foi possível excluir o usuário: {_mensagem_excecao(exc)}") from exc
+    return {"excluido": True, "usuario_id": usuario_id, "email": email}
 
 
 @router.get("/primeiro-acesso/status")
