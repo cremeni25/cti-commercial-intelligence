@@ -16,6 +16,8 @@ export interface UsuarioCTI {
   acesso_portal?: boolean
   acesso_crm?: boolean
   status_acesso?: string
+  primeiro_acesso_pendente?: boolean
+  cadastro_completo?: boolean
   permissoes?: Partial<PermissoesUsuario>
   created_at: string
 }
