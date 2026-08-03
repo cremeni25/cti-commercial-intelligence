@@ -48,7 +48,10 @@ def _primeiro(tabela: str, registro_id: str, detalhe: str) -> dict[str, Any]:
 def _opcional(tabela: str, registro_id: str | None) -> dict[str, Any] | None:
     if not registro_id:
         return None
-    dados = supabase.table(tabela).select("*").eq("id", registro_id).limit(1).execute().data or []
+    try:
+        dados = supabase.table(tabela).select("*").eq("id", registro_id).limit(1).execute().data or []
+    except Exception:
+        return None
     return dados[0] if dados else None
 
 
