@@ -55,6 +55,16 @@ def _opcional(tabela: str, registro_id: str | None) -> dict[str, Any] | None:
     return dados[0] if dados else None
 
 
+def _cliente_opcional(cliente_id: str | None) -> tuple[dict[str, Any] | None, str | None]:
+    if not cliente_id:
+        return None, None
+    for tabela in ("cti_clientes", "clientes"):
+        cliente = _opcional(tabela, cliente_id)
+        if cliente:
+            return cliente, tabela
+    return None, None
+
+
 def _emails_validos(valores: list[str]) -> list[str]:
     emails: list[str] = []
     for valor in valores:
@@ -117,7 +127,8 @@ def _registrar_destinatarios(
 
 def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
     pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
-    proposta = _opcional("cti_propostas", str(pedido.get("proposta_id") or ""))
+    proposta_id = pedido.get("proposta_id") or pedido.get("proposta_aceita_id")
+    proposta = _opcional("cti_propostas", str(proposta_id or ""))
     item = _opcional("cti_oportunidade_itens", str(pedido.get("item_oportunidade_id") or ""))
     oportunidade_id = (proposta or {}).get("oportunidade_id") or pedido.get("oportunidade_id")
     oportunidade = _opcional("cti_oportunidades", str(oportunidade_id or ""))
@@ -125,8 +136,9 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
         pedido.get("cliente_id")
         or (proposta or {}).get("cliente_id")
         or (oportunidade or {}).get("cliente_id")
+        or (item or {}).get("cliente_id")
     )
-    cliente_cadastrado = _opcional("cti_clientes", str(cliente_id or ""))
+    cliente_cadastrado, cliente_tabela = _cliente_opcional(str(cliente_id or ""))
     cliente = cliente_cadastrado
 
     snapshot = (proposta or {}).get("snapshot_dados") or {}
@@ -142,15 +154,21 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
         cliente,
         oportunidade,
         oportunidade_snapshot if isinstance(oportunidade_snapshot, dict) else None,
+        cliente_snapshot if isinstance(cliente_snapshot, dict) else None,
         snapshot if isinstance(snapshot, dict) else None,
+        proposta,
+        item,
+        pedido,
     ]
     for fonte in fontes:
         if not isinstance(fonte, dict):
             continue
         nome_cliente = (
             fonte.get("razao_social")
+            or fonte.get("nome_fantasia")
             or fonte.get("nome")
             or fonte.get("cliente_nome")
+            or fonte.get("empresa_nome")
             or fonte.get("empresa")
         )
         if nome_cliente:
@@ -175,6 +193,7 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
         "transporte_email": configuracao_email(),
         "integridade": {
             "cliente_cadastrado": bool(cliente_cadastrado),
+            "cliente_tabela": cliente_tabela,
             "cliente_recuperado_snapshot": bool(cliente and not cliente_cadastrado),
         },
     }
@@ -183,10 +202,15 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
 def _nome_cliente(pacote: dict[str, Any]) -> str:
     cliente = pacote.get("cliente") or {}
     oportunidade = pacote.get("oportunidade") or {}
+    proposta = pacote.get("proposta") or {}
+    pedido = pacote.get("pedido") or {}
     return str(
         cliente.get("razao_social")
+        or cliente.get("nome_fantasia")
         or cliente.get("nome")
         or oportunidade.get("cliente_nome")
+        or proposta.get("cliente_nome")
+        or pedido.get("cliente_nome")
         or "Cliente não identificado"
     )
 
