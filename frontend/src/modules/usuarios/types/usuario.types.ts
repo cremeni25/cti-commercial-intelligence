@@ -1,3 +1,5 @@
+import type { PermissoesUsuario } from "../services/usuarios.service"
+
 export interface UsuarioCTI {
   id: string
   auth_id: string
@@ -5,6 +7,7 @@ export interface UsuarioCTI {
   email: string
   empresa: string
   cargo: string
+  funcao?: string | null
   tipo_usuario: string
   ativo: boolean
   territorio?: string | null
@@ -13,5 +16,6 @@ export interface UsuarioCTI {
   acesso_portal?: boolean
   acesso_crm?: boolean
   status_acesso?: string
+  permissoes?: Partial<PermissoesUsuario>
   created_at: string
 }
