@@ -35,7 +35,7 @@ const usuarioInicial: UsuarioNovo = {
   funcao: "",
   territorio: "Viena SP",
   ddds: [],
-  superior_id: null,
+  gestor_responsavel: "",
   permissoes: permissoesIniciais,
 }
 
@@ -105,9 +105,10 @@ export default function Page() {
       await criarUsuario({
         ...novo,
         email: novo.email.trim().toLowerCase(),
+        gestor_responsavel: novo.gestor_responsavel?.trim() || null,
         ddds: dddsTexto.split(",").map((item) => item.trim()).filter(Boolean),
       })
-      setMensagem("Usuário criado. O cargo é informativo e os acessos foram definidos individualmente pelo Admin Master.")
+      setMensagem("Usuário criado. O cargo, o gestor responsável e os acessos foram definidos pelo Admin Master.")
       setNovo(usuarioInicial)
       setDddsTexto("")
       setMostrarNovo(false)
@@ -125,7 +126,7 @@ export default function Page() {
           <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6 lg:p-8">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">CTI Administração</p>
             <div className="mt-3 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div><h1 className="text-3xl font-bold">Usuários e permissões</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">Cadastre qualquer colaborador, informe sua função e defina exatamente o que ele pode acessar. Novos cargos não exigem alteração de código.</p></div>
+              <div><h1 className="text-3xl font-bold">Usuários e permissões</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">Cadastre qualquer colaborador, informe livremente sua função e seu gestor e defina exatamente o que ele pode acessar.</p></div>
               {autorizado && <button type="button" onClick={() => setMostrarNovo(!mostrarNovo)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">{mostrarNovo ? "Fechar cadastro" : "Criar usuário"}</button>}
             </div>
           </header>
@@ -135,7 +136,7 @@ export default function Page() {
             {erro && <div className="rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">{erro}</div>}
 
             {mostrarNovo && <form onSubmit={cadastrar} className="space-y-6 rounded-3xl border border-cyan-900 bg-[#071427] p-5 sm:p-6">
-              <div><h2 className="text-xl font-bold">Novo usuário CTI</h2><p className="mt-1 text-sm text-slate-400">Função livre, gestor opcional e permissões individuais.</p></div>
+              <div><h2 className="text-xl font-bold">Novo usuário CTI</h2><p className="mt-1 text-sm text-slate-400">Função livre, gestor livre e permissões individuais.</p></div>
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <Campo label="Nome completo" value={novo.nome} onChange={(value) => setNovo({ ...novo, nome: value })} required />
                 <Campo label="E-mail" type="email" value={novo.email} onChange={(value) => setNovo({ ...novo, email: value })} required />
@@ -144,7 +145,7 @@ export default function Page() {
                 <Campo label="Empresa" value={novo.empresa} onChange={(value) => setNovo({ ...novo, empresa: value })} required />
                 <Campo label="Território" value={novo.territorio || ""} onChange={(value) => setNovo({ ...novo, territorio: value })} />
                 <Campo label="DDDs autorizados" value={dddsTexto} onChange={setDddsTexto} placeholder="011, 012, 013" />
-                <label className="text-sm text-slate-300">Gestor responsável<select value={novo.superior_id || ""} onChange={(e) => setNovo({ ...novo, superior_id: e.target.value || null })} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3"><option value="">Sem gestor vinculado</option>{usuarios.map((item) => <option key={item.id} value={item.id}>{item.nome} — {item.funcao || item.cargo}</option>)}</select></label>
+                <Campo label="Gestor responsável" value={novo.gestor_responsavel || ""} onChange={(value) => setNovo({ ...novo, gestor_responsavel: value })} placeholder="Ex.: Carlos Silva — Gerente Regional Carrier" />
               </div>
               <div className="grid gap-4 lg:grid-cols-3">{grupos.map((grupo) => <fieldset key={grupo.titulo} className="rounded-2xl border border-[#17345e] bg-[#061126] p-4"><legend className="px-2 font-semibold text-cyan-300">{grupo.titulo}</legend><div className="space-y-3">{grupo.itens.map((item) => <label key={item.chave} className="flex items-center gap-3 text-sm text-slate-200"><input type="checkbox" checked={novo.permissoes[item.chave]} onChange={(e) => marcar(item.chave, e.target.checked)} className="h-4 w-4 accent-cyan-500" />{item.rotulo}</label>)}</div></fieldset>)}</div>
               <button disabled={processando} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">{processando ? "Criando..." : "Criar usuário e aplicar permissões"}</button>
@@ -152,7 +153,7 @@ export default function Page() {
 
             <div className="grid gap-4 sm:grid-cols-3"><Metric label="Usuários cadastrados" value={String(usuarios.length)} /><Metric label="Usuários ativos" value={String(usuarios.filter((item) => item.ativo).length)} /><Metric label="Primeiro acesso pendente" value={String(usuarios.filter((item) => item.status_acesso === "PRIMEIRO_ACESSO_PENDENTE").length)} /></div>
 
-            <section className="overflow-hidden rounded-3xl border border-[#13203f] bg-[#071427]"><div className="border-b border-[#13203f] px-6 py-5"><h2 className="text-lg font-bold">Contas reais cadastradas</h2></div><div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-[#061326] text-xs uppercase text-slate-500"><tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">Cargo / função</th><th className="px-6 py-4">Território / DDDs</th><th className="px-6 py-4">Acessos</th><th className="px-6 py-4">Situação</th></tr></thead><tbody className="divide-y divide-[#13203f]">{usuarios.map((item) => <tr key={item.id}><td className="px-6 py-4"><strong>{item.nome}</strong><div className="mt-1 text-xs text-slate-500">{item.email}</div></td><td className="px-6 py-4 text-cyan-300">{item.funcao || item.cargo || "—"}</td><td className="px-6 py-4 text-slate-300">{item.territorio || "—"}{item.ddds?.length ? ` / ${item.ddds.join(", ")}` : ""}</td><td className="px-6 py-4 text-xs text-slate-300">{item.permissoes?.acesso_total ? "ACESSO TOTAL" : [item.permissoes?.acesso_portal && "SITE", item.permissoes?.acesso_crm && "CRM"].filter(Boolean).join(" + ") || "SEM ACESSO"}</td><td className="px-6 py-4"><span className="rounded-full border border-[#254b75] px-3 py-1 text-xs text-slate-300">{item.status_acesso || (item.ativo ? "ATIVO" : "INATIVO")}</span></td></tr>)}</tbody></table></div></section>
+            <section className="overflow-hidden rounded-3xl border border-[#13203f] bg-[#071427]"><div className="border-b border-[#13203f] px-6 py-5"><h2 className="text-lg font-bold">Contas reais cadastradas</h2></div><div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-[#061326] text-xs uppercase text-slate-500"><tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">Cargo / função</th><th className="px-6 py-4">Gestor</th><th className="px-6 py-4">Território / DDDs</th><th className="px-6 py-4">Acessos</th><th className="px-6 py-4">Situação</th></tr></thead><tbody className="divide-y divide-[#13203f]">{usuarios.map((item) => <tr key={item.id}><td className="px-6 py-4"><strong>{item.nome}</strong><div className="mt-1 text-xs text-slate-500">{item.email}</div></td><td className="px-6 py-4 text-cyan-300">{item.funcao || item.cargo || "—"}</td><td className="px-6 py-4 text-slate-300">{item.gestor_responsavel || "—"}</td><td className="px-6 py-4 text-slate-300">{item.territorio || "—"}{item.ddds?.length ? ` / ${item.ddds.join(", ")}` : ""}</td><td className="px-6 py-4 text-xs text-slate-300">{item.permissoes?.acesso_total ? "ACESSO TOTAL" : [item.permissoes?.acesso_portal && "SITE", item.permissoes?.acesso_crm && "CRM"].filter(Boolean).join(" + ") || "SEM ACESSO"}</td><td className="px-6 py-4"><span className="rounded-full border border-[#254b75] px-3 py-1 text-xs text-slate-300">{item.status_acesso || (item.ativo ? "ATIVO" : "INATIVO")}</span></td></tr>)}</tbody></table></div></section>
           </>}
         </div>
       </section>
