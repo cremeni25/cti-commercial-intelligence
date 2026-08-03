@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
@@ -11,25 +10,36 @@ from core.supabase_client import supabase
 
 router = APIRouter(prefix="/governanca", tags=["governanca-usuarios"])
 
-PerfilCTI = Literal[
-    "ADMIN_MASTER",
-    "DIRETOR_VIENA_SP",
-    "ADMIN_COMERCIAL_VIENA_SP",
-    "ADMIN_FINANCEIRO_VIENA_SP",
-    "INDICADOR_VIENA_SP",
-    "REPRES_REGIAO_01",
-    "REPRES_REGIAO_02",
-]
+
+class PermissoesUsuario(BaseModel):
+    acesso_portal: bool = False
+    acesso_crm: bool = False
+    dashboard_executivo: bool = False
+    clientes_visualizar: bool = False
+    clientes_editar: bool = False
+    oportunidades_visualizar: bool = False
+    oportunidades_editar: bool = False
+    propostas_visualizar: bool = False
+    propostas_emitir: bool = False
+    pedidos_visualizar: bool = False
+    pedidos_converter: bool = False
+    pedidos_enviar: bool = False
+    financeiro_visualizar: bool = False
+    usuarios_administrar: bool = False
+    configuracoes_administrar: bool = False
+    acesso_total: bool = False
 
 
 class UsuarioTemporario(BaseModel):
     nome: str = Field(min_length=3, max_length=120)
     email: str = Field(min_length=5, max_length=254)
     senha_temporaria: str = Field(min_length=8, max_length=128)
-    tipo_usuario: PerfilCTI
     empresa: str = Field(default="VIENA SP", min_length=2, max_length=120)
-    territorio: str | None = Field(default="Viena SP", max_length=120)
+    funcao: str = Field(min_length=2, max_length=120)
+    territorio: str | None = Field(default=None, max_length=120)
     ddds: list[str] = Field(default_factory=list, max_length=20)
+    superior_id: str | None = None
+    permissoes: PermissoesUsuario
 
     @field_validator("email")
     @classmethod
@@ -66,86 +76,85 @@ def _exigir_master(usuario: UsuarioAutenticado) -> None:
         raise HTTPException(status_code=403, detail="Operação exclusiva do ADMIN_MASTER.")
 
 
-def _permissoes(perfil: str) -> dict:
-    return {
-        "acesso_portal": True,
-        "acesso_crm": True,
-        "admin_sistema": perfil == "ADMIN_MASTER",
-        "escopo_operacional": "TOTAL" if perfil in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"} else "FUNCAO",
-    }
-
-
-@router.get("/perfis")
-def listar_perfis(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    _exigir_master(usuario)
-    resposta = supabase.table("cti_funcoes").select("*").eq("ativo", True).order("ordem").execute()
-    return _dados(resposta)
+def _permissoes_dict(payload: PermissoesUsuario) -> dict:
+    dados = payload.model_dump()
+    if dados["acesso_total"]:
+        for chave in dados:
+            dados[chave] = True
+    dados["updated_at"] = _agora()
+    return dados
 
 
 @router.get("/usuarios")
 def listar_usuarios(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
-    resposta = (
+    usuarios = _dados(
         supabase.table("cti_users")
         .select("*")
         .not_.is_("auth_id", "null")
         .order("created_at", desc=True)
         .execute()
     )
-    return _dados(resposta)
+    permissoes = _dados(supabase.table("cti_user_permissions").select("*").execute())
+    por_usuario = {str(item.get("user_id")): item for item in permissoes}
+    for item in usuarios:
+        item["permissoes"] = por_usuario.get(str(item.get("id")), {})
+    return usuarios
 
 
 @router.post("/usuarios", status_code=status.HTTP_201_CREATED)
 def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
-    if payload.tipo_usuario == "ADMIN_MASTER":
-        raise HTTPException(status_code=400, detail="Não é permitida a criação direta de outro ADMIN_MASTER.")
-
-    existente = supabase.table("cti_users").select("id").eq("email", payload.email).limit(1).execute()
+    existente = supabase.table("cti_users").select("id").ilike("email", payload.email).limit(1).execute()
     if _dados(existente):
         raise HTTPException(status_code=409, detail="Já existe usuário com este e-mail.")
 
     auth_id = ""
     try:
-        criado = supabase.auth.admin.create_user(
-            {
-                "email": payload.email,
-                "password": payload.senha_temporaria,
-                "email_confirm": True,
-                "user_metadata": {
-                    "nome": payload.nome.strip(),
-                    "tipo_usuario": payload.tipo_usuario,
-                    "primeiro_acesso_pendente": True,
-                },
-                "app_metadata": {"role": payload.tipo_usuario},
-            }
-        )
+        criado = supabase.auth.admin.create_user({
+            "email": payload.email,
+            "password": payload.senha_temporaria,
+            "email_confirm": True,
+            "user_metadata": {
+                "nome": payload.nome.strip(),
+                "funcao": payload.funcao.strip(),
+                "primeiro_acesso_pendente": True,
+            },
+            "app_metadata": {"role": "USUARIO_CTI"},
+        })
         auth_user = getattr(criado, "user", None) or getattr(getattr(criado, "data", None), "user", None)
         auth_id = str(getattr(auth_user, "id", "") or "")
         if not auth_id:
             raise RuntimeError("Supabase Auth não retornou o identificador do usuário.")
 
-        permissoes = _permissoes(payload.tipo_usuario)
         registro = {
             "auth_id": auth_id,
             "nome": payload.nome.strip(),
             "email": payload.email,
             "empresa": payload.empresa.strip(),
-            "cargo": payload.tipo_usuario,
-            "tipo_usuario": payload.tipo_usuario,
+            "cargo": payload.funcao.strip(),
+            "funcao": payload.funcao.strip(),
+            "tipo_usuario": "USUARIO_CTI",
             "territorio": (payload.territorio or "").strip() or None,
             "ddds": sorted({ddd.strip() for ddd in payload.ddds if ddd.strip()}),
+            "superior_id": payload.superior_id or None,
             "ativo": True,
             "status_acesso": "PRIMEIRO_ACESSO_PENDENTE",
-            "acesso_portal": permissoes["acesso_portal"],
-            "acesso_crm": True,
+            "acesso_portal": payload.permissoes.acesso_portal or payload.permissoes.acesso_total,
+            "acesso_crm": payload.permissoes.acesso_crm or payload.permissoes.acesso_total,
             "primeiro_acesso_pendente": True,
             "cadastro_completo": False,
             "senha_temporaria_criada_em": _agora(),
         }
         resposta = supabase.table("cti_users").insert(registro).execute()
         dados = _dados(resposta)
-        return dados[0] if dados else registro
+        if not dados:
+            raise RuntimeError("Perfil CTI não foi criado.")
+        criado_cti = dados[0]
+        permissoes = {"user_id": criado_cti["id"], **_permissoes_dict(payload.permissoes)}
+        supabase.table("cti_user_permissions").insert(permissoes).execute()
+        criado_cti["permissoes"] = permissoes
+        return criado_cti
     except HTTPException:
         raise
     except Exception as exc:
@@ -157,15 +166,17 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
         raise HTTPException(status_code=500, detail="Não foi possível criar o usuário temporário.") from exc
 
 
+@router.put("/usuarios/{usuario_id}/permissoes")
+def atualizar_permissoes(usuario_id: str, payload: PermissoesUsuario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    dados = {"user_id": usuario_id, **_permissoes_dict(payload)}
+    resposta = supabase.table("cti_user_permissions").upsert(dados, on_conflict="user_id").execute()
+    return _dados(resposta)[0] if _dados(resposta) else dados
+
+
 @router.get("/primeiro-acesso/status")
 def status_primeiro_acesso(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    resposta = (
-        supabase.table("cti_users")
-        .select("id,primeiro_acesso_pendente,cadastro_completo,status_acesso,tipo_usuario")
-        .eq("id", usuario.id)
-        .single()
-        .execute()
-    )
+    resposta = supabase.table("cti_users").select("id,primeiro_acesso_pendente,cadastro_completo,status_acesso,tipo_usuario").eq("id", usuario.id).single().execute()
     dados = getattr(resposta, "data", None) or {}
     return {
         "primeiro_acesso_pendente": bool(dados.get("primeiro_acesso_pendente")),
@@ -176,15 +187,13 @@ def status_primeiro_acesso(usuario: UsuarioAutenticado = Depends(usuario_atual))
 
 
 @router.post("/primeiro-acesso/concluir")
-def concluir_primeiro_acesso(
-    payload: ConfirmacaoPrimeiroAcesso,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+def concluir_primeiro_acesso(payload: ConfirmacaoPrimeiroAcesso, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     cadastro = payload.cadastro
     atualizacao = {
         "nome": cadastro.nome.strip(),
         "telefone": cadastro.telefone.strip(),
         "cargo": cadastro.cargo.strip(),
+        "funcao": cadastro.cargo.strip(),
         "departamento": (cadastro.departamento or "").strip() or None,
         "territorio": (cadastro.territorio or "").strip() or None,
         "ddds": sorted({ddd.strip() for ddd in cadastro.ddds if ddd.strip()}),
