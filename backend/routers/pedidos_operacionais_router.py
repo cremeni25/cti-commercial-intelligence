@@ -65,6 +65,31 @@ def _cliente_opcional(cliente_id: str | None) -> tuple[dict[str, Any] | None, st
     return None, None
 
 
+def _equipamento_pedido(pacote: dict[str, Any]) -> str:
+    item = pacote.get("item") or {}
+    proposta = pacote.get("proposta") or {}
+    pedido = pacote.get("pedido") or {}
+    snapshot = proposta.get("snapshot_dados") if isinstance(proposta, dict) else {}
+    snapshot = snapshot if isinstance(snapshot, dict) else {}
+    item_snapshot = snapshot.get("item") if isinstance(snapshot.get("item"), dict) else {}
+    itens_snapshot = snapshot.get("itens") if isinstance(snapshot.get("itens"), list) else []
+    primeiro_item_snapshot = itens_snapshot[0] if itens_snapshot and isinstance(itens_snapshot[0], dict) else {}
+
+    for fonte in (item, item_snapshot, primeiro_item_snapshot, proposta, pedido, snapshot):
+        if not isinstance(fonte, dict):
+            continue
+        valor = (
+            fonte.get("equipamento")
+            or fonte.get("modelo_equipamento")
+            or fonte.get("equipamentos")
+            or fonte.get("produto")
+            or fonte.get("modelo")
+        )
+        if valor:
+            return str(valor)
+    return "A definir"
+
+
 def _emails_validos(valores: list[str]) -> list[str]:
     emails: list[str] = []
     for valor in valores:
@@ -180,6 +205,17 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
             "origem": "DOSSIE_COMERCIAL",
         }
 
+    pacote_base = {
+        "pedido": pedido,
+        "proposta": proposta,
+        "item": item,
+    }
+    equipamento = _equipamento_pedido(pacote_base)
+    if not item and equipamento != "A definir":
+        item = {"equipamento": equipamento, "origem": "DOSSIE_COMERCIAL"}
+    elif item and not item.get("equipamento") and equipamento != "A definir":
+        item = {**item, "equipamento": equipamento}
+
     envio = _ultimo_registro(pedido, "DESTINATARIOS_PEDIDO")
     protocolo = _ultimo_registro(pedido, "ENVIO_PEDIDO")
     return {
@@ -195,6 +231,7 @@ def _pacote_pedido(pedido_id: str) -> dict[str, Any]:
             "cliente_cadastrado": bool(cliente_cadastrado),
             "cliente_tabela": cliente_tabela,
             "cliente_recuperado_snapshot": bool(cliente and not cliente_cadastrado),
+            "equipamento_recuperado": equipamento != "A definir",
         },
     }
 
@@ -222,7 +259,7 @@ def _html_pedido(pacote: dict[str, Any]) -> tuple[str, str, str]:
     envio = pacote.get("envio") or {}
     numero = str(pedido.get("numero") or pedido.get("id") or "Pedido CTI")
     cliente = _nome_cliente(pacote)
-    equipamento = str(item.get("equipamento") or "A definir")
+    equipamento = _equipamento_pedido(pacote)
     quantidade = str(item.get("quantidade") or pedido.get("quantidade") or "1")
     valor = float(pedido.get("valor") or 0)
     valor_br = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
