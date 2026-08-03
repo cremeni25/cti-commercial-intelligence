@@ -38,7 +38,7 @@ class UsuarioTemporario(BaseModel):
     funcao: str = Field(min_length=2, max_length=120)
     territorio: str | None = Field(default=None, max_length=120)
     ddds: list[str] = Field(default_factory=list, max_length=20)
-    superior_id: str | None = None
+    gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
 
     @field_validator("email")
@@ -85,6 +85,11 @@ def _permissoes_dict(payload: PermissoesUsuario) -> dict:
     return dados
 
 
+def _mensagem_excecao(exc: Exception) -> str:
+    mensagem = str(exc).strip() or exc.__class__.__name__
+    return mensagem[:400]
+
+
 @router.get("/usuarios")
 def listar_usuarios(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
@@ -107,9 +112,11 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
     _exigir_master(usuario)
     existente = supabase.table("cti_users").select("id").ilike("email", payload.email).limit(1).execute()
     if _dados(existente):
-        raise HTTPException(status_code=409, detail="Já existe usuário com este e-mail.")
+        raise HTTPException(status_code=409, detail="Já existe usuário com este e-mail em cti_users.")
 
     auth_id = ""
+    usuario_cti_id = ""
+    etapa = "criação da conta no Supabase Auth"
     try:
         criado = supabase.auth.admin.create_user({
             "email": payload.email,
@@ -127,6 +134,7 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
         if not auth_id:
             raise RuntimeError("Supabase Auth não retornou o identificador do usuário.")
 
+        etapa = "gravação do cadastro em cti_users"
         registro = {
             "auth_id": auth_id,
             "nome": payload.nome.strip(),
@@ -137,7 +145,8 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
             "tipo_usuario": "USUARIO_CTI",
             "territorio": (payload.territorio or "").strip() or None,
             "ddds": sorted({ddd.strip() for ddd in payload.ddds if ddd.strip()}),
-            "superior_id": payload.superior_id or None,
+            "gestor_responsavel": (payload.gestor_responsavel or "").strip() or None,
+            "superior_id": None,
             "ativo": True,
             "status_acesso": "PRIMEIRO_ACESSO_PENDENTE",
             "acesso_portal": payload.permissoes.acesso_portal or payload.permissoes.acesso_total,
@@ -149,21 +158,41 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
         resposta = supabase.table("cti_users").insert(registro).execute()
         dados = _dados(resposta)
         if not dados:
-            raise RuntimeError("Perfil CTI não foi criado.")
+            raise RuntimeError("O banco não retornou o perfil CTI criado.")
         criado_cti = dados[0]
-        permissoes = {"user_id": criado_cti["id"], **_permissoes_dict(payload.permissoes)}
-        supabase.table("cti_user_permissions").insert(permissoes).execute()
+        usuario_cti_id = str(criado_cti.get("id") or "")
+        if not usuario_cti_id:
+            raise RuntimeError("O perfil CTI foi criado sem identificador.")
+
+        etapa = "gravação das permissões individuais"
+        permissoes = {"user_id": usuario_cti_id, **_permissoes_dict(payload.permissoes)}
+        resposta_permissoes = supabase.table("cti_user_permissions").insert(permissoes).execute()
+        if not _dados(resposta_permissoes):
+            raise RuntimeError("O banco não confirmou a gravação das permissões.")
+
         criado_cti["permissoes"] = permissoes
         return criado_cti
     except HTTPException:
         raise
     except Exception as exc:
+        if usuario_cti_id:
+            try:
+                supabase.table("cti_user_permissions").delete().eq("user_id", usuario_cti_id).execute()
+            except Exception:
+                pass
+            try:
+                supabase.table("cti_users").delete().eq("id", usuario_cti_id).execute()
+            except Exception:
+                pass
         if auth_id:
             try:
                 supabase.auth.admin.delete_user(auth_id)
             except Exception:
                 pass
-        raise HTTPException(status_code=500, detail="Não foi possível criar o usuário temporário.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Não foi possível criar o usuário na etapa '{etapa}': {_mensagem_excecao(exc)}",
+        ) from exc
 
 
 @router.put("/usuarios/{usuario_id}/permissoes")

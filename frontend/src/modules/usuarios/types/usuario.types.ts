@@ -12,7 +12,7 @@ export interface UsuarioCTI {
   ativo: boolean
   territorio?: string | null
   ddds?: string[]
-  superior_id?: string | null
+  gestor_responsavel?: string | null
   acesso_portal?: boolean
   acesso_crm?: boolean
   status_acesso?: string
