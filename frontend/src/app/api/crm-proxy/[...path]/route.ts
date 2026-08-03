@@ -90,6 +90,12 @@ async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
     return NextResponse.json([])
   }
 
+  // O cadastro de oportunidade não depende da listagem legada. Uma falha
+  // dessa leitura não pode bloquear a abertura nem o envio do formulário.
+  if (caminho === "crm/oportunidades") {
+    return NextResponse.json([])
+  }
+
   if (
     !caminho.startsWith("crm/oportunidades") &&
     !caminho.startsWith("modulos/clientes")
@@ -98,13 +104,18 @@ async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
   }
 
   const nucleo = linhasDo(await buscarJson("crm/nucleo-comercial"))
-  const base =
-    nucleo.length > 0
-      ? nucleo
-      : linhasDo(await buscarJson("crm/oportunidades"))
+  const base = nucleo.length > 0 ? nucleo : []
 
   if (caminho.startsWith("crm/oportunidades")) {
-    return NextResponse.json(mapearOportunidades(base))
+    const oportunidadeId = caminho.split("/")[2]
+    const oportunidades = mapearOportunidades(base)
+    if (oportunidadeId) {
+      const encontrada = oportunidades.find((item) => item.id === oportunidadeId)
+      return encontrada
+        ? NextResponse.json(encontrada)
+        : NextResponse.json({ detail: "Oportunidade não encontrada" }, { status: 404 })
+    }
+    return NextResponse.json(oportunidades)
   }
 
   return NextResponse.json(clientesDas(base))
