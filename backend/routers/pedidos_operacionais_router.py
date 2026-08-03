@@ -19,6 +19,11 @@ class ConverterPedidoOperacionalRequest(BaseModel):
     data_pedido: str | None = None
 
 
+class AtualizarDestinatariosPedidoRequest(BaseModel):
+    destinatarios: list[str] = Field(min_length=1)
+    observacoes_envio: str | None = None
+
+
 def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -50,27 +55,17 @@ def _emails_validos(valores: list[str]) -> list[str]:
     return emails
 
 
-@router.post("/propostas/{proposta_id}/converter-pedido-operacional")
-def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperacionalRequest):
-    destinatarios = _emails_validos(dados.destinatarios)
-    pedidos = converter_em_pedido(
-        proposta_id,
-        ConverterPedidoRequest(
-            responsavel_id=dados.responsavel_id,
-            data_pedido=dados.data_pedido,
-            origem_comercial="CRM_APP",
-        ),
-    )
-    pedido = pedidos[0] if isinstance(pedidos, list) and pedidos else pedidos
-    if not isinstance(pedido, dict) or not pedido.get("id"):
-        raise HTTPException(status_code=500, detail="Pedido criado sem identificação válida.")
-
-    dossie = list(pedido.get("dossie_documentos") or [])
+def _registrar_destinatarios(pedido: dict[str, Any], destinatarios: list[str], observacoes: str | None) -> dict[str, Any]:
+    dossie = [
+        registro
+        for registro in list(pedido.get("dossie_documentos") or [])
+        if not (isinstance(registro, dict) and registro.get("tipo") == "DESTINATARIOS_PEDIDO")
+    ]
     dossie.append(
         {
             "tipo": "DESTINATARIOS_PEDIDO",
             "destinatarios": destinatarios,
-            "observacoes_envio": dados.observacoes_envio,
+            "observacoes_envio": observacoes,
             "status_envio": "PENDENTE",
             "registrado_em": _agora(),
         }
@@ -86,6 +81,29 @@ def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperaci
     return atualizado[0] if atualizado else {**pedido, "dossie_documentos": dossie}
 
 
+@router.post("/propostas/{proposta_id}/converter-pedido-operacional")
+def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperacionalRequest):
+    destinatarios = _emails_validos(dados.destinatarios)
+    pedidos = converter_em_pedido(
+        proposta_id,
+        ConverterPedidoRequest(
+            responsavel_id=dados.responsavel_id,
+            data_pedido=dados.data_pedido,
+            origem_comercial="CRM_APP",
+        ),
+    )
+    pedido = pedidos[0] if isinstance(pedidos, list) and pedidos else pedidos
+    if not isinstance(pedido, dict) or not pedido.get("id"):
+        raise HTTPException(status_code=500, detail="Pedido criado sem identificação válida.")
+    return _registrar_destinatarios(pedido, destinatarios, dados.observacoes_envio)
+
+
+@router.post("/pedidos/{pedido_id}/destinatarios")
+def atualizar_destinatarios_pedido(pedido_id: str, dados: AtualizarDestinatariosPedidoRequest):
+    pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
+    return _registrar_destinatarios(pedido, _emails_validos(dados.destinatarios), dados.observacoes_envio)
+
+
 @router.get("/pedidos/{pedido_id}")
 def consultar_pedido_operacional(pedido_id: str):
     pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
@@ -94,7 +112,8 @@ def consultar_pedido_operacional(pedido_id: str):
     oportunidade_id = (proposta or {}).get("oportunidade_id") or pedido.get("oportunidade_id")
     oportunidade = _opcional("cti_oportunidades", str(oportunidade_id or ""))
     cliente_id = pedido.get("cliente_id") or (proposta or {}).get("cliente_id") or (oportunidade or {}).get("cliente_id")
-    cliente = _opcional("cti_clientes", str(cliente_id or ""))
+    cliente_cadastrado = _opcional("cti_clientes", str(cliente_id or ""))
+    cliente = cliente_cadastrado
 
     snapshot = (proposta or {}).get("snapshot_dados") or {}
     cliente_snapshot = snapshot.get("cliente") if isinstance(snapshot, dict) else None
@@ -104,8 +123,19 @@ def consultar_pedido_operacional(pedido_id: str):
     if not oportunidade and isinstance(oportunidade_snapshot, dict):
         oportunidade = oportunidade_snapshot
 
+    nome_cliente = None
+    fontes = [cliente, oportunidade, oportunidade_snapshot if isinstance(oportunidade_snapshot, dict) else None, snapshot if isinstance(snapshot, dict) else None]
+    for fonte in fontes:
+        if not isinstance(fonte, dict):
+            continue
+        nome_cliente = fonte.get("razao_social") or fonte.get("nome") or fonte.get("cliente_nome") or fonte.get("empresa")
+        if nome_cliente:
+            break
+    if not cliente and nome_cliente:
+        cliente = {"nome": nome_cliente, "razao_social": nome_cliente, "origem": "DOSSIE_COMERCIAL"}
+
     envio = next(
-        (registro for registro in reversed(list(pedido.get("dossie_documentos") or [])) if registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
+        (registro for registro in reversed(list(pedido.get("dossie_documentos") or [])) if isinstance(registro, dict) and registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
         None,
     )
     return {
@@ -116,7 +146,7 @@ def consultar_pedido_operacional(pedido_id: str):
         "cliente": cliente,
         "envio": envio,
         "integridade": {
-            "cliente_cadastrado": bool(cliente_id and _opcional("cti_clientes", str(cliente_id))),
-            "cliente_recuperado_snapshot": bool(cliente and not _opcional("cti_clientes", str(cliente_id or ""))),
+            "cliente_cadastrado": bool(cliente_cadastrado),
+            "cliente_recuperado_snapshot": bool(cliente and not cliente_cadastrado),
         },
     }
