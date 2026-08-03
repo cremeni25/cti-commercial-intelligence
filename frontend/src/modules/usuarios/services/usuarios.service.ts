@@ -29,7 +29,7 @@ export type UsuarioNovo = {
   funcao: string
   territorio?: string
   ddds: string[]
-  superior_id?: string | null
+  gestor_responsavel?: string | null
   permissoes: PermissoesUsuario
 }
 
