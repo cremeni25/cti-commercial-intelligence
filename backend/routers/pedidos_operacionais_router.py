@@ -30,6 +30,13 @@ def _primeiro(tabela: str, registro_id: str, detalhe: str) -> dict[str, Any]:
     return dados[0]
 
 
+def _opcional(tabela: str, registro_id: str | None) -> dict[str, Any] | None:
+    if not registro_id:
+        return None
+    dados = supabase.table(tabela).select("*").eq("id", registro_id).limit(1).execute().data or []
+    return dados[0] if dados else None
+
+
 def _emails_validos(valores: list[str]) -> list[str]:
     emails: list[str] = []
     for valor in valores:
@@ -82,11 +89,20 @@ def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperaci
 @router.get("/pedidos/{pedido_id}")
 def consultar_pedido_operacional(pedido_id: str):
     pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
-    proposta = _primeiro("cti_propostas", str(pedido["proposta_id"]), "Proposta não encontrada") if pedido.get("proposta_id") else None
-    item = _primeiro("cti_oportunidade_itens", str(pedido["item_oportunidade_id"]), "Item não encontrado") if pedido.get("item_oportunidade_id") else None
-    oportunidade = _primeiro("cti_oportunidades", str(proposta["oportunidade_id"]), "Oportunidade não encontrada") if proposta and proposta.get("oportunidade_id") else None
+    proposta = _opcional("cti_propostas", str(pedido.get("proposta_id") or ""))
+    item = _opcional("cti_oportunidade_itens", str(pedido.get("item_oportunidade_id") or ""))
+    oportunidade_id = (proposta or {}).get("oportunidade_id") or pedido.get("oportunidade_id")
+    oportunidade = _opcional("cti_oportunidades", str(oportunidade_id or ""))
     cliente_id = pedido.get("cliente_id") or (proposta or {}).get("cliente_id") or (oportunidade or {}).get("cliente_id")
-    cliente = _primeiro("cti_clientes", str(cliente_id), "Cliente não encontrado") if cliente_id else None
+    cliente = _opcional("cti_clientes", str(cliente_id or ""))
+
+    snapshot = (proposta or {}).get("snapshot_dados") or {}
+    cliente_snapshot = snapshot.get("cliente") if isinstance(snapshot, dict) else None
+    oportunidade_snapshot = snapshot.get("oportunidade") if isinstance(snapshot, dict) else None
+    if not cliente and isinstance(cliente_snapshot, dict):
+        cliente = cliente_snapshot
+    if not oportunidade and isinstance(oportunidade_snapshot, dict):
+        oportunidade = oportunidade_snapshot
 
     envio = next(
         (registro for registro in reversed(list(pedido.get("dossie_documentos") or [])) if registro.get("tipo") == "DESTINATARIOS_PEDIDO"),
@@ -99,4 +115,8 @@ def consultar_pedido_operacional(pedido_id: str):
         "oportunidade": oportunidade,
         "cliente": cliente,
         "envio": envio,
+        "integridade": {
+            "cliente_cadastrado": bool(cliente_id and _opcional("cti_clientes", str(cliente_id))),
+            "cliente_recuperado_snapshot": bool(cliente and not _opcional("cti_clientes", str(cliente_id or ""))),
+        },
     }
