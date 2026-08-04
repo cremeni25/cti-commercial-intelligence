@@ -5,9 +5,10 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 
 router = APIRouter(prefix="/master/testes-campo", tags=["MASTER - Testes de Campo"])
@@ -17,13 +18,16 @@ class RegistrarTesteCampo(BaseModel):
     campanha: str = Field(min_length=3, max_length=80)
     oportunidade_id: str
     cliente_id: str | None = None
-    criado_por: str
     observacao: str = "TESTE DE CAMPO"
 
 
 class LimparCampanha(BaseModel):
-    executado_por: str
     confirmacao: str
+
+
+def _exigir_master(usuario: UsuarioAutenticado) -> None:
+    if usuario.tipo_usuario != "ADMIN_MASTER":
+        raise HTTPException(status_code=403, detail="Operação exclusiva do ADMIN_MASTER.")
 
 
 def _normalizar_campanha(value: str) -> str:
@@ -83,7 +87,10 @@ def _mapear_campanha(campanha: str) -> dict[str, Any]:
 
 
 @router.post("/registrar")
-def registrar_teste_campo(dados: RegistrarTesteCampo):
+def registrar_teste_campo(
+    dados: RegistrarTesteCampo,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
     campanha = _normalizar_campanha(dados.campanha)
     oportunidade = (
         supabase.table("cti_oportunidades")
@@ -101,7 +108,7 @@ def registrar_teste_campo(dados: RegistrarTesteCampo):
         "campanha": campanha,
         "oportunidade_id": dados.oportunidade_id,
         "cliente_id": dados.cliente_id or registro.get("cliente_id"),
-        "criado_por": dados.criado_por,
+        "criado_por": usuario.id,
         "observacao": "TESTE DE CAMPO",
         "status": "ATIVO",
     }
@@ -122,7 +129,7 @@ def registrar_teste_campo(dados: RegistrarTesteCampo):
         "oportunidade_id": dados.oportunidade_id,
         "tipo": "TESTE_CAMPO",
         "descricao": "TESTE DE CAMPO",
-        "usuario_id": dados.criado_por,
+        "usuario_id": usuario.id,
         "payload": {"teste_campo": True, "campanha": campanha},
         "created_at": datetime.now(timezone.utc).isoformat(),
     }).execute()
@@ -130,7 +137,8 @@ def registrar_teste_campo(dados: RegistrarTesteCampo):
 
 
 @router.get("")
-def listar_campanhas():
+def listar_campanhas(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
     rows = supabase.table("cti_testes_campo").select("*").order("created_at", desc=True).execute().data or []
     campanhas: dict[str, dict[str, Any]] = {}
     for row in rows:
@@ -144,7 +152,11 @@ def listar_campanhas():
 
 
 @router.get("/{campanha}/previsualizar")
-def previsualizar_campanha(campanha: str):
+def previsualizar_campanha(
+    campanha: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _exigir_master(usuario)
     mapa = _mapear_campanha(_normalizar_campanha(campanha))
     return {
         "campanha": mapa["campanha"],
@@ -169,7 +181,12 @@ def previsualizar_campanha(campanha: str):
 
 
 @router.post("/{campanha}/limpar")
-def limpar_campanha(campanha: str, dados: LimparCampanha):
+def limpar_campanha(
+    campanha: str,
+    dados: LimparCampanha,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _exigir_master(usuario)
     nome = _normalizar_campanha(campanha)
     esperado = f"EXCLUIR {nome}"
     if dados.confirmacao.strip().upper() != esperado:
@@ -208,11 +225,11 @@ def limpar_campanha(campanha: str, dados: LimparCampanha):
     supabase.table("cti_testes_campo").update({
         "status": "EXCLUIDO",
         "encerrado_em": agora,
-        "encerrado_por": dados.executado_por,
+        "encerrado_por": usuario.id,
     }).eq("campanha", nome).eq("status", "ATIVO").execute()
     auditoria = {
         "campanha": nome,
-        "executado_por": dados.executado_por,
+        "executado_por": usuario.id,
         "executado_em": agora,
         "contagens": contagens,
         "ids_processados": ids_relatorio,
