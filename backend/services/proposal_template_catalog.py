@@ -17,20 +17,20 @@ class ProposalTemplateDefinition:
 TEMPLATES: tuple[ProposalTemplateDefinition, ...] = (
     ProposalTemplateDefinition("CITIMAX_280", "CITIMAX 280", "CITIMAX 280.docx"),
     ProposalTemplateDefinition("CITIMAX_400", "CITIMAX 400", "CITIMAX 400.docx"),
-    ProposalTemplateDefinition("CITIMAX_500", "CITIMAX 500", "CITIMAX 500.docx"),
+    ProposalTemplateDefinition("CITIMAX_500", "CITIMAX 500", "CITIMAX 500.doc"),
     ProposalTemplateDefinition("CITIMAX_D6", "CITIMAX D6", "CITIMAX D6.docx"),
     ProposalTemplateDefinition("CITIMAX_D7", "CITIMAX D7", "CITIMAX D7.docx"),
     ProposalTemplateDefinition("S8", "S8", "S8.docx"),
     ProposalTemplateDefinition("S9", "S9", "S9.docx"),
-    ProposalTemplateDefinition("SUPRA_750", "SUPRA 750", "SUPRA 750 Rev 19.05.docx"),
+    ProposalTemplateDefinition("SUPRA_750", "SUPRA 750", "SUPRA 750.docx"),
     ProposalTemplateDefinition("SUPRA_850", "SUPRA 850", "SUPRA 850.docx"),
     ProposalTemplateDefinition("SUPRA_1150", "SUPRA 1150", "SUPRA 1150.docx"),
-    ProposalTemplateDefinition("XARIOS_350", "XARIOS 350", "XARIOS 350.docx"),
-    ProposalTemplateDefinition("XARIOS_6", "XARIOS 6", "XARIOS 6.docx"),
     ProposalTemplateDefinition("VECTOR_8500", "VECTOR 8500", "Vector 8500.docx"),
     ProposalTemplateDefinition("VECTOR_HE19", "VECTOR HE19", "Vector HE19.docx"),
     ProposalTemplateDefinition("X4_7500", "X4 7500", "X4 7500.docx"),
     ProposalTemplateDefinition("X4_7700", "X4 7700", "X4 7700.docx"),
+    ProposalTemplateDefinition("XARIOS_6", "XARIOS 6", "XARIOS 6.doc"),
+    ProposalTemplateDefinition("XARIOS_350", "XARIOS 350", "XARIOS 350.doc"),
 )
 
 
