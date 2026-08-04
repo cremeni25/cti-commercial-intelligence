@@ -99,7 +99,13 @@ def desativar_destinatario(destinatario_id: str):
 def listar_pedidos_comerciais():
     pedidos = supabase.table("cti_pedidos").select("*").order("created_at", desc=True).execute().data or []
     clientes = _mapa_clientes()
-    propostas = supabase.table("cti_propostas").select("id,numero,equipamentos,produtos,status_documento,hash_documento").execute().data or []
+    propostas = (
+        supabase.table("cti_propostas")
+        .select("id,numero,item_oportunidade_id,equipamentos,produtos,status_documento,hash_documento")
+        .execute()
+        .data
+        or []
+    )
     propostas_por_id = {str(item.get("id")): item for item in propostas if item.get("id")}
     itens = supabase.table("cti_oportunidade_itens").select("*").execute().data or []
     itens_por_id = {str(item.get("id")): item for item in itens if item.get("id")}
@@ -109,7 +115,8 @@ def listar_pedidos_comerciais():
     saida: list[dict[str, Any]] = []
     for pedido in pedidos:
         proposta = propostas_por_id.get(str(pedido.get("proposta_aceita_id") or pedido.get("proposta_id") or ""), {})
-        item = itens_por_id.get(str(pedido.get("item_oportunidade_id") or ""), {})
+        item_id = str(pedido.get("item_oportunidade_id") or proposta.get("item_oportunidade_id") or "")
+        item = itens_por_id.get(item_id, {})
         aceite = aceites_por_id.get(str(pedido.get("aceite_id") or ""), {})
         saida.append({
             **pedido,
@@ -133,7 +140,7 @@ def detalhe_pedido(pedido_id: str):
     pedido = pedidos[0]
     proposta_id = str(pedido.get("proposta_aceita_id") or pedido.get("proposta_id") or "")
     proposta = (supabase.table("cti_propostas").select("*").eq("id", proposta_id).limit(1).execute().data or [{}])[0]
-    item_id = str(pedido.get("item_oportunidade_id") or "")
+    item_id = str(pedido.get("item_oportunidade_id") or proposta.get("item_oportunidade_id") or "")
     item = (supabase.table("cti_oportunidade_itens").select("*").eq("id", item_id).limit(1).execute().data or [{}])[0]
     aceite_id = str(pedido.get("aceite_id") or "")
     aceite = (supabase.table("cti_proposta_aceites").select("*").eq("id", aceite_id).limit(1).execute().data or [{}])[0]
