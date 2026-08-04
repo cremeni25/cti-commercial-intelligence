@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
+from routers.modelos_proposta_reconciliacao_router import reconciliar_modelos_com_storage
 
 router = APIRouter(prefix="/catalogo-comercial", tags=["Catálogo Comercial"])
 
@@ -63,8 +64,16 @@ def _equipamento(codigo: str) -> dict[str, Any]:
     return dados[0]
 
 
+def _reconciliar_modelos_sem_interromper_operacao() -> None:
+    try:
+        reconciliar_modelos_com_storage(executor="CTI_BACKEND_CATALOGO")
+    except Exception as exc:
+        print(f"[CATALOGO] [AVISO] Reconciliação automática de modelos pendente: {exc}")
+
+
 @router.get("/equipamentos")
 def listar_equipamentos(linha: str | None = None):
+    _reconciliar_modelos_sem_interromper_operacao()
     consulta = supabase.table("cti_catalogo_equipamentos").select("*").eq("ativo", True)
     if linha:
         consulta = consulta.eq("linha_produto", linha.strip().upper())
