@@ -11,10 +11,11 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from core.admin_auth import UsuarioAutenticado, exigir_escrita_catalogo
 from core.supabase_client import supabase
+from services.proposal_template_catalog import TEMPLATES
 
 router = APIRouter(prefix="/modelos-proposta-importacao", tags=["Modelos de proposta"])
 BUCKET = "modelos-propostas-carrier"
-MAX_PACKAGE_BYTES = 20 * 1024 * 1024
+MAX_PACKAGE_BYTES = 30 * 1024 * 1024
 ALLOWED_EXTENSIONS = {".doc", ".docx"}
 
 
@@ -26,18 +27,34 @@ def _slug(valor: object) -> str:
     return "-".join(str(valor or "").strip().lower().split())
 
 
-def _modelos_ativos() -> list[dict]:
-    return (
+def _linha_produto(equipamento: str) -> str:
+    if equipamento.startswith("VECTOR") or equipamento.startswith("X4"):
+        return "TRAILER"
+    if equipamento.startswith("SUPRA") or equipamento in {"S8", "S9"}:
+        return "DIESEL TRUCK"
+    return "DIRECT DRIVE"
+
+
+def _modelo_existente(equipamento: str, versao: int) -> dict | None:
+    rows = (
         supabase.table("cti_modelos_proposta")
         .select("*")
-        .eq("ativo", True)
-        .not_.is_("arquivo_template_nome_original", "null")
-        .order("linha_produto")
-        .order("equipamento")
+        .eq("equipamento", equipamento)
+        .eq("versao", versao)
+        .limit(1)
         .execute()
         .data
         or []
     )
+    return rows[0] if rows else None
+
+
+def _arquivo_por_nome(arquivos: dict[str, bytes], nome_esperado: str) -> bytes | None:
+    alvo = nome_esperado.casefold()
+    encontrados = [conteudo for nome, conteudo in arquivos.items() if nome.casefold() == alvo]
+    if len(encontrados) != 1:
+        return None
+    return encontrados[0]
 
 
 @router.post("/pacote")
@@ -53,7 +70,7 @@ async def importar_pacote(
     if not conteudo_pacote:
         raise HTTPException(status_code=422, detail="O pacote está vazio.")
     if len(conteudo_pacote) > MAX_PACKAGE_BYTES:
-        raise HTTPException(status_code=413, detail="O pacote excede 20 MB.")
+        raise HTTPException(status_code=413, detail="O pacote excede 30 MB.")
 
     try:
         arquivo_zip = zipfile.ZipFile(io.BytesIO(conteudo_pacote))
@@ -67,93 +84,119 @@ async def importar_pacote(
         nome = PurePosixPath(item.filename).name
         extensao = PurePosixPath(nome).suffix.lower()
         if extensao not in ALLOWED_EXTENSIONS:
-            raise HTTPException(status_code=422, detail=f"Arquivo não permitido no pacote: {nome}")
-        if nome in arquivos:
+            continue
+        chave = nome.casefold()
+        if any(existente.casefold() == chave for existente in arquivos):
             raise HTTPException(status_code=422, detail=f"Nome duplicado no pacote: {nome}")
         arquivos[nome] = arquivo_zip.read(item)
 
-    modelos = _modelos_ativos()
-    esperados = {str(item.get("arquivo_template_nome_original") or "") for item in modelos}
-    esperados.discard("")
-    recebidos = set(arquivos)
-
-    faltantes = sorted(esperados - recebidos)
-    extras = sorted(recebidos - esperados)
+    esperados = {template.source_filename for template in TEMPLATES}
+    faltantes = sorted(
+        nome for nome in esperados if not any(recebido.casefold() == nome.casefold() for recebido in arquivos)
+    )
+    extras = sorted(
+        nome for nome in arquivos if not any(nome.casefold() == esperado.casefold() for esperado in esperados)
+    )
     if faltantes or extras:
         raise HTTPException(
             status_code=422,
-            detail={"mensagem": "O pacote não corresponde ao conjunto oficial.", "faltantes": faltantes, "extras": extras},
+            detail={
+                "mensagem": "O pacote não corresponde aos 16 documentos oficiais.",
+                "faltantes": faltantes,
+                "extras": extras,
+            },
         )
 
     resultados: list[dict] = []
     falhas: list[dict] = []
 
-    for modelo in modelos:
-        modelo_id = str(modelo.get("id"))
-        nome = str(modelo.get("arquivo_template_nome_original") or "")
-        binario = arquivos[nome]
+    for template in TEMPLATES:
+        binario = _arquivo_por_nome(arquivos, template.source_filename)
+        if not binario:
+            falhas.append({"equipamento": template.equipment, "erro": "Arquivo oficial não localizado no pacote."})
+            continue
+
         hash_recebido = hashlib.sha256(binario).hexdigest().lower()
-        hash_esperado = str(modelo.get("arquivo_template_hash_sha256") or "").lower()
-        tamanho_esperado = int(modelo.get("arquivo_template_tamanho_bytes") or 0)
-
-        if len(binario) != tamanho_esperado or hash_recebido != hash_esperado:
-            falhas.append({"modelo_id": modelo_id, "arquivo": nome, "erro": "Tamanho ou SHA-256 divergente."})
-            continue
-
-        if modelo.get("arquivo_template_storage"):
-            resultados.append({"modelo_id": modelo_id, "arquivo": nome, "situacao": "JA_ARMAZENADO"})
-            continue
-
-        versao = int(modelo.get("versao") or 1)
-        caminho = f"{_slug(modelo.get('linha_produto'))}/{_slug(modelo.get('equipamento'))}/v{versao}/{nome}"
-        mime = mimetypes.guess_type(nome)[0] or "application/octet-stream"
+        tamanho = len(binario)
+        versao = int(template.version)
+        caminho = f"oficiais/{_slug(template.equipment)}/v{versao}/{template.source_filename}"
+        mime = mimetypes.guess_type(template.source_filename)[0] or "application/octet-stream"
+        agora = _agora()
 
         try:
             supabase.storage.from_(BUCKET).upload(
                 caminho,
                 binario,
-                {"content-type": mime, "upsert": "false"},
+                {"content-type": mime, "upsert": "true"},
             )
-            agora = _agora()
-            atualizado = (
-                supabase.table("cti_modelos_proposta")
-                .update({
-                    "arquivo_template_storage": caminho,
-                    "homologado_em": None,
-                    "layout_preservado": True,
-                    "conteudo_integral_obrigatorio": True,
-                    "imutavel": True,
-                    "updated_at": agora,
-                })
-                .eq("id", modelo_id)
-                .is_("arquivo_template_storage", "null")
-                .execute()
-                .data
-                or []
-            )
-            if not atualizado:
-                raise RuntimeError("Registro alterado por outro processo.")
+
+            existente = _modelo_existente(template.equipment, versao)
+            registro = {
+                "linha_produto": _linha_produto(template.equipment),
+                "equipamento": template.equipment,
+                "versao": versao,
+                "arquivo_template_nome_original": template.source_filename,
+                "arquivo_template_tamanho_bytes": tamanho,
+                "arquivo_template_hash_sha256": hash_recebido,
+                "arquivo_template_storage": caminho,
+                "homologado_em": agora,
+                "layout_preservado": True,
+                "conteudo_integral_obrigatorio": True,
+                "imutavel": True,
+                "ativo": True,
+                "updated_at": agora,
+            }
+
+            if existente:
+                atualizado = (
+                    supabase.table("cti_modelos_proposta")
+                    .update(registro)
+                    .eq("id", existente.get("id"))
+                    .execute()
+                    .data
+                    or []
+                )
+                modelo = atualizado[0] if atualizado else existente
+                operacao = "SUBSTITUICAO_MESTRE_OFICIAL"
+            else:
+                registro["created_at"] = agora
+                inseridos = supabase.table("cti_modelos_proposta").insert(registro).execute().data or []
+                if not inseridos:
+                    raise RuntimeError("O banco não confirmou a criação do modelo oficial.")
+                modelo = inseridos[0]
+                operacao = "IMPORTACAO_MESTRE_OFICIAL"
 
             supabase.table("cti_modelos_proposta_auditoria").insert({
-                "modelo_proposta_id": modelo_id,
-                "operacao": "ATIVACAO",
+                "modelo_proposta_id": modelo.get("id"),
+                "operacao": operacao,
                 "versao": versao,
                 "arquivo_template_storage": caminho,
-                "arquivo_template_nome_original": nome,
+                "arquivo_template_nome_original": template.source_filename,
                 "arquivo_template_hash_sha256": hash_recebido,
                 "conteudo_template": modelo.get("conteudo_template") or {},
-                "justificativa": f"Importação única do pacote oficial por ADMIN_MASTER {usuario.email}; arquivo validado por nome, tamanho e SHA-256.",
+                "justificativa": (
+                    "Substituição controlada pelo pacote integral dos 16 documentos oficiais Carrier; "
+                    f"binário preservado sem alteração, tamanho e SHA-256 calculados no recebimento por {usuario.email}."
+                ),
             }).execute()
-            resultados.append({"modelo_id": modelo_id, "arquivo": nome, "situacao": "ARMAZENADO", "caminho": caminho})
+
+            resultados.append({
+                "modelo_id": modelo.get("id"),
+                "equipamento": template.equipment,
+                "arquivo": template.source_filename,
+                "tamanho_bytes": tamanho,
+                "sha256": hash_recebido,
+                "situacao": "MESTRE_OFICIAL_ATUALIZADO",
+            })
         except Exception as exc:
-            falhas.append({"modelo_id": modelo_id, "arquivo": nome, "erro": str(exc)})
+            falhas.append({"equipamento": template.equipment, "arquivo": template.source_filename, "erro": str(exc)})
 
     return {
-        "ok": not falhas,
+        "ok": not falhas and len(resultados) == len(TEMPLATES),
         "arquivos_unicos_recebidos": len(arquivos),
-        "modelos_processados": len(modelos),
-        "armazenados_ou_existentes": len(resultados),
+        "modelos_esperados": len(TEMPLATES),
+        "modelos_atualizados": len(resultados),
         "falhas": falhas,
         "resultados": resultados,
-        "proxima_etapa": "FILA_HOMOLOGACAO_VISUAL",
+        "proxima_etapa": "GERAR_PROPOSTA_PDF_COM_MESTRE_OFICIAL",
     }
