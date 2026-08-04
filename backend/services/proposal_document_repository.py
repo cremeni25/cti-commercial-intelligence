@@ -46,8 +46,6 @@ def finalize_official_proposal(
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
     model = rows[0]
-    if not model.get("homologado_em"):
-        raise ProposalDocumentRepositoryError("Modelo oficial ainda não homologado visualmente.")
 
     source_path = str(model.get("arquivo_template_storage") or "").strip()
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
@@ -71,7 +69,7 @@ def finalize_official_proposal(
         output_number=str(proposta.get("numero") or proposta.get("id") or "PROPOSTA"),
     )
     if not hmac.compare_digest(generated.source_sha256.lower(), expected_hash):
-        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo homologado.")
+        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo oficial registrado.")
     if not verify_media_preserved(bytes(source), generated.content):
         raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
 
@@ -84,7 +82,8 @@ def finalize_official_proposal(
     if not proposal_id:
         raise ProposalDocumentRepositoryError("Proposta sem identificador persistente.")
     version = int(proposta.get("versao") or 1)
-    path = f"propostas/{proposal_id}/v{version}/{pdf.filename}"
+    source_revision = generated.source_sha256[:12]
+    path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{pdf.filename}"
     uploaded = supabase.storage.from_(FINAL_BUCKET).upload(
         path,
         pdf.content,
