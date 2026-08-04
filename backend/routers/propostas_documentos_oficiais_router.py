@@ -50,6 +50,31 @@ def _optional_by_id(table: str, record_id: object) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+def _client_by_id(record_id: object, *, required: bool) -> dict[str, Any] | None:
+    normalized = str(record_id or "").strip()
+    if not normalized:
+        if required:
+            raise HTTPException(status_code=409, detail="A proposta não possui cliente vinculado.")
+        return None
+
+    failures: list[str] = []
+    for table in ("cti_clientes", "clientes"):
+        try:
+            rows = supabase.table(table).select("*").eq("id", normalized).limit(1).execute().data or []
+        except Exception as exc:
+            failures.append(f"{table}: {exc}")
+            continue
+        if rows:
+            return rows[0]
+
+    if required:
+        detail = "Cliente da proposta não encontrado."
+        if failures:
+            detail += " Consultas: " + " | ".join(failures)
+        raise HTTPException(status_code=404, detail=detail)
+    return None
+
+
 def _proposal_package(proposal_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
     proposal = _first("cti_propostas", proposal_id, "Proposta não encontrada.")
     item_id = str(proposal.get("item_oportunidade_id") or "").strip()
@@ -59,7 +84,9 @@ def _proposal_package(proposal_id: str) -> tuple[dict[str, Any], dict[str, Any],
         raise HTTPException(status_code=409, detail="A proposta não possui todos os vínculos documentais obrigatórios.")
     item = _first("cti_oportunidade_itens", item_id, "Item da proposta não encontrado.")
     opportunity = _first("cti_oportunidades", opportunity_id, "Oportunidade da proposta não encontrada.")
-    client = _first("clientes", client_id, "Cliente da proposta não encontrado.")
+    client = _client_by_id(client_id, required=True)
+    if client is None:
+        raise HTTPException(status_code=404, detail="Cliente da proposta não encontrado.")
     return proposal, item, opportunity, client
 
 
@@ -116,7 +143,7 @@ def proposal_dossier(proposal_id: str):
     proposal = _first("cti_propostas", proposal_id, "Proposta não encontrada.")
     item = _optional_by_id("cti_oportunidade_itens", proposal.get("item_oportunidade_id"))
     opportunity = _optional_by_id("cti_oportunidades", proposal.get("oportunidade_id"))
-    client = _optional_by_id("clientes", proposal.get("cliente_id"))
+    client = _client_by_id(proposal.get("cliente_id"), required=False)
     acceptances = _related("cti_proposta_aceites", "proposta_id", proposal_id)
     orders = _related("cti_pedidos", "proposta_id", proposal_id)
     return {
