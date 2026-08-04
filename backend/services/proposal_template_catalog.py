@@ -22,7 +22,7 @@ TEMPLATES: tuple[ProposalTemplateDefinition, ...] = (
     ProposalTemplateDefinition("CITIMAX_D7", "CITIMAX D7", "CITIMAX D7.docx"),
     ProposalTemplateDefinition("S8", "S8", "S8.docx"),
     ProposalTemplateDefinition("S9", "S9", "S9.docx"),
-    ProposalTemplateDefinition("SUPRA_750", "SUPRA 750", "SUPRA 750.docx"),
+    ProposalTemplateDefinition("SUPRA_750", "SUPRA 750", "SUPRA 750 Rev 19.05.docx"),
     ProposalTemplateDefinition("SUPRA_850", "SUPRA 850", "SUPRA 850.docx"),
     ProposalTemplateDefinition("SUPRA_1150", "SUPRA 1150", "SUPRA 1150.docx"),
     ProposalTemplateDefinition("XARIOS_350", "XARIOS 350", "XARIOS 350.docx"),
