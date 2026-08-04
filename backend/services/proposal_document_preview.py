@@ -62,7 +62,6 @@ def build_preview_official_proposal(
     )
 
     output_number = str(proposta.get("numero") or proposta.get("id") or "PROPOSTA")
-    preview_mode = "PREENCHIDA"
     try:
         generated = render_official_docx(
             source,
@@ -70,22 +69,16 @@ def build_preview_official_proposal(
             payload,
             output_number=output_number,
             validate_required=False,
+            require_all_requested_anchors=False,
         )
-        if not verify_media_preserved(source, generated.content):
-            raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
-        docx_content = generated.content
-        docx_filename = generated.filename
-        docx_sha256 = generated.sha256
     except Exception as exc:
-        if "âncoras contínuas seguras" not in str(exc):
-            raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
-        docx_content = source
-        docx_filename = f"{output_number}-{template.code}-v{template.version}-VALIDACAO.docx"
-        docx_sha256 = source_hash
-        preview_mode = "MESTRE_INTEGRO"
+        raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
+
+    if not verify_media_preserved(source, generated.content):
+        raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
 
     try:
-        pdf = convert_docx_to_pdf(docx_content, docx_filename)
+        pdf = convert_docx_to_pdf(generated.content, generated.filename)
     except DocxPdfConversionError as exc:
         raise ProposalDocumentRepositoryError(f"Não foi possível gerar o PDF para visualização: {exc}") from exc
 
@@ -94,10 +87,10 @@ def build_preview_official_proposal(
         "filename": pdf.filename,
         "sha256": pdf.sha256,
         "source_sha256": source_hash,
-        "intermediate_docx_sha256": docx_sha256,
+        "intermediate_docx_sha256": generated.sha256,
         "template_code": template.code,
         "template_version": template.version,
         "homologado": bool(model.get("homologado_em")),
-        "preview_mode": preview_mode,
+        "preview_mode": "PREENCHIDA",
         "mime_type": "application/pdf",
     }
