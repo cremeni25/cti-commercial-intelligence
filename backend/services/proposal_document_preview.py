@@ -41,7 +41,10 @@ def preview_official_proposal(
     if not source_path or not expected_hash:
         raise ProposalDocumentRepositoryError("Modelo oficial sem arquivo mestre ou SHA-256 registrado.")
 
-    source = supabase.storage.from_(MASTER_BUCKET).download(source_path)
+    try:
+        source = supabase.storage.from_(MASTER_BUCKET).download(source_path)
+    except Exception as exc:
+        raise ProposalDocumentRepositoryError(f"Falha ao recuperar o arquivo mestre: {exc}") from exc
     if not source:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
 
@@ -66,16 +69,32 @@ def preview_official_proposal(
     proposal_id = str(proposta.get("id") or "").strip()
     version = int(proposta.get("versao") or 1)
     path = f"previews/propostas/{proposal_id}/v{version}/{generated.filename}"
-    supabase.storage.from_(FINAL_BUCKET).upload(
-        path,
-        generated.content,
-        {
-            "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "upsert": "true",
-        },
-    )
+    bucket = supabase.storage.from_(FINAL_BUCKET)
+
+    try:
+        bucket.remove([path])
+    except Exception:
+        pass
+
+    try:
+        uploaded = bucket.upload(
+            path,
+            generated.content,
+            {
+                "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "upsert": "false",
+            },
+        )
+    except Exception as exc:
+        raise ProposalDocumentRepositoryError(f"Falha ao armazenar a pré-visualização oficial: {exc}") from exc
+    if not uploaded:
+        raise ProposalDocumentRepositoryError("O storage não confirmou a pré-visualização oficial.")
+
     validity = max(60, min(expires_in, 1800))
-    signed = supabase.storage.from_(FINAL_BUCKET).create_signed_url(path, validity)
+    try:
+        signed = bucket.create_signed_url(path, validity)
+    except Exception as exc:
+        raise ProposalDocumentRepositoryError(f"Falha ao criar acesso temporário à pré-visualização: {exc}") from exc
     if isinstance(signed, dict):
         url = signed.get("signedURL") or signed.get("signed_url")
     else:
