@@ -91,34 +91,24 @@ def reconciliar_modelos_com_storage(*, executor: str) -> dict[str, Any]:
     paths = _listar_arquivos()
     indice = _indice_por_nome(paths)
     criados: list[dict[str, Any]] = []
+    atualizados: list[dict[str, Any]] = []
     existentes: list[dict[str, Any]] = []
     bloqueios: list[dict[str, Any]] = []
 
     for template in TEMPLATES:
-        existente = _registro_existente(template.equipment, template.version)
-        if existente:
-            existentes.append({
-                "id": existente.get("id"),
-                "equipamento": template.equipment,
-                "versao": template.version,
-                "arquivo_template_storage": existente.get("arquivo_template_storage"),
-                "homologado_em": existente.get("homologado_em"),
-            })
-            continue
-
         candidatos = indice.get(template.source_filename.casefold(), [])
         if not candidatos:
             bloqueios.append({
                 "equipamento": template.equipment,
                 "arquivo_esperado": template.source_filename,
-                "erro": "Arquivo mestre não localizado no bucket privado.",
+                "erro": "Arquivo mestre oficial não localizado no bucket privado.",
             })
             continue
         if len(candidatos) > 1:
             bloqueios.append({
                 "equipamento": template.equipment,
                 "arquivo_esperado": template.source_filename,
-                "erro": "Mais de um arquivo com o mesmo nome foi localizado.",
+                "erro": "Mais de um arquivo oficial com o mesmo nome foi localizado.",
                 "candidatos": candidatos,
             })
             continue
@@ -126,6 +116,65 @@ def reconciliar_modelos_com_storage(*, executor: str) -> dict[str, Any]:
         path = candidatos[0]
         tamanho, sha256 = _metadados_binarios(path)
         agora = _agora()
+        existente = _registro_existente(template.equipment, template.version)
+
+        if existente:
+            caminho_atual = str(existente.get("arquivo_template_storage") or "")
+            hash_atual = str(existente.get("arquivo_template_hash_sha256") or "").lower()
+            nome_atual = str(existente.get("arquivo_template_nome_original") or "")
+            if caminho_atual != path or hash_atual != sha256.lower() or nome_atual != template.source_filename:
+                dados_atualizados = {
+                    "arquivo_template_nome_original": template.source_filename,
+                    "arquivo_template_tamanho_bytes": tamanho,
+                    "arquivo_template_hash_sha256": sha256,
+                    "arquivo_template_storage": path,
+                    "homologado_em": None,
+                    "updated_at": agora,
+                }
+                resposta = (
+                    supabase.table("cti_modelos_proposta")
+                    .update(dados_atualizados)
+                    .eq("id", existente.get("id"))
+                    .execute()
+                    .data
+                    or []
+                )
+                if not resposta:
+                    bloqueios.append({
+                        "equipamento": template.equipment,
+                        "arquivo_esperado": template.source_filename,
+                        "erro": "O banco não confirmou a correção do vínculo do modelo.",
+                    })
+                    continue
+                supabase.table("cti_modelos_proposta_auditoria").insert({
+                    "modelo_proposta_id": existente.get("id"),
+                    "operacao": "CORRECAO_VINCULO_MESTRE",
+                    "versao": template.version,
+                    "arquivo_template_storage": path,
+                    "arquivo_template_nome_original": template.source_filename,
+                    "arquivo_template_hash_sha256": sha256,
+                    "conteudo_template": existente.get("conteudo_template") or {},
+                    "justificativa": (
+                        "Vínculo restaurado para o arquivo mestre oficial original; "
+                        f"tamanho e SHA-256 recalculados diretamente do binário por {executor}."
+                    ),
+                }).execute()
+                atualizados.append({
+                    "id": existente.get("id"),
+                    "equipamento": template.equipment,
+                    "arquivo_template_storage": path,
+                    "arquivo_template_hash_sha256": sha256,
+                })
+            else:
+                existentes.append({
+                    "id": existente.get("id"),
+                    "equipamento": template.equipment,
+                    "versao": template.version,
+                    "arquivo_template_storage": caminho_atual,
+                    "homologado_em": existente.get("homologado_em"),
+                })
+            continue
+
         registro = {
             "linha_produto": _linha_produto(template.equipment),
             "equipamento": template.equipment,
@@ -150,21 +199,7 @@ def reconciliar_modelos_com_storage(*, executor: str) -> dict[str, Any]:
                 "erro": "O banco não confirmou a criação do modelo.",
             })
             continue
-
         modelo = inseridos[0]
-        supabase.table("cti_modelos_proposta_auditoria").insert({
-            "modelo_proposta_id": modelo.get("id"),
-            "operacao": "SINCRONIZACAO_STORAGE",
-            "versao": template.version,
-            "arquivo_template_storage": path,
-            "arquivo_template_nome_original": template.source_filename,
-            "arquivo_template_hash_sha256": sha256,
-            "conteudo_template": modelo.get("conteudo_template") or {},
-            "justificativa": (
-                "Registro ausente criado automaticamente a partir do arquivo mestre real já existente no bucket privado; "
-                f"tamanho e SHA-256 calculados diretamente do binário por {executor}."
-            ),
-        }).execute()
         criados.append({
             "id": modelo.get("id"),
             "equipamento": template.equipment,
@@ -174,20 +209,17 @@ def reconciliar_modelos_com_storage(*, executor: str) -> dict[str, Any]:
             "arquivo_template_hash_sha256": sha256,
         })
 
-    total_confirmado = len(existentes) + len(criados)
+    total_confirmado = len(existentes) + len(criados) + len(atualizados)
     return {
         "ok": not bloqueios and total_confirmado == len(TEMPLATES),
         "esperados": len(TEMPLATES),
         "existentes": len(existentes),
         "criados": len(criados),
+        "atualizados": len(atualizados),
         "total_confirmado": total_confirmado,
         "registros_criados": criados,
+        "registros_atualizados": atualizados,
         "bloqueios": bloqueios,
-        "proxima_acao": (
-            "Abrir a fila de homologação visual e homologar os modelos pendentes."
-            if not bloqueios and total_confirmado == len(TEMPLATES)
-            else "Disponibilizar no bucket somente os arquivos mestres listados nos bloqueios e executar novamente."
-        ),
     }
 
 
