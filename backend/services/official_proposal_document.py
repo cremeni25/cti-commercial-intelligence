@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import re
 from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
@@ -75,6 +77,8 @@ REQUIRED_DOCUMENT_FIELDS = {
     "validade",
 }
 
+_TEXT_NODE = re.compile(r"<w:t(?:\s[^>]*)?>(.*?)</w:t>", re.DOTALL)
+
 
 def _clean(value: Any) -> str:
     if value is None:
@@ -91,14 +95,9 @@ def _document_fields(payload: Any) -> dict[str, Any]:
         source = dict(getattr(payload, "fields", {}) or {})
     if not source:
         raise OfficialProposalDocumentError("Payload documental inválido ou vazio.")
-
     if any(key in FIELD_ANCHORS for key in source):
         return source
-
-    return {
-        document_key: source.get(internal_key)
-        for internal_key, document_key in PAYLOAD_FIELD_MAP.items()
-    }
+    return {document_key: source.get(internal_key) for internal_key, document_key in PAYLOAD_FIELD_MAP.items()}
 
 
 def validate_document_payload(payload: Mapping[str, Any]) -> None:
@@ -110,14 +109,34 @@ def validate_document_payload(payload: Mapping[str, Any]) -> None:
 
 
 def _replace_anchor_text(xml: str, anchor: str, value: str) -> tuple[str, bool]:
-    escaped_value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    position = xml.find(anchor)
+    """Insere o valor após uma âncora mesmo quando o Word a dividiu em vários runs."""
+    nodes = list(_TEXT_NODE.finditer(xml))
+    if not nodes:
+        return xml, False
+
+    visible_parts: list[str] = []
+    ranges: list[tuple[int, int, re.Match[str]]] = []
+    cursor = 0
+    for node in nodes:
+        text = html.unescape(node.group(1))
+        start = cursor
+        cursor += len(text)
+        visible_parts.append(text)
+        ranges.append((start, cursor, node))
+
+    visible = "".join(visible_parts)
+    position = visible.find(anchor)
     if position < 0:
         return xml, False
-    end_text = xml.find("</w:t>", position)
-    if end_text < 0:
+    anchor_end = position + len(anchor)
+
+    target = next((node for start, end, node in ranges if start < anchor_end <= end), None)
+    if target is None:
         return xml, False
-    return xml[:end_text] + " " + escaped_value + xml[end_text:], True
+
+    escaped_value = html.escape(value, quote=False)
+    insertion = target.end(1)
+    return xml[:insertion] + " " + escaped_value + xml[insertion:], True
 
 
 def render_official_docx(
@@ -169,7 +188,7 @@ def render_official_docx(
     missing_anchors = sorted(required_anchors - replaced)
     if missing_anchors:
         raise OfficialProposalDocumentError(
-            "O modelo oficial não contém âncoras contínuas seguras para os campos: " + ", ".join(missing_anchors)
+            "O modelo oficial não contém âncoras seguras para os campos: " + ", ".join(missing_anchors)
         )
 
     generated = output_buffer.getvalue()
