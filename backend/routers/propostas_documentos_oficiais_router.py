@@ -10,13 +10,13 @@ from fastapi.responses import StreamingResponse
 from core.supabase_client import supabase
 from services.proposal_document_preview import build_preview_official_proposal
 from services.proposal_document_repository import (
+    DOCX_MIME,
     FINAL_BUCKET,
     ProposalDocumentRepositoryError,
     finalize_official_proposal,
 )
 
 router = APIRouter(prefix="/crm-documentos", tags=["Propostas oficiais Carrier"])
-PDF_MIME = "application/pdf"
 
 
 def _first(table: str, record_id: str, detail: str) -> dict[str, Any]:
@@ -65,15 +65,15 @@ def _proposal_package(proposal_id: str) -> tuple[dict[str, Any], dict[str, Any],
 def _document_metadata(proposal: dict[str, Any]) -> dict[str, Any]:
     metadata = proposal.get("arquivo_documento") or {}
     if not isinstance(metadata, dict) or not metadata.get("path") or not metadata.get("sha256"):
-        raise HTTPException(status_code=409, detail="A proposta ainda não possui PDF oficial finalizado.")
+        raise HTTPException(status_code=409, detail="A proposta ainda não possui Word oficial finalizado.")
     return metadata
 
 
 def _filename_ascii(filename: str, proposal_id: str) -> str:
     base = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
     safe = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
-    if not safe.lower().endswith(".pdf"):
-        safe = f"{safe or 'proposta_' + proposal_id}.pdf"
+    if not safe.lower().endswith(".docx"):
+        safe = f"{safe or 'proposta_' + proposal_id}.docx"
     return safe[:180]
 
 
@@ -102,7 +102,7 @@ def finalize_document(proposal_id: str):
     if (
         isinstance(existing, dict)
         and existing.get("path")
-        and str(existing.get("mime_type") or "").lower() == PDF_MIME
+        and str(existing.get("mime_type") or "").lower() == DOCX_MIME
     ):
         return {"ok": True, "already_finalized": True, "document": existing, "proposal": proposal}
 
@@ -142,13 +142,14 @@ def preview_document_file(proposal_id: str):
         filename = _filename_ascii(str(preview.get("filename") or ""), proposal_id)
         return StreamingResponse(
             BytesIO(content),
-            media_type=PDF_MIME,
+            media_type=DOCX_MIME,
             headers={
-                "Content-Disposition": f'inline; filename="{filename}"',
+                "Content-Disposition": f'attachment; filename="{filename}"',
                 "Content-Length": str(len(content)),
                 "Cache-Control": "no-store, max-age=0",
                 "Pragma": "no-cache",
-                "X-CTI-Document-Mode": str(preview.get("preview_mode") or "PREENCHIDA"),
+                "X-CTI-Document-Mode": str(preview.get("preview_mode") or "WORD_PREENCHIDO"),
+                "X-CTI-SHA256": str(preview.get("sha256") or ""),
             },
         )
     except HTTPException:
@@ -158,7 +159,7 @@ def preview_document_file(proposal_id: str):
     except Exception as exc:
         raise HTTPException(
             status_code=500,
-            detail=f"Falha técnica ao apresentar o PDF da proposta: {type(exc).__name__}: {exc}",
+            detail=f"Falha técnica ao gerar o Word da proposta: {type(exc).__name__}: {exc}",
         ) from exc
 
 
@@ -170,13 +171,13 @@ def official_document(proposal_id: str, expires_in: int = 900):
     try:
         response = supabase.storage.from_(FINAL_BUCKET).create_signed_url(str(metadata["path"]), validity)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail="Não foi possível criar o acesso temporário ao PDF oficial.") from exc
+        raise HTTPException(status_code=502, detail="Não foi possível criar o acesso temporário ao Word oficial.") from exc
     if isinstance(response, dict):
         url = response.get("signedURL") or response.get("signed_url")
     else:
         url = getattr(response, "signed_url", None) or getattr(response, "signedURL", None)
     if not url:
-        raise HTTPException(status_code=502, detail="O storage não retornou a URL temporária do PDF oficial.")
+        raise HTTPException(status_code=502, detail="O storage não retornou a URL temporária do Word oficial.")
     return {
         "proposal_id": proposal_id,
         "document": metadata,
