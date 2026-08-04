@@ -4,11 +4,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 from hashlib import sha256
 from io import BytesIO
-from pathlib import Path
 from typing import Any, Mapping
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from services.proposal_template_catalog import ProposalTemplateDefinition, template_for_equipment
+from services.proposal_template_catalog import template_for_equipment
 
 
 class OfficialProposalDocumentError(ValueError):
@@ -25,9 +24,6 @@ class GeneratedOfficialDocument:
     source_sha256: str
 
 
-# Anchors are intentionally limited to fields that already exist in the official files.
-# The engine replaces text only; drawings, media, relationships, headers, footers,
-# tables, section properties and page breaks remain untouched inside the DOCX package.
 FIELD_ANCHORS: dict[str, tuple[str, ...]] = {
     "data": ("Data:",),
     "cliente_nome": ("Nome do cliente:",),
@@ -47,6 +43,24 @@ FIELD_ANCHORS: dict[str, tuple[str, ...]] = {
     "validade": ("Validade da proposta:",),
 }
 
+PAYLOAD_FIELD_MAP: dict[str, str] = {
+    "proposal_date": "data",
+    "client_name": "cliente_nome",
+    "client_tax_id": "cpf_cnpj",
+    "client_state_registration": "inscricao_estadual",
+    "client_address": "endereco_completo",
+    "client_phone": "telefones",
+    "client_email": "email",
+    "voltage": "voltagem",
+    "quantity": "quantidade",
+    "unit_price": "valor_unitario",
+    "total_price": "valor_total",
+    "accessories": "acessorios",
+    "payment_terms": "condicoes_pagamento",
+    "down_payment_value": "valor_entrada",
+    "authorized_service_name_address": "autorizada",
+    "validity": "validade",
+}
 
 REQUIRED_DOCUMENT_FIELDS = {
     "cliente_nome",
@@ -65,7 +79,26 @@ REQUIRED_DOCUMENT_FIELDS = {
 def _clean(value: Any) -> str:
     if value is None:
         return ""
+    if isinstance(value, (list, tuple, set)):
+        value = ", ".join(str(item) for item in value if item is not None)
     return " ".join(str(value).replace("\r", " ").replace("\n", " ").split())
+
+
+def _document_fields(payload: Any) -> dict[str, Any]:
+    if isinstance(payload, Mapping):
+        source = dict(payload)
+    else:
+        source = dict(getattr(payload, "fields", {}) or {})
+    if not source:
+        raise OfficialProposalDocumentError("Payload documental inválido ou vazio.")
+
+    if any(key in FIELD_ANCHORS for key in source):
+        return source
+
+    return {
+        document_key: source.get(internal_key)
+        for internal_key, document_key in PAYLOAD_FIELD_MAP.items()
+    }
 
 
 def validate_document_payload(payload: Mapping[str, Any]) -> None:
@@ -77,34 +110,23 @@ def validate_document_payload(payload: Mapping[str, Any]) -> None:
 
 
 def _replace_anchor_text(xml: str, anchor: str, value: str) -> tuple[str, bool]:
-    """Append a field value to the exact official anchor without changing package layout.
-
-    Word can split visible text across multiple runs. The first implementation accepts
-    only contiguous anchors and fails closed when an anchor is not found; it never
-    recreates or approximates the official proposal.
-    """
-    escaped_value = (
-        value.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
-    marker = anchor
-    position = xml.find(marker)
+    escaped_value = value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    position = xml.find(anchor)
     if position < 0:
         return xml, False
     end_text = xml.find("</w:t>", position)
     if end_text < 0:
         return xml, False
-    insert_at = end_text
-    return xml[:insert_at] + " " + escaped_value + xml[insert_at:], True
+    return xml[:end_text] + " " + escaped_value + xml[end_text:], True
 
 
 def render_official_docx(
     source: bytes,
     equipment: str,
-    payload: Mapping[str, Any],
+    payload: Any,
     *,
     output_number: str,
+    validate_required: bool = True,
 ) -> GeneratedOfficialDocument:
     template = template_for_equipment(equipment)
     if not template.source_filename.lower().endswith(".docx"):
@@ -112,12 +134,16 @@ def render_official_docx(
             f"O modelo {template.equipment} está em formato DOC legado e precisa ser convertido para DOCX "
             "sem alteração visual antes da emissão automatizada."
         )
-    validate_document_payload(payload)
-    source_hash = sha256(source).hexdigest()
 
+    document_fields = _document_fields(payload)
+    if validate_required:
+        validate_document_payload(document_fields)
+
+    source_hash = sha256(source).hexdigest()
     input_buffer = BytesIO(source)
     output_buffer = BytesIO()
     replaced: set[str] = set()
+    requested = {key for key, value in document_fields.items() if _clean(value)}
 
     try:
         with ZipFile(input_buffer, "r") as source_zip, ZipFile(output_buffer, "w", ZIP_DEFLATED) as target_zip:
@@ -126,7 +152,7 @@ def render_official_docx(
                 if info.filename == "word/document.xml":
                     xml = content.decode("utf-8")
                     for field, anchors in FIELD_ANCHORS.items():
-                        value = _clean(payload.get(field))
+                        value = _clean(document_fields.get(field))
                         if not value:
                             continue
                         for anchor in anchors:
@@ -136,10 +162,11 @@ def render_official_docx(
                                 break
                     content = xml.encode("utf-8")
                 target_zip.writestr(deepcopy(info), content)
-    except Exception as exc:  # invalid packages must never be emitted
+    except Exception as exc:
         raise OfficialProposalDocumentError("Arquivo oficial DOCX inválido ou corrompido.") from exc
 
-    missing_anchors = sorted(REQUIRED_DOCUMENT_FIELDS - replaced)
+    required_anchors = REQUIRED_DOCUMENT_FIELDS if validate_required else requested
+    missing_anchors = sorted(required_anchors - replaced)
     if missing_anchors:
         raise OfficialProposalDocumentError(
             "O modelo oficial não contém âncoras contínuas seguras para os campos: " + ", ".join(missing_anchors)
@@ -158,7 +185,6 @@ def render_official_docx(
 
 
 def verify_media_preserved(source: bytes, generated: bytes) -> bool:
-    """Guarantee that all embedded images and relationships remain byte-identical."""
     with ZipFile(BytesIO(source), "r") as source_zip, ZipFile(BytesIO(generated), "r") as generated_zip:
         protected = [
             name
