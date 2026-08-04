@@ -40,6 +40,7 @@ def build_proposal_document_payload(
     item: dict[str, Any],
     opportunity: dict[str, Any],
     client: dict[str, Any],
+    validate_required: bool = True,
 ) -> ProposalDocumentPayload:
     template = template_for_equipment(str(_first(item, "equipamento", "modelo_equipamento", "produto", default="")))
 
@@ -99,20 +100,21 @@ def build_proposal_document_payload(
         "responsible_id": _first(opportunity, "responsavel_id") or _first(proposal, "responsavel_id"),
     }
 
-    _required(
-        fields,
-        "proposal_number",
-        "client_name",
-        "client_tax_id",
-        "client_address",
-        "client_email",
-        "equipment",
-        "quantity",
-        "unit_price",
-        "total_price",
-        "payment_terms",
-        "validity",
-    )
+    if validate_required:
+        _required(
+            fields,
+            "proposal_number",
+            "client_name",
+            "client_tax_id",
+            "client_address",
+            "client_email",
+            "equipment",
+            "quantity",
+            "unit_price",
+            "total_price",
+            "payment_terms",
+            "validity",
+        )
 
     return ProposalDocumentPayload(
         template_code=template.code,
