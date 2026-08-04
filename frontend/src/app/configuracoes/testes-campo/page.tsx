@@ -5,7 +5,6 @@ import Link from "next/link"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useAuth } from "@/core/auth"
-import { API_URL } from "@/lib/api"
 
 type Campanha = { campanha: string; ativos: number; encerrados: number; created_at?: string }
 type Previa = {
@@ -31,12 +30,13 @@ export default function TestesCampoMasterPage() {
   const [processando, setProcessando] = useState(false)
 
   const papel = papelDoUsuario(usuario)
-  const master = ["MASTER", "ADMIN_MASTER", "CEO", "CEO_ADMIN_MASTER"].includes(papel)
+  const master = papel === "ADMIN_MASTER"
+  const base = "/api/crm-proxy/master/testes-campo"
 
   async function carregar() {
     setCarregando(true); setErro("")
     try {
-      const response = await fetch(`${API_URL}/master/testes-campo`, { cache: "no-store" })
+      const response = await fetch(base, { cache: "no-store" })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar as campanhas de teste.")
       setCampanhas(Array.isArray(payload) ? payload : [])
@@ -50,7 +50,7 @@ export default function TestesCampoMasterPage() {
   async function abrirPrevia(campanha: string) {
     setErro(""); setMensagem(""); setConfirmacao("")
     try {
-      const response = await fetch(`${API_URL}/master/testes-campo/${encodeURIComponent(campanha)}/previsualizar`, { cache: "no-store" })
+      const response = await fetch(`${base}/${encodeURIComponent(campanha)}/previsualizar`, { cache: "no-store" })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.detail || "Não foi possível preparar a conferência.")
       setPrevia(payload)
@@ -61,10 +61,10 @@ export default function TestesCampoMasterPage() {
     if (!previa) return
     setProcessando(true); setErro(""); setMensagem("")
     try {
-      const response = await fetch(`${API_URL}/master/testes-campo/${encodeURIComponent(previa.campanha)}/limpar`, {
+      const response = await fetch(`${base}/${encodeURIComponent(previa.campanha)}/limpar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ executado_por: String((usuario as Record<string, unknown> | null)?.id || ""), confirmacao }),
+        body: JSON.stringify({ confirmacao }),
       })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.detail || "A limpeza não foi concluída.")
@@ -76,7 +76,7 @@ export default function TestesCampoMasterPage() {
 
   return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar /><section className="min-w-0 flex-1"><Topbar /><div className="space-y-6 p-4 sm:p-6 lg:p-8">
     <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6"><Link href="/configuracoes" className="text-sm font-semibold text-cyan-300">← Voltar para configurações</Link><p className="mt-5 text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">Administração MASTER</p><h1 className="mt-2 text-3xl font-bold">Testes de campo</h1><p className="mt-2 text-sm text-slate-400">Conferência e limpeza controlada de oportunidades, propostas, aceites, pedidos e vínculos criados exclusivamente em simulações.</p></header>
-    {!master && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">Acesso exclusivo do MASTER.</div>}
+    {!master && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">Acesso exclusivo do ADMIN_MASTER.</div>}
     {erro && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">{erro}</div>}
     {mensagem && <div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 p-5 text-emerald-200">{mensagem}</div>}
     {master && <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Campanhas registradas</h2>{carregando ? <p className="mt-5 text-slate-400">Carregando...</p> : campanhas.length === 0 ? <p className="mt-5 text-slate-500">Nenhum teste de campo registrado.</p> : <div className="mt-5 space-y-3">{campanhas.map((item) => <article key={item.campanha} className="flex flex-col gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4 md:flex-row md:items-center md:justify-between"><div><p className="font-semibold text-white">{item.campanha}</p><p className="mt-1 text-sm text-slate-400">{item.ativos} oportunidade(s) ativa(s) • {item.encerrados} encerrada(s)</p></div><button disabled={!item.ativos} onClick={() => void abrirPrevia(item.campanha)} className="rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300 disabled:opacity-40">Conferir limpeza</button></article>)}</div>}</section>}
