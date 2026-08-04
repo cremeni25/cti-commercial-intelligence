@@ -52,6 +52,7 @@ def build_preview_official_proposal(
         item=dict(item),
         opportunity=dict(oportunidade),
         client=dict(cliente),
+        validate_required=False,
     )
     try:
         generated = render_official_docx(
