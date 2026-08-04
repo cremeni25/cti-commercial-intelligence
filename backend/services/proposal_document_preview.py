@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hmac
+from hashlib import sha256
 from typing import Any, Mapping
 
 from services.official_proposal_document import render_official_docx, verify_media_preserved
@@ -41,11 +42,15 @@ def build_preview_official_proposal(
         raise ProposalDocumentRepositoryError("Modelo oficial sem arquivo mestre ou SHA-256 registrado.")
 
     try:
-        source = supabase.storage.from_(MASTER_BUCKET).download(source_path)
+        source = bytes(supabase.storage.from_(MASTER_BUCKET).download(source_path))
     except Exception as exc:
         raise ProposalDocumentRepositoryError(f"Falha ao baixar o arquivo mestre: {exc}") from exc
     if not source:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
+
+    source_hash = sha256(source).hexdigest()
+    if not hmac.compare_digest(source_hash.lower(), expected_hash):
+        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do registro técnico.")
 
     payload = build_proposal_document_payload(
         proposal=dict(proposta),
@@ -54,28 +59,39 @@ def build_preview_official_proposal(
         client=dict(cliente),
         validate_required=False,
     )
+
+    output_number = str(proposta.get("numero") or proposta.get("id") or "PROPOSTA")
     try:
         generated = render_official_docx(
-            bytes(source),
+            source,
             equipment,
             payload,
-            output_number=str(proposta.get("numero") or proposta.get("id") or "PROPOSTA"),
+            output_number=output_number,
             validate_required=False,
         )
+        if not verify_media_preserved(source, generated.content):
+            raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
+        return {
+            "content": generated.content,
+            "filename": generated.filename,
+            "sha256": generated.sha256,
+            "source_sha256": generated.source_sha256,
+            "template_code": generated.template_code,
+            "template_version": generated.template_version,
+            "homologado": bool(model.get("homologado_em")),
+            "preview_mode": "PREENCHIDA",
+        }
     except Exception as exc:
-        raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
-
-    if not hmac.compare_digest(generated.source_sha256.lower(), expected_hash):
-        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do registro técnico.")
-    if not verify_media_preserved(bytes(source), generated.content):
-        raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
+        if "âncoras contínuas seguras" not in str(exc):
+            raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
 
     return {
-        "content": generated.content,
-        "filename": generated.filename,
-        "sha256": generated.sha256,
-        "source_sha256": generated.source_sha256,
-        "template_code": generated.template_code,
-        "template_version": generated.template_version,
+        "content": source,
+        "filename": f"{output_number}-{template.code}-v{template.version}-VALIDACAO.docx",
+        "sha256": source_hash,
+        "source_sha256": source_hash,
+        "template_code": template.code,
+        "template_version": template.version,
         "homologado": bool(model.get("homologado_em")),
+        "preview_mode": "MESTRE_INTEGRO",
     }
