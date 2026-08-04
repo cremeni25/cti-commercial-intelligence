@@ -58,11 +58,10 @@ def finalize_official_proposal(
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
 
     payload = build_proposal_document_payload(
-        proposta=proposta,
-        item=item,
-        oportunidade=oportunidade,
-        cliente=cliente,
-        application=application or {},
+        proposal=dict(proposta),
+        item=dict(item),
+        opportunity=dict(oportunidade),
+        client=dict(cliente),
     )
     generated = render_official_docx(
         bytes(source),
