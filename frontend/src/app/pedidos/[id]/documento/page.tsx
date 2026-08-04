@@ -45,7 +45,7 @@ export default function DocumentoPedidoPage() {
 
       <section className="mt-7 grid gap-5 sm:grid-cols-2">
         <Bloco titulo="Identificação"><Linha rotulo="Pedido" valor={texto(dados.pedido.numero)} /><Linha rotulo="Data" valor={dataHora(dados.pedido.data_pedido || dados.pedido.created_at)} /><Linha rotulo="Status" valor={texto(dados.pedido.status)} /><Linha rotulo="Valor" valor={moeda(dados.pedido.valor)} /></Bloco>
-        <Bloco titulo="Vínculo documental"><Linha rotulo="Proposta" valor={texto(dados.proposta.numero)} /><Linha rotulo="Revisão" valor={texto(dados.proposta.versao, "1")} /><Linha rotulo="Hash" valor={texto(dados.proposta.hash_documento)} /><Linha rotulo="Status da proposta" valor={texto(dados.proposta.status_documento || dados.proposta.status)} /></Bloco>
+        <Bloco titulo="Vínculo documental"><Linha rotulo="Proposta" valor={texto(dados.proposta.numero)} /><Linha rotulo="Revisão" valor={texto(dados.proposta.versao, "1")} /><Linha rotulo="Hash" valor={texto(dados.proposta.hash_documento)} compacto /><Linha rotulo="Status da proposta" valor={texto(dados.proposta.status_documento || dados.proposta.status)} /></Bloco>
       </section>
 
       <section className="mt-7"><Bloco titulo="Objeto do pedido"><Linha rotulo="Linha" valor={texto(dados.item.linha_produto || dados.proposta.produtos)} /><Linha rotulo="Equipamento" valor={texto(dados.item.equipamento || dados.proposta.equipamentos)} /><Linha rotulo="Configuração" valor={texto(dados.item.configuracao)} /><Linha rotulo="Quantidade" valor={texto(dados.item.quantidade, "1")} /><Linha rotulo="Preço unitário" valor={moeda(dados.item.preco_unitario || dados.proposta.valor)} /><Linha rotulo="Desconto" valor={`${texto(dados.item.desconto_percentual, "0")}%`} /><Linha rotulo="Valor total" valor={moeda(dados.pedido.valor || dados.proposta.valor)} /></Bloco></section>
@@ -60,5 +60,5 @@ export default function DocumentoPedidoPage() {
   </main>
 }
 
-function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) { return <div className="rounded-lg border border-slate-400"><h2 className="bg-blue-800 px-4 py-2 font-bold uppercase text-white">{titulo}</h2><dl className="p-4">{children}</dl></div> }
-function Linha({ rotulo, valor }: { rotulo: string; valor: string }) { return <div className="grid grid-cols-[145px_1fr] gap-3 border-b border-slate-200 py-2 last:border-0"><dt className="font-semibold text-slate-700">{rotulo}</dt><dd className="break-words">{valor}</dd></div> }
+function Bloco({ titulo, children }: { titulo: string; children: React.ReactNode }) { return <div className="min-w-0 rounded-lg border border-slate-400"><h2 className="bg-blue-800 px-4 py-2 font-bold uppercase text-white">{titulo}</h2><dl className="min-w-0 p-4">{children}</dl></div> }
+function Linha({ rotulo, valor, compacto = false }: { rotulo: string; valor: string; compacto?: boolean }) { return <div className="grid min-w-0 grid-cols-[105px_minmax(0,1fr)] gap-3 border-b border-slate-200 py-2 last:border-0 sm:grid-cols-[145px_minmax(0,1fr)]"><dt className="font-semibold text-slate-700">{rotulo}</dt><dd className={`min-w-0 break-all ${compacto ? "font-mono text-[10px] leading-4" : ""}`}>{valor}</dd></div> }
