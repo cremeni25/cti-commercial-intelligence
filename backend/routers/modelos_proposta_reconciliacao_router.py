@@ -87,10 +87,7 @@ def _metadados_binarios(path: str) -> tuple[int, str]:
     return len(raw), hashlib.sha256(raw).hexdigest()
 
 
-@router.post("/sincronizar-storage")
-def sincronizar_modelos_com_storage(
-    usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo),
-):
+def reconciliar_modelos_com_storage(*, executor: str) -> dict[str, Any]:
     paths = _listar_arquivos()
     indice = _indice_por_nome(paths)
     criados: list[dict[str, Any]] = []
@@ -164,8 +161,8 @@ def sincronizar_modelos_com_storage(
             "arquivo_template_hash_sha256": sha256,
             "conteudo_template": modelo.get("conteudo_template") or {},
             "justificativa": (
-                "Registro ausente criado a partir do arquivo mestre real já existente no bucket privado; "
-                f"tamanho e SHA-256 calculados diretamente do binário por {usuario.email}."
+                "Registro ausente criado automaticamente a partir do arquivo mestre real já existente no bucket privado; "
+                f"tamanho e SHA-256 calculados diretamente do binário por {executor}."
             ),
         }).execute()
         criados.append({
@@ -192,3 +189,10 @@ def sincronizar_modelos_com_storage(
             else "Disponibilizar no bucket somente os arquivos mestres listados nos bloqueios e executar novamente."
         ),
     }
+
+
+@router.post("/sincronizar-storage")
+def sincronizar_modelos_com_storage(
+    usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo),
+):
+    return reconciliar_modelos_com_storage(executor=usuario.email)
