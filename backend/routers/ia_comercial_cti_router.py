@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from services.ia_comercial_cti import contexto_comercial, gerar_resposta
+from services.ia_comercial_cti import IAComercialOpenAIError, contexto_comercial, gerar_resposta
 
 router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
@@ -121,14 +121,28 @@ def enviar_mensagem(
     try:
         contexto = contexto_comercial(usuario.id, usuario.tipo_usuario)
         resposta_texto, metadados = gerar_resposta(mensagem, historico, contexto)
+    except IAComercialOpenAIError as exc:
+        supabase.table("cti_ia_auditoria").insert({
+            "conversa_id": conversa_id,
+            "usuario_id": usuario.id,
+            "acao": "ERRO_OPENAI",
+            "detalhes": {
+                "codigo": exc.codigo,
+                "erro": exc.detalhe_tecnico,
+            },
+        }).execute()
+        raise HTTPException(status_code=502, detail=exc.mensagem_publica) from exc
     except Exception as exc:
         supabase.table("cti_ia_auditoria").insert({
             "conversa_id": conversa_id,
             "usuario_id": usuario.id,
             "acao": "ERRO_GERACAO_RESPOSTA",
-            "detalhes": {"erro": str(exc)[:500]},
+            "detalhes": {"tipo": type(exc).__name__, "erro": str(exc)[:500]},
         }).execute()
-        raise HTTPException(status_code=502, detail="A IA Comercial não conseguiu concluir a resposta.") from exc
+        raise HTTPException(
+            status_code=502,
+            detail="O núcleo da IA encontrou uma falha interna antes de concluir a resposta. A ocorrência foi registrada na auditoria.",
+        ) from exc
 
     fontes = [{"tipo": "CTI", "descricao": "Clientes, oportunidades, propostas e pedidos autorizados."}]
     assistente = _dados(
