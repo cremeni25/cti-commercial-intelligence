@@ -146,6 +146,7 @@ def render_official_docx(
     *,
     output_number: str,
     validate_required: bool = True,
+    require_all_requested_anchors: bool = True,
 ) -> GeneratedOfficialDocument:
     template = template_for_equipment(equipment)
     if not template.source_filename.lower().endswith(".docx"):
@@ -186,7 +187,7 @@ def render_official_docx(
 
     required_anchors = REQUIRED_DOCUMENT_FIELDS if validate_required else requested
     missing_anchors = sorted(required_anchors - replaced)
-    if missing_anchors:
+    if missing_anchors and require_all_requested_anchors:
         raise OfficialProposalDocumentError(
             "O modelo oficial não contém âncoras seguras para os campos: " + ", ".join(missing_anchors)
         )
