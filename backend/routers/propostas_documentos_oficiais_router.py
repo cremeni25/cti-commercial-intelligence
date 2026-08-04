@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from io import BytesIO
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
@@ -77,6 +78,39 @@ def _filename_ascii(filename: str, proposal_id: str) -> str:
     return safe[:180]
 
 
+def _signed_url(path: str, expires_in: int) -> str:
+    try:
+        response = supabase.storage.from_(FINAL_BUCKET).create_signed_url(path, expires_in)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Não foi possível criar o acesso temporário ao Word.") from exc
+    if isinstance(response, dict):
+        url = response.get("signedURL") or response.get("signed_url")
+    else:
+        url = getattr(response, "signed_url", None) or getattr(response, "signedURL", None)
+    if not url:
+        raise HTTPException(status_code=502, detail="O storage não retornou a URL temporária do Word.")
+    return str(url)
+
+
+def _build_preview(proposal_id: str) -> dict[str, Any]:
+    proposal, item, opportunity, client = _proposal_package(proposal_id)
+    snapshot = proposal.get("snapshot_dados") or {}
+    application = snapshot.get("aplicacao") if isinstance(snapshot, dict) else {}
+    try:
+        return build_preview_official_proposal(
+            supabase,
+            proposta=proposal,
+            item=item,
+            oportunidade=opportunity,
+            cliente=client,
+            application=application if isinstance(application, dict) else {},
+        )
+    except ProposalDocumentRepositoryError:
+        raise
+    except Exception as exc:
+        raise ProposalDocumentRepositoryError(f"Falha ao preencher o Word oficial: {exc}") from exc
+
+
 @router.get("/propostas/{proposal_id}")
 def proposal_dossier(proposal_id: str):
     proposal = _first("cti_propostas", proposal_id, "Proposta não encontrada.")
@@ -122,29 +156,71 @@ def finalize_document(proposal_id: str):
     return {"ok": True, "already_finalized": False, **result}
 
 
+@router.get("/propostas/{proposal_id}/previsualizar-documento")
+def preview_document(proposal_id: str, expires_in: int = 1800):
+    validity = max(300, min(expires_in, 3600))
+    try:
+        preview = _build_preview(proposal_id)
+        content = bytes(preview.get("content") or b"")
+        if not content:
+            raise ProposalDocumentRepositoryError("O Word preenchido foi gerado sem conteúdo.")
+
+        filename = _filename_ascii(str(preview.get("filename") or ""), proposal_id)
+        sha256 = str(preview.get("sha256") or "").strip()
+        if not sha256:
+            raise ProposalDocumentRepositoryError("O Word preenchido foi gerado sem SHA-256.")
+
+        path = f"previews/propostas/{proposal_id}/{sha256[:16]}/{filename}"
+        bucket = supabase.storage.from_(FINAL_BUCKET)
+        try:
+            bucket.remove([path])
+        except Exception:
+            pass
+        uploaded = bucket.upload(
+            path,
+            content,
+            {"content-type": DOCX_MIME, "upsert": "true"},
+        )
+        if not uploaded:
+            raise ProposalDocumentRepositoryError("O storage não confirmou a prévia Word.")
+
+        document_url = _signed_url(path, validity)
+        viewer_url = "https://view.officeapps.live.com/op/embed.aspx?src=" + quote(document_url, safe="")
+        return {
+            "proposal_id": proposal_id,
+            "filename": filename,
+            "mime_type": DOCX_MIME,
+            "sha256": sha256,
+            "path": path,
+            "document_url": document_url,
+            "viewer_url": viewer_url,
+            "expires_in": validity,
+            "preview_mode": str(preview.get("preview_mode") or "WORD_PREENCHIDO"),
+        }
+    except HTTPException:
+        raise
+    except ProposalDocumentRepositoryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha técnica ao preparar a visualização do Word: {type(exc).__name__}: {exc}",
+        ) from exc
+
+
 @router.get("/propostas/{proposal_id}/previsualizar-documento-arquivo")
 def preview_document_file(proposal_id: str):
     try:
-        proposal, item, opportunity, client = _proposal_package(proposal_id)
-        snapshot = proposal.get("snapshot_dados") or {}
-        application = snapshot.get("aplicacao") if isinstance(snapshot, dict) else {}
-        preview = build_preview_official_proposal(
-            supabase,
-            proposta=proposal,
-            item=item,
-            oportunidade=opportunity,
-            cliente=client,
-            application=application if isinstance(application, dict) else {},
-        )
+        preview = _build_preview(proposal_id)
         content = bytes(preview.get("content") or b"")
         if not content:
-            raise ProposalDocumentRepositoryError("A pré-visualização foi gerada sem conteúdo binário.")
+            raise ProposalDocumentRepositoryError("O Word preenchido foi gerado sem conteúdo.")
         filename = _filename_ascii(str(preview.get("filename") or ""), proposal_id)
         return StreamingResponse(
             BytesIO(content),
             media_type=DOCX_MIME,
             headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Disposition": f'inline; filename="{filename}"',
                 "Content-Length": str(len(content)),
                 "Cache-Control": "no-store, max-age=0",
                 "Pragma": "no-cache",
@@ -168,19 +244,12 @@ def official_document(proposal_id: str, expires_in: int = 900):
     proposal = _first("cti_propostas", proposal_id, "Proposta não encontrada.")
     metadata = _document_metadata(proposal)
     validity = max(60, min(expires_in, 1800))
-    try:
-        response = supabase.storage.from_(FINAL_BUCKET).create_signed_url(str(metadata["path"]), validity)
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail="Não foi possível criar o acesso temporário ao Word oficial.") from exc
-    if isinstance(response, dict):
-        url = response.get("signedURL") or response.get("signed_url")
-    else:
-        url = getattr(response, "signed_url", None) or getattr(response, "signedURL", None)
-    if not url:
-        raise HTTPException(status_code=502, detail="O storage não retornou a URL temporária do Word oficial.")
+    url = _signed_url(str(metadata["path"]), validity)
+    viewer_url = "https://view.officeapps.live.com/op/embed.aspx?src=" + quote(url, safe="")
     return {
         "proposal_id": proposal_id,
         "document": metadata,
-        "url": str(url),
+        "url": url,
+        "viewer_url": viewer_url,
         "expires_in": validity,
     }
