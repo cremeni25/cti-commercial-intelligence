@@ -94,6 +94,7 @@ export default function NovaOportunidadePage() {
 
   async function salvar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault()
+    const formularioElemento = evento.currentTarget
     setErro("")
     setSucesso("")
 
@@ -103,7 +104,7 @@ export default function NovaOportunidadePage() {
       return
     }
 
-    const formulario = new FormData(evento.currentTarget)
+    const formulario = new FormData(formularioElemento)
     const clienteNome = (clienteSelecionado?.nome || buscaCliente).trim()
     const titulo = texto(formulario.get("titulo"))
     const municipio = texto(formulario.get("municipio"))
@@ -163,12 +164,12 @@ export default function NovaOportunidadePage() {
       })
       const detalhe = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(texto(detalhe.detail) || `Falha ${resposta.status}`)
-      setSucesso("Oportunidade criada e sincronizada com o CTI.")
-      evento.currentTarget.reset()
+      formularioElemento.reset()
       setBuscaCliente("")
       setClienteSelecionado(null)
       setLinhas([])
       setEquipamentos([])
+      setSucesso("Oportunidade criada e sincronizada com o CTI.")
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível criar a oportunidade.")
     } finally {
