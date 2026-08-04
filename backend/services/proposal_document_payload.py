@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from typing import Any
 
 from services.proposal_template_catalog import template_for_equipment
@@ -34,6 +35,32 @@ def _required(fields: dict[str, Any], *names: str) -> None:
         )
 
 
+def _date_br(value: Any) -> str:
+    if value is None or str(value).strip() == "":
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%d/%m/%Y")
+    if isinstance(value, date):
+        return value.strftime("%d/%m/%Y")
+    raw = str(value).strip()
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).strftime("%d/%m/%Y")
+    except ValueError:
+        try:
+            return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%d/%m/%Y")
+        except ValueError:
+            return raw
+
+
+def _money_br(value: Any) -> str:
+    try:
+        number = float(value or 0)
+    except (TypeError, ValueError):
+        return str(value or "")
+    formatted = f"{number:,.2f}"
+    return "R$ " + formatted.replace(",", "_").replace(".", ",").replace("_", ".")
+
+
 def build_proposal_document_payload(
     *,
     proposal: dict[str, Any],
@@ -49,35 +76,43 @@ def build_proposal_document_payload(
     discount = float(_first(item, "desconto_percentual", default=0) or 0)
     total = round(quantity * unit_price * (1 - discount / 100), 2)
 
+    client_name = _first(client, "razao_social", "nome_fantasia", "nome", "empresa") or _first(opportunity, "cliente_nome", "empresa_nome")
+    client_tax_id = _first(client, "cpf_cnpj", "cnpj", "cpf", "documento", "documento_fiscal") or _first(opportunity, "cpf_cnpj", "cnpj", "cpf")
+    client_state_registration = _first(client, "inscricao_estadual", "ie", "inscricao", "inscricao_est") or _first(opportunity, "inscricao_estadual", "ie")
+    client_address = _first(client, "endereco_completo", "endereco", "logradouro", "address") or _first(opportunity, "endereco_completo", "endereco")
+    client_phone = _first(client, "telefone", "celular", "whatsapp", "telefone_principal", "fone") or _first(opportunity, "telefone", "celular", "whatsapp")
+    client_email = _first(client, "email", "email_principal", "email_comercial") or _first(opportunity, "email", "email_principal")
+
     fields: dict[str, Any] = {
         "proposal_number": _first(proposal, "numero"),
         "proposal_revision": _first(proposal, "versao", default=1),
-        "proposal_date": _first(proposal, "emitida_em", "created_at"),
+        "proposal_date": _date_br(_first(proposal, "emitida_em", "created_at")),
         "billing_company": _first(proposal, "empresa_faturamento", default="Carrier Refrigeração Brasil Ltda"),
         "billing_branch": _first(proposal, "filial_faturamento", "cnpj_faturamento"),
-        "client_name": _first(client, "razao_social", "nome_fantasia", "nome") or _first(opportunity, "cliente_nome", "empresa_nome"),
-        "client_tax_id": _first(client, "cpf_cnpj", "cnpj", "cpf"),
-        "client_state_registration": _first(client, "inscricao_estadual", "ie"),
-        "client_address": _first(client, "endereco_completo", "endereco"),
-        "client_phone": _first(client, "telefone", "celular", "whatsapp"),
-        "client_email": _first(client, "email", "email_principal"),
+        "client_name": client_name,
+        "client_tax_id": client_tax_id,
+        "client_state_registration": client_state_registration,
+        "client_address": client_address,
+        "client_phone": client_phone,
+        "client_email": client_email,
         "equipment": template.equipment,
         "configuration": _first(item, "configuracao", "tipo_equipamento"),
         "voltage": _first(proposal, "voltagem"),
+        "quantity_intro": quantity,
         "quantity": quantity,
-        "unit_price": unit_price,
+        "unit_price": _money_br(unit_price),
         "discount_percent": discount,
-        "total_price": total,
+        "total_price": _money_br(total),
         "taxes": _first(item, "impostos", default="04% ICMS/PIS/COFINS"),
         "accessories": _first(item, "opcionais", "acessorios", default=[]),
         "payment_terms": _first(item, "condicao_pagamento"),
         "has_down_payment": _first(proposal, "possui_entrada") or _first(item, "possui_entrada", "entrada_sim_nao"),
-        "down_payment_value": _first(proposal, "valor_entrada"),
+        "down_payment_value": _money_br(_first(proposal, "valor_entrada")) if _first(proposal, "valor_entrada") is not None else None,
         "delivery_type": _first(item, "tipo_entrega", "local_entrega"),
         "authorized_service_name_address": _first(proposal, "autorizada_nome_endereco"),
         "freight": _first(item, "frete"),
         "delivery_deadline": _first(item, "prazo_entrega"),
-        "validity": _first(item, "validade_condicao") or _first(proposal, "validade"),
+        "validity": _date_br(_first(item, "validade_condicao") or _first(proposal, "validade")),
         "commercial_notes": _first(item, "observacoes_comerciais") or _first(proposal, "observacoes"),
         "technical_notes": _first(item, "observacoes_tecnicas"),
         "body_width_m": _first(opportunity, "bau_largura_m", "largura_bau_m"),
