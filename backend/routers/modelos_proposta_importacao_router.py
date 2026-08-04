@@ -164,6 +164,7 @@ async def importar_pacote(
 
             existente = _modelo_existente(template.equipment, versao)
             registro = {
+                "nome": template.equipment,
                 "linha_produto": _linha_produto(template.equipment),
                 "equipamento": template.equipment,
                 "versao": versao,
