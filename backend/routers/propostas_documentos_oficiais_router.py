@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
+from io import BytesIO
 from typing import Any
-from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 
 from core.supabase_client import supabase
 from services.proposal_document_preview import build_preview_official_proposal
@@ -44,6 +46,14 @@ def _document_metadata(proposal: dict[str, Any]) -> dict[str, Any]:
     return metadata
 
 
+def _filename_ascii(filename: str, proposal_id: str) -> str:
+    base = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", base).strip("._")
+    if not safe.lower().endswith(".docx"):
+        safe = f"{safe or 'proposta_' + proposal_id}.docx"
+    return safe[:180]
+
+
 @router.post("/propostas/{proposal_id}/finalizar-documento")
 def finalize_document(proposal_id: str):
     proposal, item, opportunity, client = _proposal_package(proposal_id)
@@ -69,10 +79,10 @@ def finalize_document(proposal_id: str):
 
 @router.get("/propostas/{proposal_id}/previsualizar-documento-arquivo")
 def preview_document_file(proposal_id: str):
-    proposal, item, opportunity, client = _proposal_package(proposal_id)
-    snapshot = proposal.get("snapshot_dados") or {}
-    application = snapshot.get("aplicacao") if isinstance(snapshot, dict) else {}
     try:
+        proposal, item, opportunity, client = _proposal_package(proposal_id)
+        snapshot = proposal.get("snapshot_dados") or {}
+        application = snapshot.get("aplicacao") if isinstance(snapshot, dict) else {}
         preview = build_preview_official_proposal(
             supabase,
             proposta=proposal,
@@ -81,21 +91,30 @@ def preview_document_file(proposal_id: str):
             cliente=client,
             application=application if isinstance(application, dict) else {},
         )
+        content = bytes(preview.get("content") or b"")
+        if not content:
+            raise ProposalDocumentRepositoryError("A pré-visualização foi gerada sem conteúdo binário.")
+        filename = _filename_ascii(str(preview.get("filename") or ""), proposal_id)
+        stream = BytesIO(content)
+        return StreamingResponse(
+            stream,
+            media_type=DOCX_MIME,
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Length": str(len(content)),
+                "Cache-Control": "no-store, max-age=0",
+                "Pragma": "no-cache",
+            },
+        )
+    except HTTPException:
+        raise
     except ProposalDocumentRepositoryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-    filename = str(preview["filename"])
-    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
-    return Response(
-        content=bytes(preview["content"]),
-        media_type=DOCX_MIME,
-        headers={
-            "Content-Disposition": disposition,
-            "X-CTI-Preview": "true",
-            "X-CTI-SHA256": str(preview["sha256"]),
-            "Cache-Control": "no-store",
-        },
-    )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Falha técnica ao entregar a pré-visualização DOCX: {type(exc).__name__}: {exc}",
+        ) from exc
 
 
 @router.get("/propostas/{proposal_id}/documento-oficial")
