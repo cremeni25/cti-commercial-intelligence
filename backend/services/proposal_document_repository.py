@@ -4,13 +4,13 @@ import hmac
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
-from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
 from services.official_proposal_document import render_official_docx, verify_media_preserved
 from services.proposal_document_payload import build_proposal_document_payload
 from services.proposal_template_catalog import template_for_equipment
 
 MASTER_BUCKET = "modelos-propostas-carrier"
 FINAL_BUCKET = "documentos-comerciais-cti"
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 class ProposalDocumentRepositoryError(RuntimeError):
@@ -73,50 +73,45 @@ def finalize_official_proposal(
     if not verify_media_preserved(bytes(source), generated.content):
         raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
 
-    try:
-        pdf = convert_docx_to_pdf(generated.content, generated.filename)
-    except DocxPdfConversionError as exc:
-        raise ProposalDocumentRepositoryError(f"Não foi possível gerar o PDF oficial: {exc}") from exc
-
     proposal_id = str(proposta.get("id") or "").strip()
     if not proposal_id:
         raise ProposalDocumentRepositoryError("Proposta sem identificador persistente.")
     version = int(proposta.get("versao") or 1)
     source_revision = generated.source_sha256[:12]
-    path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{pdf.filename}"
+    path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{generated.filename}"
     uploaded = supabase.storage.from_(FINAL_BUCKET).upload(
         path,
-        pdf.content,
+        generated.content,
         {
-            "content-type": "application/pdf",
+            "content-type": DOCX_MIME,
             "upsert": "false",
         },
     )
     if not uploaded:
-        raise ProposalDocumentRepositoryError("O storage não confirmou o PDF final imutável.")
+        raise ProposalDocumentRepositoryError("O storage não confirmou o Word final imutável.")
 
     metadata = {
         "bucket": FINAL_BUCKET,
         "path": path,
-        "filename": pdf.filename,
-        "mime_type": "application/pdf",
-        "sha256": pdf.sha256,
+        "filename": generated.filename,
+        "mime_type": DOCX_MIME,
+        "sha256": generated.sha256,
         "source_bucket": MASTER_BUCKET,
         "source_path": source_path,
         "source_sha256": generated.source_sha256,
-        "intermediate_docx_sha256": generated.sha256,
         "template_code": generated.template_code,
         "template_version": generated.template_version,
         "finalized_at": _now(),
         "preserves_images": True,
         "preserves_carrier_branding": True,
         "immutable": True,
+        "document_format": "DOCX",
     }
     updated = (
         supabase.table("cti_propostas")
         .update({
             "arquivo_documento": metadata,
-            "hash_documento": pdf.sha256,
+            "hash_documento": generated.sha256,
             "modelo_proposta_id": model.get("id"),
             "updated_at": metadata["finalized_at"],
         })
@@ -126,5 +121,5 @@ def finalize_official_proposal(
         or []
     )
     if not updated:
-        raise ProposalDocumentRepositoryError("O vínculo do PDF final com a proposta não foi confirmado.")
+        raise ProposalDocumentRepositoryError("O vínculo do Word final com a proposta não foi confirmado.")
     return {"document": metadata, "proposal": updated[0]}
