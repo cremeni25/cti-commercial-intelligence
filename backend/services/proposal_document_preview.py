@@ -4,11 +4,12 @@ import hmac
 from hashlib import sha256
 from typing import Any, Mapping
 
-from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
 from services.official_proposal_document import render_official_docx, verify_media_preserved
 from services.proposal_document_payload import build_proposal_document_payload
 from services.proposal_template_catalog import template_for_equipment
 from services.proposal_document_repository import MASTER_BUCKET, ProposalDocumentRepositoryError
+
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def build_preview_official_proposal(
@@ -77,20 +78,14 @@ def build_preview_official_proposal(
     if not verify_media_preserved(source, generated.content):
         raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
 
-    try:
-        pdf = convert_docx_to_pdf(generated.content, generated.filename)
-    except DocxPdfConversionError as exc:
-        raise ProposalDocumentRepositoryError(f"Não foi possível gerar o PDF para visualização: {exc}") from exc
-
     return {
-        "content": pdf.content,
-        "filename": pdf.filename,
-        "sha256": pdf.sha256,
+        "content": generated.content,
+        "filename": generated.filename,
+        "sha256": generated.sha256,
         "source_sha256": source_hash,
-        "intermediate_docx_sha256": generated.sha256,
         "template_code": template.code,
         "template_version": template.version,
         "homologado": bool(model.get("homologado_em")),
-        "preview_mode": "PREENCHIDA",
-        "mime_type": "application/pdf",
+        "preview_mode": "WORD_PREENCHIDO",
+        "mime_type": DOCX_MIME,
     }
