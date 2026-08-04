@@ -57,6 +57,37 @@ def _arquivo_por_nome(arquivos: dict[str, bytes], nome_esperado: str) -> bytes |
     return encontrados[0]
 
 
+def _registrar_auditoria(
+    *,
+    modelo: dict,
+    equipamento: str,
+    versao: int,
+    caminho: str,
+    nome_arquivo: str,
+    hash_recebido: str,
+    usuario_email: str,
+) -> str | None:
+    try:
+        supabase.table("cti_modelos_proposta_auditoria").insert({
+            "modelo_proposta_id": modelo.get("id"),
+            "nome": equipamento,
+            "operacao": "ATIVACAO",
+            "versao": versao,
+            "arquivo_template_storage": caminho,
+            "arquivo_template_nome_original": nome_arquivo,
+            "arquivo_template_hash_sha256": hash_recebido,
+            "conteudo_template": modelo.get("conteudo_template") or {},
+            "justificativa": (
+                "Substituição controlada pelo pacote integral dos 16 documentos oficiais Carrier; "
+                "binário preservado sem alteração, tamanho e SHA-256 calculados no recebimento; "
+                f"executado por ADMIN_MASTER {usuario_email}."
+            ),
+        }).execute()
+        return None
+    except Exception as exc:
+        return str(exc)
+
+
 @router.post("/pacote")
 async def importar_pacote(
     pacote: UploadFile = File(...),
@@ -109,6 +140,7 @@ async def importar_pacote(
 
     resultados: list[dict] = []
     falhas: list[dict] = []
+    avisos_auditoria: list[dict] = []
 
     for template in TEMPLATES:
         binario = _arquivo_por_nome(arquivos, template.source_filename)
@@ -156,29 +188,27 @@ async def importar_pacote(
                     .data
                     or []
                 )
-                modelo = atualizado[0] if atualizado else existente
-                operacao = "SUBSTITUICAO_MESTRE_OFICIAL"
+                if not atualizado:
+                    raise RuntimeError("O banco não confirmou a atualização do modelo oficial.")
+                modelo = atualizado[0]
             else:
                 registro["created_at"] = agora
                 inseridos = supabase.table("cti_modelos_proposta").insert(registro).execute().data or []
                 if not inseridos:
                     raise RuntimeError("O banco não confirmou a criação do modelo oficial.")
                 modelo = inseridos[0]
-                operacao = "IMPORTACAO_MESTRE_OFICIAL"
 
-            supabase.table("cti_modelos_proposta_auditoria").insert({
-                "modelo_proposta_id": modelo.get("id"),
-                "operacao": operacao,
-                "versao": versao,
-                "arquivo_template_storage": caminho,
-                "arquivo_template_nome_original": template.source_filename,
-                "arquivo_template_hash_sha256": hash_recebido,
-                "conteudo_template": modelo.get("conteudo_template") or {},
-                "justificativa": (
-                    "Substituição controlada pelo pacote integral dos 16 documentos oficiais Carrier; "
-                    f"binário preservado sem alteração, tamanho e SHA-256 calculados no recebimento por {usuario.email}."
-                ),
-            }).execute()
+            aviso = _registrar_auditoria(
+                modelo=modelo,
+                equipamento=template.equipment,
+                versao=versao,
+                caminho=caminho,
+                nome_arquivo=template.source_filename,
+                hash_recebido=hash_recebido,
+                usuario_email=usuario.email,
+            )
+            if aviso:
+                avisos_auditoria.append({"equipamento": template.equipment, "aviso": aviso})
 
             resultados.append({
                 "modelo_id": modelo.get("id"),
@@ -197,6 +227,7 @@ async def importar_pacote(
         "modelos_esperados": len(TEMPLATES),
         "modelos_atualizados": len(resultados),
         "falhas": falhas,
+        "avisos_auditoria": avisos_auditoria,
         "resultados": resultados,
         "proxima_etapa": "GERAR_PROPOSTA_PDF_COM_MESTRE_OFICIAL",
     }
