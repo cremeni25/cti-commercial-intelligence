@@ -7,6 +7,7 @@ from routers.governanca_usuarios_router import router as governanca_usuarios_rou
 from routers.crm_visao_router import router as crm_visao_router
 from routers.propostas_pedidos_router import router as propostas_pedidos_router
 from routers.propostas_consulta_router import router as propostas_consulta_router
+from routers.propostas_primeira_pagina_router import router as propostas_primeira_pagina_router
 from routers.pedidos_operacionais_router import router as pedidos_operacionais_router
 from routers.pedidos_documentos_oficiais_router import router as pedidos_documentos_oficiais_router
 from routers.documentos_comerciais_listagem_router import router as documentos_comerciais_listagem_router
@@ -27,6 +28,7 @@ router.include_router(governanca_usuarios_router)
 router.include_router(crm_visao_router)
 router.include_router(propostas_pedidos_router)
 router.include_router(propostas_consulta_router)
+router.include_router(propostas_primeira_pagina_router)
 router.include_router(pedidos_operacionais_router)
 router.include_router(pedidos_documentos_oficiais_router)
 router.include_router(documentos_comerciais_listagem_router)

@@ -42,6 +42,7 @@ FIELD_ANCHORS: dict[str, tuple[str, ...]] = {
     "condicoes_pagamento": ("Condições de pagamentos:",),
     "valor_entrada": ("Valor:",),
     "autorizada": ("Nome e endereço da Autorizada:",),
+    "lynx_periodo_meses": ("Período:",),
     "validade": ("Validade da proposta:",),
 }
 
@@ -61,6 +62,7 @@ PAYLOAD_FIELD_MAP: dict[str, str] = {
     "payment_terms": "condicoes_pagamento",
     "down_payment_value": "valor_entrada",
     "authorized_service_name_address": "autorizada",
+    "lynx_months": "lynx_periodo_meses",
     "validity": "validade",
 }
 
