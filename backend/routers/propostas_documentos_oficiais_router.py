@@ -5,7 +5,7 @@ from io import BytesIO
 from typing import Any
 from urllib.parse import quote
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from core.supabase_client import supabase
@@ -157,44 +157,22 @@ def finalize_document(proposal_id: str):
 
 
 @router.get("/propostas/{proposal_id}/previsualizar-documento")
-def preview_document(proposal_id: str, expires_in: int = 1800):
-    validity = max(300, min(expires_in, 3600))
+def preview_document(proposal_id: str, request: Request):
     try:
         preview = _build_preview(proposal_id)
-        content = bytes(preview.get("content") or b"")
-        if not content:
-            raise ProposalDocumentRepositoryError("O Word preenchido foi gerado sem conteúdo.")
-
-        filename = _filename_ascii(str(preview.get("filename") or ""), proposal_id)
         sha256 = str(preview.get("sha256") or "").strip()
         if not sha256:
             raise ProposalDocumentRepositoryError("O Word preenchido foi gerado sem SHA-256.")
 
-        path = f"previews/propostas/{proposal_id}/{sha256[:16]}/{filename}"
-        bucket = supabase.storage.from_(FINAL_BUCKET)
-        try:
-            bucket.remove([path])
-        except Exception:
-            pass
-        uploaded = bucket.upload(
-            path,
-            content,
-            {"content-type": DOCX_MIME, "upsert": "true"},
-        )
-        if not uploaded:
-            raise ProposalDocumentRepositoryError("O storage não confirmou a prévia Word.")
-
-        document_url = _signed_url(path, validity)
+        document_url = str(request.url_for("preview_document_file", proposal_id=proposal_id)) + f"?v={sha256[:16]}"
         viewer_url = "https://view.officeapps.live.com/op/embed.aspx?src=" + quote(document_url, safe="")
         return {
             "proposal_id": proposal_id,
-            "filename": filename,
+            "filename": _filename_ascii(str(preview.get("filename") or ""), proposal_id),
             "mime_type": DOCX_MIME,
             "sha256": sha256,
-            "path": path,
             "document_url": document_url,
             "viewer_url": viewer_url,
-            "expires_in": validity,
             "preview_mode": str(preview.get("preview_mode") or "WORD_PREENCHIDO"),
         }
     except HTTPException:
@@ -208,7 +186,7 @@ def preview_document(proposal_id: str, expires_in: int = 1800):
         ) from exc
 
 
-@router.get("/propostas/{proposal_id}/previsualizar-documento-arquivo")
+@router.get("/propostas/{proposal_id}/previsualizar-documento-arquivo", name="preview_document_file")
 def preview_document_file(proposal_id: str):
     try:
         preview = _build_preview(proposal_id)
@@ -222,8 +200,8 @@ def preview_document_file(proposal_id: str):
             headers={
                 "Content-Disposition": f'inline; filename="{filename}"',
                 "Content-Length": str(len(content)),
-                "Cache-Control": "no-store, max-age=0",
-                "Pragma": "no-cache",
+                "Cache-Control": "public, max-age=300",
+                "X-Content-Type-Options": "nosniff",
                 "X-CTI-Document-Mode": str(preview.get("preview_mode") or "WORD_PREENCHIDO"),
                 "X-CTI-SHA256": str(preview.get("sha256") or ""),
             },
