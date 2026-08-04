@@ -60,6 +60,7 @@ def build_preview_official_proposal(
             equipment,
             payload,
             output_number=str(proposta.get("numero") or proposta.get("id") or "PROPOSTA"),
+            validate_required=False,
         )
     except Exception as exc:
         raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
