@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.supabase_client import supabase
+from services.proposal_document_preview import preview_official_proposal
 from services.proposal_document_repository import (
     FINAL_BUCKET,
     ProposalDocumentRepositoryError,
@@ -62,6 +63,25 @@ def finalize_document(proposal_id: str):
     except ProposalDocumentRepositoryError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"ok": True, "already_finalized": False, **result}
+
+
+@router.post("/propostas/{proposal_id}/previsualizar-documento")
+def preview_document(proposal_id: str, expires_in: int = 900):
+    proposal, item, opportunity, client = _proposal_package(proposal_id)
+    snapshot = proposal.get("snapshot_dados") or {}
+    application = snapshot.get("aplicacao") if isinstance(snapshot, dict) else {}
+    try:
+        return preview_official_proposal(
+            supabase,
+            proposta=proposal,
+            item=item,
+            oportunidade=opportunity,
+            cliente=client,
+            application=application if isinstance(application, dict) else {},
+            expires_in=expires_in,
+        )
+    except ProposalDocumentRepositoryError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("/propostas/{proposal_id}/documento-oficial")
