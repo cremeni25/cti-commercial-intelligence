@@ -20,10 +20,33 @@ PDF_MIME = "application/pdf"
 
 
 def _first(table: str, record_id: str, detail: str) -> dict[str, Any]:
-    rows = supabase.table(table).select("*").eq("id", record_id).limit(1).execute().data or []
+    try:
+        rows = supabase.table(table).select("*").eq("id", record_id).limit(1).execute().data or []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar {table}: {exc}") from exc
     if not rows:
         raise HTTPException(status_code=404, detail=detail)
     return rows[0]
+
+
+def _related(table: str, column: str, value: str) -> list[dict[str, Any]]:
+    if not value:
+        return []
+    try:
+        return supabase.table(table).select("*").eq(column, value).execute().data or []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar {table}: {exc}") from exc
+
+
+def _optional_by_id(table: str, record_id: object) -> dict[str, Any] | None:
+    normalized = str(record_id or "").strip()
+    if not normalized:
+        return None
+    try:
+        rows = supabase.table(table).select("*").eq("id", normalized).limit(1).execute().data or []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar {table}: {exc}") from exc
+    return rows[0] if rows else None
 
 
 def _proposal_package(proposal_id: str) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any], dict[str, Any]]:
@@ -52,6 +75,24 @@ def _filename_ascii(filename: str, proposal_id: str) -> str:
     if not safe.lower().endswith(".pdf"):
         safe = f"{safe or 'proposta_' + proposal_id}.pdf"
     return safe[:180]
+
+
+@router.get("/propostas/{proposal_id}")
+def proposal_dossier(proposal_id: str):
+    proposal = _first("cti_propostas", proposal_id, "Proposta não encontrada.")
+    item = _optional_by_id("cti_oportunidade_itens", proposal.get("item_oportunidade_id"))
+    opportunity = _optional_by_id("cti_oportunidades", proposal.get("oportunidade_id"))
+    client = _optional_by_id("clientes", proposal.get("cliente_id"))
+    acceptances = _related("cti_proposta_aceites", "proposta_id", proposal_id)
+    orders = _related("cti_pedidos", "proposta_id", proposal_id)
+    return {
+        "proposta": proposal,
+        "item": item,
+        "oportunidade": opportunity,
+        "cliente": client,
+        "aceites": acceptances,
+        "pedidos": orders,
+    }
 
 
 @router.post("/propostas/{proposal_id}/finalizar-documento")
