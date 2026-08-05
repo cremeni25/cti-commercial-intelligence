@@ -45,7 +45,7 @@ def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return {
         "status": "ready",
         "nome": "IA Comercial CTI",
-        "modo": "leitura_e_analise",
+        "modo": "sistema_completo_web_auditavel",
         "usuario": {"id": usuario.id, "nome": usuario.nome, "perfil": usuario.tipo_usuario},
     }
 
@@ -94,7 +94,6 @@ def enviar_mensagem(
 ):
     conversa = _conversa_do_usuario(conversa_id, usuario)
     mensagem = payload.mensagem.strip()
-
     mensagens_anteriores = _dados(
         supabase.table("cti_ia_mensagens")
         .select("papel,conteudo")
@@ -105,17 +104,11 @@ def enviar_mensagem(
     )
     historico = [
         {"role": str(item.get("papel") or "user"), "content": str(item.get("conteudo") or "")}
-        for item in mensagens_anteriores
-        if item.get("conteudo")
+        for item in mensagens_anteriores if item.get("conteudo")
     ]
-
     supabase.table("cti_ia_mensagens").insert({
-        "conversa_id": conversa_id,
-        "usuario_id": usuario.id,
-        "papel": "user",
-        "conteudo": mensagem,
-        "fontes": [],
-        "metadados": {},
+        "conversa_id": conversa_id, "usuario_id": usuario.id, "papel": "user",
+        "conteudo": mensagem, "fontes": [], "metadados": {},
     }).execute()
 
     try:
@@ -123,55 +116,34 @@ def enviar_mensagem(
         resposta_texto, metadados = gerar_resposta(mensagem, historico, contexto)
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert({
-            "conversa_id": conversa_id,
-            "usuario_id": usuario.id,
-            "acao": "ERRO_OPENAI",
-            "detalhes": {
-                "codigo": exc.codigo,
-                "erro": exc.detalhe_tecnico,
-            },
+            "conversa_id": conversa_id, "usuario_id": usuario.id, "acao": "ERRO_OPENAI",
+            "detalhes": {"codigo": exc.codigo, "erro": exc.detalhe_tecnico},
         }).execute()
         raise HTTPException(status_code=502, detail=exc.mensagem_publica) from exc
     except Exception as exc:
         supabase.table("cti_ia_auditoria").insert({
-            "conversa_id": conversa_id,
-            "usuario_id": usuario.id,
-            "acao": "ERRO_GERACAO_RESPOSTA",
+            "conversa_id": conversa_id, "usuario_id": usuario.id, "acao": "ERRO_GERACAO_RESPOSTA",
             "detalhes": {"tipo": type(exc).__name__, "erro": str(exc)[:500]},
         }).execute()
-        raise HTTPException(
-            status_code=502,
-            detail="O núcleo da IA encontrou uma falha interna antes de concluir a resposta. A ocorrência foi registrada na auditoria.",
-        ) from exc
+        raise HTTPException(status_code=502, detail="O núcleo da IA encontrou uma falha interna registrada na auditoria.") from exc
 
-    fontes = [{"tipo": "CTI", "descricao": "Clientes, oportunidades, propostas e pedidos autorizados."}]
+    fontes = metadados.get("fontes") or [{"tipo": "CTI", "descricao": "Sistema CTI completo."}]
     assistente = _dados(
         supabase.table("cti_ia_mensagens").insert({
-            "conversa_id": conversa_id,
-            "usuario_id": usuario.id,
-            "papel": "assistant",
-            "conteudo": resposta_texto,
-            "fontes": fontes,
-            "metadados": metadados,
+            "conversa_id": conversa_id, "usuario_id": usuario.id, "papel": "assistant",
+            "conteudo": resposta_texto, "fontes": fontes, "metadados": metadados,
         }).execute()
     )
-
     agora = datetime.now(timezone.utc).isoformat()
     atualizacao = {"updated_at": agora}
     if str(conversa.get("titulo") or "") == "Nova conversa":
         atualizacao["titulo"] = mensagem[:80]
     supabase.table("cti_ia_conversas").update(atualizacao).eq("id", conversa_id).execute()
     supabase.table("cti_ia_auditoria").insert({
-        "conversa_id": conversa_id,
-        "usuario_id": usuario.id,
-        "acao": "RESPOSTA_GERADA",
-        "detalhes": metadados,
+        "conversa_id": conversa_id, "usuario_id": usuario.id,
+        "acao": "RESPOSTA_GERADA", "detalhes": metadados,
     }).execute()
-
     return assistente[0] if assistente else {
-        "conversa_id": conversa_id,
-        "papel": "assistant",
-        "conteudo": resposta_texto,
-        "fontes": fontes,
-        "metadados": metadados,
+        "conversa_id": conversa_id, "papel": "assistant", "conteudo": resposta_texto,
+        "fontes": fontes, "metadados": metadados,
     }
