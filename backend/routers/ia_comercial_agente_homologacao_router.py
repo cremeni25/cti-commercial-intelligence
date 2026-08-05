@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.ia_agente_homologacao_config import carregar_ia_agente_homologacao_config
+from services.ia_comercial_agente_homologacao import executar_agente_homologacao
 
 router = APIRouter(
     prefix="/ia-comercial-agente-homologacao",
@@ -11,10 +13,11 @@ router = APIRouter(
 )
 
 
-@router.get("/status")
-def status_agente_homologacao(
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+class ConsultaAgente(BaseModel):
+    pergunta: str = Field(min_length=2, max_length=12000)
+
+
+def _configuracao_validada():
     config = carregar_ia_agente_homologacao_config()
     if not config.habilitada:
         raise HTTPException(status_code=404, detail="Agente experimental não habilitado neste ambiente.")
@@ -26,7 +29,14 @@ def status_agente_homologacao(
                 "e obrigatoriamente em modo somente leitura."
             ),
         )
+    return config
 
+
+@router.get("/status")
+def status_agente_homologacao(
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    config = _configuracao_validada()
     return {
         "status": "ready_for_homologation",
         "nome": "IA Comercial CTI - Agente Experimental",
@@ -46,4 +56,32 @@ def status_agente_homologacao(
             "altera_propostas_pedidos": False,
             "permite_escrita": False,
         },
+    }
+
+
+@router.post("/consultar")
+def consultar_agente_homologacao(
+    payload: ConsultaAgente,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    config = _configuracao_validada()
+    try:
+        resultado = executar_agente_homologacao(
+            pergunta=payload.pergunta.strip(),
+            usuario_id=usuario.id,
+            tipo_usuario=usuario.tipo_usuario,
+            config=config,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha no agente isolado de homologação: {type(exc).__name__}: {str(exc)[:300]}",
+        ) from exc
+
+    return {
+        "status": "completed",
+        "ambiente": config.ambiente,
+        "somente_leitura": True,
+        "usuario": {"id": usuario.id, "perfil": usuario.tipo_usuario},
+        **resultado,
     }
