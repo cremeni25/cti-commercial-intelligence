@@ -10,7 +10,7 @@ from core.supabase_client import supabase
 from services.ia_comercial_historico import contexto_historico
 
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-WEB_MODEL = os.getenv("OPENAI_WEB_MODEL", "gpt-4o-mini-search-preview")
+WEB_MODEL = os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini")
 MAX_CONTEXT_ROWS = 120
 
 SYSTEM_PROMPT = """Você é a IA Comercial CTI, assistente geral e exclusivo da operação Viena SP / Carrier.
@@ -22,6 +22,7 @@ Nunca invente clientes, valores, datas, vendas, pedidos ou fatos externos.
 Diferencie claramente: fatos do CTI, fatos da web e inferências.
 As permissões limitam somente os dados e ações disponíveis ao usuário; não limitam seu raciocínio.
 Nesta fase, você consulta e analisa, mas não altera registros.
+Quando usar a web, execute a pesquisa de fato, cite as fontes encontradas e nunca diga ao usuário para pesquisar manualmente.
 """
 
 
@@ -106,6 +107,8 @@ def _classificar_falha_openai(exc: Exception) -> IAComercialOpenAIError:
         return IAComercialOpenAIError("A conta OpenAI atingiu o saldo ou limite de uso.", codigo="OPENAI_QUOTA", detalhe_tecnico=detalhe)
     if status_code == 404 or "model_not_found" in normalizado:
         return IAComercialOpenAIError("O modelo OpenAI configurado não está disponível.", codigo="OPENAI_MODEL", detalhe_tecnico=detalhe)
+    if status_code in {400, 422}:
+        return IAComercialOpenAIError("A solicitação da IA foi recusada por incompatibilidade técnica.", codigo="OPENAI_REQUEST", detalhe_tecnico=detalhe)
     if "connection" in tipo.lower() or "timeout" in tipo.lower():
         return IAComercialOpenAIError("O backend não conseguiu se comunicar com a OpenAI.", codigo="OPENAI_CONNECTION", detalhe_tecnico=detalhe)
     return IAComercialOpenAIError("A OpenAI não concluiu a resposta.", codigo="OPENAI_UNKNOWN", detalhe_tecnico=detalhe)
@@ -130,18 +133,86 @@ def _decidir_fontes(client: OpenAI, mensagem: str, historico: list[dict[str, str
         return "INTERNO"
 
 
-def _fontes_web(mensagem_objeto: Any) -> list[dict[str, str]]:
+def _fonte_unica(fontes: list[dict[str, str]], descricao: str, url: str) -> None:
+    if url and not any(item.get("url") == url for item in fontes):
+        fontes.append({"tipo": "WEB", "descricao": descricao or url, "url": url})
+
+
+def _fontes_responses(resposta: Any) -> list[dict[str, str]]:
     fontes: list[dict[str, str]] = []
-    for anotacao in getattr(mensagem_objeto, "annotations", None) or []:
-        url = getattr(anotacao, "url", None)
-        titulo = getattr(anotacao, "title", None)
-        citacao = getattr(anotacao, "url_citation", None)
-        if citacao:
-            url = url or getattr(citacao, "url", None)
-            titulo = titulo or getattr(citacao, "title", None)
-        if url and not any(item.get("url") == url for item in fontes):
-            fontes.append({"tipo": "WEB", "descricao": str(titulo or url), "url": str(url)})
+    for item in getattr(resposta, "output", None) or []:
+        if getattr(item, "type", None) == "web_search_call":
+            acao = getattr(item, "action", None)
+            for origem in getattr(acao, "sources", None) or []:
+                _fonte_unica(fontes, str(getattr(origem, "title", "") or ""), str(getattr(origem, "url", "") or ""))
+        if getattr(item, "type", None) != "message":
+            continue
+        for parte in getattr(item, "content", None) or []:
+            for anotacao in getattr(parte, "annotations", None) or []:
+                citacao = getattr(anotacao, "url_citation", None) or anotacao
+                _fonte_unica(
+                    fontes,
+                    str(getattr(citacao, "title", "") or ""),
+                    str(getattr(citacao, "url", "") or ""),
+                )
     return fontes
+
+
+def _responder_com_web(
+    client: OpenAI,
+    mensagem: str,
+    historico: list[dict[str, str]],
+    contexto: dict[str, Any],
+) -> tuple[str, Any, list[dict[str, str]]]:
+    entrada = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": "Contexto interno autorizado do CTI em JSON:\n" + json.dumps(contexto, ensure_ascii=False, default=str),
+        },
+        *historico[-20:],
+        {"role": "user", "content": mensagem},
+    ]
+    resposta = client.responses.create(
+        model=WEB_MODEL,
+        tools=[{
+            "type": "web_search_preview",
+            "search_context_size": "medium",
+            "user_location": {
+                "type": "approximate",
+                "country": "BR",
+                "region": "São Paulo",
+                "city": "São Paulo",
+                "timezone": "America/Sao_Paulo",
+            },
+        }],
+        tool_choice="required",
+        input=entrada,
+        store=False,
+    )
+    texto = str(getattr(resposta, "output_text", "") or "").strip()
+    return texto, resposta, _fontes_responses(resposta)
+
+
+def _responder_interno(
+    client: OpenAI,
+    mensagem: str,
+    historico: list[dict[str, str]],
+    contexto: dict[str, Any],
+) -> tuple[str, Any]:
+    entradas: list[dict[str, str]] = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {
+            "role": "system",
+            "content": "Contexto interno autorizado do CTI em JSON:\n" + json.dumps(contexto, ensure_ascii=False, default=str),
+        },
+        *historico[-20:],
+        {"role": "user", "content": mensagem},
+    ]
+    resposta = client.chat.completions.create(model=MODEL, messages=entradas, temperature=0.2)
+    escolha = resposta.choices[0] if getattr(resposta, "choices", None) else None
+    texto = str(getattr(getattr(escolha, "message", None), "content", "") or "").strip()
+    return texto, resposta
 
 
 def gerar_resposta(mensagem: str, historico: list[dict[str, str]], contexto: dict[str, Any]) -> tuple[str, dict[str, Any]]:
@@ -151,42 +222,40 @@ def gerar_resposta(mensagem: str, historico: list[dict[str, str]], contexto: dic
 
     client = OpenAI(api_key=api_key, timeout=90.0, max_retries=1)
     modo = _decidir_fontes(client, mensagem, historico)
-    entradas: list[dict[str, str]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "system", "content": "Contexto interno autorizado do CTI em JSON:\n" + json.dumps(contexto, ensure_ascii=False, default=str)},
-        *historico[-20:],
-        {"role": "user", "content": mensagem},
-    ]
+    fontes: list[dict[str, str]] = []
+    modelo_usado = MODEL
 
-    modelo_usado = WEB_MODEL if modo in {"WEB", "HIBRIDO"} else MODEL
     try:
-        resposta = client.chat.completions.create(model=modelo_usado, messages=entradas, temperature=0.2)
+        if modo in {"WEB", "HIBRIDO"}:
+            modelo_usado = WEB_MODEL
+            texto, resposta, fontes_web = _responder_com_web(client, mensagem, historico, contexto)
+            fontes.extend(fontes_web)
+            if modo == "HIBRIDO":
+                fontes.insert(0, {"tipo": "CTI", "descricao": "Sistema CTI completo e base histórica do Dashboard Executivo."})
+        else:
+            texto, resposta = _responder_interno(client, mensagem, historico, contexto)
+            fontes = [{"tipo": "CTI", "descricao": "Sistema CTI completo e base histórica do Dashboard Executivo."}]
     except Exception as exc:
         raise _classificar_falha_openai(exc) from exc
 
-    escolha = resposta.choices[0] if getattr(resposta, "choices", None) else None
-    mensagem_resposta = getattr(escolha, "message", None)
-    texto = str(getattr(mensagem_resposta, "content", "") or "").strip()
     if not texto:
         raise IAComercialOpenAIError("O modelo respondeu sem conteúdo textual.", codigo="OPENAI_EMPTY_RESPONSE")
-
-    fontes = [{"tipo": "CTI", "descricao": "Sistema CTI completo e base histórica do Dashboard Executivo."}]
-    if modo == "WEB":
-        fontes = []
-    if modo in {"WEB", "HIBRIDO"}:
-        fontes.extend(_fontes_web(mensagem_resposta))
-        if not any(item.get("tipo") == "WEB" for item in fontes):
-            fontes.append({"tipo": "WEB", "descricao": "Pesquisa web executada pelo modelo de busca OpenAI."})
+    if modo in {"WEB", "HIBRIDO"} and not any(item.get("tipo") == "WEB" and item.get("url") for item in fontes):
+        raise IAComercialOpenAIError(
+            "A pesquisa web não retornou fontes verificáveis nesta execução.",
+            codigo="OPENAI_WEB_WITHOUT_SOURCES",
+        )
 
     uso = getattr(resposta, "usage", None)
     metadados = {
         "modelo": modelo_usado,
         "modo_fontes": modo,
+        "pesquisa_web_executada": modo in {"WEB", "HIBRIDO"},
         "fontes": fontes,
         "response_id": getattr(resposta, "id", None),
         "escopo": contexto.get("escopo"),
         "quantidades_contexto": contexto.get("quantidades", {}),
-        "tokens_entrada": getattr(uso, "prompt_tokens", None),
-        "tokens_saida": getattr(uso, "completion_tokens", None),
+        "tokens_entrada": getattr(uso, "input_tokens", None) or getattr(uso, "prompt_tokens", None),
+        "tokens_saida": getattr(uso, "output_tokens", None) or getattr(uso, "completion_tokens", None),
     }
     return texto, metadados
