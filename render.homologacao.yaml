@@ -7,7 +7,7 @@ services:
     rootDir: backend
     autoDeploy: false
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main_ia_homologacao:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: CTI_AMBIENTE
         value: homologation
@@ -15,6 +15,10 @@ services:
         value: "true"
       - key: CTI_IA_AGENTE_SOMENTE_LEITURA
         value: "true"
+      - key: CTI_HOMOLOGACAO_DOCS
+        value: "false"
+      - key: CTI_HOMOLOGACAO_ORIGENS
+        sync: false
       - key: OPENAI_AGENT_MODEL
         value: gpt-4.1-mini
       - key: OPENAI_AGENT_WEB_MODEL
