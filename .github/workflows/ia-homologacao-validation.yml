@@ -17,6 +17,9 @@ on:
       - ".github/workflows/ia-homologacao-validation.yml"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   validate-ia-homologacao:
     runs-on: ubuntu-latest
@@ -60,3 +63,63 @@ jobs:
           bash -n scripts/espelho/exportar_estado_real.sh
           bash -n scripts/espelho/validar_fidelidade.sh
           bash -n scripts/espelho/implantar_espelho_completo.sh
+
+  verify-database-connections:
+    name: Verificar conexoes sem copiar dados
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: cti-ia-homologação
+    env:
+      CTI_PRODUCAO_DATABASE_URL: ${{ secrets.CTI_PRODUCAO_DATABASE_URL }}
+      CTI_HOMOLOGACAO_DATABASE_URL: ${{ secrets.CTI_HOMOLOGACAO_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Instalar cliente PostgreSQL
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Validar formato e separacao dos destinos
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CTI_PRODUCAO_DATABASE_URL:?Secret CTI_PRODUCAO_DATABASE_URL ausente.}"
+          : "${CTI_HOMOLOGACAO_DATABASE_URL:?Secret CTI_HOMOLOGACAO_DATABASE_URL ausente.}"
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          origem = urlparse(os.environ["CTI_PRODUCAO_DATABASE_URL"])
+          destino = urlparse(os.environ["CTI_HOMOLOGACAO_DATABASE_URL"])
+          if origem.scheme not in {"postgres", "postgresql"}:
+              raise SystemExit("BLOQUEADO: conexão de produção não é PostgreSQL.")
+          if destino.scheme not in {"postgres", "postgresql"}:
+              raise SystemExit("BLOQUEADO: conexão de homologação não é PostgreSQL.")
+          if not origem.hostname or not destino.hostname:
+              raise SystemExit("BLOQUEADO: hostname ausente.")
+          if origem.hostname == destino.hostname:
+              raise SystemExit("BLOQUEADO: origem e destino possuem o mesmo hostname.")
+          if "fgljrlyxylhfaeeqijyoe" not in (origem.username or "") + (origem.hostname or ""):
+              raise SystemExit("BLOQUEADO: origem não corresponde ao projeto operacional CTI.")
+          if "xhrikmksydsyalxkkyot" not in (destino.username or "") + (destino.hostname or ""):
+              raise SystemExit("BLOQUEADO: destino não corresponde ao projeto espelho autorizado.")
+          print("Formato e separação validados sem exposição de credenciais.")
+          PY
+      - name: Validar leitura da origem
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$CTI_PRODUCAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select current_database(), current_user;" >/dev/null
+          psql "$CTI_PRODUCAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema='public';" >/dev/null
+          pg_dump "$CTI_PRODUCAO_DATABASE_URL" --schema=public --schema-only --no-owner --no-privileges --file=/tmp/cti_schema_verificacao.sql
+          test -s /tmp/cti_schema_verificacao.sql
+          rm -f /tmp/cti_schema_verificacao.sql
+      - name: Validar acesso ao destino sem escrita
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$CTI_HOMOLOGACAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select current_database(), current_user;" >/dev/null
+          psql "$CTI_HOMOLOGACAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema='public';" >/dev/null
+          echo "VERIFICAÇÃO CONCLUÍDA: nenhuma cópia ou alteração foi executada."
