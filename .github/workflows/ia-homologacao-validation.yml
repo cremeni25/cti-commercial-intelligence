@@ -22,33 +22,49 @@ permissions:
 
 jobs:
   validate-ia-homologacao:
+    name: Validar IA e conexoes sem copiar dados
     runs-on: ubuntu-22.04
-    defaults:
-      run:
-        working-directory: backend
+    timeout-minutes: 20
+    environment: cti-ia-homologação
     env:
       SUPABASE_URL: https://example.supabase.co
       SUPABASE_KEY: test-key
       CTI_AMBIENTE: homologation
       CTI_IA_AGENTE_HOMOLOGACAO: "true"
       CTI_IA_AGENTE_SOMENTE_LEITURA: "true"
+      CTI_PRODUCAO_DATABASE_URL: ${{ secrets.CTI_PRODUCAO_DATABASE_URL }}
+      CTI_HOMOLOGACAO_DATABASE_URL: ${{ secrets.CTI_HOMOLOGACAO_DATABASE_URL }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
           cache-dependency-path: backend/requirements.txt
-      - run: python -m pip install --upgrade pip
-      - run: pip install -r requirements.txt pytest httpx
-      - name: Validate isolated IA tests
+
+      - name: Instalar dependencias Python e PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt pytest httpx
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Validar testes isolados da IA
+        working-directory: backend
         run: |
           pytest -q \
             tests/test_ia_agente_homologacao_config.py \
             tests/test_ia_agente_homologacao_read_only.py \
             tests/test_ia_homologacao_arquitetura.py \
             tests/test_ia_comercial_fontes.py
-      - name: Validate Python compilation
+
+      - name: Validar compilacao Python
+        working-directory: backend
         run: |
           python -m py_compile \
             core/ia_agente_homologacao_config.py \
@@ -57,30 +73,13 @@ jobs:
             services/ia_comercial_agente_homologacao.py \
             services/ia_comercial_agente_homologacao_orquestrador.py \
             services/ia_homologacao_memoria.py
-      - name: Validate shell scripts
-        working-directory: .
+
+      - name: Validar scripts do espelho
         run: |
           bash -n scripts/espelho/exportar_estado_real.sh
           bash -n scripts/espelho/validar_fidelidade.sh
           bash -n scripts/espelho/implantar_espelho_completo.sh
 
-  verify-database-connections:
-    name: Verificar conexoes sem copiar dados
-    runs-on: ubuntu-22.04
-    timeout-minutes: 15
-    environment: cti-ia-homologação
-    env:
-      CTI_PRODUCAO_DATABASE_URL: ${{ secrets.CTI_PRODUCAO_DATABASE_URL }}
-      CTI_HOMOLOGACAO_DATABASE_URL: ${{ secrets.CTI_HOMOLOGACAO_DATABASE_URL }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Instalar cliente PostgreSQL
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
       - name: Validar formato e separacao dos destinos
         shell: bash
         run: |
@@ -94,44 +93,29 @@ jobs:
           origem_raw = os.environ["CTI_PRODUCAO_DATABASE_URL"].strip()
           destino_raw = os.environ["CTI_HOMOLOGACAO_DATABASE_URL"].strip()
 
-          for nome, valor in (
-              ("produção", origem_raw),
-              ("homologação", destino_raw),
-          ):
-              if "[YOUR-PASSWORD]" in valor or "YOUR-PASSWORD" in valor:
-                  raise SystemExit(
-                      f"BLOQUEADO: o segredo de {nome} ainda contém o marcador [YOUR-PASSWORD]. "
-                      "Substitua-o pela senha real do banco antes de validar."
-                  )
+          for nome, valor in (("produção", origem_raw), ("homologação", destino_raw)):
+              if "YOUR-PASSWORD" in valor:
+                  raise SystemExit(f"BLOQUEADO: o segredo de {nome} ainda contém YOUR-PASSWORD.")
               if "\n" in valor or "\r" in valor:
-                  raise SystemExit(
-                      f"BLOQUEADO: o segredo de {nome} deve conter somente uma connection string, em uma única linha."
-                  )
+                  raise SystemExit(f"BLOQUEADO: o segredo de {nome} deve estar em uma única linha.")
 
-          try:
-              origem = urlparse(origem_raw)
-              destino = urlparse(destino_raw)
-          except ValueError as exc:
-              raise SystemExit(
-                  "BLOQUEADO: connection string inválida. Use uma única URL postgresql:// completa, "
-                  "com a senha real no lugar de [YOUR-PASSWORD]."
-              ) from exc
+          origem = urlparse(origem_raw)
+          destino = urlparse(destino_raw)
 
-          if origem.scheme not in {"postgres", "postgresql"}:
-              raise SystemExit("BLOQUEADO: conexão de produção não é PostgreSQL.")
-          if destino.scheme not in {"postgres", "postgresql"}:
-              raise SystemExit("BLOQUEADO: conexão de homologação não é PostgreSQL.")
-          if not origem.hostname or not destino.hostname:
-              raise SystemExit("BLOQUEADO: hostname ausente.")
-          if origem.hostname == destino.hostname:
-              raise SystemExit("BLOQUEADO: origem e destino possuem o mesmo hostname.")
-          if "fgljrlyxylhfaeeqijyoe" not in (origem.username or "") + (origem.hostname or ""):
-              raise SystemExit("BLOQUEADO: origem não corresponde ao projeto operacional CTI.")
-          if "xhrikmksydsyalxkkyot" not in (destino.username or "") + (destino.hostname or ""):
-              raise SystemExit("BLOQUEADO: destino não corresponde ao projeto espelho autorizado.")
+          if origem.scheme not in {"postgres", "postgresql"} or not origem.hostname:
+              raise SystemExit("BLOQUEADO: conexão de produção inválida.")
+          if destino.scheme not in {"postgres", "postgresql"} or not destino.hostname:
+              raise SystemExit("BLOQUEADO: conexão de homologação inválida.")
+          if origem.hostname == destino.hostname and origem.username == destino.username:
+              raise SystemExit("BLOQUEADO: origem e destino são iguais.")
+          if "fgljrlyxylhfaeeqijyoe" not in ((origem.username or "") + (origem.hostname or "")):
+              raise SystemExit("BLOQUEADO: origem não corresponde ao CTI operacional.")
+          if "xhrikmksydsyalxkkyot" not in ((destino.username or "") + (destino.hostname or "")):
+              raise SystemExit("BLOQUEADO: destino não corresponde ao espelho autorizado.")
           print("Formato e separação validados sem exposição de credenciais.")
           PY
-      - name: Validar leitura da origem
+
+      - name: Validar leitura da origem e exportacao temporaria
         shell: bash
         run: |
           set -euo pipefail
@@ -140,6 +124,7 @@ jobs:
           pg_dump "$CTI_PRODUCAO_DATABASE_URL" --schema=public --schema-only --no-owner --no-privileges --file=/tmp/cti_schema_verificacao.sql
           test -s /tmp/cti_schema_verificacao.sql
           rm -f /tmp/cti_schema_verificacao.sql
+
       - name: Validar acesso ao destino sem escrita
         shell: bash
         run: |
@@ -147,3 +132,7 @@ jobs:
           psql "$CTI_HOMOLOGACAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select current_database(), current_user;" >/dev/null
           psql "$CTI_HOMOLOGACAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema='public';" >/dev/null
           echo "VERIFICAÇÃO CONCLUÍDA: nenhuma cópia ou alteração foi executada."
+
+      - name: Limpar arquivo temporario
+        if: ${{ always() }}
+        run: rm -f /tmp/cti_schema_verificacao.sql
