@@ -91,8 +91,32 @@ jobs:
           import os
           from urllib.parse import urlparse
 
-          origem = urlparse(os.environ["CTI_PRODUCAO_DATABASE_URL"])
-          destino = urlparse(os.environ["CTI_HOMOLOGACAO_DATABASE_URL"])
+          origem_raw = os.environ["CTI_PRODUCAO_DATABASE_URL"].strip()
+          destino_raw = os.environ["CTI_HOMOLOGACAO_DATABASE_URL"].strip()
+
+          for nome, valor in (
+              ("produção", origem_raw),
+              ("homologação", destino_raw),
+          ):
+              if "[YOUR-PASSWORD]" in valor or "YOUR-PASSWORD" in valor:
+                  raise SystemExit(
+                      f"BLOQUEADO: o segredo de {nome} ainda contém o marcador [YOUR-PASSWORD]. "
+                      "Substitua-o pela senha real do banco antes de validar."
+                  )
+              if "\n" in valor or "\r" in valor:
+                  raise SystemExit(
+                      f"BLOQUEADO: o segredo de {nome} deve conter somente uma connection string, em uma única linha."
+                  )
+
+          try:
+              origem = urlparse(origem_raw)
+              destino = urlparse(destino_raw)
+          except ValueError as exc:
+              raise SystemExit(
+                  "BLOQUEADO: connection string inválida. Use uma única URL postgresql:// completa, "
+                  "com a senha real no lugar de [YOUR-PASSWORD]."
+              ) from exc
+
           if origem.scheme not in {"postgres", "postgresql"}:
               raise SystemExit("BLOQUEADO: conexão de produção não é PostgreSQL.")
           if destino.scheme not in {"postgres", "postgresql"}:
