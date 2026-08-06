@@ -1,3 +1,4 @@
+# Disparo controlado da validacao consolidada em homologacao.
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1]
