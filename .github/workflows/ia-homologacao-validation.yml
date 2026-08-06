@@ -1,3 +1,4 @@
+# Execucao consolidada: testes da IA e verificacao somente leitura das conexoes.
 name: IA Homologacao Validation
 
 on:
