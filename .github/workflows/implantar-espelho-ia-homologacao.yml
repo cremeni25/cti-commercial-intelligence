@@ -28,7 +28,7 @@ jobs:
     name: Espelho unidirecional protegido
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    environment: cti-ia-homologacao
+    environment: cti-ia-homologação
     env:
       CTI_PRODUCAO_DATABASE_URL: ${{ secrets.CTI_PRODUCAO_DATABASE_URL }}
       CTI_HOMOLOGACAO_DATABASE_URL: ${{ secrets.CTI_HOMOLOGACAO_DATABASE_URL }}
