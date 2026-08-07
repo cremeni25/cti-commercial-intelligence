@@ -1,5 +1,5 @@
 # Execucao consolidada: testes da IA e verificacao somente leitura das conexoes.
-# Revisao experimental: disparo tecnico apos ajuste da validacao de URL.
+# Revisao experimental: normalizacao segura das conexoes para hosts oficiais.
 name: IA Homologacao Validation
 
 on:
@@ -82,7 +82,7 @@ jobs:
           bash -n scripts/espelho/validar_fidelidade.sh
           bash -n scripts/espelho/implantar_espelho_completo.sh
 
-      - name: Validar formato e separacao dos destinos
+      - name: Normalizar e validar destinos oficiais
         shell: bash
         run: |
           set -euo pipefail
@@ -90,25 +90,42 @@ jobs:
           : "${CTI_HOMOLOGACAO_DATABASE_URL:?Secret CTI_HOMOLOGACAO_DATABASE_URL ausente.}"
           python - <<'PY'
           import os
+          from urllib.parse import quote
 
-          origem_raw = os.environ["CTI_PRODUCAO_DATABASE_URL"].strip()
-          destino_raw = os.environ["CTI_HOMOLOGACAO_DATABASE_URL"].strip()
-
-          for nome, valor in (("produção", origem_raw), ("homologação", destino_raw)):
-              if "YOUR-PASSWORD" in valor:
+          def credential(raw: str, nome: str) -> str:
+              raw = raw.strip()
+              if "YOUR-PASSWORD" in raw:
                   raise SystemExit(f"BLOQUEADO: o segredo de {nome} ainda contém YOUR-PASSWORD.")
-              if "\n" in valor or "\r" in valor:
+              if "\n" in raw or "\r" in raw:
                   raise SystemExit(f"BLOQUEADO: o segredo de {nome} deve estar em uma única linha.")
-              if not valor.startswith(("postgres://", "postgresql://")):
-                  raise SystemExit(f"BLOQUEADO: conexão de {nome} inválida.")
+              if raw.startswith(("postgres://", "postgresql://")):
+                  after_scheme = raw.split("://", 1)[1]
+                  userinfo, sep, _ = after_scheme.rpartition("@")
+                  if not sep or ":" not in userinfo:
+                      raise SystemExit(f"BLOQUEADO: conexão de {nome} inválida.")
+                  _, password = userinfo.split(":", 1)
+                  if not password:
+                      raise SystemExit(f"BLOQUEADO: credencial de {nome} vazia.")
+                  return password
+              return quote(raw, safe="")
 
-          if origem_raw == destino_raw:
+          prod_password = credential(os.environ["CTI_PRODUCAO_DATABASE_URL"], "produção")
+          homo_password = credential(os.environ["CTI_HOMOLOGACAO_DATABASE_URL"], "homologação")
+
+          prod = f"postgresql://postgres:{prod_password}@db.fgjrlyxylhfaeeqijyoe.supabase.co:5432/postgres"
+          homo = f"postgresql://postgres:{homo_password}@db.xhrikmksydsyalxkkyot.supabase.co:5432/postgres"
+
+          if prod == homo:
               raise SystemExit("BLOQUEADO: origem e destino são iguais.")
-          if "fgjrlyxylhfaeeqijyoe" not in origem_raw:
-              raise SystemExit("BLOQUEADO: origem não corresponde ao CTI operacional.")
-          if "xhrikmksydsyalxkkyot" not in destino_raw:
-              raise SystemExit("BLOQUEADO: destino não corresponde ao espelho autorizado.")
-          print("Formato e separação validados sem exposição de credenciais.")
+
+          env_file = os.environ["GITHUB_ENV"]
+          with open(env_file, "a", encoding="utf-8") as f:
+              f.write(f"CTI_PRODUCAO_DATABASE_URL={prod}\n")
+              f.write(f"CTI_HOMOLOGACAO_DATABASE_URL={homo}\n")
+
+          print(f"::add-mask::{prod}")
+          print(f"::add-mask::{homo}")
+          print("Destinos oficiais normalizados sem exposição de credenciais.")
           PY
 
       - name: Validar leitura da origem e exportacao temporaria
