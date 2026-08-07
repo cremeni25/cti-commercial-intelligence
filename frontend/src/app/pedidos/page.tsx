@@ -30,6 +30,7 @@ type PedidoOperacional = {
   quantidade?: number
   proposta_numero?: string
   status_envio_carrier?: string
+  enviado_carrier_em?: string
   aceite?: { nome_signatario?: string; metodo?: string; aceito_em?: string; status?: string }
 }
 
@@ -37,6 +38,8 @@ type Pedido = PedidoOperacional & {
   oportunidade_id?: string
   etapa_comercial?: string
 }
+
+type FiltroPedido = "TODOS" | "PENDENTES" | "ENVIADOS" | "FALHAS"
 
 function moeda(valor: unknown) {
   return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
@@ -46,6 +49,17 @@ function data(valor?: string) {
   if (!valor) return "-"
   const d = new Date(valor)
   return Number.isNaN(d.getTime()) ? valor : d.toLocaleDateString("pt-BR")
+}
+
+function statusPedido(item: Pedido) {
+  return String(item.status_envio_carrier || item.status || item.etapa_comercial || "NAO_ENVIADO").toUpperCase()
+}
+
+function grupoPedido(item: Pedido): Exclude<FiltroPedido, "TODOS"> {
+  const status = statusPedido(item)
+  if (["ENVIADO", "REENVIADO", "CONFIRMADO", "ENVIADO_CARRIER", "APROVADO_CARRIER"].includes(status)) return "ENVIADOS"
+  if (["FALHA", "ERRO", "REJEITADO", "REJEITADO_CARRIER"].includes(status)) return "FALHAS"
+  return "PENDENTES"
 }
 
 async function buscarLista<T>(url: string, mensagem: string): Promise<T[]> {
@@ -76,6 +90,7 @@ export default function PedidosPage() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
   const [busca, setBusca] = useState("")
+  const [filtro, setFiltro] = useState<FiltroPedido>("TODOS")
 
   useEffect(() => {
     let ativo = true
@@ -115,15 +130,31 @@ export default function PedidosPage() {
     return () => { ativo = false }
   }, [])
 
+  const resumo = useMemo(() => {
+    const enviados = dados.filter((item) => grupoPedido(item) === "ENVIADOS").length
+    const falhas = dados.filter((item) => grupoPedido(item) === "FALHAS").length
+    const pendentes = dados.filter((item) => grupoPedido(item) === "PENDENTES").length
+    const valor = dados.reduce((total, item) => total + Number(item.valor || 0), 0)
+    return { total: dados.length, enviados, falhas, pendentes, valor }
+  }, [dados])
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase("pt-BR")
-    if (!termo) return dados
-    return dados.filter((item) => JSON.stringify(item).toLocaleLowerCase("pt-BR").includes(termo))
-  }, [busca, dados])
+    return dados.filter((item) => {
+      if (filtro !== "TODOS" && grupoPedido(item) !== filtro) return false
+      if (!termo) return true
+      return `${item.numero || ""} ${item.cliente_nome || ""} ${item.equipamento || ""} ${statusPedido(item)}`
+        .toLocaleLowerCase("pt-BR")
+        .includes(termo)
+    })
+  }, [busca, dados, filtro])
 
-  const valorTotal = dados.reduce((total, item) => total + Number(item.valor || 0), 0)
-  const enviados = dados.filter((item) => ["ENVIADO", "REENVIADO", "CONFIRMADO", "ENVIADO_CARRIER", "APROVADO_CARRIER"].includes(String(item.status_envio_carrier || item.status))).length
-  const preparando = dados.filter((item) => String(item.status_envio_carrier) === "PREPARANDO" || item.etapa_comercial === "DOSSIÊ").length
+  const filtros: Array<{ id: FiltroPedido; label: string; valor: number }> = [
+    { id: "TODOS", label: "Todos", valor: resumo.total },
+    { id: "PENDENTES", label: "A acompanhar", valor: resumo.pendentes },
+    { id: "ENVIADOS", label: "Enviados", valor: resumo.enviados },
+    { id: "FALHAS", label: "Falhas", valor: resumo.falhas },
+  ]
 
   return <main className="flex min-h-screen bg-[#020817] text-white">
     <Sidebar />
@@ -134,39 +165,51 @@ export default function PedidosPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Operação comercial</p>
-              <h1 className="mt-2 text-3xl font-bold">Pedidos e dossiês Carrier</h1>
-              <p className="mt-2 text-sm text-slate-400">Pedidos reconhecidos pelo núcleo comercial e complementados pelos dados operacionais do dossiê.</p>
+              <h1 className="mt-2 text-3xl font-bold">Acompanhamento de pedidos</h1>
+              <p className="mt-2 text-sm text-slate-400">Situação operacional, envio à Carrier, pendências e valor dos pedidos comerciais em uma única trilha.</p>
             </div>
             <Link href="/funil-carrier" className="rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-300">Abrir Funil Carrier</Link>
           </div>
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <Kpi titulo="Pedidos" valor={String(dados.length)} />
-          <Kpi titulo="Valor total" valor={moeda(valorTotal)} />
-          <Kpi titulo="Dossiês em preparação" valor={String(preparando)} />
-          <Kpi titulo="Enviados à Carrier" valor={String(enviados)} />
+          <Kpi titulo="Pedidos" valor={String(resumo.total)} detalhe="volume total" />
+          <Kpi titulo="A acompanhar" valor={String(resumo.pendentes)} detalhe="aguardando avanço" />
+          <Kpi titulo="Enviados" valor={String(resumo.enviados)} detalhe="envio registrado" />
+          <Kpi titulo="Valor em pedidos" valor={moeda(resumo.valor)} detalhe={resumo.falhas ? `${resumo.falhas} com falha de envio` : "sem falhas de envio"} />
         </section>
 
         <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-            <div><h2 className="text-xl font-bold">Gestão de pedidos</h2><p className="mt-1 text-sm text-slate-400">Proposta, aceite, pedido e encaminhamento em uma única trilha.</p></div>
-            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente, pedido ou equipamento" className="w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3 text-sm text-white md:max-w-md" />
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Gestão de pedidos</h2>
+              <p className="mt-1 text-sm text-slate-400">Proposta, aceite, pedido, dossiê e encaminhamento em uma única trilha operacional.</p>
+            </div>
+            <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente, pedido, equipamento ou status" className="w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3 text-sm text-white xl:max-w-md" />
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {filtros.map((item) => <button key={item.id} type="button" onClick={() => setFiltro(item.id)} className={`rounded-full border px-4 py-2 text-sm ${filtro === item.id ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-[#24466f] bg-[#020817] text-slate-400"}`}>{item.label} <strong className="ml-1">{item.valor}</strong></button>)}
           </div>
 
           {erro && <div className="mt-5 rounded-xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
-          {loading ? <p className="mt-6 text-slate-400">Carregando pedidos...</p> : filtrados.length === 0 ? <p className="mt-6 text-slate-500">Nenhum pedido encontrado.</p> : <div className="mt-6 overflow-x-auto">
+          {loading ? <p className="mt-6 text-slate-400">Carregando pedidos...</p> : filtrados.length === 0 ? <p className="mt-6 text-slate-500">Nenhum pedido encontrado para o filtro selecionado.</p> : <div className="mt-6 overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead><tr className="border-b border-[#16325c] text-left text-slate-400"><th className="p-3">Cliente</th><th className="p-3">Pedido</th><th className="p-3">Equipamento</th><th className="p-3">Valor</th><th className="p-3">Aceite</th><th className="p-3">Carrier</th><th className="p-3">Ação</th></tr></thead>
-              <tbody>{filtrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] align-top">
-                <td className="p-3"><p className="font-semibold text-white">{item.cliente_nome || "Cliente não identificado"}</p><p className="mt-1 text-xs text-slate-500">{data(item.data_pedido)}</p></td>
-                <td className="p-3"><p className="text-cyan-300">{item.numero || "Pedido"}</p><p className="mt-1 text-xs text-slate-500">Proposta {item.proposta_numero || "-"}</p></td>
-                <td className="p-3"><p>{item.equipamento || "-"}</p><p className="mt-1 text-xs text-slate-500">{item.linha_produto || "-"} • {item.quantidade || 1} un.</p></td>
-                <td className="p-3 font-semibold text-emerald-300">{moeda(item.valor)}</td>
-                <td className="p-3"><p>{item.aceite?.nome_signatario || "Registrado"}</p><p className="mt-1 text-xs text-slate-500">{item.aceite?.metodo || "-"}</p></td>
-                <td className="p-3"><span className="rounded-full border border-cyan-800 px-3 py-1 text-xs text-cyan-200">{item.status_envio_carrier || item.etapa_comercial || "PEDIDO"}</span></td>
-                <td className="p-3"><Link href={`/pedidos/${item.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Abrir dossiê</Link></td>
-              </tr>)}</tbody>
+              <tbody>{filtrados.map((item) => {
+                const grupo = grupoPedido(item)
+                const falha = grupo === "FALHAS"
+                const enviadoEm = item.enviado_carrier_em
+                return <tr key={item.id} className={`border-b border-[#13203f] align-top ${falha ? "bg-red-950/10" : ""}`}>
+                  <td className="p-3"><p className="font-semibold text-white">{item.cliente_nome || "Cliente não identificado"}</p><p className="mt-1 text-xs text-slate-500">{data(item.data_pedido)}</p></td>
+                  <td className="p-3"><p className="text-cyan-300">{item.numero || "Pedido"}</p><p className="mt-1 text-xs text-slate-500">Proposta {item.proposta_numero || "-"}</p></td>
+                  <td className="p-3"><p>{item.equipamento || "-"}</p><p className="mt-1 text-xs text-slate-500">{item.linha_produto || "-"} • {item.quantidade || 1} un.</p></td>
+                  <td className="p-3 font-semibold text-emerald-300">{moeda(item.valor)}</td>
+                  <td className="p-3"><p>{item.aceite?.nome_signatario || "Registrado"}</p><p className="mt-1 text-xs text-slate-500">{item.aceite?.metodo || "-"}</p></td>
+                  <td className="p-3"><span className={`rounded-full border px-3 py-1 text-xs ${falha ? "border-red-800 text-red-300" : grupo === "ENVIADOS" ? "border-emerald-800 text-emerald-300" : "border-cyan-800 text-cyan-200"}`}>{statusPedido(item).replaceAll("_", " ")}</span>{enviadoEm && <p className="mt-2 text-xs text-slate-500">Enviado {data(enviadoEm)}</p>}</td>
+                  <td className="p-3"><Link href={`/pedidos/${item.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">Abrir acompanhamento</Link></td>
+                </tr>
+              })}</tbody>
             </table>
           </div>}
         </section>
@@ -175,6 +218,6 @@ export default function PedidosPage() {
   </main>
 }
 
-function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
-  return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div>
+function Kpi({ titulo, valor, detalhe }: { titulo: string; valor: string; detalhe: string }) {
+  return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p><p className="mt-1 text-xs text-slate-500">{detalhe}</p></div>
 }
