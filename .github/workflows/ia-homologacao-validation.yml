@@ -1,4 +1,5 @@
 # Execucao consolidada: testes da IA e verificacao somente leitura das conexoes.
+# Revisao experimental: disparo tecnico apos ajuste da validacao de URL.
 name: IA Homologacao Validation
 
 on:
