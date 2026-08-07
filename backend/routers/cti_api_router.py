@@ -1,3 +1,5 @@
+import os
+
 from fastapi import APIRouter, UploadFile, File
 from routers.upload_router import upload_anfir_seguro
 from routers.product_catalog_router import router as product_catalog_router
@@ -44,6 +46,11 @@ router.include_router(propostas_documentos_oficiais_router)
 router.include_router(validacao_operacional_documentos_router)
 router.include_router(testes_campo_master_router)
 router.include_router(ia_comercial_cti_router)
+
+if os.getenv("CTI_IA_AGENTE_HOMOLOGACAO", "false").strip().lower() in {"1", "true", "yes", "on", "sim"}:
+    from routers.ia_comercial_agente_homologacao_router import router as ia_comercial_agente_homologacao_router
+
+    router.include_router(ia_comercial_agente_homologacao_router)
 
 
 @router.post("/upload")

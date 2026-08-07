@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: cti-ia-agente-homologacao
+    runtime: python
+    repo: https://github.com/cremeni25/cti-commercial-intelligence
+    branch: fix-ia-web-quality
+    rootDir: backend
+    autoDeploy: false
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main_ia_homologacao:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CTI_AMBIENTE
+        value: homologation
+      - key: CTI_IA_AGENTE_HOMOLOGACAO
+        value: "true"
+      - key: CTI_IA_AGENTE_SOMENTE_LEITURA
+        value: "true"
+      - key: CTI_HOMOLOGACAO_DOCS
+        value: "false"
+      - key: CTI_HOMOLOGACAO_ORIGENS
+        sync: false
+      - key: OPENAI_AGENT_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_AGENT_WEB_MODEL
+        value: gpt-4.1-mini
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false

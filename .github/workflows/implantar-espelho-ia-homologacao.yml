@@ -1,0 +1,119 @@
+name: Implantar Espelho IA Homologacao
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "Executar somente verificação ou implantar o espelho"
+        required: true
+        type: choice
+        default: verificar
+        options:
+          - verificar
+          - implantar
+      confirmacao:
+        description: "Para implantar, digite exatamente: IMPLANTAR ESPELHO CTI IA"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: implantar-espelho-ia-homologacao
+  cancel-in-progress: false
+
+jobs:
+  espelho:
+    name: Espelho unidirecional protegido
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: cti-ia-homologação
+    env:
+      CTI_PRODUCAO_DATABASE_URL: ${{ secrets.CTI_PRODUCAO_DATABASE_URL }}
+      CTI_HOMOLOGACAO_DATABASE_URL: ${{ secrets.CTI_HOMOLOGACAO_DATABASE_URL }}
+      CTI_HOMOLOGACAO_PROJECT_REF: xhrikmksydsyalxkkyot
+    steps:
+      - name: Validar acionamento
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ inputs.modo }}" == "implantar" ]] && [[ "${{ inputs.confirmacao }}" != "IMPLANTAR ESPELHO CTI IA" ]]; then
+            echo "BLOQUEADO: confirmação literal inválida para implantação." >&2
+            exit 50
+          fi
+
+      - name: Checkout da branch homologada
+        uses: actions/checkout@v4
+        with:
+          ref: fix-ia-web-quality
+          persist-credentials: false
+
+      - name: Instalar cliente PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pg_dump --version
+          psql --version
+
+      - name: Validar segredos e destinos sem exibir credenciais
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${CTI_PRODUCAO_DATABASE_URL:?Secret CTI_PRODUCAO_DATABASE_URL ausente.}"
+          : "${CTI_HOMOLOGACAO_DATABASE_URL:?Secret CTI_HOMOLOGACAO_DATABASE_URL ausente.}"
+
+          origem_host="$(python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          print(urlparse(os.environ['CTI_PRODUCAO_DATABASE_URL']).hostname or '')
+          PY
+          )"
+          destino_host="$(python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          print(urlparse(os.environ['CTI_HOMOLOGACAO_DATABASE_URL']).hostname or '')
+          PY
+          )"
+
+          [[ -n "$origem_host" && -n "$destino_host" ]] || { echo "BLOQUEADO: conexão sem hostname válido." >&2; exit 51; }
+          [[ "$origem_host" != "$destino_host" ]] || { echo "BLOQUEADO: origem e destino possuem o mesmo hostname." >&2; exit 52; }
+          [[ "$destino_host" == *"xhrikmksydsyalxkkyot"* ]] || { echo "BLOQUEADO: destino não pertence ao projeto espelho autorizado." >&2; exit 53; }
+
+          psql "$CTI_PRODUCAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select current_database(), current_user;" >/dev/null
+          psql "$CTI_HOMOLOGACAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select current_database(), current_user;" >/dev/null
+          echo "Conexões validadas sem exposição de credenciais."
+
+      - name: Verificar banco operacional em modo não destrutivo
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$CTI_PRODUCAO_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "select count(*) from information_schema.tables where table_schema='public';" >/dev/null
+          pg_dump "$CTI_PRODUCAO_DATABASE_URL" --schema=public --schema-only --no-owner --no-privileges --file=/tmp/cti_schema_verificacao.sql
+          test -s /tmp/cti_schema_verificacao.sql
+          rm -f /tmp/cti_schema_verificacao.sql
+          echo "Leitura e exportação técnica da origem validadas; nenhuma escrita executada."
+
+      - name: Encerrar após verificação
+        if: ${{ inputs.modo == 'verificar' }}
+        shell: bash
+        run: |
+          echo "VERIFICAÇÃO APROVADA. Nenhuma cópia ou alteração foi executada no destino."
+
+      - name: Implantar espelho completo
+        if: ${{ inputs.modo == 'implantar' }}
+        shell: bash
+        env:
+          OUT_DIR: /tmp/artefatos-espelho
+        run: |
+          set -euo pipefail
+          bash scripts/espelho/implantar_espelho_completo.sh
+
+      - name: Remover artefatos temporários
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          rm -rf /tmp/artefatos-espelho /tmp/cti_schema_verificacao.sql
+          echo "Artefatos temporários removidos do runner."
