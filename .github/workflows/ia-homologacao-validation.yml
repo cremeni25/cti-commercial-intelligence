@@ -1,5 +1,5 @@
 # Execucao consolidada: testes da IA e verificacao somente leitura das conexoes.
-# Revisao experimental: normalizacao segura das conexoes para hosts oficiais.
+# Revisao experimental: diagnostico seguro da estrutura dos secrets antes da normalizacao.
 name: IA Homologacao Validation
 
 on:
@@ -81,6 +81,29 @@ jobs:
           bash -n scripts/espelho/exportar_estado_real.sh
           bash -n scripts/espelho/validar_fidelidade.sh
           bash -n scripts/espelho/implantar_espelho_completo.sh
+
+      - name: Diagnosticar estrutura segura dos secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+
+          def resumo(nome: str, raw: str, ref: str):
+              raw = raw or ""
+              print(f"{nome}: presente={bool(raw)}")
+              print(f"{nome}: tamanho={len(raw)}")
+              print(f"{nome}: inicia_postgres={raw.startswith(('postgres://','postgresql://'))}")
+              print(f"{nome}: quantidade_arroba={raw.count('@')}")
+              print(f"{nome}: quantidade_dois_pontos={raw.count(':')}")
+              print(f"{nome}: contem_ref_esperada={ref in raw}")
+              print(f"{nome}: contem_your_password={'YOUR-PASSWORD' in raw}")
+              print(f"{nome}: contem_percentual={'%' in raw}")
+              print(f"{nome}: contem_quebra_linha={chr(10) in raw or chr(13) in raw}")
+
+          resumo('producao', os.environ.get('CTI_PRODUCAO_DATABASE_URL',''), 'fgjrlyxylhfaeeqijyoe')
+          resumo('homologacao', os.environ.get('CTI_HOMOLOGACAO_DATABASE_URL',''), 'xhrikmksydsyalxkkyot')
+          PY
 
       - name: Normalizar e validar destinos oficiais
         shell: bash
