@@ -109,7 +109,7 @@ jobs:
               raise SystemExit("BLOQUEADO: conexão de homologação inválida.")
           if origem.hostname == destino.hostname and origem.username == destino.username:
               raise SystemExit("BLOQUEADO: origem e destino são iguais.")
-          if "fgljrlyxylhfaeeqijyoe" not in ((origem.username or "") + (origem.hostname or "")):
+          if "fgjrlyxylhfaeeqijyoe" not in ((origem.username or "") + (origem.hostname or "")):
               raise SystemExit("BLOQUEADO: origem não corresponde ao CTI operacional.")
           if "xhrikmksydsyalxkkyot" not in ((destino.username or "") + (destino.hostname or "")):
               raise SystemExit("BLOQUEADO: destino não corresponde ao espelho autorizado.")
