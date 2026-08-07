@@ -4,9 +4,6 @@ from core.supabase_client import supabase
 
 router = APIRouter()
 
-# ------------------------------
-# MODEL CORRETO (ALINHADO AO BANCO)
-# ------------------------------
 
 class Venda(BaseModel):
     cliente_id: str
@@ -18,19 +15,25 @@ class Venda(BaseModel):
     observacao: str | None = None
 
 
-# ------------------------------
-# CREATE VENDA
-# ------------------------------
+@router.get("/vendas")
+def listar_vendas():
+    try:
+        response = (
+            supabase.table("vendas")
+            .select("*")
+            .order("data_venda", desc=True)
+            .execute()
+        )
+        return response.data or []
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/vendas")
 def criar_venda(venda: Venda):
-
     try:
-        data = venda.dict()
-
+        data = venda.model_dump()
         response = supabase.table("vendas").insert(data).execute()
-
         return response.data
-
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
