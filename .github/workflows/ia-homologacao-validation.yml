@@ -89,7 +89,6 @@ jobs:
           : "${CTI_HOMOLOGACAO_DATABASE_URL:?Secret CTI_HOMOLOGACAO_DATABASE_URL ausente.}"
           python - <<'PY'
           import os
-          from urllib.parse import urlparse
 
           origem_raw = os.environ["CTI_PRODUCAO_DATABASE_URL"].strip()
           destino_raw = os.environ["CTI_HOMOLOGACAO_DATABASE_URL"].strip()
@@ -99,19 +98,14 @@ jobs:
                   raise SystemExit(f"BLOQUEADO: o segredo de {nome} ainda contém YOUR-PASSWORD.")
               if "\n" in valor or "\r" in valor:
                   raise SystemExit(f"BLOQUEADO: o segredo de {nome} deve estar em uma única linha.")
+              if not valor.startswith(("postgres://", "postgresql://")):
+                  raise SystemExit(f"BLOQUEADO: conexão de {nome} inválida.")
 
-          origem = urlparse(origem_raw)
-          destino = urlparse(destino_raw)
-
-          if origem.scheme not in {"postgres", "postgresql"} or not origem.hostname:
-              raise SystemExit("BLOQUEADO: conexão de produção inválida.")
-          if destino.scheme not in {"postgres", "postgresql"} or not destino.hostname:
-              raise SystemExit("BLOQUEADO: conexão de homologação inválida.")
-          if origem.hostname == destino.hostname and origem.username == destino.username:
+          if origem_raw == destino_raw:
               raise SystemExit("BLOQUEADO: origem e destino são iguais.")
-          if "fgjrlyxylhfaeeqijyoe" not in ((origem.username or "") + (origem.hostname or "")):
+          if "fgjrlyxylhfaeeqijyoe" not in origem_raw:
               raise SystemExit("BLOQUEADO: origem não corresponde ao CTI operacional.")
-          if "xhrikmksydsyalxkkyot" not in ((destino.username or "") + (destino.hostname or "")):
+          if "xhrikmksydsyalxkkyot" not in destino_raw:
               raise SystemExit("BLOQUEADO: destino não corresponde ao espelho autorizado.")
           print("Formato e separação validados sem exposição de credenciais.")
           PY
