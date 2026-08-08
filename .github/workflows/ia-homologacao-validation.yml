@@ -5,13 +5,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - "backend/core/ia_agente_homologacao_config.py"
-      - "backend/main_ia_homologacao.py"
-      - "backend/migrations/homologacao/**"
-      - "backend/routers/ia_comercial_agente_homologacao_router.py"
-      - "backend/services/ia_comercial_agente_homologacao*.py"
-      - "backend/services/ia_homologacao_memoria.py"
-      - "backend/tests/test_ia_*homologacao*.py"
+      - "backend/services/ia_comercial_cti.py"
       - "backend/tests/test_ia_comercial_fontes.py"
       - "scripts/espelho/**"
       - "render.homologacao.yaml"
@@ -57,23 +51,11 @@ jobs:
 
       - name: Validar testes isolados da IA
         working-directory: backend
-        run: |
-          pytest -q \
-            tests/test_ia_agente_homologacao_config.py \
-            tests/test_ia_agente_homologacao_read_only.py \
-            tests/test_ia_homologacao_arquitetura.py \
-            tests/test_ia_comercial_fontes.py
+        run: pytest -q tests/test_ia_comercial_fontes.py
 
       - name: Validar compilacao Python
         working-directory: backend
-        run: |
-          python -m py_compile \
-            core/ia_agente_homologacao_config.py \
-            main_ia_homologacao.py \
-            routers/ia_comercial_agente_homologacao_router.py \
-            services/ia_comercial_agente_homologacao.py \
-            services/ia_comercial_agente_homologacao_orquestrador.py \
-            services/ia_homologacao_memoria.py
+        run: python -m py_compile services/ia_comercial_cti.py
 
       - name: Validar scripts do espelho
         run: |
