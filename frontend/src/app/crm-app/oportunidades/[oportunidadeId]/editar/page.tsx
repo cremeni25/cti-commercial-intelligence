@@ -1,8 +1,9 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Save } from "lucide-react"
+import { lerContextoOportunidade, montarDescricaoComContexto } from "@/lib/crm-opportunity"
 
 type Registro = Record<string, unknown>
 function texto(valor: unknown) { return String(valor || "").trim() }
@@ -20,6 +21,7 @@ export default function EditarOportunidade() {
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState("")
   const [sucesso, setSucesso] = useState("")
+  const contexto = useMemo(() => lerContextoOportunidade(dados), [dados])
 
   async function obter() {
     const resposta = await fetch(`/api/crm-proxy/crm/oportunidades/${encodeURIComponent(id)}`, { cache: "no-store" })
@@ -35,16 +37,29 @@ export default function EditarOportunidade() {
   async function salvar(evento: FormEvent<HTMLFormElement>) {
     evento.preventDefault(); setSalvando(true); setErro(""); setSucesso("")
     const form = new FormData(evento.currentTarget)
+    const equipamento = texto(form.get("equipamento"))
+    const municipio = texto(form.get("municipio"))
+    const estado = texto(form.get("estado")).toUpperCase()
+    const descricaoBase = texto(form.get("descricao"))
+    const descricao = montarDescricaoComContexto(descricaoBase, {
+      linhas: contexto.linhas,
+      equipamentos: equipamento ? equipamento.split(",").map((item) => item.trim()).filter(Boolean) : contexto.equipamentos,
+      quantidade: contexto.quantidade,
+      municipio: municipio || contexto.municipio,
+      uf: estado || contexto.uf,
+      ddd: contexto.ddd,
+      subRegiao: contexto.subRegiao,
+    })
     const payload: Registro = {
       titulo: texto(form.get("titulo")),
-      descricao: texto(form.get("descricao")) || null,
+      descricao,
       status: texto(form.get("status")),
       valor_estimado: numero(form.get("valor_estimado")),
       probabilidade: numero(form.get("probabilidade")),
       data_fechamento_prevista: texto(form.get("data_fechamento_prevista")) || null,
-      equipamento: texto(form.get("equipamento")) || null,
-      municipio: texto(form.get("municipio")) || null,
-      estado: texto(form.get("estado")).toUpperCase() || null,
+      equipamento: equipamento || null,
+      municipio: municipio || null,
+      estado: estado || null,
     }
 
     try {
@@ -53,8 +68,6 @@ export default function EditarOportunidade() {
       })
       const detalhe = await resposta.json().catch(() => ({}))
       if (!resposta.ok) {
-        // O backend atualiza o registro principal antes de histórico/auditoria.
-        // Em caso de falha auxiliar, confirma a gravação real antes de acusar erro.
         const confirmado = await obter().catch(() => null)
         const gravado = confirmado && texto(confirmado.titulo) === texto(payload.titulo)
           && texto(confirmado.status) === texto(payload.status)
@@ -72,6 +85,10 @@ export default function EditarOportunidade() {
     } finally { setSalvando(false) }
   }
 
+  const equipamentoExibido = texto(dados.equipamento) || contexto.equipamentos.join(", ")
+  const municipioExibido = texto(dados.municipio) || contexto.municipio
+  const estadoExibido = texto(dados.estado || dados.uf) || contexto.uf
+
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 text-white sm:px-6"><div className="mx-auto max-w-3xl">
     <header className="mb-5 flex items-center gap-3"><button onClick={() => router.push(voltar)} className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></button><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Editar oportunidade</h1><p className="text-sm text-slate-400">Altere os dados comerciais e salve no núcleo CTI</p></div></header>
     {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
@@ -81,11 +98,11 @@ export default function EditarOportunidade() {
       <label><span className="mb-2 block text-sm text-slate-300">Etapa</span><select name="status" defaultValue={texto(dados.status) || "OPORTUNIDADE"} className="h-12 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4"><option>OPORTUNIDADE</option><option>ATIVIDADES</option><option>PROPOSTA</option><option>NEGOCIACAO</option><option>PEDIDO</option><option>GANHO</option><option>PERDIDO</option><option>CANCELADO</option></select></label>
       <Campo name="valor_estimado" label="Valor estimado" type="number" valor={String(dados.valor_estimado || dados.valor || 0)}/>
       <Campo name="probabilidade" label="Probabilidade (%)" type="number" valor={String(dados.probabilidade || 0)}/>
-      <Campo name="equipamento" label="Equipamento" valor={texto(dados.equipamento)}/>
+      <Campo name="equipamento" label="Equipamento" valor={equipamentoExibido}/>
       <Campo name="data_fechamento_prevista" label="Fechamento previsto" type="date" valor={texto(dados.data_fechamento_prevista).slice(0, 10)}/>
-      <Campo name="municipio" label="Município" valor={texto(dados.municipio)}/>
-      <Campo name="estado" label="UF" valor={texto(dados.estado || dados.uf)}/>
-      <label className="sm:col-span-2"><span className="mb-2 block text-sm text-slate-300">Descrição comercial</span><textarea name="descricao" defaultValue={texto(dados.descricao)} rows={6} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label>
+      <Campo name="municipio" label="Município" valor={municipioExibido}/>
+      <Campo name="estado" label="UF" valor={estadoExibido}/>
+      <label className="sm:col-span-2"><span className="mb-2 block text-sm text-slate-300">Descrição comercial</span><textarea name="descricao" defaultValue={contexto.descricao} rows={6} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label>
       <button disabled={salvando} className="flex min-h-14 items-center justify-center gap-2 rounded-2xl bg-cyan-500 font-bold text-slate-950 disabled:opacity-60 sm:col-span-2">{salvando ? <Loader2 className="animate-spin"/> : <Save size={20}/>}Salvar alterações</button>
     </form>}
   </div></main>
