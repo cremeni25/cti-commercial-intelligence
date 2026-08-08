@@ -45,6 +45,8 @@ export default function TestesCampoMasterPage() {
     } finally { setCarregando(false) }
   }
 
+  // A carga é assíncrona e sincroniza a tela com o backend após a resolução da autenticação.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { if (master) void carregar() }, [master])
 
   async function abrirPrevia(campanha: string) {
