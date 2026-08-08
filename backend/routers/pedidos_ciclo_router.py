@@ -30,6 +30,18 @@ def buscar_pedido(pedido_id: str) -> dict[str, Any]:
     return dados[0]
 
 
+@router.get("/ciclos")
+def listar_ciclos():
+    return (
+        supabase.table("cti_pedidos")
+        .select("id,numero,item_oportunidade_id,status_ciclo,status_envio_carrier,carrier_confirmado_em,faturado_em,numero_nf,entregue_em,instalado_em,encerrado_em,observacao_acompanhamento")
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+
+
 @router.get("/pedidos/{pedido_id}/ciclo")
 def obter_ciclo(pedido_id: str):
     pedido = buscar_pedido(pedido_id)
@@ -66,10 +78,7 @@ def atualizar_ciclo(pedido_id: str, dados: AtualizarCicloRequest):
     if etapa == "ENCERRADO" and not pedido.get("instalado_em"):
         raise HTTPException(status_code=422, detail="O ciclo só pode ser encerrado após a instalação do equipamento.")
 
-    payload: dict[str, Any] = {
-        "status_ciclo": etapa,
-        "updated_at": agora(),
-    }
+    payload: dict[str, Any] = {"status_ciclo": etapa, "updated_at": agora()}
     if dados.observacao is not None:
         payload["observacao_acompanhamento"] = dados.observacao.strip() or None
     if etapa == "CARRIER":
