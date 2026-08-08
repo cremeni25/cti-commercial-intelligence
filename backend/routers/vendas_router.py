@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import unicodedata
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -32,6 +33,90 @@ def _opcional(tabela: str, registro_id: str | None):
     except Exception:
         return None
     return dados[0] if dados else None
+
+
+def _normalizar(valor: object) -> str:
+    texto = unicodedata.normalize("NFKD", str(valor or ""))
+    texto = "".join(caractere for caractere in texto if not unicodedata.combining(caractere))
+    return "".join(caractere for caractere in texto.upper() if caractere.isalnum())
+
+
+def _resolver_fk_textual(tabela: str, candidatos: list[object]) -> str | None:
+    termos = [_normalizar(valor) for valor in candidatos if _normalizar(valor)]
+    if not termos:
+        return None
+    try:
+        registros = supabase.table(tabela).select("*").limit(500).execute().data or []
+    except Exception:
+        return None
+
+    for registro in registros:
+        registro_id = registro.get("id")
+        if not registro_id:
+            continue
+        valores = [_normalizar(valor) for valor in registro.values() if isinstance(valor, (str, int, float))]
+        if any(termo == valor for termo in termos for valor in valores if valor):
+            return str(registro_id)
+
+    for registro in registros:
+        registro_id = registro.get("id")
+        if not registro_id:
+            continue
+        valores = [_normalizar(valor) for valor in registro.values() if isinstance(valor, (str, int, float))]
+        if any((termo in valor or valor in termo) for termo in termos for valor in valores if valor and len(valor) >= 3):
+            return str(registro_id)
+    return None
+
+
+def _resolver_equipamento(item: dict, snapshot: dict) -> str | None:
+    equipamento_id = item.get("equipamento_id")
+    if equipamento_id and _opcional("equipamentos", str(equipamento_id)):
+        return str(equipamento_id)
+
+    return _resolver_fk_textual(
+        "equipamentos",
+        [
+            item.get("equipamento_codigo"),
+            item.get("equipamento"),
+            item.get("modelo_base"),
+            item.get("nome_comercial"),
+            snapshot.get("equipamento_codigo"),
+            snapshot.get("equipamento"),
+            snapshot.get("modelo_base"),
+            snapshot.get("nome_comercial"),
+        ],
+    )
+
+
+def _resolver_implementador(pedido: dict, proposta: dict, oportunidade: dict, item: dict, snapshot: dict) -> str | None:
+    ids = [
+        pedido.get("implementador_id"),
+        proposta.get("implementador_id"),
+        oportunidade.get("implementador_id"),
+        item.get("implementador_id"),
+        snapshot.get("implementador_id"),
+    ]
+    for valor in ids:
+        if valor and _opcional("implementadoras", str(valor)):
+            return str(valor)
+
+    return _resolver_fk_textual(
+        "implementadoras",
+        [
+            pedido.get("implementador"),
+            pedido.get("implementadora"),
+            proposta.get("implementador"),
+            proposta.get("implementadora"),
+            oportunidade.get("implementador"),
+            oportunidade.get("implementadora"),
+            oportunidade.get("implementadora_nome"),
+            item.get("implementador"),
+            item.get("implementadora"),
+            snapshot.get("implementador"),
+            snapshot.get("implementadora"),
+            snapshot.get("implementadora_nome"),
+        ],
+    )
 
 
 @router.get("/vendas")
@@ -92,25 +177,20 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
 
     snapshot = proposta.get("snapshot_dados") if isinstance(proposta, dict) else {}
     snapshot = snapshot if isinstance(snapshot, dict) else {}
+    snapshot_item = snapshot.get("item") if isinstance(snapshot.get("item"), dict) else {}
+    snapshot_contexto = {**snapshot, **snapshot_item}
 
     cliente_id = pedido.get("cliente_id") or proposta.get("cliente_id") or oportunidade.get("cliente_id")
-    equipamento_id = item.get("equipamento_id") or item.get("id")
-    implementador_id = (
-        pedido.get("implementador_id")
-        or proposta.get("implementador_id")
-        or oportunidade.get("implementador_id")
-        or pedido.get("responsavel_id")
-        or oportunidade.get("responsavel_id")
-        or snapshot.get("responsavel_id")
-    )
+    equipamento_id = _resolver_equipamento(item, snapshot_contexto)
+    implementador_id = _resolver_implementador(pedido, proposta, oportunidade, item, snapshot_contexto)
 
     faltantes = []
     if not cliente_id:
         faltantes.append("cliente")
     if not equipamento_id:
-        faltantes.append("equipamento")
+        faltantes.append("equipamento cadastrado na base de vendas")
     if not implementador_id:
-        faltantes.append("responsável/implementador")
+        faltantes.append("implementadora vinculada ao pedido")
     if faltantes:
         raise HTTPException(
             status_code=409,
@@ -119,7 +199,7 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
 
     valor = float(pedido.get("valor") or proposta.get("valor") or item.get("valor_total") or 0)
     numero = str(pedido.get("numero") or pedido_id)
-    equipamento = str(item.get("equipamento") or snapshot.get("equipamento") or "")
+    equipamento = str(item.get("equipamento") or snapshot_contexto.get("equipamento") or "")
     observacoes = [marcador, f"Pedido {numero}"]
     if equipamento:
         observacoes.append(f"Equipamento {equipamento}")
@@ -128,8 +208,8 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
 
     payload = {
         "cliente_id": str(cliente_id),
-        "equipamento_id": str(equipamento_id),
-        "implementador_id": str(implementador_id),
+        "equipamento_id": equipamento_id,
+        "implementador_id": implementador_id,
         "tipo_venda": dados.tipo_venda.strip().upper() or "EQUIPAMENTO",
         "valor": valor,
         "data_venda": datetime.now(timezone.utc).date().isoformat(),
