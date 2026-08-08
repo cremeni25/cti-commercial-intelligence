@@ -11,12 +11,17 @@ router = APIRouter()
 
 class Venda(BaseModel):
     cliente_id: str
-    equipamento_id: str
-    implementador_id: str
     tipo_venda: str
     valor: float
     data_venda: str
     observacao: str | None = None
+    equipamento_id: str | None = None
+    implementador_id: str | None = None
+    pedido_id: str | None = None
+    oportunidade_id: str | None = None
+    item_oportunidade_id: str | None = None
+    equipamento_codigo: str | None = None
+    implementadora_id: str | None = None
 
 
 class ConcluirVendaPedidoRequest(BaseModel):
@@ -41,93 +46,69 @@ def _normalizar(valor: object) -> str:
     return "".join(caractere for caractere in texto.upper() if caractere.isalnum())
 
 
-def _resolver_fk_textual(tabela: str, candidatos: list[object]) -> str | None:
-    termos = [_normalizar(valor) for valor in candidatos if _normalizar(valor)]
+def _resolver_equipamento_codigo(item: dict, snapshot: dict) -> str | None:
+    candidatos = [
+        item.get("equipamento_codigo"),
+        item.get("equipamento"),
+        item.get("modelo_base"),
+        item.get("nome_comercial"),
+        snapshot.get("equipamento_codigo"),
+        snapshot.get("equipamento"),
+        snapshot.get("modelo_base"),
+        snapshot.get("nome_comercial"),
+    ]
+    termos = {_normalizar(valor) for valor in candidatos if _normalizar(valor)}
     if not termos:
         return None
+
     try:
-        registros = supabase.table(tabela).select("*").limit(500).execute().data or []
+        catalogo = supabase.table("cti_catalogo_equipamentos").select("codigo,modelo_base,nome_comercial").eq("ativo", True).execute().data or []
     except Exception:
-        return None
+        catalogo = []
 
-    for registro in registros:
-        registro_id = registro.get("id")
-        if not registro_id:
-            continue
-        valores = [_normalizar(valor) for valor in registro.values() if isinstance(valor, (str, int, float))]
-        if any(termo == valor for termo in termos for valor in valores if valor):
-            return str(registro_id)
+    for registro in catalogo:
+        valores = {
+            _normalizar(registro.get("codigo")),
+            _normalizar(registro.get("modelo_base")),
+            _normalizar(registro.get("nome_comercial")),
+        }
+        if termos.intersection(valores):
+            return str(registro.get("codigo"))
 
-    for registro in registros:
-        registro_id = registro.get("id")
-        if not registro_id:
-            continue
-        valores = [_normalizar(valor) for valor in registro.values() if isinstance(valor, (str, int, float))]
+    for registro in catalogo:
+        valores = [
+            _normalizar(registro.get("codigo")),
+            _normalizar(registro.get("modelo_base")),
+            _normalizar(registro.get("nome_comercial")),
+        ]
         if any((termo in valor or valor in termo) for termo in termos for valor in valores if valor and len(valor) >= 3):
-            return str(registro_id)
+            return str(registro.get("codigo"))
     return None
 
 
-def _resolver_equipamento(item: dict, snapshot: dict) -> str | None:
-    equipamento_id = item.get("equipamento_id")
-    if equipamento_id and _opcional("equipamentos", str(equipamento_id)):
-        return str(equipamento_id)
-
-    return _resolver_fk_textual(
-        "equipamentos",
-        [
-            item.get("equipamento_codigo"),
-            item.get("equipamento"),
-            item.get("modelo_base"),
-            item.get("nome_comercial"),
-            snapshot.get("equipamento_codigo"),
-            snapshot.get("equipamento"),
-            snapshot.get("modelo_base"),
-            snapshot.get("nome_comercial"),
-        ],
-    )
-
-
-def _resolver_implementador(pedido: dict, proposta: dict, oportunidade: dict, item: dict, snapshot: dict) -> str | None:
+def _resolver_implementadora(pedido: dict, proposta: dict, oportunidade: dict, item: dict, snapshot: dict) -> str | None:
     ids = [
+        pedido.get("implementadora_id"),
         pedido.get("implementador_id"),
+        proposta.get("implementadora_id"),
         proposta.get("implementador_id"),
+        oportunidade.get("implementadora_id"),
         oportunidade.get("implementador_id"),
+        item.get("implementadora_id"),
         item.get("implementador_id"),
+        snapshot.get("implementadora_id"),
         snapshot.get("implementador_id"),
     ]
     for valor in ids:
         if valor and _opcional("implementadoras", str(valor)):
             return str(valor)
-
-    return _resolver_fk_textual(
-        "implementadoras",
-        [
-            pedido.get("implementador"),
-            pedido.get("implementadora"),
-            proposta.get("implementador"),
-            proposta.get("implementadora"),
-            oportunidade.get("implementador"),
-            oportunidade.get("implementadora"),
-            oportunidade.get("implementadora_nome"),
-            item.get("implementador"),
-            item.get("implementadora"),
-            snapshot.get("implementador"),
-            snapshot.get("implementadora"),
-            snapshot.get("implementadora_nome"),
-        ],
-    )
+    return None
 
 
 @router.get("/vendas")
 def listar_vendas():
     try:
-        response = (
-            supabase.table("vendas")
-            .select("*")
-            .order("data_venda", desc=True)
-            .execute()
-        )
+        response = supabase.table("vendas").select("*").order("data_venda", desc=True).execute()
         return response.data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -136,8 +117,7 @@ def listar_vendas():
 @router.post("/vendas")
 def criar_venda(venda: Venda):
     try:
-        data = venda.model_dump()
-        response = supabase.table("vendas").insert(data).execute()
+        response = supabase.table("vendas").insert(venda.model_dump(exclude_none=True)).execute()
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -152,19 +132,14 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     if not pedido:
         raise HTTPException(status_code=404, detail="Pedido não encontrado.")
 
-    marcador = f"CTI_PEDIDO:{pedido_id}"
     try:
-        existentes = (
-            supabase.table("vendas")
-            .select("*")
-            .ilike("observacao", f"%{marcador}%")
-            .limit(1)
-            .execute()
-            .data
-            or []
-        )
+        existentes = supabase.table("vendas").select("*").eq("pedido_id", pedido_id).limit(1).execute().data or []
     except Exception:
-        existentes = []
+        marcador = f"CTI_PEDIDO:{pedido_id}"
+        try:
+            existentes = supabase.table("vendas").select("*").ilike("observacao", f"%{marcador}%").limit(1).execute().data or []
+        except Exception:
+            existentes = []
     if existentes:
         return {"status": "JA_REGISTRADA", "venda": existentes[0]}
 
@@ -181,35 +156,32 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     snapshot_contexto = {**snapshot, **snapshot_item}
 
     cliente_id = pedido.get("cliente_id") or proposta.get("cliente_id") or oportunidade.get("cliente_id")
-    equipamento_id = _resolver_equipamento(item, snapshot_contexto)
-    implementador_id = _resolver_implementador(pedido, proposta, oportunidade, item, snapshot_contexto)
+    equipamento_codigo = _resolver_equipamento_codigo(item, snapshot_contexto)
+    implementadora_id = _resolver_implementadora(pedido, proposta, oportunidade, item, snapshot_contexto)
 
     faltantes = []
     if not cliente_id:
         faltantes.append("cliente")
-    if not equipamento_id:
-        faltantes.append("equipamento cadastrado na base de vendas")
-    if not implementador_id:
-        faltantes.append("implementadora vinculada ao pedido")
+    if not equipamento_codigo:
+        faltantes.append("equipamento do catálogo comercial")
     if faltantes:
-        raise HTTPException(
-            status_code=409,
-            detail="O pedido ainda não possui vínculo suficiente para registrar a venda: " + ", ".join(faltantes) + ".",
-        )
+        raise HTTPException(status_code=409, detail="O pedido ainda não possui vínculo suficiente para registrar a venda: " + ", ".join(faltantes) + ".")
 
     valor = float(pedido.get("valor") or proposta.get("valor") or item.get("valor_total") or 0)
     numero = str(pedido.get("numero") or pedido_id)
-    equipamento = str(item.get("equipamento") or snapshot_contexto.get("equipamento") or "")
-    observacoes = [marcador, f"Pedido {numero}"]
-    if equipamento:
-        observacoes.append(f"Equipamento {equipamento}")
+    equipamento = str(item.get("equipamento") or snapshot_contexto.get("equipamento") or equipamento_codigo)
+    marcador = f"CTI_PEDIDO:{pedido_id}"
+    observacoes = [marcador, f"Pedido {numero}", f"Equipamento {equipamento}"]
     if dados.observacao:
         observacoes.append(dados.observacao.strip())
 
     payload = {
         "cliente_id": str(cliente_id),
-        "equipamento_id": equipamento_id,
-        "implementador_id": implementador_id,
+        "pedido_id": pedido_id,
+        "oportunidade_id": str(oportunidade_id) if oportunidade_id else None,
+        "item_oportunidade_id": str(item_id) if item_id else None,
+        "equipamento_codigo": equipamento_codigo,
+        "implementadora_id": implementadora_id,
         "tipo_venda": dados.tipo_venda.strip().upper() or "EQUIPAMENTO",
         "valor": valor,
         "data_venda": datetime.now(timezone.utc).date().isoformat(),
@@ -217,7 +189,7 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     }
 
     try:
-        criado = supabase.table("vendas").insert(payload).execute().data or []
+        criado = supabase.table("vendas").insert({k: v for k, v in payload.items() if v is not None}).execute().data or []
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Não foi possível registrar a venda do pedido: {e}")
 
