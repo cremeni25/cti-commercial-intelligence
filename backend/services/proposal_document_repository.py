@@ -46,6 +46,8 @@ def finalize_official_proposal(
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
     model = rows[0]
+    if not model.get("homologado_em"):
+        raise ProposalDocumentRepositoryError("Modelo oficial não homologado.")
 
     source_path = str(model.get("arquivo_template_storage") or "").strip()
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
