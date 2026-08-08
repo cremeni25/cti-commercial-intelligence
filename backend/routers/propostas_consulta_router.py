@@ -28,33 +28,45 @@ def _buscar_cliente(*fontes: dict[str, Any] | None) -> dict[str, Any] | None:
         cliente_id = fonte.get("cliente_id")
         if not cliente_id:
             continue
-        clientes = supabase.table("cti_clientes").select("*").eq("id", cliente_id).limit(1).execute().data or []
-        if clientes:
-            return clientes[0]
+        for tabela in ("cti_clientes", "clientes"):
+            try:
+                clientes = supabase.table(tabela).select("*").eq("id", cliente_id).limit(1).execute().data or []
+            except Exception:
+                clientes = []
+            if clientes:
+                return clientes[0]
     return None
 
 
 def _buscar_pedidos(proposta_id: str) -> list[dict[str, Any]]:
-    por_aceite = (
-        supabase.table("cti_pedidos")
-        .select("*")
-        .eq("proposta_aceita_id", proposta_id)
-        .order("created_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    # Ambientes históricos do CTI não possuem necessariamente proposta_aceita_id.
+    # A consulta do detalhe não pode falhar por incompatibilidade de schema legado.
+    try:
+        por_aceite = (
+            supabase.table("cti_pedidos")
+            .select("*")
+            .eq("proposta_aceita_id", proposta_id)
+            .order("created_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        por_aceite = []
     if por_aceite:
         return por_aceite
-    return (
-        supabase.table("cti_pedidos")
-        .select("*")
-        .eq("proposta_id", proposta_id)
-        .order("created_at", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    try:
+        return (
+            supabase.table("cti_pedidos")
+            .select("*")
+            .eq("proposta_id", proposta_id)
+            .order("created_at", desc=True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return []
 
 
 @router.get("/propostas/{proposta_id}")
