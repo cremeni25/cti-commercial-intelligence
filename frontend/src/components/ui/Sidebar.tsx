@@ -14,13 +14,13 @@ const perfilAtual = "ADMIN_MASTER"
 const permissoesMenu = {
   ADMIN_MASTER: [
     "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras", "/locadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/atividades", "/forecast",
+    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais",
   ],
   DIRETOR: [
     "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras", "/locadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/atividades", "/forecast",
+    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes",
   ],
@@ -48,6 +48,7 @@ const menuGroups: MenuGroup[] = [
       { label: "Propostas", href: "/propostas", icon: "📄", type: "emoji" },
       { label: "Pedidos", href: "/pedidos", icon: "📦", type: "emoji" },
       { label: "Vendas", href: "/vendas", icon: "💰", type: "emoji" },
+      { label: "Relatórios", href: "/relatorios", icon: "📑", type: "emoji" },
       { label: "Atividades", href: "/atividades", icon: "📅", type: "emoji" },
       { label: "Forecast", href: "/forecast", icon: "📊", type: "emoji" },
     ],
