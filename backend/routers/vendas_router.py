@@ -105,11 +105,36 @@ def _resolver_implementadora(pedido: dict, proposta: dict, oportunidade: dict, i
     return None
 
 
+def _enriquecer_venda(venda: dict) -> dict:
+    enriquecida = dict(venda)
+
+    cliente = _opcional("clientes", str(venda.get("cliente_id") or "")) or {}
+    enriquecida["cliente_nome"] = cliente.get("nome") or venda.get("cliente_id") or "-"
+
+    equipamento_codigo = venda.get("equipamento_codigo")
+    if equipamento_codigo:
+        enriquecida["equipamento_nome"] = equipamento_codigo
+    else:
+        equipamento = _opcional("equipamentos", str(venda.get("equipamento_id") or "")) or {}
+        enriquecida["equipamento_nome"] = equipamento.get("modelo") or venda.get("equipamento_id") or "-"
+
+    implementadora = {}
+    if venda.get("implementadora_id") is not None:
+        implementadora = _opcional("implementadoras", str(venda.get("implementadora_id"))) or {}
+    if not implementadora and venda.get("implementador_id"):
+        implementadora = _opcional("implementadores", str(venda.get("implementador_id"))) or {}
+    enriquecida["implementadora_nome"] = implementadora.get("nome") or "-"
+
+    pedido = _opcional("cti_pedidos", str(venda.get("pedido_id") or "")) or {}
+    enriquecida["pedido_numero"] = pedido.get("numero") or venda.get("pedido_id") or "-"
+    return enriquecida
+
+
 @router.get("/vendas")
 def listar_vendas():
     try:
         response = supabase.table("vendas").select("*").order("data_venda", desc=True).execute()
-        return response.data or []
+        return [_enriquecer_venda(venda) for venda in (response.data or [])]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
