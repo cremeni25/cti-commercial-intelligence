@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -77,7 +77,7 @@ def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render
         cliente={},
     )
     path, content, options = supabase.storage.final.uploads[0]
-    assert path == "propostas/p1/v1/PROP-1-SUPRA_750-v1.docx"
+    assert path == "propostas/p1/v1/fonte-source-hash/PROP-1-SUPRA_750-v1.docx"
     assert content == b"final"
     assert options["upsert"] == "false"
     assert result["document"]["immutable"] is True
