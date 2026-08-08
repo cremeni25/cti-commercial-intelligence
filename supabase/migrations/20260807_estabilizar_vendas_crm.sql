@@ -5,7 +5,7 @@ alter table public.vendas
   add column if not exists oportunidade_id uuid references public.cti_oportunidades(id) on delete restrict,
   add column if not exists item_oportunidade_id uuid references public.cti_oportunidade_itens(id) on delete restrict,
   add column if not exists equipamento_codigo text references public.cti_catalogo_equipamentos(codigo) on delete restrict,
-  add column if not exists implementadora_id uuid references public.implementadoras(id) on delete restrict;
+  add column if not exists implementadora_id bigint references public.implementadoras(id) on delete restrict;
 
 -- O modelo legado de vendas exigia equipamento_id/implementador_id de tabelas antigas.
 -- O CRM atual trabalha com cti_catalogo_equipamentos e pedido/oportunidade como fontes canônicas.
