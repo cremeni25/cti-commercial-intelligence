@@ -9,6 +9,7 @@ from services.official_proposal_document import (
     validate_document_payload,
     verify_media_preserved,
 )
+from services.proposal_template_catalog import template_for_equipment
 
 
 PAYLOAD = {
@@ -71,9 +72,10 @@ def test_generation_preserves_images_branding_headers_and_relationships():
         assert "Valor Total desta proposta: R$ 200.000,00" in xml
 
 
-def test_legacy_doc_is_never_recreated_or_approximated():
-    with pytest.raises(OfficialProposalDocumentError, match="DOC legado"):
-        render_official_docx(b"legacy", "CITIMAX 500", PAYLOAD, output_number="PROP-TESTE")
+def test_legacy_models_use_only_verified_docx_sources():
+    for equipment in ("CITIMAX 500", "XARIOS 350", "XARIOS 6"):
+        template = template_for_equipment(equipment)
+        assert template.source_filename.lower().endswith(".docx")
 
 
 def test_missing_anchor_blocks_document_instead_of_changing_layout():

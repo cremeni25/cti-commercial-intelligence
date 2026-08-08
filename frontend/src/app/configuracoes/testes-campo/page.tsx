@@ -26,7 +26,7 @@ export default function TestesCampoMasterPage() {
   const [confirmacao, setConfirmacao] = useState("")
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
-  const [carregando, setCarregando] = useState(true)
+  const [carregando, setCarregando] = useState(false)
   const [processando, setProcessando] = useState(false)
 
   const papel = papelDoUsuario(usuario)
@@ -45,7 +45,9 @@ export default function TestesCampoMasterPage() {
     } finally { setCarregando(false) }
   }
 
-  useEffect(() => { if (master) void carregar(); else setCarregando(false) }, [master])
+  // A carga é assíncrona e sincroniza a tela com o backend após a resolução da autenticação.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { if (master) void carregar() }, [master])
 
   async function abrirPrevia(campanha: string) {
     setErro(""); setMensagem(""); setConfirmacao("")

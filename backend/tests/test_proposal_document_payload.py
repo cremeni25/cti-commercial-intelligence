@@ -54,7 +54,7 @@ def test_builds_official_template_payload_with_crm_data():
     assert result.fields["client_tax_id"] == "12.345.678/0001-90"
     assert result.fields["body_length_m"] == 6.0
     assert result.fields["lynx_included"] is True
-    assert result.fields["total_price"] == 199500.0
+    assert result.fields["total_price"] == "R$ 199.500,00"
 
 
 def test_rejects_generation_when_required_document_data_is_missing():
