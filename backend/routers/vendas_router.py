@@ -123,7 +123,7 @@ def _enriquecer_venda(venda: dict) -> dict:
         implementadora = _opcional("implementadoras", str(venda.get("implementadora_id"))) or {}
     if not implementadora and venda.get("implementador_id"):
         implementadora = _opcional("implementadores", str(venda.get("implementador_id"))) or {}
-    enriquecida["implementadora_nome"] = implementadora.get("nome") or "-"
+    enriquecida["implementadora_nome"] = implementadora.get("nome") or None
 
     pedido = _opcional("cti_pedidos", str(venda.get("pedido_id") or "")) or {}
     enriquecida["pedido_numero"] = pedido.get("numero") or venda.get("pedido_id") or "-"
