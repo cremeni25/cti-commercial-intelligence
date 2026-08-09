@@ -1,0 +1,307 @@
+from __future__ import annotations
+
+import json
+import os
+from typing import Any
+
+from openai import OpenAI
+
+from services.ia_comercial_cti import (
+    IAComercialOpenAIError,
+    _classificar_falha_openai,
+    _fontes_responses,
+    contexto_comercial,
+)
+from services.ia_comercial_historico import contexto_historico
+
+AGENT_MODEL = os.getenv("OPENAI_AGENT_MODEL", os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini"))
+MAX_ITERACOES_AGENTE = 8
+
+INSTRUCOES_AGENTE = """Você é a IA Comercial CTI, o agente de inteligência comercial do sistema CTI da operação Viena SP / Carrier.
+Seu comportamento deve ser de um assistente geral, conversacional, analítico e operacional especializado no domínio comercial do CTI.
+
+Você não trabalha a partir de uma lista fechada de perguntas. Interprete livremente a solicitação do usuário, decomponha problemas complexos e escolha autonomamente quais ferramentas precisa usar e em qual sequência.
+
+Princípios obrigatórios:
+- Para fatos internos do CTI, use as ferramentas CTI antes de afirmar números, clientes, oportunidades, pedidos, atividades, histórico ou qualquer outro dado operacional.
+- Para fatos externos, atuais, mercado, concorrentes, legislação, notícias, tendências, empresas ou informações verificáveis fora do CTI, use pesquisa web real.
+- Quando a solicitação exigir cruzamento, combine ferramentas internas e web na mesma execução.
+- Pode chamar múltiplas ferramentas e repetir consultas quando isso for necessário para concluir a tarefa.
+- Diferencie fatos internos, fatos externos e inferências/recomendações.
+- Nunca invente dados, fontes, clientes, valores, datas, vendas, pedidos, equipamentos ou acontecimentos.
+- Considere o histórico da conversa para continuidade, mas valide fatos operacionais pelas ferramentas quando necessário.
+- As permissões do usuário controlam os dados disponíveis nas ferramentas; não reduza a qualidade do raciocínio por causa do perfil.
+- Nesta etapa, todas as ferramentas CTI são somente leitura. Não tente alterar registros.
+- Responda em português do Brasil, com profundidade proporcional ao pedido e linguagem comercial clara.
+- Não exponha detalhes técnicos de function calling ao usuário; entregue a conclusão útil da tarefa.
+"""
+
+
+def _normalizar(texto: Any) -> str:
+    return str(texto or "").strip().casefold()
+
+
+def _filtrar_registros(
+    registros: list[dict[str, Any]],
+    termo: str | None,
+    limite: int,
+) -> list[dict[str, Any]]:
+    limite = max(1, min(int(limite or 30), 100))
+    if not termo:
+        return registros[:limite]
+    alvo = _normalizar(termo)
+    return [
+        item
+        for item in registros
+        if alvo in _normalizar(json.dumps(item, ensure_ascii=False, default=str))
+    ][:limite]
+
+
+def _executar_ferramenta_cti(
+    nome: str,
+    argumentos: dict[str, Any],
+    usuario_id: str,
+    tipo_usuario: str,
+) -> dict[str, Any]:
+    if nome == "consultar_resumo_cti":
+        contexto = contexto_comercial(usuario_id, tipo_usuario)
+        return {
+            "ferramenta": nome,
+            "escopo": contexto.get("escopo"),
+            "quantidades": contexto.get("quantidades"),
+            "valores": contexto.get("valores"),
+            "fontes_disponiveis": contexto.get("fontes_disponiveis"),
+        }
+
+    if nome == "consultar_dominio_cti":
+        dominio = str(argumentos.get("dominio") or "oportunidades")
+        permitidos = {"clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades"}
+        if dominio not in permitidos:
+            return {"ferramenta": nome, "erro": "Domínio CTI não autorizado."}
+
+        contexto = contexto_comercial(usuario_id, tipo_usuario)
+        registros = contexto.get("crm", {}).get(dominio, [])
+        if not isinstance(registros, list):
+            registros = []
+        filtrados = _filtrar_registros(
+            registros,
+            str(argumentos.get("termo") or "") or None,
+            int(argumentos.get("limite") or 30),
+        )
+        return {
+            "ferramenta": nome,
+            "dominio": dominio,
+            "escopo": contexto.get("escopo"),
+            "total_retornado": len(filtrados),
+            "amostragem": contexto.get("amostragem_detalhes"),
+            "resultado": filtrados,
+        }
+
+    if nome == "consultar_historico_cti":
+        historico = contexto_historico(tipo_usuario)
+        registros = historico.get("registros_ultimos_90_dias", [])
+        if not isinstance(registros, list):
+            registros = []
+        filtrados = _filtrar_registros(
+            registros,
+            str(argumentos.get("termo") or "") or None,
+            int(argumentos.get("limite") or 40),
+        )
+        return {
+            "ferramenta": nome,
+            "fonte": historico.get("fonte"),
+            "escopo": historico.get("escopo"),
+            "dashboard_historico": historico.get("dashboard_historico"),
+            "periodo_recente": historico.get("periodo_recente"),
+            "registros_filtrados": filtrados,
+            "observacao_amostragem": historico.get("observacao_amostragem"),
+        }
+
+    return {"ferramenta": nome, "erro": "Ferramenta desconhecida ou não autorizada."}
+
+
+def ferramentas_agente() -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "web_search",
+            "search_context_size": "high",
+            "user_location": {
+                "type": "approximate",
+                "country": "BR",
+                "region": "São Paulo",
+                "city": "São Paulo",
+                "timezone": "America/Sao_Paulo",
+            },
+        },
+        {
+            "type": "function",
+            "name": "consultar_resumo_cti",
+            "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.",
+            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "strict": True,
+        },
+        {
+            "type": "function",
+            "name": "consultar_dominio_cti",
+            "description": "Consulta registros autorizados dos principais domínios operacionais do CRM CTI.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dominio": {
+                        "type": "string",
+                        "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades"],
+                    },
+                    "termo": {"type": ["string", "null"]},
+                    "limite": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                "required": ["dominio", "termo", "limite"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+        {
+            "type": "function",
+            "name": "consultar_historico_cti",
+            "description": "Consulta a base histórica CTI/ANFIR e indicadores históricos usados pelo Dashboard Executivo.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "termo": {"type": ["string", "null"]},
+                    "limite": {"type": "integer", "minimum": 1, "maximum": 100},
+                },
+                "required": ["termo", "limite"],
+                "additionalProperties": False,
+            },
+            "strict": True,
+        },
+    ]
+
+
+def _entrada_inicial(mensagem: str, historico: list[dict[str, str]]) -> list[dict[str, str]]:
+    entrada: list[dict[str, str]] = []
+    for item in historico[-30:]:
+        papel = str(item.get("role") or "user")
+        conteudo = str(item.get("content") or "").strip()
+        if papel in {"user", "assistant"} and conteudo:
+            entrada.append({"role": papel, "content": conteudo})
+    entrada.append({"role": "user", "content": mensagem})
+    return entrada
+
+
+def gerar_resposta_agente(
+    mensagem: str,
+    historico: list[dict[str, str]],
+    usuario_id: str,
+    tipo_usuario: str,
+) -> tuple[str, dict[str, Any]]:
+    api_key = os.getenv("OPENAI_API_KEY")
+    if not api_key:
+        raise IAComercialOpenAIError(
+            "OPENAI_API_KEY não está configurada no backend.",
+            codigo="OPENAI_KEY_MISSING",
+        )
+
+    client = OpenAI(api_key=api_key, timeout=120.0, max_retries=1)
+    ferramentas = ferramentas_agente()
+    rastreio: list[dict[str, Any]] = []
+    fontes: list[dict[str, str]] = []
+
+    try:
+        resposta = client.responses.create(
+            model=AGENT_MODEL,
+            instructions=INSTRUCOES_AGENTE,
+            input=_entrada_inicial(mensagem, historico),
+            tools=ferramentas,
+            store=False,
+        )
+
+        for iteracao in range(1, MAX_ITERACOES_AGENTE + 1):
+            chamadas = [
+                item
+                for item in (getattr(resposta, "output", None) or [])
+                if getattr(item, "type", None) == "function_call"
+            ]
+            if not chamadas:
+                break
+
+            saidas: list[dict[str, str]] = []
+            for chamada in chamadas:
+                nome = str(getattr(chamada, "name", "") or "")
+                try:
+                    argumentos = json.loads(str(getattr(chamada, "arguments", "{}") or "{}"))
+                except json.JSONDecodeError:
+                    argumentos = {}
+
+                resultado = _executar_ferramenta_cti(
+                    nome,
+                    argumentos,
+                    usuario_id,
+                    tipo_usuario,
+                )
+                rastreio.append(
+                    {
+                        "tipo": "CTI",
+                        "iteracao": iteracao,
+                        "ferramenta": nome,
+                        "argumentos": argumentos,
+                        "resumo": {
+                            "dominio": resultado.get("dominio"),
+                            "total_retornado": resultado.get("total_retornado"),
+                            "erro": resultado.get("erro"),
+                        },
+                    }
+                )
+                saidas.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": str(getattr(chamada, "call_id", "") or ""),
+                        "output": json.dumps(resultado, ensure_ascii=False, default=str),
+                    }
+                )
+
+            resposta = client.responses.create(
+                model=AGENT_MODEL,
+                instructions=INSTRUCOES_AGENTE,
+                previous_response_id=getattr(resposta, "id", None),
+                input=saidas,
+                tools=ferramentas,
+                store=False,
+            )
+        else:
+            raise IAComercialOpenAIError(
+                "A IA atingiu o limite de etapas desta execução antes de concluir a tarefa.",
+                codigo="AGENT_MAX_ITERATIONS",
+            )
+
+    except IAComercialOpenAIError:
+        raise
+    except Exception as exc:
+        raise _classificar_falha_openai(exc) from exc
+
+    texto = str(getattr(resposta, "output_text", "") or "").strip()
+    if not texto:
+        raise IAComercialOpenAIError(
+            "A IA não produziu uma resposta textual.",
+            codigo="OPENAI_EMPTY_RESPONSE",
+        )
+
+    fontes = _fontes_responses(resposta)
+    if fontes:
+        rastreio.append({"tipo": "WEB", "fontes_encontradas": len(fontes)})
+
+    uso = getattr(resposta, "usage", None)
+    metadados = {
+        "arquitetura": "agente_orquestrador",
+        "modelo": AGENT_MODEL,
+        "somente_leitura": True,
+        "ferramentas": rastreio,
+        "fontes": fontes,
+        "response_id": getattr(resposta, "id", None),
+        "tokens_entrada": getattr(uso, "input_tokens", None),
+        "tokens_saida": getattr(uso, "output_tokens", None),
+        "iteracoes_maximas": MAX_ITERACOES_AGENTE,
+    }
+    if not fontes and any(item.get("tipo") == "CTI" for item in rastreio):
+        metadados["fontes"] = [{"tipo": "CTI", "descricao": "Ferramentas internas autorizadas do CTI."}]
+
+    return texto, metadados
