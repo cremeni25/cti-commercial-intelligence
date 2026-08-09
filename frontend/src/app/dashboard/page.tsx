@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
@@ -9,7 +9,6 @@ import { API_URL } from "@/lib/api"
 
 type RankingItem = { nome: string; quantidade: number }
 type DashboardContextual = {
-  total_registros?: number
   total_clientes?: number
   total_estados?: number
   total_municipios?: number
@@ -24,14 +23,11 @@ type NucleoComercial = {
   pedido_id?: string | null
   encerrada?: boolean
 }
-type CicloResumo = {
-  total_pedidos?: number
-  enviados_carrier?: number
-  faturados?: number
-  entregues?: number
-  instalados?: number
-  encerrados?: number
-  divergencias_numero_serie?: number
+type OportunidadeCRM = {
+  id: string
+  linha_equipamentos?: string | null
+  equipamento?: string | null
+  status?: string | null
 }
 type LinhaProduto = {
   codigo: "TR" | "DT" | "DD"
@@ -47,12 +43,17 @@ type ProductLinesMetadata = {
   descricao?: string
   total_registros_periodo?: number
   registros_classificados_periodo?: number
-  registros_sem_linha_classificada?: number
   cobertura_classificacao_percentual?: number
 }
 type ProductLinesResponse = {
   metadata?: ProductLinesMetadata
   linhas?: Omit<LinhaProduto, "disponivel">[]
+}
+type LinhaEmCurso = {
+  codigo: "TR" | "DT" | "DD"
+  negociacoes: number
+  valor: number
+  ponderado: number
 }
 
 const LINHAS = [
@@ -66,7 +67,7 @@ export default function DashboardHub() {
   const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [historico, setHistorico] = useState<DashboardContextual | null>(null)
   const [nucleo, setNucleo] = useState<NucleoComercial[]>([])
-  const [ciclo, setCiclo] = useState<CicloResumo>({})
+  const [oportunidadesCrm, setOportunidadesCrm] = useState<OportunidadeCRM[]>([])
   const [linhasProduto, setLinhasProduto] = useState<LinhaProduto[]>(LINHAS_VAZIAS)
   const [metadataLinhas, setMetadataLinhas] = useState<ProductLinesMetadata>({})
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("")
@@ -76,13 +77,13 @@ export default function DashboardHub() {
   useEffect(() => {
     let ativo = true
     queueMicrotask(async () => {
-      const [dadosNucleo, dadosCiclo] = await Promise.all([
+      const [dadosNucleo, dadosOportunidades] = await Promise.all([
         tentar<NucleoComercial[]>(() => buscarJson(`${API_URL}/crm/nucleo-comercial`)),
-        tentar<CicloResumo>(() => buscarJson(`${API_URL}/carrier-operacional/ciclo-resumo`)),
+        tentar<OportunidadeCRM[]>(() => buscarJson(`${API_URL}/crm/oportunidades`)),
       ])
       if (!ativo) return
       setNucleo(dadosNucleo ?? [])
-      setCiclo(dadosCiclo ?? {})
+      setOportunidadesCrm(dadosOportunidades ?? [])
     })
     return () => { ativo = false }
   }, [])
@@ -130,6 +131,19 @@ export default function DashboardHub() {
   const totalClassificado = metadataLinhas.registros_classificados_periodo ?? linhasProduto.reduce((soma, linha) => soma + linha.atual, 0)
   const cobertura = metadataLinhas.cobertura_classificacao_percentual ?? percentual(totalClassificado, totalPeriodo)
 
+  const oportunidadePorId = useMemo(() => new Map(oportunidadesCrm.map((item) => [String(item.id), item])), [oportunidadesCrm])
+  const linhasEmCurso = useMemo<LinhaEmCurso[]>(() => LINHAS.map((linha) => {
+    const itens = abertos.filter((item) => classificarLinha(oportunidadePorId.get(String(item.oportunidade_id))) === linha.codigo)
+    return {
+      codigo: linha.codigo,
+      negociacoes: itens.length,
+      valor: itens.reduce((total, item) => total + Number(item.valor || 0), 0),
+      ponderado: itens.reduce((total, item) => total + Number(item.valor_ponderado || 0), 0),
+    }
+  }), [abertos, oportunidadePorId])
+  const classificadosEmCurso = linhasEmCurso.reduce((total, item) => total + item.negociacoes, 0)
+  const semLinhaEmCurso = Math.max(abertos.length - classificadosEmCurso, 0)
+
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
       <Sidebar />
@@ -139,7 +153,7 @@ export default function DashboardHub() {
           <header>
             <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Leitura temporal executiva</p>
             <h1 className="mt-2 text-3xl font-bold">Dashboard Executivo</h1>
-            <p className="mt-2 max-w-4xl text-sm text-slate-400">O painel separa o que já aconteceu daquilo que ainda está em curso. O histórico respeita os filtros temporais; o CRM mostra negócios vivos e o ciclo operacional mostra o avanço real após o pedido.</p>
+            <p className="mt-2 max-w-4xl text-sm text-slate-400">O painel compara o que já foi consolidado nas bases históricas com o que está sendo construído agora pelo CRM.</p>
             <p className="mt-2 text-sm text-cyan-300">Contexto ativo: {contextoAtual.label} — {contextoAtual.description}</p>
           </header>
 
@@ -172,39 +186,22 @@ export default function DashboardHub() {
           </section>
 
           <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6">
-            <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Cadeia operacional atual</p>
-                <h2 className="mt-1 text-2xl font-bold">Do pedido à instalação</h2>
-                <p className="mt-1 text-sm text-slate-400">Entrega não encerra o ciclo. Instalação é o marco operacional; encerramento confirma a conclusão.</p>
-              </div>
-              {(ciclo.divergencias_numero_serie ?? 0) > 0 && <span className="w-fit rounded-full border border-amber-700 bg-amber-950/30 px-4 py-2 text-sm text-amber-200">{ciclo.divergencias_numero_serie} divergência(s) de série</span>}
-            </div>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-              <Etapa titulo="CARRIER" valor={ciclo.enviados_carrier ?? 0} />
-              <Etapa titulo="Faturados" valor={ciclo.faturados ?? 0} />
-              <Etapa titulo="Entregues" valor={ciclo.entregues ?? 0} />
-              <Etapa titulo="Instalados" valor={ciclo.instalados ?? 0} destaque />
-              <Etapa titulo="Encerrados" valor={ciclo.encerrados ?? 0} />
-            </div>
-          </section>
-
-          <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Histórico realizado por produto</p>
-              <h2 className="mt-1 text-2xl font-bold">TR · DT · DD no período selecionado</h2>
-              <p className="mt-1 text-sm text-slate-400">Comparação temporal somente sobre registros históricos classificados. Detalhes operacionais permanecem nas telas de Equipamentos.</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Comparativo temporal por equipamento</p>
+              <h2 className="mt-1 text-2xl font-bold">REALIZADO × EM CURSO</h2>
+              <p className="mt-1 text-sm text-slate-400">Cada linha confronta sua presença histórica no período selecionado com as negociações abertas no CRM.</p>
             </div>
-            <div className="mt-5 grid gap-4 lg:grid-cols-3">
-              {linhasProduto.map((linha) => <LinhaHistorica key={linha.codigo} linha={linha} totalClassificado={totalClassificado} />)}
+            <div className="mt-5 grid gap-4 xl:grid-cols-3">
+              {LINHAS.map((definicao) => {
+                const realizado = linhasProduto.find((linha) => linha.codigo === definicao.codigo) ?? { ...definicao, atual: 0, anterior: 0, variacao: 0, direcao: "estavel", modelos: [], disponivel: false }
+                const emCurso = linhasEmCurso.find((linha) => linha.codigo === definicao.codigo) ?? { codigo: definicao.codigo, negociacoes: 0, valor: 0, ponderado: 0 }
+                return <ComparativoLinha key={definicao.codigo} linha={realizado} emCurso={emCurso} totalHistorico={totalClassificado} totalPipeline={pipelineAberto} loading={loading} />
+              })}
             </div>
-            <p className="mt-4 text-xs text-slate-500">Cobertura da classificação histórica no período: {loading ? "..." : `${cobertura.toLocaleString("pt-BR")}%`}. {metadataLinhas.descricao || ""}</p>
-          </section>
-
-          <section className="rounded-3xl border border-[#24466f] bg-[#07162b] p-5 sm:p-6">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Próxima camada: IA Comercial CTI</p>
-            <h2 className="mt-1 text-xl font-bold">Interpretação, não mais poluição visual</h2>
-            <p className="mt-2 max-w-5xl text-sm text-slate-400">A IA será evoluída depois da homologação desta separação temporal. Ela deverá comparar histórico realizado, negócios em curso e exceções operacionais para produzir briefing executivo, alertas e recomendações, sem reproduzir na tela os módulos que já existem no menu lateral.</p>
+            <div className="mt-4 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <span>Cobertura da classificação histórica: {loading ? "..." : `${cobertura.toLocaleString("pt-BR")}%`}. {metadataLinhas.descricao || ""}</span>
+              {semLinhaEmCurso > 0 && <span className="text-amber-300">{semLinhaEmCurso} negócio(s) em curso ainda sem linha de equipamento classificada.</span>}
+            </div>
           </section>
         </div>
       </section>
@@ -223,6 +220,19 @@ async function tentar<T>(executar: () => Promise<T>, tentativas = 1): Promise<T 
   }
   return null
 }
+function normalizar(valor?: string | null) { return String(valor || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[-_/]+/g, " ").replace(/\s+/g, " ").trim() }
+function classificarLinha(item?: OportunidadeCRM) {
+  if (!item) return null
+  const linha = normalizar(item.linha_equipamentos)
+  if (["TR", "TRAILER", "LINHA TRAILER"].includes(linha)) return "TR"
+  if (["DT", "DIESEL TRUCK", "LINHA DIESEL TRUCK"].includes(linha)) return "DT"
+  if (["DD", "DIRECT DRIVE", "LINHA DIRECT DRIVE"].includes(linha)) return "DD"
+  const equipamento = normalizar(item.equipamento)
+  if (/\b(X4 7500|X4 7700|VECTOR HE19|HE19)\b/.test(equipamento)) return "TR"
+  if (/\b(SUPRA 750|SUPRA 850|SUPRA 1150)\b/.test(equipamento)) return "DT"
+  if (/\b(CM 280|CM280|CM 400|CM400|CM 500|CM500|D6|D7|XARIOS 350|XARIOS 600)\b/.test(equipamento)) return "DD"
+  return null
+}
 function percentual(parte?: number, total?: number) { if (!parte || !total) return 0; return Math.round((parte / total) * 100) }
 function moeda(valor?: number) { return `R$ ${(valor ?? 0).toLocaleString("pt-BR")}` }
 function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string; subtitulo: string; destaque: string; children: React.ReactNode }) {
@@ -230,10 +240,15 @@ function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string
 }
 function Info({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p><p className="mt-1 text-sm font-semibold text-cyan-200">{valor}</p></div> }
 function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div> }
-function Etapa({ titulo, valor, destaque = false }: { titulo: string; valor: number; destaque?: boolean }) { return <div className={`rounded-2xl border p-4 ${destaque ? "border-emerald-700 bg-emerald-950/20" : "border-[#16325c] bg-[#091a33]"}`}><p className="text-sm text-slate-400">{titulo}</p><p className={`mt-2 text-3xl font-bold ${destaque ? "text-emerald-300" : "text-cyan-300"}`}>{valor}</p></div> }
-function LinhaHistorica({ linha, totalClassificado }: { linha: LinhaProduto; totalClassificado: number }) {
-  const participacao = totalClassificado > 0 ? (linha.atual / totalClassificado) * 100 : 0
-  const direcao = linha.variacao > 0 ? "alta" : linha.variacao < 0 ? "queda" : "estável"
-  return <article className="rounded-2xl border border-[#16325c] bg-[#091a33] p-5"><div className="flex items-start justify-between gap-3"><div><p className="text-xs font-semibold text-cyan-400">{linha.codigo}</p><h3 className="mt-1 text-lg font-bold">{linha.nome}</h3></div><span className="rounded-full border border-[#24466f] px-3 py-1 text-xs text-slate-300">{direcao}</span></div>{linha.disponivel ? <><div className="mt-5 grid grid-cols-3 gap-3 text-center"><Mini titulo="Atual" valor={linha.atual} /><Mini titulo="Anterior" valor={linha.anterior} /><Mini titulo="Variação" valor={`${linha.variacao > 0 ? "+" : ""}${linha.variacao.toLocaleString("pt-BR")}%`} /></div><p className="mt-4 text-sm text-slate-400">Participação na base histórica classificada: <strong className="text-cyan-300">{participacao.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</strong></p></> : <p className="mt-5 text-sm text-slate-500">Indicador indisponível.</p>}</article>
+function ComparativoLinha({ linha, emCurso, totalHistorico, totalPipeline, loading }: { linha: LinhaProduto; emCurso: LinhaEmCurso; totalHistorico: number; totalPipeline: number; loading: boolean }) {
+  const participacaoHistorica = totalHistorico > 0 ? (linha.atual / totalHistorico) * 100 : 0
+  const participacaoPipeline = totalPipeline > 0 ? (emCurso.valor / totalPipeline) * 100 : 0
+  const sinal = linha.variacao > 0 ? "+" : ""
+  return <article className="overflow-hidden rounded-2xl border border-[#16325c] bg-[#091a33]">
+    <header className="border-b border-[#16325c] p-4"><p className="text-xs font-semibold text-cyan-400">{linha.codigo}</p><h3 className="mt-1 text-xl font-bold">{linha.nome}</h3></header>
+    <div className="grid sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
+      <div className="border-b border-[#16325c] p-4 sm:border-b-0 sm:border-r xl:border-b xl:border-r-0 2xl:border-b-0 2xl:border-r"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">Realizado</p><p className="mt-3 text-3xl font-bold text-cyan-300">{loading ? "..." : linha.atual}</p><p className="mt-2 text-sm text-slate-400">{participacaoHistorica.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% da base classificada</p><p className="mt-1 text-xs text-slate-500">Anterior: {linha.anterior} · Variação: {sinal}{linha.variacao.toLocaleString("pt-BR")}%</p></div>
+      <div className="p-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-400">Em curso</p><p className="mt-3 text-3xl font-bold text-emerald-300">{emCurso.negociacoes}</p><p className="mt-2 text-sm text-slate-300">{moeda(emCurso.valor)} em pipeline</p><p className="mt-1 text-xs text-slate-500">{participacaoPipeline.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% do pipeline · ponderado {moeda(emCurso.ponderado)}</p></div>
+    </div>
+  </article>
 }
-function Mini({ titulo, valor }: { titulo: string; valor: string | number }) { return <div className="rounded-xl bg-[#020817] p-3"><p className="text-xs text-slate-500">{titulo}</p><p className="mt-1 font-bold text-cyan-300">{valor}</p></div> }
