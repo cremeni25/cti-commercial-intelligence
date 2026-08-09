@@ -12,6 +12,7 @@ from routers.pedidos_operacionais_router import router as pedidos_operacionais_r
 from routers.pedidos_documentos_oficiais_router import router as pedidos_documentos_oficiais_router
 from routers.documentos_comerciais_listagem_router import router as documentos_comerciais_listagem_router
 from routers.carrier_operacional_router import router as carrier_operacional_router
+from routers.pedidos_ciclo_router import router as pedidos_ciclo_router
 from routers.catalogo_comercial_router import router as catalogo_comercial_router
 from routers.modelos_proposta_storage_router import router as modelos_proposta_storage_router
 from routers.modelos_proposta_importacao_router import router as modelos_proposta_importacao_router
@@ -35,6 +36,7 @@ router.include_router(pedidos_operacionais_router)
 router.include_router(pedidos_documentos_oficiais_router)
 router.include_router(documentos_comerciais_listagem_router)
 router.include_router(carrier_operacional_router)
+router.include_router(pedidos_ciclo_router)
 router.include_router(catalogo_comercial_router)
 router.include_router(modelos_proposta_storage_router)
 router.include_router(modelos_proposta_importacao_router)
