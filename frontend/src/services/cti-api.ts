@@ -1,11 +1,22 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com"
+const API_URL = "/api/cti"
 
 export type OperationalContextValue = "brasil" | "viena-sp" | `uf-${string}` | `ddd-${string}`
 
 async function request(endpoint: string) {
   const response = await fetch(`${API_URL}${endpoint}`, { cache: "no-store" })
-  if (!response.ok) throw new Error(`Erro ao carregar ${endpoint}`)
-  return response.json()
+  const contentType = response.headers.get("content-type") || ""
+  if (!contentType.includes("application/json")) {
+    const trecho = (await response.text()).slice(0, 160).replace(/\s+/g, " ")
+    throw new Error(`Backend CTI retornou conteúdo inválido (${response.status}): ${trecho || "sem conteúdo"}`)
+  }
+  const payload = await response.json()
+  if (!response.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String(payload.detail)
+      : `Erro ao carregar ${endpoint}`
+    throw new Error(detalhe)
+  }
+  return payload
 }
 
 export async function getDashboardExecutivo() { return request("/analytics/dashboard") }
