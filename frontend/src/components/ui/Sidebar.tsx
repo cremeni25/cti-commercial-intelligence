@@ -13,18 +13,18 @@ const perfilAtual = "ADMIN_MASTER"
 
 const permissoesMenu = {
   ADMIN_MASTER: [
-    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras", "/locadoras",
+    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
     "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais",
   ],
   DIRETOR: [
-    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras", "/locadoras",
+    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
     "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes",
   ],
-  GERENTE: ["/dashboard", "/empresas", "/implementadoras", "/locadoras", "/oportunidades"],
+  GERENTE: ["/dashboard", "/empresas", "/implementadoras", "/oportunidades"],
   VENDEDOR: ["/dashboard", "/oportunidades"],
 }
 
@@ -58,7 +58,6 @@ const menuGroups: MenuGroup[] = [
     itens: [
       { label: "Empresas", href: "/empresas", icon: "🏢", type: "emoji" },
       { label: "Implementadoras", href: "/implementadoras", icon: "🏭", type: "emoji" },
-      { label: "Locadoras", href: "/locadoras", icon: "🏬", type: "emoji" },
     ],
   },
   {
