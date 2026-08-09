@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { Bot, Loader2, MessageSquarePlus, Send, ShieldCheck } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -50,6 +50,7 @@ export default function IaComercialPage() {
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState("")
+  const fimConversaRef = useRef<HTMLDivElement | null>(null)
 
   const conversaAtual = useMemo(
     () => conversas.find((item) => item.id === conversaId),
@@ -91,6 +92,13 @@ export default function IaComercialPage() {
     return () => { ativo = false }
   }, [conversaId])
 
+  useEffect(() => {
+    fimConversaRef.current?.scrollIntoView({
+      behavior: enviando ? "smooth" : "auto",
+      block: "end",
+    })
+  }, [mensagens, enviando, conversaId])
+
   async function enviar(evento: FormEvent) {
     evento.preventDefault()
     const texto = entrada.trim()
@@ -126,12 +134,12 @@ export default function IaComercialPage() {
   }
 
   return (
-    <main className="flex min-h-screen bg-[#020817] text-white">
+    <main className="flex h-screen overflow-hidden bg-[#020817] text-white">
       <Sidebar />
-      <section className="min-w-0 flex-1">
+      <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
-        <div className="grid min-h-[calc(100vh-72px)] lg:grid-cols-[300px_1fr]">
-          <aside className="border-r border-[#13203f] bg-[#061126] p-4">
+        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[300px_1fr]">
+          <aside className="min-h-0 overflow-y-auto border-r border-[#13203f] bg-[#061126] p-4">
             <button onClick={() => void criarConversa()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950">
               <MessageSquarePlus size={18} /> Nova conversa
             </button>
@@ -144,8 +152,8 @@ export default function IaComercialPage() {
             </div>
           </aside>
 
-          <section className="flex min-h-0 flex-col">
-            <header className="border-b border-[#13203f] bg-[#091a33] px-5 py-4">
+          <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+            <header className="shrink-0 border-b border-[#13203f] bg-[#091a33] px-5 py-4">
               <div className="flex items-center gap-3">
                 <div className="grid size-11 place-items-center rounded-2xl bg-cyan-500/10 text-cyan-300"><Bot /></div>
                 <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Assistente exclusivo do CTI</p><h1 className="text-xl font-bold">IA Comercial CTI</h1></div>
@@ -153,7 +161,7 @@ export default function IaComercialPage() {
               <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><ShieldCheck size={15} className="text-emerald-400" /> Fase inicial: leitura, análise e respostas auditáveis. Nenhum registro é alterado.</div>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
               <div className="mx-auto max-w-4xl space-y-4">
                 {mensagens.length === 0 && (
                   <div className="rounded-3xl border border-[#18345e] bg-[#071427] p-7 text-center">
@@ -174,10 +182,11 @@ export default function IaComercialPage() {
 
                 {enviando && <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="animate-spin" size={17} /> Analisando o contexto CTI...</div>}
                 {erro && <div className="rounded-xl border border-red-900 bg-red-950/30 px-4 py-3 text-sm text-red-200">{erro}</div>}
+                <div ref={fimConversaRef} aria-hidden="true" />
               </div>
             </div>
 
-            <form onSubmit={enviar} className="border-t border-[#13203f] bg-[#061126] p-4">
+            <form onSubmit={enviar} className="shrink-0 border-t border-[#13203f] bg-[#061126] p-4">
               <div className="mx-auto flex max-w-4xl gap-3">
                 <textarea value={entrada} onChange={(event) => setEntrada(event.target.value)} placeholder={`Pergunte à ${conversaAtual?.titulo || "IA Comercial CTI"}...`} rows={2} className="min-h-14 flex-1 resize-none rounded-2xl border border-[#28507c] bg-[#020d1f] px-4 py-3 text-sm outline-none focus:border-cyan-400" />
                 <button disabled={!entrada.trim() || enviando} className="grid size-14 place-items-center rounded-2xl bg-cyan-500 text-slate-950 disabled:opacity-40"><Send size={20} /></button>
