@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
@@ -26,6 +26,7 @@ type OportunidadeCRM = {
   id: string
   linha_equipamentos?: string | null
   equipamento?: string | null
+  descricao?: string | null
 }
 type LinhaProduto = {
   codigo: "TR" | "DT" | "DD"
@@ -187,38 +188,44 @@ export default function DashboardHub() {
           <section className="grid gap-5 2xl:grid-cols-2">
             <GraficoPainel titulo="REALIZADO" subtitulo="Volume por linha — período atual × anterior">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoHistorico} margin={{ top: 12, right: 16, left: 0, bottom: 0 }}>
+                <BarChart data={graficoHistorico} margin={{ top: 30, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false} />
                   <XAxis dataKey="linha" stroke="#8294ad" />
                   <YAxis stroke="#8294ad" />
                   <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => nomeLinha(String(label))} />
                   <Legend />
-                  <Bar dataKey="anterior" name="Período anterior" fill="#52657d" radius={[7, 7, 0, 0]} />
-                  <Bar dataKey="atual" name="Período selecionado" fill="#22d3ee" radius={[7, 7, 0, 0]} />
+                  <Bar dataKey="anterior" name="Período anterior" fill="#52657d" radius={[7, 7, 0, 0]}>
+                    <LabelList dataKey="anterior" position="top" fill="#94a3b8" fontSize={12} />
+                  </Bar>
+                  <Bar dataKey="atual" name="Período selecionado" fill="#22d3ee" radius={[7, 7, 0, 0]}>
+                    <LabelList dataKey="atual" position="top" fill="#67e8f9" fontSize={12} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
             </GraficoPainel>
 
             <GraficoPainel titulo="EM CURSO" subtitulo="Pipeline atual por linha de equipamento">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoPipeline} margin={{ top: 12, right: 16, left: 8, bottom: 0 }}>
+                <BarChart data={graficoPipeline} margin={{ top: 34, right: 16, left: 8, bottom: 0 }}>
                   <CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false} />
                   <XAxis dataKey="linha" stroke="#8294ad" />
                   <YAxis stroke="#8294ad" tickFormatter={(valor) => abreviarMoeda(Number(valor))} />
                   <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => nomeLinha(String(label))} formatter={(valor, nome) => nome === "Pipeline" ? [moeda(Number(valor)), nome] : [valor, nome]} />
                   <Legend />
-                  <Bar dataKey="valor" name="Pipeline" fill="#34d399" radius={[7, 7, 0, 0]} />
+                  <Bar dataKey="valor" name="Pipeline" fill="#34d399" radius={[7, 7, 0, 0]}>
+                    <LabelList dataKey="valor" position="top" fill="#6ee7b7" fontSize={12} formatter={(valor) => abreviarMoeda(Number(valor))} />
+                  </Bar>
                 </BarChart>
               </ResponsiveContainer>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                {linhasEmCurso.map((linha) => <Mini key={linha.codigo} titulo={linha.codigo} valor={`${linha.negociacoes} negócio(s)`} />)}
+                {linhasEmCurso.map((linha) => <Mini key={linha.codigo} titulo={linha.codigo} valor={`${linha.negociacoes} negócio(s) · ${abreviarMoeda(linha.valor)}`} />)}
               </div>
             </GraficoPainel>
           </section>
 
           <section className="flex flex-col gap-2 rounded-2xl border border-[#13203f] bg-[#071226] px-5 py-4 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
             <span>Cobertura da classificação histórica: {loading ? "..." : `${cobertura.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}.</span>
-            {semLinhaEmCurso > 0 ? <span className="text-amber-300">{semLinhaEmCurso} negócio(s) em curso ainda sem linha de equipamento classificada.</span> : <span>Todos os negócios em curso estão classificados por linha.</span>}
+            {semLinhaEmCurso > 0 ? <span className="text-amber-300">{semLinhaEmCurso} negócio(s) em curso sem classificação recuperável.</span> : <span className="text-emerald-300">Todos os negócios em curso estão classificados por linha.</span>}
           </section>
         </div>
       </section>
@@ -230,7 +237,28 @@ const tooltipStyle = { backgroundColor: "#061126", border: "1px solid #24507a", 
 async function buscarJson<T>(url: string): Promise<T> { const response = await fetch(url, { cache: "no-store" }); if (!response.ok) throw new Error(`${response.status} ${url}`); return response.json() as Promise<T> }
 async function tentar<T>(executar: () => Promise<T>, tentativas = 1): Promise<T | null> { for (let tentativa = 0; tentativa < tentativas; tentativa += 1) { try { return await executar() } catch { if (tentativa + 1 < tentativas) await new Promise((resolve) => setTimeout(resolve, 700)) } } return null }
 function normalizar(valor?: string | null) { return String(valor || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[-_/]+/g, " ").replace(/\s+/g, " ").trim() }
-function classificarLinha(item?: OportunidadeCRM) { if (!item) return null; const linha = normalizar(item.linha_equipamentos); if (["TR", "TRAILER", "LINHA TRAILER"].includes(linha)) return "TR"; if (["DT", "DIESEL TRUCK", "LINHA DIESEL TRUCK"].includes(linha)) return "DT"; if (["DD", "DIRECT DRIVE", "LINHA DIRECT DRIVE"].includes(linha)) return "DD"; const equipamento = normalizar(item.equipamento); if (/\b(X4 7500|X4 7700|VECTOR HE19|HE19)\b/.test(equipamento)) return "TR"; if (/\b(SUPRA 750|SUPRA 850|SUPRA 1150)\b/.test(equipamento)) return "DT"; if (/\b(CM 280|CM280|CM 400|CM400|CM 500|CM500|D6|D7|XARIOS 350|XARIOS 600)\b/.test(equipamento)) return "DD"; return null }
+function valorContexto(descricao: string | null | undefined, chave: string) {
+  const texto = String(descricao || "")
+  const match = texto.match(new RegExp(`(?:^|\\n)${chave}\\s*:\\s*([^\\n]+)`, "i"))
+  return match?.[1]?.trim() || ""
+}
+function classificarLinha(item?: OportunidadeCRM) {
+  if (!item) return null
+  const linhaEstruturada = normalizar(item.linha_equipamentos)
+  const linhaContexto = normalizar(valorContexto(item.descricao, "linhas?"))
+  const linha = linhaEstruturada || linhaContexto
+  if (["TR", "TRAILER", "LINHA TRAILER"].includes(linha)) return "TR"
+  if (["DT", "DIESEL TRUCK", "LINHA DIESEL TRUCK"].includes(linha)) return "DT"
+  if (["DD", "DIRECT DRIVE", "LINHA DIRECT DRIVE"].includes(linha)) return "DD"
+
+  const equipamentoEstruturado = normalizar(item.equipamento)
+  const equipamentoContexto = normalizar(valorContexto(item.descricao, "equipamentos?"))
+  const equipamento = equipamentoEstruturado || equipamentoContexto
+  if (/\b(X4 7500|X4 7700|VECTOR 8500|VECTOR HE19|HE19)\b/.test(equipamento)) return "TR"
+  if (/\b(SUPRA 750|SUPRA 850|SUPRA 1150|A500)\b/.test(equipamento)) return "DT"
+  if (/\b(CM 280|CM280|CM 400|CM400|CM 500|CM500|CM 600|CM600|D6|D7|S8|S9|XARIOS 350|XARIOS 600)\b/.test(equipamento)) return "DD"
+  return null
+}
 function nomeLinha(codigo: string) { return LINHAS.find((linha) => linha.codigo === codigo)?.nome ?? codigo }
 function moeda(valor?: number) { return `R$ ${(valor ?? 0).toLocaleString("pt-BR")}` }
 function abreviarMoeda(valor: number) { if (Math.abs(valor) >= 1000000) return `R$ ${(valor / 1000000).toFixed(1)}M`; if (Math.abs(valor) >= 1000) return `R$ ${(valor / 1000).toFixed(0)}k`; return `R$ ${valor}` }
