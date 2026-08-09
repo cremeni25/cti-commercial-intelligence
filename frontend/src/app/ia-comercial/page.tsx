@@ -134,18 +134,18 @@ export default function IaComercialPage() {
   }
 
   return (
-    <main className="flex h-screen overflow-hidden bg-[#020817] text-white">
+    <main className="flex h-[100dvh] overflow-hidden bg-[#020817] text-white">
       <Sidebar />
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
-        <div className="grid min-h-0 flex-1 overflow-hidden lg:grid-cols-[300px_1fr]">
-          <aside className="min-h-0 overflow-y-auto border-r border-[#13203f] bg-[#061126] p-4">
-            <button onClick={() => void criarConversa()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950">
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[300px_1fr] lg:grid-rows-1">
+          <aside className="max-h-36 min-h-0 overflow-y-auto border-r border-[#13203f] bg-[#061126] p-3 lg:max-h-none lg:p-4">
+            <button onClick={() => void criarConversa()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 font-semibold text-slate-950 lg:py-3">
               <MessageSquarePlus size={18} /> Nova conversa
             </button>
-            <div className="mt-4 space-y-2">
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:mt-4 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
               {carregando ? <p className="text-sm text-slate-500">Carregando...</p> : conversas.map((item) => (
-                <button key={item.id} onClick={() => setConversaId(item.id)} className={`w-full rounded-xl border px-3 py-3 text-left text-sm ${item.id === conversaId ? "border-cyan-500 bg-cyan-950/30 text-cyan-200" : "border-[#13203f] bg-[#091a33] text-slate-300"}`}>
+                <button key={item.id} onClick={() => setConversaId(item.id)} className={`w-[220px] flex-none rounded-xl border px-3 py-2.5 text-left text-sm lg:w-full lg:py-3 ${item.id === conversaId ? "border-cyan-500 bg-cyan-950/30 text-cyan-200" : "border-[#13203f] bg-[#091a33] text-slate-300"}`}>
                   <span className="line-clamp-2">{item.titulo || "Nova conversa"}</span>
                 </button>
               ))}
@@ -153,26 +153,26 @@ export default function IaComercialPage() {
           </aside>
 
           <section className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-            <header className="shrink-0 border-b border-[#13203f] bg-[#091a33] px-5 py-4">
+            <header className="shrink-0 border-b border-[#13203f] bg-[#091a33] px-4 py-3 sm:px-5 sm:py-4">
               <div className="flex items-center gap-3">
-                <div className="grid size-11 place-items-center rounded-2xl bg-cyan-500/10 text-cyan-300"><Bot /></div>
-                <div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">Assistente exclusivo do CTI</p><h1 className="text-xl font-bold">IA Comercial CTI</h1></div>
+                <div className="grid size-9 place-items-center rounded-xl bg-cyan-500/10 text-cyan-300 sm:size-11 sm:rounded-2xl"><Bot size={20} /></div>
+                <div className="min-w-0"><p className="truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-400 sm:text-xs">Assistente exclusivo do CTI</p><h1 className="text-lg font-bold sm:text-xl">IA Comercial CTI</h1></div>
               </div>
-              <div className="mt-3 flex items-center gap-2 text-xs text-slate-400"><ShieldCheck size={15} className="text-emerald-400" /> Fase inicial: leitura, análise e respostas auditáveis. Nenhum registro é alterado.</div>
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400 sm:mt-3 sm:text-xs"><ShieldCheck size={14} className="shrink-0 text-emerald-400" /> <span className="line-clamp-1 sm:line-clamp-none">Fase inicial: leitura, análise e respostas auditáveis. Nenhum registro é alterado.</span></div>
             </header>
 
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-6">
               <div className="mx-auto max-w-4xl space-y-4">
                 {mensagens.length === 0 && (
-                  <div className="rounded-3xl border border-[#18345e] bg-[#071427] p-7 text-center">
-                    <Bot className="mx-auto text-cyan-300" size={38} />
-                    <h2 className="mt-4 text-2xl font-bold">Como posso apoiar a operação comercial?</h2>
+                  <div className="rounded-3xl border border-[#18345e] bg-[#071427] p-5 text-center sm:p-7">
+                    <Bot className="mx-auto text-cyan-300" size={34} />
+                    <h2 className="mt-4 text-xl font-bold sm:text-2xl">Como posso apoiar a operação comercial?</h2>
                     <p className="mt-3 text-sm leading-6 text-slate-400">Pergunte sobre clientes, oportunidades, propostas, pedidos, prioridades, riscos ou próximos encaminhamentos registrados no CTI.</p>
                   </div>
                 )}
 
                 {mensagens.map((mensagem, indice) => (
-                  <article key={mensagem.id || `${mensagem.papel}-${indice}`} className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-6 ${mensagem.papel === "user" ? "ml-auto bg-cyan-500 text-slate-950" : "border border-[#18345e] bg-[#091a33] text-slate-200"}`}>
+                  <article key={mensagem.id || `${mensagem.papel}-${indice}`} className={`max-w-[94%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[90%] ${mensagem.papel === "user" ? "ml-auto bg-cyan-500 text-slate-950" : "border border-[#18345e] bg-[#091a33] text-slate-200"}`}>
                     <div className="whitespace-pre-wrap">{mensagem.conteudo}</div>
                     {mensagem.papel === "assistant" && mensagem.fontes?.length ? (
                       <div className="mt-3 border-t border-[#18345e] pt-2 text-xs text-slate-500">Fonte: {mensagem.fontes.map((fonte) => fonte.descricao || fonte.tipo).join(" · ")}</div>
@@ -186,10 +186,10 @@ export default function IaComercialPage() {
               </div>
             </div>
 
-            <form onSubmit={enviar} className="shrink-0 border-t border-[#13203f] bg-[#061126] p-4">
-              <div className="mx-auto flex max-w-4xl gap-3">
-                <textarea value={entrada} onChange={(event) => setEntrada(event.target.value)} placeholder={`Pergunte à ${conversaAtual?.titulo || "IA Comercial CTI"}...`} rows={2} className="min-h-14 flex-1 resize-none rounded-2xl border border-[#28507c] bg-[#020d1f] px-4 py-3 text-sm outline-none focus:border-cyan-400" />
-                <button disabled={!entrada.trim() || enviando} className="grid size-14 place-items-center rounded-2xl bg-cyan-500 text-slate-950 disabled:opacity-40"><Send size={20} /></button>
+            <form onSubmit={enviar} className="shrink-0 border-t border-[#13203f] bg-[#061126] p-3 sm:p-4">
+              <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
+                <textarea value={entrada} onChange={(event) => setEntrada(event.target.value)} placeholder={`Pergunte à ${conversaAtual?.titulo || "IA Comercial CTI"}...`} rows={1} className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-[#28507c] bg-[#020d1f] px-4 py-3 text-sm outline-none focus:border-cyan-400" />
+                <button disabled={!entrada.trim() || enviando} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cyan-500 text-slate-950 disabled:opacity-40 sm:size-14"><Send size={20} /></button>
               </div>
             </form>
           </section>
