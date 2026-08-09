@@ -188,6 +188,15 @@ def _entrada_inicial(mensagem: str, historico: list[dict[str, str]]) -> list[dic
     return entrada
 
 
+def _serializar_item_resposta(item: Any) -> dict[str, Any]:
+    if isinstance(item, dict):
+        return item
+    model_dump = getattr(item, "model_dump", None)
+    if callable(model_dump):
+        return model_dump(exclude_none=True)
+    raise TypeError(f"Item de resposta OpenAI não serializável: {type(item).__name__}")
+
+
 def gerar_resposta_agente(
     mensagem: str,
     historico: list[dict[str, str]],
@@ -205,20 +214,22 @@ def gerar_resposta_agente(
     ferramentas = ferramentas_agente()
     rastreio: list[dict[str, Any]] = []
     fontes: list[dict[str, str]] = []
+    entrada_agente: list[dict[str, Any]] = list(_entrada_inicial(mensagem, historico))
 
     try:
         resposta = client.responses.create(
             model=AGENT_MODEL,
             instructions=INSTRUCOES_AGENTE,
-            input=_entrada_inicial(mensagem, historico),
+            input=entrada_agente,
             tools=ferramentas,
             store=False,
         )
 
         for iteracao in range(1, MAX_ITERACOES_AGENTE + 1):
+            itens_resposta = list(getattr(resposta, "output", None) or [])
             chamadas = [
                 item
-                for item in (getattr(resposta, "output", None) or [])
+                for item in itens_resposta
                 if getattr(item, "type", None) == "function_call"
             ]
             if not chamadas:
@@ -259,11 +270,15 @@ def gerar_resposta_agente(
                     }
                 )
 
+            # Com store=False não podemos depender de previous_response_id. Mantemos
+            # o estado do turno localmente, reenviando os itens produzidos pelo modelo
+            # e os outputs das ferramentas, conforme o fluxo manual da Responses API.
+            entrada_agente.extend(_serializar_item_resposta(item) for item in itens_resposta)
+            entrada_agente.extend(saidas)
             resposta = client.responses.create(
                 model=AGENT_MODEL,
                 instructions=INSTRUCOES_AGENTE,
-                previous_response_id=getattr(resposta, "id", None),
-                input=saidas,
+                input=entrada_agente,
                 tools=ferramentas,
                 store=False,
             )
