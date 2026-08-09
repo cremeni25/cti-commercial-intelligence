@@ -12,6 +12,24 @@ from services.ia_comercial_historico import contexto_historico
 MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 WEB_MODEL = os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini")
 MAX_CONTEXT_ROWS = 120
+CONTEXT_PAGE_SIZE = 1000
+
+STATUS_OPORTUNIDADE_ENCERRADA = {
+    "GANHO",
+    "PERDIDO",
+    "CANCELADO",
+    "CANCELADA",
+    "CONCLUIDO",
+    "CONCLUÍDO",
+    "ENCERRADO",
+}
+STATUS_PEDIDO_ENCERRADO = {
+    "ENCERRADO",
+    "CANCELADO",
+    "CANCELADA",
+    "CONCLUIDO",
+    "CONCLUÍDO",
+}
 
 SYSTEM_PROMPT = """Você é a IA Comercial CTI, assistente geral e exclusivo da operação Viena SP / Carrier.
 Compreenda o CTI como um sistema único: base histórica CTI/ANFIR, Dashboard Executivo, CRM, clientes,
@@ -23,6 +41,9 @@ Diferencie claramente: fatos do CTI, fatos da web e inferências.
 As permissões limitam somente os dados e ações disponíveis ao usuário; não limitam seu raciocínio.
 Nesta fase, você consulta e analisa, mas não altera registros.
 Quando usar a web, execute a pesquisa de fato, cite as fontes encontradas e nunca diga ao usuário para pesquisar manualmente.
+Os campos de quantidades e valores consolidados do contexto interno são calculados sobre o conjunto completo autorizado.
+Os arrays detalhados em crm podem ser amostras limitadas para controle de contexto. Em perguntas quantitativas,
+use os consolidados; não derive totais contando a amostra e não apresente uma amostra como lista exaustiva.
 """
 
 
@@ -39,11 +60,51 @@ def _dados(resposta: Any) -> list[dict[str, Any]]:
     return dados if isinstance(dados, list) else []
 
 
-def _consulta_segura(tabela: str, colunas: str = "*", limite: int = MAX_CONTEXT_ROWS) -> list[dict[str, Any]]:
+def _consulta_segura(tabela: str, colunas: str = "*") -> list[dict[str, Any]]:
+    """Lê integralmente uma fonte interna, paginando para não truncar métricas da IA."""
+    registros: list[dict[str, Any]] = []
+    inicio = 0
     try:
-        return _dados(supabase.table(tabela).select(colunas).limit(limite).execute())
+        while True:
+            lote = _dados(
+                supabase.table(tabela)
+                .select(colunas)
+                .range(inicio, inicio + CONTEXT_PAGE_SIZE - 1)
+                .execute()
+            )
+            registros.extend(lote)
+            if len(lote) < CONTEXT_PAGE_SIZE:
+                break
+            inicio += CONTEXT_PAGE_SIZE
+        return registros
     except Exception:
         return []
+
+
+def _status(valor: Any) -> str:
+    return str(valor or "").strip().upper().replace(" ", "_")
+
+
+def _numero(valor: Any) -> float:
+    if valor in (None, ""):
+        return 0.0
+    try:
+        if isinstance(valor, str):
+            texto = valor.strip().replace("R$", "").replace(" ", "")
+            if "," in texto:
+                texto = texto.replace(".", "").replace(",", ".")
+            return float(texto)
+        return float(valor)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _oportunidade_aberta(item: dict[str, Any]) -> bool:
+    return _status(item.get("status")) not in STATUS_OPORTUNIDADE_ENCERRADA
+
+
+def _pedido_em_curso(item: dict[str, Any]) -> bool:
+    return _status(item.get("status")) not in STATUS_PEDIDO_ENCERRADO
 
 
 def contexto_comercial(usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
@@ -64,7 +125,25 @@ def contexto_comercial(usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
         cliente_ids = {str(item.get("cliente_id")) for item in oportunidades if item.get("cliente_id")}
         clientes = [item for item in clientes if str(item.get("id") or "") in cliente_ids]
 
+    oportunidades_abertas = [item for item in oportunidades if _oportunidade_aberta(item)]
+    pedidos_em_curso = [item for item in pedidos if _pedido_em_curso(item)]
+    valor_pedidos_em_curso = round(
+        sum(_numero(item.get("valor") if item.get("valor") is not None else item.get("valor_total")) for item in pedidos_em_curso),
+        2,
+    )
+
     historico = contexto_historico(tipo_usuario)
+    quantidades = {
+        "clientes_crm": len(clientes),
+        "oportunidades": len(oportunidades),
+        "oportunidades_abertas": len(oportunidades_abertas),
+        "itens": len(itens),
+        "propostas": len(propostas),
+        "pedidos": len(pedidos),
+        "pedidos_em_curso": len(pedidos_em_curso),
+        "atividades": len(atividades),
+        "registros_historicos": historico.get("dashboard_historico", {}).get("total_registros", 0),
+    }
     return {
         "escopo": "global" if tipo_usuario == "ADMIN_MASTER" else "usuario_autorizado",
         "fontes_disponiveis": [
@@ -74,22 +153,21 @@ def contexto_comercial(usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
             "Atividades e histórico operacional",
             "Pesquisa web quando necessária",
         ],
-        "quantidades": {
-            "clientes_crm": len(clientes),
-            "oportunidades": len(oportunidades),
-            "itens": len(itens),
-            "propostas": len(propostas),
-            "pedidos": len(pedidos),
-            "atividades": len(atividades),
-            "registros_historicos": historico.get("dashboard_historico", {}).get("total_registros", 0),
+        "quantidades": quantidades,
+        "valores": {
+            "pedidos_em_curso": valor_pedidos_em_curso,
+        },
+        "amostragem_detalhes": {
+            "limite_por_fonte": MAX_CONTEXT_ROWS,
+            "totais_calculados_sobre_base_completa": True,
         },
         "crm": {
-            "clientes": clientes,
-            "oportunidades": oportunidades,
-            "itens": itens,
-            "propostas": propostas,
-            "pedidos": pedidos,
-            "atividades": atividades,
+            "clientes": clientes[:MAX_CONTEXT_ROWS],
+            "oportunidades": oportunidades[:MAX_CONTEXT_ROWS],
+            "itens": itens[:MAX_CONTEXT_ROWS],
+            "propostas": propostas[:MAX_CONTEXT_ROWS],
+            "pedidos": pedidos[:MAX_CONTEXT_ROWS],
+            "atividades": atividades[:MAX_CONTEXT_ROWS],
         },
         "historico_dashboard": historico,
     }
