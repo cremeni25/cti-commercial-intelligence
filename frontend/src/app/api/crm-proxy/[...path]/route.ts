@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
 
-const BACKEND_CTI = "https://cti-backend-5ugf.onrender.com"
+const BACKEND_CTI =
+  process.env.VERCEL_ENV === "preview"
+    ? "https://cti-backend-pr-206.onrender.com"
+    : "https://cti-backend-5ugf.onrender.com"
 
 type Registro = Record<string, unknown>
 
