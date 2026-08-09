@@ -7,7 +7,8 @@ from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from services.ia_comercial_cti import IAComercialOpenAIError, contexto_comercial, gerar_resposta
+from services.ia_comercial_agente import gerar_resposta_agente
+from services.ia_comercial_cti import IAComercialOpenAIError
 
 router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
@@ -45,7 +46,15 @@ def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return {
         "status": "ready",
         "nome": "IA Comercial CTI",
-        "modo": "sistema_completo_web_auditavel",
+        "modo": "agente_orquestrador_cti_web",
+        "capacidades": [
+            "conversa contextual",
+            "escolha autônoma de ferramentas CTI",
+            "pesquisa web",
+            "cruzamento multi-fonte",
+            "rastreio auditável",
+        ],
+        "somente_leitura": True,
         "usuario": {"id": usuario.id, "nome": usuario.nome, "perfil": usuario.tipo_usuario},
     }
 
@@ -104,46 +113,83 @@ def enviar_mensagem(
     )
     historico = [
         {"role": str(item.get("papel") or "user"), "content": str(item.get("conteudo") or "")}
-        for item in mensagens_anteriores if item.get("conteudo")
+        for item in mensagens_anteriores
+        if item.get("conteudo")
     ]
-    supabase.table("cti_ia_mensagens").insert({
-        "conversa_id": conversa_id, "usuario_id": usuario.id, "papel": "user",
-        "conteudo": mensagem, "fontes": [], "metadados": {},
-    }).execute()
+    supabase.table("cti_ia_mensagens").insert(
+        {
+            "conversa_id": conversa_id,
+            "usuario_id": usuario.id,
+            "papel": "user",
+            "conteudo": mensagem,
+            "fontes": [],
+            "metadados": {},
+        }
+    ).execute()
 
     try:
-        contexto = contexto_comercial(usuario.id, usuario.tipo_usuario)
-        resposta_texto, metadados = gerar_resposta(mensagem, historico, contexto)
+        resposta_texto, metadados = gerar_resposta_agente(
+            mensagem=mensagem,
+            historico=historico,
+            usuario_id=usuario.id,
+            tipo_usuario=usuario.tipo_usuario,
+        )
     except IAComercialOpenAIError as exc:
-        supabase.table("cti_ia_auditoria").insert({
-            "conversa_id": conversa_id, "usuario_id": usuario.id, "acao": "ERRO_OPENAI",
-            "detalhes": {"codigo": exc.codigo, "erro": exc.detalhe_tecnico},
-        }).execute()
+        supabase.table("cti_ia_auditoria").insert(
+            {
+                "conversa_id": conversa_id,
+                "usuario_id": usuario.id,
+                "acao": "ERRO_OPENAI",
+                "detalhes": {"codigo": exc.codigo, "erro": exc.detalhe_tecnico},
+            }
+        ).execute()
         raise HTTPException(status_code=502, detail=exc.mensagem_publica) from exc
     except Exception as exc:
-        supabase.table("cti_ia_auditoria").insert({
-            "conversa_id": conversa_id, "usuario_id": usuario.id, "acao": "ERRO_GERACAO_RESPOSTA",
-            "detalhes": {"tipo": type(exc).__name__, "erro": str(exc)[:500]},
-        }).execute()
-        raise HTTPException(status_code=502, detail="O núcleo da IA encontrou uma falha interna registrada na auditoria.") from exc
+        supabase.table("cti_ia_auditoria").insert(
+            {
+                "conversa_id": conversa_id,
+                "usuario_id": usuario.id,
+                "acao": "ERRO_GERACAO_RESPOSTA",
+                "detalhes": {"tipo": type(exc).__name__, "erro": str(exc)[:500]},
+            }
+        ).execute()
+        raise HTTPException(
+            status_code=502,
+            detail="O núcleo da IA encontrou uma falha interna registrada na auditoria.",
+        ) from exc
 
-    fontes = metadados.get("fontes") or [{"tipo": "CTI", "descricao": "Sistema CTI completo."}]
+    fontes = metadados.get("fontes") or []
     assistente = _dados(
-        supabase.table("cti_ia_mensagens").insert({
-            "conversa_id": conversa_id, "usuario_id": usuario.id, "papel": "assistant",
-            "conteudo": resposta_texto, "fontes": fontes, "metadados": metadados,
-        }).execute()
+        supabase.table("cti_ia_mensagens")
+        .insert(
+            {
+                "conversa_id": conversa_id,
+                "usuario_id": usuario.id,
+                "papel": "assistant",
+                "conteudo": resposta_texto,
+                "fontes": fontes,
+                "metadados": metadados,
+            }
+        )
+        .execute()
     )
     agora = datetime.now(timezone.utc).isoformat()
     atualizacao = {"updated_at": agora}
     if str(conversa.get("titulo") or "") == "Nova conversa":
         atualizacao["titulo"] = mensagem[:80]
     supabase.table("cti_ia_conversas").update(atualizacao).eq("id", conversa_id).execute()
-    supabase.table("cti_ia_auditoria").insert({
-        "conversa_id": conversa_id, "usuario_id": usuario.id,
-        "acao": "RESPOSTA_GERADA", "detalhes": metadados,
-    }).execute()
+    supabase.table("cti_ia_auditoria").insert(
+        {
+            "conversa_id": conversa_id,
+            "usuario_id": usuario.id,
+            "acao": "RESPOSTA_GERADA_AGENTE",
+            "detalhes": metadados,
+        }
+    ).execute()
     return assistente[0] if assistente else {
-        "conversa_id": conversa_id, "papel": "assistant", "conteudo": resposta_texto,
-        "fontes": fontes, "metadados": metadados,
+        "conversa_id": conversa_id,
+        "papel": "assistant",
+        "conteudo": resposta_texto,
+        "fontes": fontes,
+        "metadados": metadados,
     }
