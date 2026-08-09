@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
@@ -131,8 +131,8 @@ export default function DashboardHub() {
   const totalClassificado = metadataLinhas.registros_classificados_periodo ?? linhasProduto.reduce((soma, linha) => soma + linha.atual, 0)
   const cobertura = metadataLinhas.cobertura_classificacao_percentual ?? percentual(totalClassificado, totalPeriodo)
 
-  const oportunidadePorId = useMemo(() => new Map(oportunidadesCrm.map((item) => [String(item.id), item])), [oportunidadesCrm])
-  const linhasEmCurso = useMemo<LinhaEmCurso[]>(() => LINHAS.map((linha) => {
+  const oportunidadePorId = new Map(oportunidadesCrm.map((item) => [String(item.id), item]))
+  const linhasEmCurso: LinhaEmCurso[] = LINHAS.map((linha) => {
     const itens = abertos.filter((item) => classificarLinha(oportunidadePorId.get(String(item.oportunidade_id))) === linha.codigo)
     return {
       codigo: linha.codigo,
@@ -140,7 +140,7 @@ export default function DashboardHub() {
       valor: itens.reduce((total, item) => total + Number(item.valor || 0), 0),
       ponderado: itens.reduce((total, item) => total + Number(item.valor_ponderado || 0), 0),
     }
-  }), [abertos, oportunidadePorId])
+  })
   const classificadosEmCurso = linhasEmCurso.reduce((total, item) => total + item.negociacoes, 0)
   const semLinhaEmCurso = Math.max(abertos.length - classificadosEmCurso, 0)
 
