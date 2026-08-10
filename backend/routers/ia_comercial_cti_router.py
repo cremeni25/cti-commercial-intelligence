@@ -91,6 +91,15 @@ def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
         "explicitamente preenchido na fonte consultada. Ao descrever cobertura de campos, use contagens exatas "
         "quando disponíveis: por exemplo, se todos os registros do recorte estão sem modelo, diga que todos estão "
         "sem modelo ou informe X de X, e não 'na maioria dos casos'."
+        " REGRA DE EVIDÊNCIA DA EXECUÇÃO ATUAL: o histórico da conversa existe para continuidade semântica, "
+        "referências do usuário e compreensão de contexto, mas não é fonte factual operacional da resposta atual. "
+        "Toda afirmação factual sobre estado atual ou recorte pesquisado deve ser sustentada por uma fonte "
+        "efetivamente consultada nesta execução. Não afirme pipeline, oportunidades ou seus status sem consultar "
+        "a fonte de oportunidades nesta execução; não afirme vendas ou vínculos de venda sem consultar vendas; "
+        "não nomeie modelos disponíveis do portfólio sem consultar o catálogo; não reutilize números, status, "
+        "clientes, modelos ou conclusões de respostas anteriores como se fossem evidência atual. Quando uma fonte "
+        "necessária não tiver sido consultada, limite-se ao que as fontes atuais sustentam ou declare que aquele "
+        "ponto não foi verificado nesta execução."
     )
     return f"{mensagem}\n\n{instrucao_temporal}{instrucao_recorte}", controle
 
@@ -209,6 +218,7 @@ def enviar_mensagem(
         metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
         metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
         metadados["controle_precisao_factual"] = "qualificacoes_exigem_evidencia_explicita"
+        metadados["controle_evidencia_execucao"] = "fatos_somente_fontes_consultadas_na_execucao_atual"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
