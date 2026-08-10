@@ -81,6 +81,16 @@ def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
         "Da mesma forma, clientes do CRM podem servir como contexto ou candidatos comerciais, mas não devem "
         "ser apresentados como pertencentes ao recorte territorial pesquisado sem vínculo territorial explícito "
         "nos dados retornados."
+        " REGRA DE PRECISÃO FACTUAL: não transforme ausência de dado em confirmação. Se um campo estiver vazio, "
+        "nulo ou ausente, declare a ausência quando ela for relevante e não atribua categoria, status ou fato não "
+        "registrado. Use 'maioria' somente quando uma categoria representar estritamente mais de 50% do universo "
+        "considerado; em empate ou pluralidade sem maioria absoluta, informe as contagens/percentuais sem chamar "
+        "nenhuma categoria de majoritária. Não converta status operacional, administrativo ou documental em venda, "
+        "negócio realizado, aceite, entrega ou outro evento comercial sem semântica explícita da fonte que sustente "
+        "essa equivalência. Só qualifique cliente como ativo/inativo quando o status correspondente estiver "
+        "explicitamente preenchido na fonte consultada. Ao descrever cobertura de campos, use contagens exatas "
+        "quando disponíveis: por exemplo, se todos os registros do recorte estão sem modelo, diga que todos estão "
+        "sem modelo ou informe X de X, e não 'na maioria dos casos'."
     )
     return f"{mensagem}\n\n{instrucao_temporal}{instrucao_recorte}", controle
 
@@ -198,6 +208,7 @@ def enviar_mensagem(
         metadados["controle_temporal_origem"] = "modulo_ia_comercial"
         metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
         metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
+        metadados["controle_precisao_factual"] = "qualificacoes_exigem_evidencia_explicita"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
