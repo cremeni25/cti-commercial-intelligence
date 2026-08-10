@@ -348,3 +348,68 @@ def test_gate_forca_ferramenta_quando_modelo_tenta_responder_so_com_historico(mo
     assert metadados["evidencias_requeridas"] == ["cti_atual"]
     assert metadados["evidencias_atendidas"] == ["cti_atual"]
     assert any(item.get("tipo") == "GATE_EVIDENCIA" for item in metadados["ferramentas"])
+
+
+def test_planejamento_evidencial_ignora_instrucoes_internas_enriquecidas():
+    mensagem = (
+        "Compare a linha Trailer no DDD 011 com os dados ANFIR disponíveis. "
+        "Mostre clientes, modelos, concentração territorial e sinais de oportunidade comercial."
+        "\n\nCONTEXTO INTERNO DA IA CTI: mencione vendas, histórico, clientes e oportunidades apenas como regras internas."
+    )
+
+    original = agente._mensagem_original_para_evidencias(mensagem)
+    requeridas = agente._fontes_requeridas(original)
+
+    assert "CONTEXTO INTERNO" not in original
+    assert requeridas == {"anfir", "territorio"}
+    assert "vendas" not in requeridas
+    assert "historico" not in requeridas
+    assert "clientes" not in requeridas
+    assert "oportunidades" not in requeridas
+
+
+def test_recorte_territorial_anfir_nao_forca_dominios_globais_por_substantivos():
+    requeridas = agente._fontes_requeridas(
+        "Compare a linha Trailer no DDD 011 com os dados ANFIR disponíveis. "
+        "Mostre clientes, modelos e concentração territorial e diga onde existem sinais de oportunidade comercial."
+    )
+
+    assert requeridas == {"anfir", "territorio"}
+
+
+def test_oportunidade_comercial_conceitual_nao_vira_entidade_crm():
+    requeridas = agente._fontes_requeridas(
+        "Onde existem sinais de oportunidade comercial na linha Trailer no DDD 011 segundo a ANFIR?"
+    )
+
+    assert "oportunidades" not in requeridas
+    assert requeridas == {"anfir", "territorio"}
+
+
+def test_pipeline_explicito_continua_exigindo_oportunidades_crm():
+    requeridas = agente._fontes_requeridas(
+        "No DDD 011, compare a ANFIR com as oportunidades abertas do pipeline para Trailer."
+    )
+
+    assert requeridas == {"anfir", "territorio", "oportunidades"}
+
+
+def test_catalogo_so_e_exigido_no_recorte_anfir_quando_portfolio_e_explicito():
+    sem_catalogo = agente._fontes_requeridas(
+        "Quais modelos aparecem na ANFIR da linha Trailer no DDD 011?"
+    )
+    com_catalogo = agente._fontes_requeridas(
+        "Compare os modelos da ANFIR no DDD 011 com o catálogo de modelos disponíveis da linha Trailer."
+    )
+
+    assert sem_catalogo == {"anfir", "territorio"}
+    assert com_catalogo == {"anfir", "territorio", "produtos"}
+
+
+def test_instrucoes_territoriais_evitam_ampliacao_global_desnecessaria():
+    instrucoes = agente.INSTRUCOES_AGENTE.casefold()
+
+    assert "não consulte domínios globais de clientes, oportunidades ou vendas apenas porque essas palavras aparecem" in instrucoes
+    assert "oportunidade comercial" in instrucoes
+    assert "não significa automaticamente a entidade oportunidade do crm" in instrucoes
+    assert "catálogo informa portfólio atual, não histórico" in instrucoes
