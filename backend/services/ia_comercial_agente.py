@@ -14,6 +14,10 @@ from services.ia_comercial_cti import (
 )
 from services.ia_comercial_dados_semanticos import consultar_dominio_semantico
 from services.ia_comercial_historico import contexto_historico
+from services.ia_comercial_territorio_anfir import (
+    consultar_anfir_semantico,
+    consultar_territorio_semantico,
+)
 from services.product_catalog_service import listar_catalogo
 
 AGENT_MODEL = os.getenv("OPENAI_AGENT_MODEL", os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini"))
@@ -25,6 +29,8 @@ FERRAMENTAS_CTI_PERMITIDAS = {
     "consultar_dominio_cti",
     "consultar_historico_cti",
     "consultar_catalogo_produtos_cti",
+    "consultar_territorio_cti",
+    "consultar_anfir_cti",
 }
 
 INSTRUCOES_AGENTE = """Você é a IA Comercial CTI, agente de inteligência comercial da operação Viena SP / Carrier.
@@ -36,6 +42,8 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - A web é contexto externo. Não transforme tendências gerais em recomendações de RH, recrutamento, retenção de talentos, capacitação, cultura, automação administrativa, investimentos corporativos genéricos ou serviços não relacionados aos produtos, salvo pedido explícito.
 - Quando produtos, linhas ou modelos forem relevantes, use o catálogo oficial do CTI.
 - A ferramenta consultar_dominio_cti é paginável e opera sobre o conjunto autorizado completo. Se uma investigação precisar continuar além da página atual, use offset e tem_mais; não trate uma página como universo completo.
+- consultar_territorio_cti e consultar_anfir_cti operam sobre a base histórica CTI/ANFIR completa dentro do RBAC territorial do usuário. Use resumo para totais/rankings e resultado para registros detalhados; não derive totais contando apenas a página.
+- Em análise regional, respeite ddds_autorizados e o escopo devolvido pelo backend. Nunca amplie território por inferência.
 - Vendas podem retornar vínculos factuais resolvidos pelo backend em vinculos_resolvidos. Use esses vínculos e nunca deduza produto, cliente ou oportunidade a partir de UUIDs ou nomes técnicos.
 - Quando o usuário pedir entidades "relacionadas", "vinculadas" ou "associadas" a uma entidade-base, considere apenas relacionamentos explícitos fornecidos pelos dados. Não transforme outros registros do mesmo domínio em relacionados sem vínculo factual.
 
@@ -58,9 +66,9 @@ SEGURANÇA E ISOLAMENTO — REGRA ABSOLUTA:
 
 EVIDÊNCIA E CONTINUIDADE:
 - O histórico da conversa serve para continuidade semântica, não como prova atual de fatos operacionais ou externos.
-- Se o pedido exigir dados atuais do CTI, histórico, mercado/web, produtos, vendas, clientes ou oportunidades, consulte essas fontes na mesma execução, exceto quando a própria entidade-base já devolver os vínculos factuais explicitamente pedidos.
+- Se o pedido exigir dados atuais do CTI, histórico, ANFIR, território/DDD, mercado/web, produtos, vendas, clientes ou oportunidades, consulte essas fontes na mesma execução, exceto quando a própria entidade-base já devolver os vínculos factuais explicitamente pedidos.
 - Não existe uma cota de consultas ou fontes por resposta. Continue investigando enquanto novas evidências úteis estiverem sendo obtidas.
-- Coletar evidência não basta: a resposta final deve USAR concretamente as evidências exigidas. Em pedidos multi-fonte, CTI, clientes, oportunidades, histórico, vendas e produtos são o núcleo da síntese; a web contextualiza e não pode dominar ou substituir a evidência interna.
+- Coletar evidência não basta: a resposta final deve USAR concretamente as evidências exigidas. Em pedidos multi-fonte, CTI, clientes, oportunidades, histórico, ANFIR, território, vendas e produtos são o núcleo da síntese; a web contextualiza e não pode dominar ou substituir a evidência interna.
 - Se a solicitação atual não exigir web e nenhuma web tiver sido consultada nesta execução, não reutilize fatos externos de respostas anteriores como se pertencessem à resposta atual.
 
 PRINCÍPIOS:
@@ -166,16 +174,17 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
 
     if any(t in texto for t in ("dados atuais do cti", "estado atual do cti", "situação atual do cti", "situacao atual do cti", "cti atual", "dados do cti")):
         requeridas.add("cti_atual")
-    if "histórico" in texto or "historico" in texto or "anfir" in texto:
+    if "histórico" in texto or "historico" in texto:
         requeridas.add("historico")
+    if "anfir" in texto:
+        requeridas.add("anfir")
+    if any(t in texto for t in ("ddd", "território", "territorio", "minha região", "minha regiao", "recorte regional", "territorial")):
+        requeridas.add("territorio")
     if any(t in texto for t in ("mercado", "pesquise na web", "procure na web", "pesquisa web", "fontes externas", "informações externas", "informacoes externas", "notícias", "noticias", "tendências", "tendencias")):
         requeridas.add("web")
     if "venda" in texto or "vendas" in texto:
         requeridas.add("vendas")
 
-    # Em perguntas relacionais de vendas, os vínculos resolvidos da própria venda são a fonte
-    # primária para cliente, produto e oportunidade. Consultas amplas só são necessárias quando
-    # o usuário pedir essas entidades fora do relacionamento explícito com as vendas.
     if not relacional_vendas:
         if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
             requeridas.add("produtos")
@@ -204,6 +213,10 @@ def _evidencias_presentes(rastreio: list[dict[str, Any]], fontes_web: list[dict[
             presentes.add("historico")
         elif ferramenta == "consultar_catalogo_produtos_cti":
             presentes.add("produtos")
+        elif ferramenta == "consultar_territorio_cti":
+            presentes.add("territorio")
+        elif ferramenta == "consultar_anfir_cti":
+            presentes.add("anfir")
         elif ferramenta == "consultar_dominio_cti":
             dominio = str(argumentos.get("dominio") or "")
             if dominio in {"vendas", "clientes", "oportunidades"}:
@@ -217,6 +230,8 @@ def _instrucao_evidencias_faltantes(faltantes: set[str]) -> str:
     mapa = {
         "cti_atual": "consulte consultar_resumo_cti",
         "historico": "consulte consultar_historico_cti",
+        "anfir": "consulte consultar_anfir_cti com os filtros compatíveis com a pergunta",
+        "territorio": "consulte consultar_territorio_cti respeitando DDD/UF/período pedidos e o escopo autorizado",
         "web": "execute web_search real",
         "produtos": "consulte consultar_catalogo_produtos_cti",
         "vendas": "consulte consultar_dominio_cti no domínio vendas",
@@ -244,12 +259,18 @@ def _instrucao_sintese_final(evidencias: set[str]) -> str:
         if "relacionamentos_vendas" in evidencias
         else ""
     )
+    regra_territorial = (
+        "Para território/ANFIR, use os totais e rankings do campo resumo, que são calculados sobre todo o recorte autorizado; use resultado apenas para exemplos ou detalhes da página. Preserve limitações de cobertura como registros sem DDD ou sem modelo. "
+        if "territorio" in evidencias or "anfir" in evidencias
+        else ""
+    )
     return (
         "INSTRUÇÃO INTERNA DE SÍNTESE FINAL: todas as evidências obrigatórias já foram coletadas. "
         f"Evidências disponíveis: {', '.join(sorted(evidencias))}. Não faça novas consultas. "
         "Responda agora ao pedido original cruzando concretamente os resultados já presentes no contexto. "
         "Se vendas foram exigidas, use o total e os registros retornados em vendas e respeite vinculos_resolvidos; não deduza produto, cliente ou oportunidade por UUID. "
         + regra_relacional
+        + regra_territorial
         + "Se clientes foram exigidos fora de um relacionamento explícito, cite clientes realmente retornados. Se oportunidades foram exigidas fora de um relacionamento explícito, cite oportunidades realmente retornadas. "
         "Para oportunidades, respeite obrigatoriamente semantica_pipeline: somente registros com pode_avancar_pipeline=true podem ser recomendados para avanço/conversão. "
         "GANHO é negócio encerrado e conquistado; nunca recomende avançar uma oportunidade GANHO. PERDIDO/CANCELADO/ENCERRADO também não pertencem ao pipeline ativo. "
@@ -264,6 +285,26 @@ def _instrucao_sintese_final(evidencias: set[str]) -> str:
 
 def _assinatura_chamada(nome: str, argumentos: dict[str, Any]) -> str:
     return f"{nome}:{json.dumps(argumentos, sort_keys=True, ensure_ascii=False, default=str)}"
+
+
+def _filtros_territoriais(argumentos: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ddd": argumentos.get("ddd"),
+        "uf": argumentos.get("uf"),
+        "cidade": argumentos.get("cidade"),
+        "periodo": argumentos.get("periodo") or "TODO_HISTORICO",
+        "inicio": argumentos.get("inicio"),
+        "fim": argumentos.get("fim"),
+        "linha": argumentos.get("linha"),
+        "modelo": argumentos.get("modelo"),
+        "cliente": argumentos.get("cliente"),
+        "implementadora": argumentos.get("implementadora"),
+        "fabricante_equipamento": argumentos.get("fabricante_equipamento"),
+        "origem": argumentos.get("origem"),
+        "termo": argumentos.get("termo"),
+        "limite": int(argumentos.get("limite") or 30),
+        "offset": int(argumentos.get("offset") or 0),
+    }
 
 
 def _executar_ferramenta_cti(nome: str, argumentos: dict[str, Any], usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
@@ -298,6 +339,11 @@ def _executar_ferramenta_cti(nome: str, argumentos: dict[str, Any], usuario_id: 
             registros = []
         filtrados = _filtrar_registros(registros, str(argumentos.get("termo") or "") or None, int(argumentos.get("limite") or 40))
         return {"ferramenta": nome, "fonte": historico.get("fonte"), "escopo": historico.get("escopo"), "dashboard_historico": historico.get("dashboard_historico"), "periodo_recente": historico.get("periodo_recente"), "registros_filtrados": filtrados, "observacao_amostragem": historico.get("observacao_amostragem")}
+    if nome == "consultar_territorio_cti":
+        return {"ferramenta": nome, **consultar_territorio_semantico(usuario_id, tipo_usuario, **_filtros_territoriais(argumentos))}
+    if nome == "consultar_anfir_cti":
+        return {"ferramenta": nome, **consultar_anfir_semantico(usuario_id, tipo_usuario, **_filtros_territoriais(argumentos))}
+
     catalogo = listar_catalogo()
     linhas = catalogo.get("lines", []) if isinstance(catalogo, dict) else []
     if not isinstance(linhas, list):
@@ -308,12 +354,35 @@ def _executar_ferramenta_cti(nome: str, argumentos: dict[str, Any], usuario_id: 
     return {"ferramenta": nome, "fonte": catalogo.get("source") if isinstance(catalogo, dict) else None, "linhas": linhas}
 
 
+def _schema_territorial() -> dict[str, Any]:
+    propriedades = {
+        "ddd": {"type": ["string", "null"]},
+        "uf": {"type": ["string", "null"]},
+        "cidade": {"type": ["string", "null"]},
+        "periodo": {"type": "string", "enum": ["TODO_HISTORICO", "HOJE", "ULTIMOS_7_DIAS", "ULTIMOS_30_DIAS", "ULTIMOS_90_DIAS", "MES_ATUAL", "TRIMESTRE_ATUAL", "ANO_ATUAL", "PERSONALIZADO"]},
+        "inicio": {"type": ["string", "null"], "description": "Data inicial ISO YYYY-MM-DD quando periodo=PERSONALIZADO."},
+        "fim": {"type": ["string", "null"], "description": "Data final ISO YYYY-MM-DD quando periodo=PERSONALIZADO."},
+        "linha": {"type": ["string", "null"]},
+        "modelo": {"type": ["string", "null"]},
+        "cliente": {"type": ["string", "null"]},
+        "implementadora": {"type": ["string", "null"]},
+        "fabricante_equipamento": {"type": ["string", "null"]},
+        "origem": {"type": ["string", "null"]},
+        "termo": {"type": ["string", "null"]},
+        "limite": {"type": "integer", "minimum": 1, "maximum": 100},
+        "offset": {"type": "integer", "minimum": 0},
+    }
+    return {"type": "object", "properties": propriedades, "required": list(propriedades), "additionalProperties": False}
+
+
 def ferramentas_agente() -> list[dict[str, Any]]:
     return [
         {"type": "web_search", "search_context_size": "high", "user_location": {"type": "approximate", "country": "BR", "region": "São Paulo", "city": "São Paulo", "timezone": "America/Sao_Paulo"}},
         {"type": "function", "name": "consultar_resumo_cti", "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Vendas incluem vínculos factuais resolvidos quando disponíveis; oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
-        {"type": "function", "name": "consultar_historico_cti", "description": "Consulta a base histórica comercial CTI/ANFIR e indicadores históricos.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},
+        {"type": "function", "name": "consultar_historico_cti", "description": "Consulta indicadores históricos gerais e amostra recente da base comercial CTI/ANFIR.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},
+        {"type": "function", "name": "consultar_territorio_cti", "description": "Consulta semântica territorial da base histórica CTI/ANFIR por DDD, UF, cidade, período, linha, modelo, cliente e implementadora. Totais e rankings usam todo o recorte autorizado; detalhes são pagináveis. O RBAC territorial é aplicado pelo backend.", "parameters": _schema_territorial(), "strict": True},
+        {"type": "function", "name": "consultar_anfir_cti", "description": "Consulta semântica completa da base histórica CTI/ANFIR com filtros territoriais, temporais e de produto, incluindo consolidação e paginação. Use para análises ANFIR, histórico de mercado interno e comparação de recortes autorizados.", "parameters": _schema_territorial(), "strict": True},
         {"type": "function", "name": "consultar_catalogo_produtos_cti", "description": "Consulta o catálogo oficial de linhas, modelos e aliases de produtos/equipamentos do CTI.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}}, "required": ["termo"], "additionalProperties": False}, "strict": True},
     ]
 
@@ -398,7 +467,18 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
                         houve_progresso = True
                         assinaturas_executadas.add(assinatura)
                     resultado = _executar_ferramenta_cti(nome, argumentos, usuario_id, tipo_usuario)
-                    rastreio.append({"tipo": "CTI", "iteracao": ciclos_executados, "ferramenta": nome, "argumentos": argumentos, "resumo": {"dominio": resultado.get("dominio"), "total_retornado": resultado.get("total_retornado", resultado.get("total_encontrado")), "erro": resultado.get("erro")}})
+                    rastreio.append({
+                        "tipo": "CTI",
+                        "iteracao": ciclos_executados,
+                        "ferramenta": nome,
+                        "argumentos": argumentos,
+                        "resumo": {
+                            "dominio": resultado.get("dominio"),
+                            "visao": resultado.get("visao"),
+                            "total_retornado": resultado.get("total_retornado", resultado.get("total_encontrado")),
+                            "erro": resultado.get("erro"),
+                        },
+                    })
                     saidas.append({"type": "function_call_output", "call_id": str(getattr(chamada, "call_id", "") or ""), "output": json.dumps(resultado, ensure_ascii=False, default=str)})
 
                 presentes_depois = _evidencias_presentes(rastreio, fontes_web)
@@ -462,8 +542,9 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
         "controle_loop": "progresso_evidencial",
         "controle_sintese": "obrigatoria_multi_fonte" if sintese_forcada else "direta",
         "controle_status_pipeline": "semantica_backend",
-        "catalogo_ferramentas": "ia_002_semantico_paginavel",
+        "catalogo_ferramentas": "ia_002_semantico_paginavel_territorio_anfir",
         "controle_relacionamentos": "vinculos_explicitos",
+        "controle_territorial": "rbac_backend",
         "limite_emergencial_ciclos": LIMITE_EMERGENCIAL_CICLOS,
         "max_ciclos_sem_progresso": MAX_CICLOS_SEM_PROGRESSO,
     }
