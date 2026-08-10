@@ -14,6 +14,8 @@ def test_catalogo_agente_combina_web_e_ferramentas_cti():
         "consultar_dominio_cti",
         "consultar_historico_cti",
         "consultar_catalogo_produtos_cti",
+        "consultar_territorio_cti",
+        "consultar_anfir_cti",
     }
     assert nomes == agente.FERRAMENTAS_CTI_PERMITIDAS
 
