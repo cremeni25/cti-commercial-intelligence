@@ -53,14 +53,14 @@ def _periodo_temporal_explicito(mensagem: str) -> bool:
 def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
     if _periodo_temporal_explicito(mensagem):
         controle = "periodo_explicito_usuario"
-        instrucao = (
+        instrucao_temporal = (
             "CONTEXTO INTERNO DA IA CTI: a pergunta contém um horizonte temporal "
             "explicitamente definido pelo usuário. Preserve esse horizonte nas consultas; "
             "não o substitua silenciosamente por outro período."
         )
     else:
         controle = "sem_periodo_explicito_todo_historico"
-        instrucao = (
+        instrucao_temporal = (
             "CONTEXTO INTERNO DA IA CTI: a pergunta não definiu um horizonte temporal concreto. "
             "Para consultas territoriais/ANFIR, use TODO_HISTORICO como universo-base dos dados "
             "disponíveis. Janelas recentes podem ser analisadas complementarmente quando forem úteis, "
@@ -68,7 +68,21 @@ def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
             "Este contexto pertence exclusivamente ao módulo IA Comercial e não deriva de filtros, "
             "estado ou ações de outros módulos do CTI."
         )
-    return f"{mensagem}\n\n{instrucao}", controle
+
+    instrucao_recorte = (
+        " REGRA DE RECORTE-BASE E PROVENIÊNCIA: ao construir o universo-base de consultas territoriais "
+        "ou ANFIR, aplique como filtros restritivos somente dimensões explicitamente informadas na pergunta "
+        "atual. Não acrescente fabricante, cliente, implementadora, modelo, cidade, UF, origem ou outra "
+        "restrição por inferência para definir ou substituir o universo-base. Recortes exploratórios adicionais "
+        "são permitidos somente depois de coletar o universo-base e devem ser tratados como análises "
+        "complementares, sem apagar ou substituir os totais do recorte-base. Preserve a proveniência entre "
+        "fontes: catálogo oficial informa portfólio/modelos disponíveis, mas não prova que um modelo aparece "
+        "no histórico ANFIR; só atribua modelo ao histórico quando o próprio registro histórico sustentar isso. "
+        "Da mesma forma, clientes do CRM podem servir como contexto ou candidatos comerciais, mas não devem "
+        "ser apresentados como pertencentes ao recorte territorial pesquisado sem vínculo territorial explícito "
+        "nos dados retornados."
+    )
+    return f"{mensagem}\n\n{instrucao_temporal}{instrucao_recorte}", controle
 
 
 def _conversa_do_usuario(conversa_id: str, usuario: UsuarioAutenticado) -> dict:
@@ -182,6 +196,8 @@ def enviar_mensagem(
         )
         metadados["controle_temporal_pergunta"] = controle_temporal
         metadados["controle_temporal_origem"] = "modulo_ia_comercial"
+        metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
+        metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
