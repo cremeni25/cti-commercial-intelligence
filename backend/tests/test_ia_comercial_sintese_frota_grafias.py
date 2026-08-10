@@ -1,12 +1,13 @@
 from services import ia_comercial_sintese_factual as sintese
 
 
-def test_sintese_frota_proibe_agregacao_livre_e_aceita_agregado_backend():
+def test_sintese_frota_usa_agregado_backend_sem_reagrupar_modelos():
     instrucoes = sintese.INSTRUCOES_SINTESE_FATUAL.casefold()
 
-    assert "não some, normalize ou una categorias brutas por conta própria" in instrucoes
-    assert "agregados canônicos fornecidos pelo backend" in instrucoes
-    assert "modelos de caminhão permanecem separados" in instrucoes
+    assert "ranking_canônico fornecido pelo backend" in instrucoes
+    assert "não refaça somas nem crie agrupamentos adicionais" in instrucoes
+    assert "para modelos de caminhão" in instrucoes
+    assert "não some variantes por conta própria" in instrucoes
 
 
 def test_resumo_frota_usa_agregados_backend_e_preserva_variantes():
@@ -48,12 +49,13 @@ def test_resumo_frota_usa_agregados_backend_e_preserva_variantes():
     fabricantes = resumo["frota"]["ranking_fabricantes_caminhao_canonico_por_registros"]
     assert fabricantes == [
         {
-            "valor_canonico": "VOLKSWAGEN",
+            "valor": "VOLKSWAGEN",
             "registros": 2,
             "variantes": [
                 {"valor": "VOLKSWAGEN", "registros": 1},
                 {"valor": "Volkswagen", "registros": 1},
             ],
+            "regra_agregacao": "mesma categoria após normalização determinística de caixa, acentuação e pontuação",
         }
     ]
     assert resumo["frota"]["ranking_modelos_caminhao_por_registros"] == [
