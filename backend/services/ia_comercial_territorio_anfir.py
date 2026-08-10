@@ -62,6 +62,23 @@ def _data_iso(valor: Any) -> date | None:
         return None
 
 
+def _preenchido(valor: Any) -> bool:
+    return bool(str(valor or "").strip())
+
+
+def _chave_veiculo(item: dict[str, Any]) -> str | None:
+    chassi = str(item.get("chassi") or "").strip().upper()
+    if chassi:
+        return f"chassi:{chassi}"
+    placa = str(item.get("placa") or "").strip().upper()
+    if placa:
+        return f"placa:{placa}"
+    id_operacional = str(item.get("id_operacional") or "").strip()
+    if id_operacional:
+        return f"id_operacional:{id_operacional}"
+    return None
+
+
 def _usuario_por_id(usuario_id: str) -> dict[str, Any] | None:
     for item in _consulta_segura("cti_users"):
         if str(item.get("id") or "") == str(usuario_id):
@@ -233,16 +250,29 @@ def _resumir(registros: list[dict[str, Any]]) -> dict[str, Any]:
     clientes = {str(item.get("cliente") or "").strip() for item in registros if item.get("cliente")}
     valor_total = round(sum(_numero(item.get("valor")) for item in registros), 2)
     quantidade_total = round(sum(_numero(item.get("quantidade")) for item in registros), 2)
+    chaves_veiculos = {chave for item in registros if (chave := _chave_veiculo(item))}
     return {
         "total_registros": len(registros),
         "total_clientes": len(clientes),
+        "total_veiculos_identificaveis": len(chaves_veiculos),
+        "registros_sem_identificador_veiculo": sum(1 for item in registros if not _chave_veiculo(item)),
         "valor_total_informado": valor_total,
         "quantidade_total_informada": quantidade_total,
         "cobertura": {
             "com_ddd": sum(1 for item in registros if normalizar_ddd(item.get("ddd"))),
             "sem_ddd": sum(1 for item in registros if not normalizar_ddd(item.get("ddd"))),
-            "com_modelo": sum(1 for item in registros if str(item.get("modelo") or "").strip()),
-            "sem_modelo": sum(1 for item in registros if not str(item.get("modelo") or "").strip()),
+            "com_modelo": sum(1 for item in registros if _preenchido(item.get("modelo"))),
+            "sem_modelo": sum(1 for item in registros if not _preenchido(item.get("modelo"))),
+            "com_placa": sum(1 for item in registros if _preenchido(item.get("placa"))),
+            "sem_placa": sum(1 for item in registros if not _preenchido(item.get("placa"))),
+            "com_chassi": sum(1 for item in registros if _preenchido(item.get("chassi"))),
+            "sem_chassi": sum(1 for item in registros if not _preenchido(item.get("chassi"))),
+            "com_numero_frota": sum(1 for item in registros if _preenchido(item.get("numero_frota"))),
+            "sem_numero_frota": sum(1 for item in registros if not _preenchido(item.get("numero_frota"))),
+            "com_fabricante_caminhao": sum(1 for item in registros if _preenchido(item.get("fabricante_caminhao"))),
+            "sem_fabricante_caminhao": sum(1 for item in registros if not _preenchido(item.get("fabricante_caminhao"))),
+            "com_modelo_caminhao": sum(1 for item in registros if _preenchido(item.get("modelo_caminhao"))),
+            "sem_modelo_caminhao": sum(1 for item in registros if not _preenchido(item.get("modelo_caminhao"))),
         },
         "ranking_ddds": _ranking(registros, "ddd"),
         "ranking_estados": _ranking(registros, "estado"),
@@ -252,6 +282,9 @@ def _resumir(registros: list[dict[str, Any]]) -> dict[str, Any]:
         "ranking_clientes": _ranking(registros, "cliente"),
         "ranking_implementadoras": _ranking(registros, "implementadora"),
         "ranking_fabricantes_equipamento": _ranking(registros, "fabricante_equipamento"),
+        "ranking_tipos_veiculo": _ranking(registros, "tipo_veiculo"),
+        "ranking_fabricantes_caminhao": _ranking(registros, "fabricante_caminhao"),
+        "ranking_modelos_caminhao": _ranking(registros, "modelo_caminhao"),
     }
 
 
@@ -267,9 +300,15 @@ def _registro_publico(item: dict[str, Any]) -> dict[str, Any]:
         "sub_regiao": item.get("sub_regiao"),
         "linha": normalizar_linha(item.get("linha")),
         "modelo": item.get("modelo"),
+        "placa": item.get("placa"),
+        "chassi": item.get("chassi"),
+        "numero_frota": item.get("numero_frota"),
+        "fabricante_caminhao": item.get("fabricante_caminhao"),
+        "modelo_caminhao": item.get("modelo_caminhao"),
+        "eixo": item.get("eixo"),
+        "tipo_veiculo": item.get("tipo_veiculo"),
         "fabricante_equipamento": item.get("fabricante_equipamento"),
         "implementadora": item.get("implementadora"),
-        "tipo_veiculo": item.get("tipo_veiculo"),
         "status": item.get("status"),
         "valor": item.get("valor"),
         "quantidade": item.get("quantidade"),
@@ -380,6 +419,7 @@ def _consultar(
         "resultado": [_registro_publico(item) for item in pagina],
         "observacao": (
             "Contagens e rankings de resumo usam todo o recorte temporal solicitado; resultado é a página detalhada. "
+            "total_veiculos_identificaveis deduplica registros por chassi, depois placa e depois id_operacional; total_registros não deve ser interpretado automaticamente como quantidade de veículos únicos. "
             "Quando há período específico, resumo_historico_disponivel mostra o mesmo recorte sem filtro temporal. "
             "Zero no período não equivale a zero histórico."
         ),
