@@ -44,6 +44,9 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - A ferramenta consultar_dominio_cti é paginável e opera sobre o conjunto autorizado completo. Se uma investigação precisar continuar além da página atual, use offset e tem_mais; não trate uma página como universo completo.
 - consultar_territorio_cti e consultar_anfir_cti operam sobre a base histórica CTI/ANFIR completa dentro do RBAC territorial do usuário. Use resumo para totais/rankings e resultado para registros detalhados; não derive totais contando apenas a página.
 - Em análise regional, respeite ddds_autorizados e o escopo devolvido pelo backend. Nunca amplie território por inferência.
+- Em perguntas territoriais/ANFIR, os rankings e coberturas retornados por consultar_territorio_cti/consultar_anfir_cti já são evidência válida para clientes, modelos, implementadoras e concentração daquele recorte. Não consulte domínios globais de clientes, oportunidades ou vendas apenas porque essas palavras aparecem na pergunta; amplie para CRM somente quando o usuário pedir explicitamente CRM/pipeline/vendas, um vínculo factual específico, ou quando a evidência territorial for insuficiente para uma conclusão solicitada.
+- A expressão "oportunidade comercial", quando usada como pedido de diagnóstico, sinal ou recomendação, não significa automaticamente a entidade Oportunidade do CRM. Só trate como entidade de pipeline quando o contexto pedir oportunidades registradas, pipeline, status, estágio, probabilidade, ganho/perda ou vínculo CRM equivalente.
+- Em pergunta sobre modelos dentro de um recorte ANFIR/territorial, primeiro responda pela cobertura do próprio recorte. Catálogo informa portfólio atual, não histórico. Consulte catálogo como fonte adicional quando o usuário pedir portfólio/modelos disponíveis ou quando essa separação agregar valor explícito, sempre sem atribuir o catálogo ao histórico.
 - Vendas podem retornar vínculos factuais resolvidos pelo backend em vinculos_resolvidos. Use esses vínculos e nunca deduza produto, cliente ou oportunidade a partir de UUIDs ou nomes técnicos.
 - Quando o usuário pedir entidades "relacionadas", "vinculadas" ou "associadas" a uma entidade-base, considere apenas relacionamentos explícitos fornecidos pelos dados. Não transforme outros registros do mesmo domínio em relacionados sem vínculo factual.
 
@@ -167,18 +170,57 @@ def _pedido_relacional_vendas(mensagem: str) -> bool:
     )
 
 
+def _mensagem_original_para_evidencias(mensagem: str) -> str:
+    marcador = "\n\nCONTEXTO INTERNO DA IA CTI:"
+    return mensagem.split(marcador, 1)[0].strip()
+
+
 def _fontes_requeridas(mensagem: str) -> set[str]:
     texto = _normalizar(mensagem)
     requeridas: set[str] = set()
     relacional_vendas = _pedido_relacional_vendas(mensagem)
+    menciona_anfir = "anfir" in texto
+    menciona_territorio = any(
+        t in texto
+        for t in ("ddd", "território", "territorio", "minha região", "minha regiao", "recorte regional", "territorial")
+    )
+    recorte_territorial_anfir = menciona_anfir and menciona_territorio
+    oportunidade_crm_explicita = any(
+        t in texto
+        for t in (
+            "oportunidades do crm",
+            "oportunidade do crm",
+            "pipeline",
+            "status da oportunidade",
+            "estágio da oportunidade",
+            "estagio da oportunidade",
+            "probabilidade da oportunidade",
+            "oportunidades abertas",
+            "oportunidades ganhas",
+            "oportunidades perdidas",
+        )
+    )
+    catalogo_explicito = any(
+        t in texto
+        for t in (
+            "catálogo",
+            "catalogo",
+            "portfólio",
+            "portfolio",
+            "modelos disponíveis",
+            "modelos disponiveis",
+            "produtos disponíveis",
+            "produtos disponiveis",
+        )
+    )
 
     if any(t in texto for t in ("dados atuais do cti", "estado atual do cti", "situação atual do cti", "situacao atual do cti", "cti atual", "dados do cti")):
         requeridas.add("cti_atual")
-    if "histórico" in texto or "historico" in texto:
+    if ("histórico" in texto or "historico" in texto) and not recorte_territorial_anfir:
         requeridas.add("historico")
-    if "anfir" in texto:
+    if menciona_anfir:
         requeridas.add("anfir")
-    if any(t in texto for t in ("ddd", "território", "territorio", "minha região", "minha regiao", "recorte regional", "territorial")):
+    if menciona_territorio:
         requeridas.add("territorio")
     if any(t in texto for t in ("mercado", "pesquise na web", "procure na web", "pesquisa web", "fontes externas", "informações externas", "informacoes externas", "notícias", "noticias", "tendências", "tendencias")):
         requeridas.add("web")
@@ -186,12 +228,18 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
         requeridas.add("vendas")
 
     if not relacional_vendas:
-        if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
-            requeridas.add("produtos")
-        if "cliente" in texto or "clientes" in texto:
-            requeridas.add("clientes")
-        if "oportunidade" in texto or "oportunidades" in texto:
-            requeridas.add("oportunidades")
+        if recorte_territorial_anfir:
+            if catalogo_explicito:
+                requeridas.add("produtos")
+            if oportunidade_crm_explicita:
+                requeridas.add("oportunidades")
+        else:
+            if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
+                requeridas.add("produtos")
+            if "cliente" in texto or "clientes" in texto:
+                requeridas.add("clientes")
+            if "oportunidade" in texto or "oportunidades" in texto:
+                requeridas.add("oportunidades")
     elif any(t in texto for t in ("produto", "produtos", "cliente", "clientes", "oportunidade", "oportunidades")):
         requeridas.add("relacionamentos_vendas")
 
@@ -260,7 +308,7 @@ def _instrucao_sintese_final(evidencias: set[str]) -> str:
         else ""
     )
     regra_territorial = (
-        "Para território/ANFIR, use os totais e rankings do campo resumo, que são calculados sobre todo o recorte autorizado; use resultado apenas para exemplos ou detalhes da página. Preserve limitações de cobertura como registros sem DDD ou sem modelo. "
+        "Para território/ANFIR, use os totais, rankings e coberturas do campo resumo, calculados sobre todo o recorte autorizado; use resultado apenas para exemplos ou detalhes da página. Preserve limitações de cobertura como registros sem DDD ou sem modelo. Clientes, modelos e implementadoras do recorte devem vir desses rankings/coberturas, sem importar listas globais de CRM para dentro do território. "
         if "territorio" in evidencias or "anfir" in evidencias
         else ""
     )
@@ -434,7 +482,8 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
     rastreio: list[dict[str, Any]] = []
     fontes_web: list[dict[str, str]] = []
     assinaturas_executadas: set[str] = set()
-    evidencias_requeridas = _fontes_requeridas(mensagem)
+    mensagem_evidencial = _mensagem_original_para_evidencias(mensagem)
+    evidencias_requeridas = _fontes_requeridas(mensagem_evidencial)
     entrada_agente: list[dict[str, Any]] = list(_entrada_inicial(mensagem, historico))
     ciclos_sem_progresso = 0
     ciclos_executados = 0
@@ -535,6 +584,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
         "fontes": fontes_web,
         "evidencias_requeridas": sorted(evidencias_requeridas),
         "evidencias_atendidas": sorted(presentes_finais),
+        "origem_planejamento_evidencial": "pergunta_original_usuario",
         "response_id": getattr(resposta, "id", None),
         "tokens_entrada": getattr(uso, "input_tokens", None),
         "tokens_saida": getattr(uso, "output_tokens", None),
