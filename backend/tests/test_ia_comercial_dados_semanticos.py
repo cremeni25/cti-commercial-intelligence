@@ -86,6 +86,7 @@ def test_vendas_respeitam_escopo_por_oportunidade_ou_cliente(monkeypatch):
         ],
     }
     monkeypatch.setattr(dados, "_carregar_dominio", lambda dominio: registros.get(dominio, []))
+    monkeypatch.setattr(dados, "_consulta_segura", lambda tabela: [])
 
     resultado = dados.consultar_dominio_semantico(
         "vendas", "user-1", "VENDEDOR", limite=100
@@ -93,3 +94,49 @@ def test_vendas_respeitam_escopo_por_oportunidade_ou_cliente(monkeypatch):
 
     assert resultado["total_encontrado"] == 1
     assert resultado["resultado"][0]["id"] == "v1"
+
+
+def test_vendas_resolvem_equipamento_e_relacoes_sem_inferencia(monkeypatch):
+    registros = {
+        "clientes": [
+            {"id": "cli-abc", "nome": "ABC CARGAS LTDA", "cidade": "São Bernardo do Campo", "uf": "SP"},
+            {"id": "cli-teste", "nome": "Cliente Teste", "cidade": "São Paulo", "uf": "SP"},
+        ],
+        "oportunidades": [
+            {"id": "opp-abc", "cliente_id": "cli-abc", "nome": "teste", "status": "GANHO"},
+        ],
+        "vendas": [
+            {
+                "id": "v-x4",
+                "cliente_id": "cli-abc",
+                "oportunidade_id": "opp-abc",
+                "equipamento_codigo": "X4-7500",
+                "valor": 158000,
+            },
+            {
+                "id": "v-vector",
+                "cliente_id": "cli-teste",
+                "equipamento_id": "eq-vector",
+                "valor": 120000,
+            },
+        ],
+    }
+    monkeypatch.setattr(dados, "_carregar_dominio", lambda dominio: registros.get(dominio, []))
+
+    def fake_consulta(tabela):
+        if tabela == "equipamentos":
+            return [{"id": "eq-vector", "linha": "TR", "modelo": "Vector 8500", "observacao": "Linha Trailer"}]
+        if tabela == "cti_catalogo_equipamentos":
+            return [{"codigo": "X4-7500", "linha": "TRAILER", "modelo_base": "X4-7500", "nome_comercial": "X4-7500"}]
+        return []
+
+    monkeypatch.setattr(dados, "_consulta_segura", fake_consulta)
+
+    resultado = dados.consultar_dominio_semantico("vendas", "admin", "ADMIN_MASTER", limite=100)
+    por_id = {item["id"]: item for item in resultado["resultado"]}
+
+    assert por_id["v-x4"]["vinculos_resolvidos"]["cliente"]["nome"] == "ABC CARGAS LTDA"
+    assert por_id["v-x4"]["vinculos_resolvidos"]["oportunidade"]["status"] == "GANHO"
+    assert por_id["v-x4"]["vinculos_resolvidos"]["equipamento"]["modelo"] == "X4-7500"
+    assert por_id["v-vector"]["vinculos_resolvidos"]["equipamento"]["modelo"] == "Vector 8500"
+    assert por_id["v-vector"]["vinculos_resolvidos"]["equipamento"]["linha"] == "TR"
