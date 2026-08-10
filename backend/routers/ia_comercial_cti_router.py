@@ -27,18 +27,6 @@ def _dados(resposta):
     return dados if isinstance(dados, list) else []
 
 
-def _historico_usuario_para_agente(mensagens: list[dict]) -> list[dict[str, str]]:
-    """Preserva continuidade da intenção sem reutilizar respostas antigas da IA como evidência factual."""
-    historico: list[dict[str, str]] = []
-    for item in mensagens:
-        if str(item.get("papel") or "").strip().casefold() != "user":
-            continue
-        conteudo = str(item.get("conteudo") or "").strip()
-        if conteudo:
-            historico.append({"role": "user", "content": conteudo})
-    return historico
-
-
 def _periodo_temporal_explicito(mensagem: str) -> bool:
     texto = mensagem.strip().casefold()
     if not texto:
@@ -95,23 +83,24 @@ def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
         "nos dados retornados."
         " REGRA DE PRECISÃO FACTUAL: não transforme ausência de dado em confirmação. Se um campo estiver vazio, "
         "nulo ou ausente, declare a ausência quando ela for relevante e não atribua categoria, status ou fato não "
-        "registrado. Use 'maioria' somente quando uma categoria representar estritamente mais de 50% do universo "
-        "considerado; em empate ou pluralidade sem maioria absoluta, informe as contagens/percentuais sem chamar "
-        "nenhuma categoria de majoritária. Não converta status operacional, administrativo ou documental em venda, "
+        "registrado. Use 'maioria', 'predominante', 'líder', 'principal' ou equivalentes somente quando uma categoria "
+        "representar estritamente mais de 50% do universo considerado. Quando a cobertura do campo for parcial, "
+        "informe a contagem exata sobre o universo total ou qualifique explicitamente como 'entre os registros "
+        "preenchidos'; não transforme a categoria mais frequente entre preenchidos em predominância do universo. "
+        "Em empate ou pluralidade sem maioria absoluta, informe as contagens/percentuais sem chamar nenhuma categoria "
+        "de majoritária ou predominante. Não converta status operacional, administrativo ou documental em venda, "
         "negócio realizado, aceite, entrega ou outro evento comercial sem semântica explícita da fonte que sustente "
         "essa equivalência. Só qualifique cliente como ativo/inativo quando o status correspondente estiver "
         "explicitamente preenchido na fonte consultada. Ao descrever cobertura de campos, use contagens exatas "
         "quando disponíveis: por exemplo, se todos os registros do recorte estão sem modelo, diga que todos estão "
         "sem modelo ou informe X de X, e não 'na maioria dos casos'."
-        " REGRA DE EVIDÊNCIA DA EXECUÇÃO ATUAL: o histórico da conversa existe para continuidade semântica, "
-        "referências do usuário e compreensão de contexto, mas não é fonte factual operacional da resposta atual. "
-        "Toda afirmação factual sobre estado atual ou recorte pesquisado deve ser sustentada por uma fonte "
-        "efetivamente consultada nesta execução. Não afirme pipeline, oportunidades ou seus status sem consultar "
-        "a fonte de oportunidades nesta execução; não afirme vendas ou vínculos de venda sem consultar vendas; "
-        "não nomeie modelos disponíveis do portfólio sem consultar o catálogo; não reutilize números, status, "
-        "clientes, modelos ou conclusões de respostas anteriores como se fossem evidência atual. Quando uma fonte "
-        "necessária não tiver sido consultada, limite-se ao que as fontes atuais sustentam ou declare que aquele "
-        "ponto não foi verificado nesta execução."
+        " REGRA DE EVIDÊNCIA DA EXECUÇÃO ATUAL: nesta etapa IA-002, a execução factual é isolada de todo histórico "
+        "anterior da conversa. Toda afirmação factual sobre estado atual ou recorte pesquisado deve ser sustentada "
+        "por uma fonte efetivamente consultada nesta execução. Não afirme pipeline, oportunidades ou seus status sem "
+        "consultar a fonte de oportunidades nesta execução; não afirme vendas ou vínculos de venda sem consultar "
+        "vendas; não nomeie modelos disponíveis do portfólio sem consultar o catálogo. Quando uma fonte necessária "
+        "não tiver sido consultada, limite-se ao que as fontes atuais sustentam ou declare que aquele ponto não foi "
+        "verificado nesta execução."
     )
     return f"{mensagem}\n\n{instrucao_temporal}{instrucao_recorte}", controle
 
@@ -194,15 +183,7 @@ def enviar_mensagem(
     conversa = _conversa_do_usuario(conversa_id, usuario)
     mensagem = payload.mensagem.strip()
     mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(mensagem)
-    mensagens_anteriores = _dados(
-        supabase.table("cti_ia_mensagens")
-        .select("papel,conteudo")
-        .eq("conversa_id", conversa_id)
-        .order("created_at")
-        .limit(40)
-        .execute()
-    )
-    historico = _historico_usuario_para_agente(mensagens_anteriores)
+    historico: list[dict[str, str]] = []
     supabase.table("cti_ia_mensagens").insert(
         {
             "conversa_id": conversa_id,
@@ -227,7 +208,7 @@ def enviar_mensagem(
         metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
         metadados["controle_precisao_factual"] = "qualificacoes_exigem_evidencia_explicita"
         metadados["controle_evidencia_execucao"] = "fatos_somente_fontes_consultadas_na_execucao_atual"
-        metadados["controle_historico_agente"] = "somente_mensagens_usuario_sem_respostas_anteriores_da_ia"
+        metadados["controle_historico_agente"] = "isolado_sem_historico_na_ia002"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
