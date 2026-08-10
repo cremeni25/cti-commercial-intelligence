@@ -14,7 +14,7 @@ def test_dominios_nao_consultados_explicita_ausencias_sem_inferir_fatos():
     assert "territorio" not in ausentes
 
 
-def test_instrucoes_proibem_pipeline_vendas_e_catalogo_sem_fonte():
+def test_instrucoes_proibem_pipeline_vendas_catalogo_ausencia_inferida_e_qualificadores_fortes():
     instrucoes = sintese.INSTRUCOES_SINTESE_FATUAL.casefold()
 
     assert "se oportunidades não foram consultadas" in instrucoes
@@ -22,7 +22,11 @@ def test_instrucoes_proibem_pipeline_vendas_e_catalogo_sem_fonte():
     assert "se produtos não foram consultados" in instrucoes
     assert "não faça afirmações positivas nem negativas" in instrucoes
     assert "relacionamento comercial ativo" in instrucoes
-    assert "estritamente mais de 50%" in instrucoes
+    assert "não use \"maioria\", \"predominante\"" in instrucoes
+    assert "informe sempre contagens" in instrucoes
+    assert "campo ausente não significa objeto ausente" in instrucoes
+    assert "significa apenas \"não registrado/não informado na fonte\"" in instrucoes
+    assert "por si só, não sustenta oportunidade de venda" in instrucoes
     assert "não frigorífico" in instrucoes
 
 
