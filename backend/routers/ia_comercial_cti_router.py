@@ -10,6 +10,7 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from services.ia_comercial_agente import gerar_resposta_agente
 from services.ia_comercial_cti import IAComercialOpenAIError
+from services.ia_comercial_sintese_factual import sintetizar_fatos_execucao
 
 router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
@@ -202,6 +203,15 @@ def enviar_mensagem(
             usuario_id=usuario.id,
             tipo_usuario=usuario.tipo_usuario,
         )
+        resposta_factual, metadados_sintese = sintetizar_fatos_execucao(
+            pergunta_atual=mensagem,
+            metadados=metadados,
+            usuario_id=usuario.id,
+            tipo_usuario=usuario.tipo_usuario,
+        )
+        if resposta_factual:
+            resposta_texto = resposta_factual
+        metadados.update(metadados_sintese)
         metadados["controle_temporal_pergunta"] = controle_temporal
         metadados["controle_temporal_origem"] = "modulo_ia_comercial"
         metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
