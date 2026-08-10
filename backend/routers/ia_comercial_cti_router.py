@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -24,6 +25,50 @@ class NovaMensagem(BaseModel):
 def _dados(resposta):
     dados = getattr(resposta, "data", None)
     return dados if isinstance(dados, list) else []
+
+
+def _periodo_temporal_explicito(mensagem: str) -> bool:
+    texto = mensagem.strip().casefold()
+    if not texto:
+        return False
+
+    expressoes = (
+        r"\bhoje\b",
+        r"\b(?:últim|ultim)[oa]s?\s+\d+\s+(?:dias?|semanas?|meses?|anos?)\b",
+        r"\b(?:este|neste|no)\s+m[eê]s\b",
+        r"\bm[eê]s\s+atual\b",
+        r"\b(?:este|neste|no)\s+trimestre\b",
+        r"\btrimestre\s+atual\b",
+        r"\b(?:este|neste|no)\s+ano\b",
+        r"\bano\s+atual\b",
+        r"\btodo\s+(?:o\s+)?hist[oó]rico\b",
+        r"\bhist[oó]rico\s+completo\b",
+        r"\b20\d{2}\b",
+        r"\b\d{1,2}/\d{1,2}/\d{2,4}\b",
+        r"\b20\d{2}-\d{2}-\d{2}\b",
+    )
+    return any(re.search(expressao, texto) for expressao in expressoes)
+
+
+def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
+    if _periodo_temporal_explicito(mensagem):
+        controle = "periodo_explicito_usuario"
+        instrucao = (
+            "CONTEXTO INTERNO DA IA CTI: a pergunta contém um horizonte temporal "
+            "explicitamente definido pelo usuário. Preserve esse horizonte nas consultas; "
+            "não o substitua silenciosamente por outro período."
+        )
+    else:
+        controle = "sem_periodo_explicito_todo_historico"
+        instrucao = (
+            "CONTEXTO INTERNO DA IA CTI: a pergunta não definiu um horizonte temporal concreto. "
+            "Para consultas territoriais/ANFIR, use TODO_HISTORICO como universo-base dos dados "
+            "disponíveis. Janelas recentes podem ser analisadas complementarmente quando forem úteis, "
+            "mas não podem substituir silenciosamente o universo histórico disponível. "
+            "Este contexto pertence exclusivamente ao módulo IA Comercial e não deriva de filtros, "
+            "estado ou ações de outros módulos do CTI."
+        )
+    return f"{mensagem}\n\n{instrucao}", controle
 
 
 def _conversa_do_usuario(conversa_id: str, usuario: UsuarioAutenticado) -> dict:
@@ -103,6 +148,7 @@ def enviar_mensagem(
 ):
     conversa = _conversa_do_usuario(conversa_id, usuario)
     mensagem = payload.mensagem.strip()
+    mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(mensagem)
     mensagens_anteriores = _dados(
         supabase.table("cti_ia_mensagens")
         .select("papel,conteudo")
@@ -129,11 +175,13 @@ def enviar_mensagem(
 
     try:
         resposta_texto, metadados = gerar_resposta_agente(
-            mensagem=mensagem,
+            mensagem=mensagem_agente,
             historico=historico,
             usuario_id=usuario.id,
             tipo_usuario=usuario.tipo_usuario,
         )
+        metadados["controle_temporal_pergunta"] = controle_temporal
+        metadados["controle_temporal_origem"] = "modulo_ia_comercial"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
