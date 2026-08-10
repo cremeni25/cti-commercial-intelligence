@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { Bot, Loader2, MessageSquarePlus, Send, ShieldCheck } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -51,11 +51,6 @@ export default function IaComercialPage() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState("")
   const fimConversaRef = useRef<HTMLDivElement | null>(null)
-
-  const conversaAtual = useMemo(
-    () => conversas.find((item) => item.id === conversaId),
-    [conversas, conversaId],
-  )
 
   async function carregarConversas() {
     const lista = await requisitar("/conversas")
@@ -139,13 +134,13 @@ export default function IaComercialPage() {
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <Topbar />
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden lg:grid-cols-[300px_1fr] lg:grid-rows-1">
-          <aside className="max-h-36 min-h-0 overflow-y-auto border-r border-[#13203f] bg-[#061126] p-3 lg:max-h-none lg:p-4">
+          <aside className="min-h-0 overflow-y-auto border-r border-[#13203f] bg-[#061126] p-3 lg:p-4">
             <button onClick={() => void criarConversa()} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 font-semibold text-slate-950 lg:py-3">
               <MessageSquarePlus size={18} /> Nova conversa
             </button>
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1 lg:mt-4 lg:block lg:space-y-2 lg:overflow-visible lg:pb-0">
+            <div className="mt-4 hidden space-y-2 lg:block">
               {carregando ? <p className="text-sm text-slate-500">Carregando...</p> : conversas.map((item) => (
-                <button key={item.id} onClick={() => setConversaId(item.id)} className={`w-[220px] flex-none rounded-xl border px-3 py-2.5 text-left text-sm lg:w-full lg:py-3 ${item.id === conversaId ? "border-cyan-500 bg-cyan-950/30 text-cyan-200" : "border-[#13203f] bg-[#091a33] text-slate-300"}`}>
+                <button key={item.id} onClick={() => setConversaId(item.id)} className={`w-full rounded-xl border px-3 py-3 text-left text-sm ${item.id === conversaId ? "border-cyan-500 bg-cyan-950/30 text-cyan-200" : "border-[#13203f] bg-[#091a33] text-slate-300"}`}>
                   <span className="line-clamp-2">{item.titulo || "Nova conversa"}</span>
                 </button>
               ))}
@@ -188,7 +183,7 @@ export default function IaComercialPage() {
 
             <form onSubmit={enviar} className="shrink-0 border-t border-[#13203f] bg-[#061126] p-3 sm:p-4">
               <div className="mx-auto flex max-w-4xl gap-2 sm:gap-3">
-                <textarea value={entrada} onChange={(event) => setEntrada(event.target.value)} placeholder={`Pergunte à ${conversaAtual?.titulo || "IA Comercial CTI"}...`} rows={1} className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-[#28507c] bg-[#020d1f] px-4 py-3 text-sm outline-none focus:border-cyan-400" />
+                <textarea value={entrada} onChange={(event) => setEntrada(event.target.value)} placeholder="Pergunte à IA Comercial CTI..." rows={1} className="min-h-12 max-h-28 flex-1 resize-none rounded-2xl border border-slate-700 bg-slate-900/80 px-4 py-3 text-sm text-slate-100 outline-none placeholder:text-slate-500 focus:border-cyan-500" />
                 <button disabled={!entrada.trim() || enviando} className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cyan-500 text-slate-950 disabled:opacity-40 sm:size-14"><Send size={20} /></button>
               </div>
             </form>
