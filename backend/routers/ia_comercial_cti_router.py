@@ -27,6 +27,18 @@ def _dados(resposta):
     return dados if isinstance(dados, list) else []
 
 
+def _historico_usuario_para_agente(mensagens: list[dict]) -> list[dict[str, str]]:
+    """Preserva continuidade da intenção sem reutilizar respostas antigas da IA como evidência factual."""
+    historico: list[dict[str, str]] = []
+    for item in mensagens:
+        if str(item.get("papel") or "").strip().casefold() != "user":
+            continue
+        conteudo = str(item.get("conteudo") or "").strip()
+        if conteudo:
+            historico.append({"role": "user", "content": conteudo})
+    return historico
+
+
 def _periodo_temporal_explicito(mensagem: str) -> bool:
     texto = mensagem.strip().casefold()
     if not texto:
@@ -190,11 +202,7 @@ def enviar_mensagem(
         .limit(40)
         .execute()
     )
-    historico = [
-        {"role": str(item.get("papel") or "user"), "content": str(item.get("conteudo") or "")}
-        for item in mensagens_anteriores
-        if item.get("conteudo")
-    ]
+    historico = _historico_usuario_para_agente(mensagens_anteriores)
     supabase.table("cti_ia_mensagens").insert(
         {
             "conversa_id": conversa_id,
@@ -219,6 +227,7 @@ def enviar_mensagem(
         metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
         metadados["controle_precisao_factual"] = "qualificacoes_exigem_evidencia_explicita"
         metadados["controle_evidencia_execucao"] = "fatos_somente_fontes_consultadas_na_execucao_atual"
+        metadados["controle_historico_agente"] = "somente_mensagens_usuario_sem_respostas_anteriores_da_ia"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
