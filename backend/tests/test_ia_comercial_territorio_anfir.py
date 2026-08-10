@@ -125,14 +125,21 @@ def test_periodo_vazio_nao_apaga_existencia_historica_do_mesmo_recorte(monkeypat
     assert "Zero no período não equivale a zero histórico" in resultado["observacao"]
 
 
-def test_gate_distingue_territorio_e_anfir():
+def test_gate_distingue_territorio_e_anfir_sem_forcar_catalogo():
     requeridas = agente._fontes_requeridas(
         "Compare o DDD 011 com a ANFIR para a linha Trailer."
     )
 
-    assert "territorio" in requeridas
-    assert "anfir" in requeridas
-    assert "produtos" in requeridas
+    assert requeridas == {"territorio", "anfir"}
+    assert "produtos" not in requeridas
+
+
+def test_gate_adiciona_catalogo_quando_portfolio_e_explicito():
+    requeridas = agente._fontes_requeridas(
+        "Compare o DDD 011 com a ANFIR para a linha Trailer e com o catálogo de modelos disponíveis."
+    )
+
+    assert requeridas == {"territorio", "anfir", "produtos"}
 
 
 def test_catalogo_agente_expoe_novas_primitivas_sem_acesso_admin():
