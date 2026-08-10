@@ -86,7 +86,7 @@ def test_investigacao_multi_fonte_forca_sintese_final_com_evidencias(monkeypatch
         "cti_atual",
         "historico",
         "produtos",
-        "clientes_oportunidades",
+        "clientes",
     }
 
 
