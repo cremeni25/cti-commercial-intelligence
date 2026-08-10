@@ -17,18 +17,33 @@ type Mensagem = {
 }
 
 const API = "/api/crm-proxy/ia-comercial-cti"
+const MARGEM_RENOVACAO_SEGUNDOS = 60
 
-async function tokenAtual(): Promise<string> {
+async function tokenAtual(forcarRenovacao = false): Promise<string> {
   const supabase = getSupabaseClient()
-  const { data } = await supabase.auth.getSession()
-  const token = data.session?.access_token
-  if (!token) throw new Error("Sessão autenticada não encontrada.")
-  return token
+  const { data, error } = await supabase.auth.getSession()
+  if (error) throw new Error("Não foi possível validar a sessão autenticada.")
+
+  const sessao = data.session
+  if (!sessao) throw new Error("Sessão autenticada não encontrada.")
+
+  const agora = Math.floor(Date.now() / 1000)
+  const expiraEm = sessao.expires_at || 0
+  const deveRenovar = forcarRenovacao || !expiraEm || expiraEm <= agora + MARGEM_RENOVACAO_SEGUNDOS
+
+  if (!deveRenovar) return sessao.access_token
+
+  const renovacao = await supabase.auth.refreshSession()
+  const tokenRenovado = renovacao.data.session?.access_token
+  if (renovacao.error || !tokenRenovado) {
+    await supabase.auth.signOut({ scope: "local" }).catch(() => undefined)
+    throw new Error("Sessão expirada. Entre novamente no CTI.")
+  }
+  return tokenRenovado
 }
 
 async function requisitar(caminho: string, init?: RequestInit) {
-  const token = await tokenAtual()
-  const resposta = await fetch(`${API}${caminho}`, {
+  const executar = async (token: string) => fetch(`${API}${caminho}`, {
     ...init,
     cache: "no-store",
     headers: {
@@ -37,8 +52,21 @@ async function requisitar(caminho: string, init?: RequestInit) {
       ...(init?.headers || {}),
     },
   })
+
+  let resposta = await executar(await tokenAtual())
+  if (resposta.status === 401) {
+    resposta = await executar(await tokenAtual(true))
+  }
+
   const payload = await resposta.json().catch(() => null)
-  if (!resposta.ok) throw new Error(payload?.detail || "Falha na comunicação com a IA Comercial CTI.")
+  if (!resposta.ok) {
+    if (resposta.status === 401) {
+      const supabase = getSupabaseClient()
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined)
+      throw new Error("Sessão expirada. Entre novamente no CTI.")
+    }
+    throw new Error(payload?.detail || "Falha na comunicação com a IA Comercial CTI.")
+  }
   return payload
 }
 
