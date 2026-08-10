@@ -97,12 +97,20 @@ def test_precisao_factual_nao_transforma_ausencia_em_confirmacao():
     assert "não atribua categoria, status ou fato não registrado" in mensagem_agente
 
 
-def test_maioria_exige_mais_de_cinquenta_por_cento():
+def test_maioria_e_predominancia_exigem_mais_de_cinquenta_por_cento():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise a distribuição de status.")
 
-    assert "Use 'maioria' somente quando" in mensagem_agente
+    assert "'maioria', 'predominante', 'líder', 'principal'" in mensagem_agente
     assert "estritamente mais de 50%" in mensagem_agente
-    assert "empate ou pluralidade sem maioria absoluta" in mensagem_agente
+    assert "sem maioria absoluta" in mensagem_agente
+
+
+def test_cobertura_parcial_nao_vira_predominancia_do_universo():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise fabricantes no recorte.")
+
+    assert "cobertura do campo for parcial" in mensagem_agente
+    assert "entre os registros preenchidos" in mensagem_agente
+    assert "não transforme a categoria mais frequente entre preenchidos em predominância do universo" in mensagem_agente
 
 
 def test_status_operacional_nao_vira_venda_sem_semantica_explicita():
@@ -128,13 +136,12 @@ def test_cobertura_de_campo_deve_ser_exata():
     assert "não 'na maioria dos casos'" in mensagem_agente
 
 
-def test_historico_da_conversa_nao_e_evidencia_operacional_da_execucao_atual():
+def test_ia002_isola_execucao_factual_de_todo_historico_anterior():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal(
         "Compare Trailer no DDD 011 com a ANFIR."
     )
 
-    assert "histórico da conversa existe para continuidade semântica" in mensagem_agente
-    assert "não é fonte factual operacional da resposta atual" in mensagem_agente
+    assert "nesta etapa IA-002, a execução factual é isolada de todo histórico anterior da conversa" in mensagem_agente
     assert "fonte efetivamente consultada nesta execução" in mensagem_agente
 
 
@@ -143,17 +150,16 @@ def test_pipeline_nao_pode_ser_afirmado_sem_fonte_de_oportunidades_na_execucao()
         "Compare Trailer no DDD 011 com a ANFIR."
     )
 
-    assert "Não afirme pipeline, oportunidades ou seus status sem consultar" in mensagem_agente
-    assert "a fonte de oportunidades nesta execução" in mensagem_agente
+    assert "Não afirme pipeline, oportunidades ou seus status sem" in mensagem_agente
+    assert "consultar a fonte de oportunidades nesta execução" in mensagem_agente
 
 
-def test_catalogo_nao_pode_ser_reutilizado_da_memoria_sem_consulta_atual():
+def test_catalogo_nao_pode_ser_afirmado_sem_consulta_atual():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal(
         "Compare Trailer no DDD 011 com a ANFIR."
     )
 
     assert "não nomeie modelos disponíveis do portfólio sem consultar o catálogo" in mensagem_agente
-    assert "não reutilize números, status, clientes, modelos ou conclusões de respostas anteriores" in mensagem_agente
 
 
 def test_vendas_nao_podem_ser_afirmadas_sem_consulta_atual():
@@ -162,33 +168,4 @@ def test_vendas_nao_podem_ser_afirmadas_sem_consulta_atual():
     )
 
     assert "não afirme vendas ou vínculos de venda sem consultar vendas" in mensagem_agente
-    assert "ponto não foi verificado nesta execução" in mensagem_agente
-
-
-def test_historico_operacional_remove_respostas_antigas_da_ia():
-    mensagens = [
-        {"papel": "user", "conteudo": "Analise Trailer no DDD 011."},
-        {"papel": "assistant", "conteudo": "Pipeline sem oportunidades abertas e modelos X4-7500."},
-        {"papel": "user", "conteudo": "Agora compare com a ANFIR."},
-    ]
-
-    historico = router._historico_usuario_para_agente(mensagens)
-
-    assert historico == [
-        {"role": "user", "content": "Analise Trailer no DDD 011."},
-        {"role": "user", "content": "Agora compare com a ANFIR."},
-    ]
-    assert all(item["role"] == "user" for item in historico)
-    assert all("X4-7500" not in item["content"] for item in historico)
-
-
-def test_historico_operacional_descarta_vazios_e_preserva_intencao_do_usuario():
-    mensagens = [
-        {"papel": "assistant", "conteudo": "fato antigo"},
-        {"papel": "user", "conteudo": "  "},
-        {"papel": "user", "conteudo": "Continue a análise territorial."},
-    ]
-
-    assert router._historico_usuario_para_agente(mensagens) == [
-        {"role": "user", "content": "Continue a análise territorial."}
-    ]
+    assert "não foi verificado nesta execução" in mensagem_agente
