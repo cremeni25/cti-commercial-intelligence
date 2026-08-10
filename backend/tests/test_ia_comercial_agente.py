@@ -139,24 +139,24 @@ def test_fontes_requeridas_identifica_cruzamento_explicito_multi_fonte():
     }
 
 
-def test_fontes_requeridas_separa_vendas_clientes_oportunidades_e_produtos():
+def test_fontes_requeridas_relacionais_de_vendas_usam_vinculos_resolvidos():
     requeridas = agente._fontes_requeridas(
         "Quantas vendas existem no CTI e quais clientes, produtos e oportunidades estão relacionados a elas?"
     )
 
-    assert requeridas == {"vendas", "clientes", "produtos", "oportunidades"}
+    assert requeridas == {"vendas", "relacionamentos_vendas"}
     assert "web" not in requeridas
 
 
 def test_sintese_interna_proibe_reuso_de_web_antiga():
-    instrucao = agente._instrucao_sintese_final({"vendas", "clientes", "produtos", "oportunidades"})
+    instrucao = agente._instrucao_sintese_final({"vendas", "relacionamentos_vendas"})
 
     assert "não exigiu web" in instrucao.casefold()
     assert "não reutilize fatos" in instrucao.casefold()
     assert "vinculos_resolvidos" in instrucao
 
 
-def test_evidencias_presentes_exige_clientes_e_oportunidades_separadamente():
+def test_evidencias_presentes_mantem_vinculos_de_vendas_e_clientes_separados():
     rastreio = [
         {"tipo": "CTI", "ferramenta": "consultar_dominio_cti", "argumentos": {"dominio": "vendas"}},
         {"tipo": "CTI", "ferramenta": "consultar_dominio_cti", "argumentos": {"dominio": "clientes"}},
@@ -164,7 +164,7 @@ def test_evidencias_presentes_exige_clientes_e_oportunidades_separadamente():
 
     presentes = agente._evidencias_presentes(rastreio, [])
 
-    assert presentes == {"vendas", "clientes"}
+    assert presentes == {"vendas", "relacionamentos_vendas", "clientes"}
     assert "oportunidades" not in presentes
 
 
