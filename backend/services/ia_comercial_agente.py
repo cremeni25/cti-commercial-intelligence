@@ -12,6 +12,7 @@ from services.ia_comercial_cti import (
     _fontes_responses,
     contexto_comercial,
 )
+from services.ia_comercial_dados_semanticos import consultar_dominio_semantico
 from services.ia_comercial_historico import contexto_historico
 from services.product_catalog_service import listar_catalogo
 
@@ -34,6 +35,7 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - Relacione análises a produtos/equipamentos, linhas/modelos, clientes, carteira, frota, implementadoras, oportunidades, propostas, pedidos, vendas, visitas/atividades, território/DDD, ANFIR, concorrência, histórico, share, previsão e prioridade comercial quando pertinentes.
 - A web é contexto externo. Não transforme tendências gerais em recomendações de RH, recrutamento, retenção de talentos, capacitação, cultura, automação administrativa, investimentos corporativos genéricos ou serviços não relacionados aos produtos, salvo pedido explícito.
 - Quando produtos, linhas ou modelos forem relevantes, use o catálogo oficial do CTI.
+- A ferramenta consultar_dominio_cti é paginável e opera sobre o conjunto autorizado completo. Se uma investigação precisar continuar além da página atual, use offset e tem_mais; não trate uma página como universo completo.
 
 SEMÂNTICA COMERCIAL DO PIPELINE — REGRA OBRIGATÓRIA:
 - O status registrado da oportunidade tem precedência sobre inferências textuais, probabilidade ou datas auxiliares.
@@ -230,16 +232,23 @@ def _executar_ferramenta_cti(nome: str, argumentos: dict[str, Any], usuario_id: 
         return {"ferramenta": nome, "escopo": contexto.get("escopo"), "quantidades": contexto.get("quantidades"), "valores": contexto.get("valores"), "fontes_disponiveis": contexto.get("fontes_disponiveis")}
     if nome == "consultar_dominio_cti":
         dominio = str(argumentos.get("dominio") or "oportunidades")
-        if dominio not in {"clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades"}:
-            return {"ferramenta": nome, "erro": "Domínio CTI não autorizado."}
-        contexto = contexto_comercial(usuario_id, tipo_usuario)
-        registros = contexto.get("crm", {}).get(dominio, [])
-        if not isinstance(registros, list):
-            registros = []
-        filtrados = _filtrar_registros(registros, str(argumentos.get("termo") or "") or None, int(argumentos.get("limite") or 30))
+        resultado = consultar_dominio_semantico(
+            dominio,
+            usuario_id,
+            tipo_usuario,
+            termo=str(argumentos.get("termo") or "") or None,
+            status=str(argumentos.get("status") or "") or None,
+            limite=int(argumentos.get("limite") or 30),
+            offset=int(argumentos.get("offset") or 0),
+        )
+        if resultado.get("erro"):
+            return {"ferramenta": nome, **resultado}
         if dominio == "oportunidades":
-            filtrados = [_semantica_oportunidade(item) if isinstance(item, dict) else item for item in filtrados]
-        return {"ferramenta": nome, "dominio": dominio, "escopo": contexto.get("escopo"), "total_retornado": len(filtrados), "amostragem": contexto.get("amostragem_detalhes"), "resultado": filtrados}
+            resultado["resultado"] = [
+                _semantica_oportunidade(item) if isinstance(item, dict) else item
+                for item in resultado.get("resultado", [])
+            ]
+        return {"ferramenta": nome, **resultado}
     if nome == "consultar_historico_cti":
         historico = contexto_historico(tipo_usuario)
         registros = historico.get("registros_ultimos_90_dias", [])
@@ -261,7 +270,7 @@ def ferramentas_agente() -> list[dict[str, Any]]:
     return [
         {"type": "web_search", "search_context_size": "high", "user_location": {"type": "approximate", "country": "BR", "region": "São Paulo", "city": "São Paulo", "timezone": "America/Sao_Paulo"}},
         {"type": "function", "name": "consultar_resumo_cti", "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
-        {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta registros de negócio autorizados do CRM CTI; oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades"]}, "termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["dominio", "termo", "limite"], "additionalProperties": False}, "strict": True},
+        {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_historico_cti", "description": "Consulta a base histórica comercial CTI/ANFIR e indicadores históricos.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_catalogo_produtos_cti", "description": "Consulta o catálogo oficial de linhas, modelos e aliases de produtos/equipamentos do CTI.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}}, "required": ["termo"], "additionalProperties": False}, "strict": True},
     ]
@@ -347,7 +356,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
                         houve_progresso = True
                         assinaturas_executadas.add(assinatura)
                     resultado = _executar_ferramenta_cti(nome, argumentos, usuario_id, tipo_usuario)
-                    rastreio.append({"tipo": "CTI", "iteracao": ciclos_executados, "ferramenta": nome, "argumentos": argumentos, "resumo": {"dominio": resultado.get("dominio"), "total_retornado": resultado.get("total_retornado"), "erro": resultado.get("erro")}})
+                    rastreio.append({"tipo": "CTI", "iteracao": ciclos_executados, "ferramenta": nome, "argumentos": argumentos, "resumo": {"dominio": resultado.get("dominio"), "total_retornado": resultado.get("total_retornado", resultado.get("total_encontrado")), "erro": resultado.get("erro")}})
                     saidas.append({"type": "function_call_output", "call_id": str(getattr(chamada, "call_id", "") or ""), "output": json.dumps(resultado, ensure_ascii=False, default=str)})
 
                 presentes_depois = _evidencias_presentes(rastreio, fontes_web)
@@ -411,6 +420,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
         "controle_loop": "progresso_evidencial",
         "controle_sintese": "obrigatoria_multi_fonte" if sintese_forcada else "direta",
         "controle_status_pipeline": "semantica_backend",
+        "catalogo_ferramentas": "ia_002_semantico_paginavel",
         "limite_emergencial_ciclos": LIMITE_EMERGENCIAL_CICLOS,
         "max_ciclos_sem_progresso": MAX_CICLOS_SEM_PROGRESSO,
     }
