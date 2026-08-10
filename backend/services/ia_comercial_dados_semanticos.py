@@ -88,6 +88,83 @@ def _escopo_autorizado(usuario_id: str, tipo_usuario: str) -> dict[str, list[dic
     }
 
 
+def _mapa_por_id(registros: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    return {
+        str(item.get("id")): item
+        for item in registros
+        if isinstance(item, dict) and item.get("id")
+    }
+
+
+def _enriquecer_vendas(
+    vendas: list[dict[str, Any]],
+    clientes: list[dict[str, Any]],
+    oportunidades: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    clientes_por_id = _mapa_por_id(clientes)
+    oportunidades_por_id = _mapa_por_id(oportunidades)
+    equipamentos_por_id = _mapa_por_id(_consulta_segura("equipamentos"))
+    catalogo_por_codigo = {
+        str(item.get("codigo")): item
+        for item in _consulta_segura("cti_catalogo_equipamentos")
+        if isinstance(item, dict) and item.get("codigo")
+    }
+
+    resultado: list[dict[str, Any]] = []
+    for venda in vendas:
+        if not isinstance(venda, dict):
+            continue
+        item = dict(venda)
+        cliente = clientes_por_id.get(str(item.get("cliente_id") or ""))
+        oportunidade = oportunidades_por_id.get(str(item.get("oportunidade_id") or ""))
+        equipamento_legado = equipamentos_por_id.get(str(item.get("equipamento_id") or ""))
+        equipamento_catalogo = catalogo_por_codigo.get(str(item.get("equipamento_codigo") or ""))
+
+        item["vinculos_resolvidos"] = {
+            "cliente": (
+                {
+                    "id": cliente.get("id"),
+                    "nome": cliente.get("nome"),
+                    "cidade": cliente.get("cidade"),
+                    "uf": cliente.get("uf"),
+                }
+                if cliente
+                else None
+            ),
+            "oportunidade": (
+                {
+                    "id": oportunidade.get("id"),
+                    "nome": oportunidade.get("nome") or oportunidade.get("titulo"),
+                    "status": oportunidade.get("status"),
+                }
+                if oportunidade
+                else None
+            ),
+            "equipamento": (
+                {
+                    "origem": "catalogo_comercial",
+                    "codigo": equipamento_catalogo.get("codigo"),
+                    "modelo": equipamento_catalogo.get("modelo_base") or equipamento_catalogo.get("nome_comercial"),
+                    "linha": equipamento_catalogo.get("linha"),
+                }
+                if equipamento_catalogo
+                else (
+                    {
+                        "origem": "equipamentos_legado",
+                        "id": equipamento_legado.get("id"),
+                        "modelo": equipamento_legado.get("modelo"),
+                        "linha": equipamento_legado.get("linha"),
+                        "observacao": equipamento_legado.get("observacao"),
+                    }
+                    if equipamento_legado
+                    else None
+                )
+            ),
+        }
+        resultado.append(item)
+    return resultado
+
+
 def consultar_dominio_semantico(
     dominio: str,
     usuario_id: str,
@@ -103,7 +180,15 @@ def consultar_dominio_semantico(
 
     limite = max(1, min(int(limite or 30), 100))
     offset = max(0, int(offset or 0))
-    registros = _escopo_autorizado(usuario_id, tipo_usuario).get(dominio, [])
+    escopo = _escopo_autorizado(usuario_id, tipo_usuario)
+    registros = escopo.get(dominio, [])
+
+    if dominio == "vendas":
+        registros = _enriquecer_vendas(
+            registros,
+            escopo.get("clientes", []),
+            escopo.get("oportunidades", []),
+        )
 
     if termo:
         alvo = _normalizar(termo)
