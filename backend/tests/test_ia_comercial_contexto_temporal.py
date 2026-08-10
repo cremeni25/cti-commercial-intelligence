@@ -87,3 +87,42 @@ def test_fabricante_explicito_continua_presente_na_pergunta_e_pode_integrar_o_re
 
     assert mensagem in mensagem_agente
     assert "somente dimensões explicitamente informadas na pergunta" in mensagem_agente
+
+
+def test_precisao_factual_nao_transforma_ausencia_em_confirmacao():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise os clientes do DDD 011.")
+
+    assert "não transforme ausência de dado em confirmação" in mensagem_agente
+    assert "vazio, nulo ou ausente" in mensagem_agente
+    assert "não atribua categoria, status ou fato não registrado" in mensagem_agente
+
+
+def test_maioria_exige_mais_de_cinquenta_por_cento():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise a distribuição de status.")
+
+    assert "Use 'maioria' somente quando" in mensagem_agente
+    assert "estritamente mais de 50%" in mensagem_agente
+    assert "empate ou pluralidade sem maioria absoluta" in mensagem_agente
+
+
+def test_status_operacional_nao_vira_venda_sem_semantica_explicita():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise os registros operacionais.")
+
+    assert "Não converta status operacional" in mensagem_agente
+    assert "em venda, negócio realizado" in mensagem_agente
+    assert "sem semântica explícita da fonte" in mensagem_agente
+
+
+def test_cliente_ativo_exige_status_explicito():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Quais clientes devo priorizar?")
+
+    assert "Só qualifique cliente como ativo/inativo" in mensagem_agente
+    assert "explicitamente preenchido na fonte" in mensagem_agente
+
+
+def test_cobertura_de_campo_deve_ser_exata():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal("Analise a cobertura dos modelos.")
+
+    assert "use contagens exatas" in mensagem_agente
+    assert "todos os registros do recorte estão sem modelo" in mensagem_agente
+    assert "não 'na maioria dos casos'" in mensagem_agente
