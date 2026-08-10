@@ -126,3 +126,40 @@ def test_cobertura_de_campo_deve_ser_exata():
     assert "use contagens exatas" in mensagem_agente
     assert "todos os registros do recorte estão sem modelo" in mensagem_agente
     assert "não 'na maioria dos casos'" in mensagem_agente
+
+
+def test_historico_da_conversa_nao_e_evidencia_operacional_da_execucao_atual():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
+        "Compare Trailer no DDD 011 com a ANFIR."
+    )
+
+    assert "histórico da conversa existe para continuidade semântica" in mensagem_agente
+    assert "não é fonte factual operacional da resposta atual" in mensagem_agente
+    assert "fonte efetivamente consultada nesta execução" in mensagem_agente
+
+
+def test_pipeline_nao_pode_ser_afirmado_sem_fonte_de_oportunidades_na_execucao():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
+        "Compare Trailer no DDD 011 com a ANFIR."
+    )
+
+    assert "Não afirme pipeline, oportunidades ou seus status sem consultar" in mensagem_agente
+    assert "a fonte de oportunidades nesta execução" in mensagem_agente
+
+
+def test_catalogo_nao_pode_ser_reutilizado_da_memoria_sem_consulta_atual():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
+        "Compare Trailer no DDD 011 com a ANFIR."
+    )
+
+    assert "não nomeie modelos disponíveis do portfólio sem consultar o catálogo" in mensagem_agente
+    assert "não reutilize números, status, clientes, modelos ou conclusões de respostas anteriores" in mensagem_agente
+
+
+def test_vendas_nao_podem_ser_afirmadas_sem_consulta_atual():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
+        "Compare Trailer no DDD 011 com a ANFIR."
+    )
+
+    assert "não afirme vendas ou vínculos de venda sem consultar vendas" in mensagem_agente
+    assert "ponto não foi verificado nesta execução" in mensagem_agente
