@@ -43,8 +43,11 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - Preserve ausências e qualidade dos dados. Se um valor de fabricante/modelo/status tiver grafia anômala ou cobertura parcial, descreva a limitação sem normalizar silenciosamente o dado como se fosse completo.
 - CAMPO AUSENTE NÃO SIGNIFICA OBJETO AUSENTE: modelo, fabricante, status ou qualquer outro campo vazio/nulo significa apenas "não registrado/não informado na fonte". Nunca conclua que o cliente não possui aquele item, equipamento, condição ou característica no mundo real.
 - Ausência de modelo, fabricante ou outro campo pode sustentar somente recomendação de qualificação/atualização da base ou investigação comercial para preencher a informação. Por si só, não sustenta oportunidade de venda, renovação, substituição, modernização, conversão, ganho de share ou oferta de produto.
-- Só use dimensões factuais que aparecem em RESUMO_RELEVANTE. Se status, fabricante, implementadora, catálogo ou outra dimensão não estiver presente ali, não a mencione.
+- Só use dimensões factuais que aparecem em RESUMO_RELEVANTE. Se status, fabricante de equipamento, implementadora, catálogo ou outra dimensão não estiver presente ali, não a mencione.
 - Para sinais de oportunidade comercial, derive recomendações apenas das dimensões presentes: concentração territorial pode justificar priorização geográfica; lacunas de dados podem justificar qualificação da base. Não transforme lacuna cadastral em demanda comercial.
+- Em análises de frota, diferencie obrigatoriamente total_registros de total_veiculos_identificaveis. Um mesmo veículo pode aparecer em mais de um registro histórico. Nunca trate total_registros como quantidade de veículos únicos quando total_veiculos_identificaveis estiver disponível.
+- Cobertura de placa, chassi, fabricante/modelo do caminhão ou número de frota descreve qualidade/completude da base; não conclua ausência física do veículo ou atributo quando o campo não estiver preenchido.
+- Rankings de tipo de veículo, fabricante e modelo do caminhão contam registros do recorte, salvo indicação explícita em contrário; não os apresente como contagem de veículos únicos.
 - Diferencie fato, limitação e inferência/recomendação.
 - Responda em português do Brasil, com linguagem comercial clara e direta.
 """
@@ -111,6 +114,25 @@ def _dimensoes_territoriais_pedidas(pergunta_atual: str) -> set[str]:
         dimensoes.add("fabricantes")
     if "linha" in texto:
         dimensoes.add("linhas")
+    if any(
+        t in texto
+        for t in (
+            "frota",
+            "veículo",
+            "veiculo",
+            "veículos",
+            "veiculos",
+            "placa",
+            "chassi",
+            "caminhão",
+            "caminhao",
+            "caminhões",
+            "caminhoes",
+            "tipo de veículo",
+            "tipo de veiculo",
+        )
+    ):
+        dimensoes.add("frota")
     return dimensoes
 
 
@@ -142,6 +164,30 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
         relevante["ranking_fabricantes_equipamento"] = resumo.get("ranking_fabricantes_equipamento") or []
     if "linhas" in dimensoes:
         relevante["ranking_linhas"] = resumo.get("ranking_linhas") or []
+    if "frota" in dimensoes:
+        cobertura = resumo.get("cobertura") or {}
+        relevante["frota"] = {
+            "total_veiculos_identificaveis": resumo.get("total_veiculos_identificaveis"),
+            "registros_sem_identificador_veiculo": resumo.get("registros_sem_identificador_veiculo"),
+            "cobertura_identificacao": {
+                "com_placa": cobertura.get("com_placa"),
+                "sem_placa": cobertura.get("sem_placa"),
+                "com_chassi": cobertura.get("com_chassi"),
+                "sem_chassi": cobertura.get("sem_chassi"),
+                "com_numero_frota": cobertura.get("com_numero_frota"),
+                "sem_numero_frota": cobertura.get("sem_numero_frota"),
+            },
+            "cobertura_caminhao": {
+                "com_fabricante_caminhao": cobertura.get("com_fabricante_caminhao"),
+                "sem_fabricante_caminhao": cobertura.get("sem_fabricante_caminhao"),
+                "com_modelo_caminhao": cobertura.get("com_modelo_caminhao"),
+                "sem_modelo_caminhao": cobertura.get("sem_modelo_caminhao"),
+            },
+            "ranking_tipos_veiculo_por_registros": resumo.get("ranking_tipos_veiculo") or [],
+            "ranking_fabricantes_caminhao_por_registros": resumo.get("ranking_fabricantes_caminhao") or [],
+            "ranking_modelos_caminhao_por_registros": resumo.get("ranking_modelos_caminhao") or [],
+            "regra_contagem": "total_registros é histórico; total_veiculos_identificaveis deduplica por chassi, depois placa e id_operacional",
+        }
     relevante["regra_ausencia_dado"] = "campo não preenchido significa somente informação não registrada na fonte"
     return relevante
 
