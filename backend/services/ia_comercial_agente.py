@@ -16,7 +16,7 @@ from services.ia_comercial_historico import contexto_historico
 from services.product_catalog_service import listar_catalogo
 
 AGENT_MODEL = os.getenv("OPENAI_AGENT_MODEL", os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini"))
-MAX_ITERACOES_AGENTE = 8
+MAX_ITERACOES_AGENTE = max(8, min(int(os.getenv("OPENAI_AGENT_MAX_ITERATIONS", "12")), 16))
 
 FERRAMENTAS_CTI_PERMITIDAS = {
     "consultar_resumo_cti",
@@ -31,7 +31,7 @@ Seu comportamento deve ser de um assistente geral, conversacional, analítico e 
 IDENTIDADE E CONTEXTO OPERACIONAL:
 - CTI é a plataforma/sistema de inteligência comercial. CTI NÃO é uma empresa, não vende equipamentos, não contrata profissionais, não possui frota, não fabrica produtos e não investe em ativos operacionais.
 - Viena SP é a operação/dealer comercial atendida pelo CTI e Carrier Transicold é a marca/fabricante no contexto comercial.
-- Quando recomendar ações comerciais, direcione-as à operação, aos vendedores, gestores ou responsáveis apropriados. Nunca atribua ao CTI ações empresariais ou comerciais que pertencem à Viena/Carrier ou aos usuários.
+- Quando recomendar ações comerciais, direcione-as à operação, aos vendedores, gestores ou responsáveis apropriados. Nunca atribua ao "CTI" ações empresariais ou comerciais que pertencem à Viena/Carrier ou aos usuários.
 
 DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - O núcleo de inteligência do CTI é produto-cêntrico e orientado à operação comercial de equipamentos de refrigeração para transporte.
@@ -52,6 +52,7 @@ EVIDÊNCIA E CONTINUIDADE:
 - O histórico da conversa serve para continuidade semântica, não como prova atual de fatos operacionais ou externos.
 - Respostas anteriores do próprio assistente podem estar desatualizadas ou terem sido produzidas com fontes diferentes. Nunca reutilize números, clientes, produtos ou fatos de mercado como evidência atual sem consultar a ferramenta correspondente quando o pedido exigir atualização, cruzamento ou confirmação.
 - Se o usuário pedir explicitamente dados atuais do CTI, histórico, mercado/web, produtos/equipamentos ou clientes/oportunidades, essas fontes devem ser efetivamente consultadas na mesma execução antes da resposta final.
+- Quando houver múltiplas evidências obrigatórias, colete todas as que puder no menor número de ciclos possível. Faça chamadas independentes em paralelo na mesma etapa quando o modelo/API permitirem, em vez de consultar uma fonte por ciclo sem necessidade.
 
 Você não trabalha a partir de uma lista fechada de perguntas. Interprete livremente a solicitação do usuário, decomponha problemas complexos e escolha autonomamente quais ferramentas permitidas precisa usar e em qual sequência.
 
@@ -203,7 +204,8 @@ def _instrucao_evidencias_faltantes(faltantes: set[str]) -> str:
         "O pedido do usuário exige evidências que não foram consultadas nesta execução: "
         f"{', '.join(sorted(faltantes))}. {passos}. "
         "O histórico da conversa é apenas contexto e não substitui essas consultas. "
-        "Execute as ferramentas permitidas necessárias antes de responder ao usuário."
+        "Execute todas as ferramentas permitidas faltantes no menor número de etapas possível; "
+        "faça chamadas independentes em paralelo quando possível antes de responder ao usuário."
     )
 
 
