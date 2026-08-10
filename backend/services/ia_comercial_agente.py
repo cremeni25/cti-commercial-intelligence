@@ -36,6 +36,7 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - A web é contexto externo. Não transforme tendências gerais em recomendações de RH, recrutamento, retenção de talentos, capacitação, cultura, automação administrativa, investimentos corporativos genéricos ou serviços não relacionados aos produtos, salvo pedido explícito.
 - Quando produtos, linhas ou modelos forem relevantes, use o catálogo oficial do CTI.
 - A ferramenta consultar_dominio_cti é paginável e opera sobre o conjunto autorizado completo. Se uma investigação precisar continuar além da página atual, use offset e tem_mais; não trate uma página como universo completo.
+- Vendas podem retornar vínculos factuais resolvidos pelo backend em vinculos_resolvidos. Use esses vínculos e nunca deduza produto, cliente ou oportunidade a partir de UUIDs ou nomes técnicos.
 
 SEMÂNTICA COMERCIAL DO PIPELINE — REGRA OBRIGATÓRIA:
 - O status registrado da oportunidade tem precedência sobre inferências textuais, probabilidade ou datas auxiliares.
@@ -56,9 +57,10 @@ SEGURANÇA E ISOLAMENTO — REGRA ABSOLUTA:
 
 EVIDÊNCIA E CONTINUIDADE:
 - O histórico da conversa serve para continuidade semântica, não como prova atual de fatos operacionais ou externos.
-- Se o pedido exigir dados atuais do CTI, histórico, mercado/web, produtos ou clientes/oportunidades, consulte essas fontes na mesma execução.
+- Se o pedido exigir dados atuais do CTI, histórico, mercado/web, produtos, vendas, clientes ou oportunidades, consulte essas fontes na mesma execução.
 - Não existe uma cota de consultas ou fontes por resposta. Continue investigando enquanto novas evidências úteis estiverem sendo obtidas.
-- Coletar evidência não basta: a resposta final deve USAR concretamente as evidências exigidas. Em pedidos multi-fonte, CTI, clientes, oportunidades, histórico e produtos são o núcleo da síntese; a web contextualiza e não pode dominar ou substituir a evidência interna.
+- Coletar evidência não basta: a resposta final deve USAR concretamente as evidências exigidas. Em pedidos multi-fonte, CTI, clientes, oportunidades, histórico, vendas e produtos são o núcleo da síntese; a web contextualiza e não pode dominar ou substituir a evidência interna.
+- Se a solicitação atual não exigir web e nenhuma web tiver sido consultada nesta execução, não reutilize fatos externos de respostas anteriores como se pertencessem à resposta atual.
 
 PRINCÍPIOS:
 - Para fatos internos use ferramentas CTI; para fatos externos atuais use web real.
@@ -161,8 +163,12 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
         requeridas.add("web")
     if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
         requeridas.add("produtos")
-    if "cliente" in texto or "clientes" in texto or "oportunidade" in texto or "oportunidades" in texto:
-        requeridas.add("clientes_oportunidades")
+    if "venda" in texto or "vendas" in texto:
+        requeridas.add("vendas")
+    if "cliente" in texto or "clientes" in texto:
+        requeridas.add("clientes")
+    if "oportunidade" in texto or "oportunidades" in texto:
+        requeridas.add("oportunidades")
     return requeridas
 
 
@@ -181,8 +187,10 @@ def _evidencias_presentes(rastreio: list[dict[str, Any]], fontes_web: list[dict[
             presentes.add("historico")
         elif ferramenta == "consultar_catalogo_produtos_cti":
             presentes.add("produtos")
-        elif ferramenta == "consultar_dominio_cti" and str(argumentos.get("dominio") or "") in {"clientes", "oportunidades"}:
-            presentes.add("clientes_oportunidades")
+        elif ferramenta == "consultar_dominio_cti":
+            dominio = str(argumentos.get("dominio") or "")
+            if dominio in {"vendas", "clientes", "oportunidades"}:
+                presentes.add(dominio)
     return presentes
 
 
@@ -192,7 +200,9 @@ def _instrucao_evidencias_faltantes(faltantes: set[str]) -> str:
         "historico": "consulte consultar_historico_cti",
         "web": "execute web_search real",
         "produtos": "consulte consultar_catalogo_produtos_cti",
-        "clientes_oportunidades": "consulte consultar_dominio_cti para clientes e/ou oportunidades",
+        "vendas": "consulte consultar_dominio_cti no domínio vendas",
+        "clientes": "consulte consultar_dominio_cti no domínio clientes",
+        "oportunidades": "consulte consultar_dominio_cti no domínio oportunidades",
     }
     passos = "; ".join(mapa[item] for item in sorted(faltantes) if item in mapa)
     return (
@@ -203,19 +213,25 @@ def _instrucao_evidencias_faltantes(faltantes: set[str]) -> str:
 
 
 def _instrucao_sintese_final(evidencias: set[str]) -> str:
+    sem_web = "web" not in evidencias
+    regra_web = (
+        "A solicitação atual não exigiu web. Não reutilize fatos, números, tendências, regulações ou notícias externas de mensagens anteriores; responda somente com as evidências internas desta execução. "
+        if sem_web
+        else "Use a web apenas para contextualizar a decisão, sem substituir as evidências internas. "
+    )
     return (
         "INSTRUÇÃO INTERNA DE SÍNTESE FINAL: todas as evidências obrigatórias já foram coletadas. "
         f"Evidências disponíveis: {', '.join(sorted(evidencias))}. Não faça novas consultas. "
         "Responda agora ao pedido original cruzando concretamente os resultados já presentes no contexto. "
-        "Se clientes/oportunidades foram exigidos, cite os clientes e oportunidades retornados quando existirem. "
+        "Se vendas foram exigidas, use o total e os registros retornados em vendas e respeite vinculos_resolvidos; não deduza produto, cliente ou oportunidade por UUID. "
+        "Se clientes foram exigidos, cite clientes realmente retornados ou vinculados. Se oportunidades foram exigidas, cite oportunidades realmente retornadas ou vinculadas. "
         "Para oportunidades, respeite obrigatoriamente semantica_pipeline: somente registros com pode_avancar_pipeline=true podem ser recomendados para avanço/conversão. "
         "GANHO é negócio encerrado e conquistado; nunca recomende avançar uma oportunidade GANHO. PERDIDO/CANCELADO/ENCERRADO também não pertencem ao pipeline ativo. "
         "Se inconsistencias_qualidade não estiver vazio, sinalize a divergência como qualidade de dado e preserve o significado do status registrado. "
-        "Se produtos foram exigidos, cite linhas/modelos reais retornados pelo catálogo. "
+        "Se produtos foram exigidos, cite somente linhas/modelos sustentados pelo catálogo ou pelos vínculos factuais resolvidos nas vendas. "
         "Se histórico foi exigido, use fatos históricos específicos disponíveis. "
-        "Use dados atuais do CTI para estabelecer prioridade e a web apenas para contextualizar a decisão. "
-        "Estruture recomendações comerciais acionáveis com: evidência interna -> contexto externo relevante -> ação/prioridade. "
-        "Não transforme a resposta em relatório genérico de mercado e não introduza RH, talentos, treinamentos ou gestão corporativa genérica. "
+        + regra_web
+        + "Não transforme a resposta em relatório genérico nem introduza RH, talentos, treinamentos ou gestão corporativa genérica. "
         "Quando uma evidência consultada for insuficiente para uma conclusão específica, declare a limitação em vez de substituí-la por generalidades."
     )
 
@@ -270,7 +286,7 @@ def ferramentas_agente() -> list[dict[str, Any]]:
     return [
         {"type": "web_search", "search_context_size": "high", "user_location": {"type": "approximate", "country": "BR", "region": "São Paulo", "city": "São Paulo", "timezone": "America/Sao_Paulo"}},
         {"type": "function", "name": "consultar_resumo_cti", "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
-        {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
+        {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Vendas incluem vínculos factuais resolvidos quando disponíveis; oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_historico_cti", "description": "Consulta a base histórica comercial CTI/ANFIR e indicadores históricos.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_catalogo_produtos_cti", "description": "Consulta o catálogo oficial de linhas, modelos e aliases de produtos/equipamentos do CTI.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}}, "required": ["termo"], "additionalProperties": False}, "strict": True},
     ]
