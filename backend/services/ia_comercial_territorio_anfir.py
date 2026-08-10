@@ -246,6 +246,35 @@ def _ranking(registros: list[dict[str, Any]], campo: str, limite: int = 15) -> l
     ]
 
 
+def _relacoes_implementadoras(registros: list[dict[str, Any]], limite: int = 15, limite_relacao: int = 8) -> list[dict[str, Any]]:
+    grupos: dict[str, list[dict[str, Any]]] = {}
+    for item in registros:
+        implementadora = str(item.get("implementadora") or "").strip()
+        if not implementadora:
+            continue
+        grupos.setdefault(implementadora, []).append(item)
+
+    ordenados = sorted(grupos.items(), key=lambda par: (-len(par[1]), par[0]))[:limite]
+    return [
+        {
+            "implementadora": implementadora,
+            "registros": len(itens),
+            "clientes_por_registros": _ranking(itens, "cliente", limite_relacao),
+            "linhas_por_registros": _ranking(itens, "linha", limite_relacao),
+            "fabricantes_equipamento_por_registros": _ranking(itens, "fabricante_equipamento", limite_relacao),
+            "cobertura_relacional": {
+                "com_cliente": sum(1 for item in itens if _preenchido(item.get("cliente"))),
+                "sem_cliente": sum(1 for item in itens if not _preenchido(item.get("cliente"))),
+                "com_linha": sum(1 for item in itens if _preenchido(item.get("linha"))),
+                "sem_linha": sum(1 for item in itens if not _preenchido(item.get("linha"))),
+                "com_fabricante_equipamento": sum(1 for item in itens if _preenchido(item.get("fabricante_equipamento"))),
+                "sem_fabricante_equipamento": sum(1 for item in itens if not _preenchido(item.get("fabricante_equipamento"))),
+            },
+        }
+        for implementadora, itens in ordenados
+    ]
+
+
 def _resumir(registros: list[dict[str, Any]]) -> dict[str, Any]:
     clientes = {str(item.get("cliente") or "").strip() for item in registros if item.get("cliente")}
     valor_total = round(sum(_numero(item.get("valor")) for item in registros), 2)
@@ -281,6 +310,7 @@ def _resumir(registros: list[dict[str, Any]]) -> dict[str, Any]:
         "ranking_modelos": _ranking(registros, "modelo"),
         "ranking_clientes": _ranking(registros, "cliente"),
         "ranking_implementadoras": _ranking(registros, "implementadora"),
+        "relacoes_implementadoras": _relacoes_implementadoras(registros),
         "ranking_fabricantes_equipamento": _ranking(registros, "fabricante_equipamento"),
         "ranking_tipos_veiculo": _ranking(registros, "tipo_veiculo"),
         "ranking_fabricantes_caminhao": _ranking(registros, "fabricante_caminhao"),
@@ -420,6 +450,8 @@ def _consultar(
         "observacao": (
             "Contagens e rankings de resumo usam todo o recorte temporal solicitado; resultado é a página detalhada. "
             "total_veiculos_identificaveis deduplica registros por chassi, depois placa e depois id_operacional; total_registros não deve ser interpretado automaticamente como quantidade de veículos únicos. "
+            "relacoes_implementadoras são calculadas deterministicamente sobre todo o recorte e vinculam cada implementadora apenas aos clientes, linhas e fabricantes de equipamento presentes nos mesmos registros históricos. "
+            "Ocorrência histórica não prova venda, relacionamento ativo, preferência comercial ou oportunidade CRM. "
             "Quando há período específico, resumo_historico_disponivel mostra o mesmo recorte sem filtro temporal. "
             "Zero no período não equivale a zero histórico."
         ),
