@@ -62,4 +62,7 @@ def test_resumo_frota_usa_agregados_backend_e_preserva_variantes():
         {"valor": "ACCELO 1117 CE", "registros": 1},
         {"valor": "ACCELO 1117CE", "registros": 1},
     ]
-    assert "backend" in resumo["frota"]["regra_rankings"].casefold()
+    regra = resumo["frota"]["regra_rankings"].casefold()
+    assert "agregados deterministicamente" in regra
+    assert "variantes auditáveis" in regra
+    assert "modelos permanecem separados" in regra
