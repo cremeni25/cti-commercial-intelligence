@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 from typing import Any
 
 from openai import OpenAI
@@ -48,7 +50,8 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - Em análises de frota, diferencie obrigatoriamente total_registros de total_veiculos_identificaveis. Um mesmo veículo pode aparecer em mais de um registro histórico. Nunca trate total_registros como quantidade de veículos únicos quando total_veiculos_identificaveis estiver disponível.
 - Cobertura de placa, chassi, fabricante/modelo do caminhão ou número de frota descreve qualidade/completude da base; não conclua ausência física do veículo ou atributo quando o campo não estiver preenchido.
 - Rankings de tipo de veículo, fabricante e modelo do caminhão contam registros do recorte, salvo indicação explícita em contrário; não os apresente como contagem de veículos únicos.
-- Preserve literalmente as categorias retornadas nos rankings de frota. Não some, normalize, una ou declare que uma contagem "inclui variações de grafia" quando o backend não fornecer explicitamente um agregado normalizado. Se houver grafias diferentes, apresente-as separadamente ou sinalize a variação como qualidade de dado.
+- Quando houver ranking_canônico fornecido pelo backend, use exatamente seus totais e variantes. Não refaça somas nem crie agrupamentos adicionais.
+- Para modelos de caminhão, preserve as categorias retornadas individualmente quando não existir agregado canônico explícito. Não some variantes por conta própria.
 - Diferencie fato, limitação e inferência/recomendação.
 - Responda em português do Brasil, com linguagem comercial clara e direta.
 """
@@ -56,6 +59,58 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 
 def _normalizar(texto: Any) -> str:
     return str(texto or "").strip().casefold()
+
+
+def _chave_canonica_frota(valor: Any) -> str:
+    texto = str(valor or "").strip()
+    if not texto:
+        return ""
+    sem_acentos = "".join(
+        caractere
+        for caractere in unicodedata.normalize("NFKD", texto)
+        if not unicodedata.combining(caractere)
+    )
+    return re.sub(r"[^A-Z0-9]+", "", sem_acentos.upper())
+
+
+def _ranking_canonico_frota(ranking: Any) -> list[dict[str, Any]]:
+    if not isinstance(ranking, list):
+        return []
+    grupos: dict[str, dict[str, Any]] = {}
+    for item in ranking:
+        if not isinstance(item, dict):
+            continue
+        valor = str(item.get("valor") or "").strip()
+        try:
+            quantidade = int(item.get("registros") or 0)
+        except (TypeError, ValueError):
+            quantidade = 0
+        chave = _chave_canonica_frota(valor)
+        if not chave or quantidade <= 0:
+            continue
+        grupo = grupos.setdefault(
+            chave,
+            {"registros": 0, "variantes": [], "representante": valor, "maior_variante": -1},
+        )
+        grupo["registros"] += quantidade
+        grupo["variantes"].append({"valor": valor, "registros": quantidade})
+        if quantidade > grupo["maior_variante"]:
+            grupo["representante"] = valor
+            grupo["maior_variante"] = quantidade
+
+    consolidados = [
+        {
+            "valor": grupo["representante"],
+            "registros": grupo["registros"],
+            "variantes": sorted(
+                grupo["variantes"],
+                key=lambda item: (-int(item["registros"]), str(item["valor"])),
+            ),
+            "regra_agregacao": "mesma categoria após normalização determinística de caixa, acentuação e pontuação",
+        }
+        for grupo in grupos.values()
+    ]
+    return sorted(consolidados, key=lambda item: (-int(item["registros"]), str(item["valor"])))
 
 
 def _evidencias_atendidas(metadados: dict[str, Any]) -> set[str]:
@@ -184,11 +239,11 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
                 "com_modelo_caminhao": cobertura.get("com_modelo_caminhao"),
                 "sem_modelo_caminhao": cobertura.get("sem_modelo_caminhao"),
             },
-            "ranking_tipos_veiculo_por_registros": resumo.get("ranking_tipos_veiculo") or [],
-            "ranking_fabricantes_caminhao_por_registros": resumo.get("ranking_fabricantes_caminhao") or [],
+            "ranking_tipos_veiculo_canonico_por_registros": _ranking_canonico_frota(resumo.get("ranking_tipos_veiculo") or []),
+            "ranking_fabricantes_caminhao_canonico_por_registros": _ranking_canonico_frota(resumo.get("ranking_fabricantes_caminhao") or []),
             "ranking_modelos_caminhao_por_registros": resumo.get("ranking_modelos_caminhao") or [],
             "regra_contagem": "total_registros é histórico; total_veiculos_identificaveis deduplica por chassi, depois placa e id_operacional",
-            "regra_rankings": "categorias preservam a grafia bruta da fonte; não agregar variações sem campo normalizado explícito",
+            "regra_rankings": "tipos e fabricantes são agregados deterministicamente por caixa, acentuação e pontuação, mantendo variantes auditáveis; modelos permanecem separados salvo agregado explícito",
         }
     relevante["regra_ausencia_dado"] = "campo não preenchido significa somente informação não registrada na fonte"
     return relevante
