@@ -87,6 +87,44 @@ def test_resumo_usa_todo_recorte_e_pagina_so_detalha(monkeypatch):
     assert resultado["tem_mais"] is True
 
 
+def test_nome_comercial_trailer_e_normalizado_para_codigo_tr(monkeypatch):
+    monkeypatch.setattr(territorial.repository, "buscar_cti_anfir", _base)
+
+    resultado = territorial.consultar_anfir_semantico(
+        "u-master",
+        "ADMIN_MASTER",
+        ddd="011",
+        linha="Trailer",
+        periodo="TODO_HISTORICO",
+        limite=100,
+        offset=0,
+    )
+
+    assert resultado["filtros_aplicados"]["linha"] == "TR"
+    assert resultado["total_encontrado"] == 1
+    assert resultado["resultado"][0]["linha"] == "TR"
+    assert resultado["resultado"][0]["cliente"] == "A"
+
+
+def test_periodo_vazio_nao_apaga_existencia_historica_do_mesmo_recorte(monkeypatch):
+    monkeypatch.setattr(territorial.repository, "buscar_cti_anfir", _base)
+
+    resultado = territorial.consultar_territorio_semantico(
+        "u-master",
+        "ADMIN_MASTER",
+        ddd="011",
+        linha="TRAILER",
+        periodo="ULTIMOS_90_DIAS",
+        limite=100,
+        offset=0,
+    )
+
+    assert resultado["total_encontrado"] == 0
+    assert resultado["total_historico_disponivel"] == 1
+    assert resultado["resumo_historico_disponivel"]["total_registros"] == 1
+    assert "Zero no período não equivale a zero histórico" in resultado["observacao"]
+
+
 def test_gate_distingue_territorio_e_anfir():
     requeridas = agente._fontes_requeridas(
         "Compare o DDD 011 com a ANFIR para a linha Trailer."
