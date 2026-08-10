@@ -48,6 +48,7 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - Em análises de frota, diferencie obrigatoriamente total_registros de total_veiculos_identificaveis. Um mesmo veículo pode aparecer em mais de um registro histórico. Nunca trate total_registros como quantidade de veículos únicos quando total_veiculos_identificaveis estiver disponível.
 - Cobertura de placa, chassi, fabricante/modelo do caminhão ou número de frota descreve qualidade/completude da base; não conclua ausência física do veículo ou atributo quando o campo não estiver preenchido.
 - Rankings de tipo de veículo, fabricante e modelo do caminhão contam registros do recorte, salvo indicação explícita em contrário; não os apresente como contagem de veículos únicos.
+- Preserve literalmente as categorias retornadas nos rankings de frota. Não some, normalize, una ou declare que uma contagem "inclui variações de grafia" quando o backend não fornecer explicitamente um agregado normalizado. Se houver grafias diferentes, apresente-as separadamente ou sinalize a variação como qualidade de dado.
 - Diferencie fato, limitação e inferência/recomendação.
 - Responda em português do Brasil, com linguagem comercial clara e direta.
 """
@@ -187,6 +188,7 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
             "ranking_fabricantes_caminhao_por_registros": resumo.get("ranking_fabricantes_caminhao") or [],
             "ranking_modelos_caminhao_por_registros": resumo.get("ranking_modelos_caminhao") or [],
             "regra_contagem": "total_registros é histórico; total_veiculos_identificaveis deduplica por chassi, depois placa e id_operacional",
+            "regra_rankings": "categorias preservam a grafia bruta da fonte; não agregar variações sem campo normalizado explícito",
         }
     relevante["regra_ausencia_dado"] = "campo não preenchido significa somente informação não registrada na fonte"
     return relevante
