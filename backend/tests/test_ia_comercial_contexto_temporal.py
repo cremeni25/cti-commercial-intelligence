@@ -163,3 +163,32 @@ def test_vendas_nao_podem_ser_afirmadas_sem_consulta_atual():
 
     assert "não afirme vendas ou vínculos de venda sem consultar vendas" in mensagem_agente
     assert "ponto não foi verificado nesta execução" in mensagem_agente
+
+
+def test_historico_operacional_remove_respostas_antigas_da_ia():
+    mensagens = [
+        {"papel": "user", "conteudo": "Analise Trailer no DDD 011."},
+        {"papel": "assistant", "conteudo": "Pipeline sem oportunidades abertas e modelos X4-7500."},
+        {"papel": "user", "conteudo": "Agora compare com a ANFIR."},
+    ]
+
+    historico = router._historico_usuario_para_agente(mensagens)
+
+    assert historico == [
+        {"role": "user", "content": "Analise Trailer no DDD 011."},
+        {"role": "user", "content": "Agora compare com a ANFIR."},
+    ]
+    assert all(item["role"] == "user" for item in historico)
+    assert all("X4-7500" not in item["content"] for item in historico)
+
+
+def test_historico_operacional_descarta_vazios_e_preserva_intencao_do_usuario():
+    mensagens = [
+        {"papel": "assistant", "conteudo": "fato antigo"},
+        {"papel": "user", "conteudo": "  "},
+        {"papel": "user", "conteudo": "Continue a análise territorial."},
+    ]
+
+    assert router._historico_usuario_para_agente(mensagens) == [
+        {"role": "user", "content": "Continue a análise territorial."}
+    ]
