@@ -37,6 +37,7 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - Quando produtos, linhas ou modelos forem relevantes, use o catálogo oficial do CTI.
 - A ferramenta consultar_dominio_cti é paginável e opera sobre o conjunto autorizado completo. Se uma investigação precisar continuar além da página atual, use offset e tem_mais; não trate uma página como universo completo.
 - Vendas podem retornar vínculos factuais resolvidos pelo backend em vinculos_resolvidos. Use esses vínculos e nunca deduza produto, cliente ou oportunidade a partir de UUIDs ou nomes técnicos.
+- Quando o usuário pedir entidades "relacionadas", "vinculadas" ou "associadas" a uma entidade-base, considere apenas relacionamentos explícitos fornecidos pelos dados. Não transforme outros registros do mesmo domínio em relacionados sem vínculo factual.
 
 SEMÂNTICA COMERCIAL DO PIPELINE — REGRA OBRIGATÓRIA:
 - O status registrado da oportunidade tem precedência sobre inferências textuais, probabilidade ou datas auxiliares.
@@ -57,7 +58,7 @@ SEGURANÇA E ISOLAMENTO — REGRA ABSOLUTA:
 
 EVIDÊNCIA E CONTINUIDADE:
 - O histórico da conversa serve para continuidade semântica, não como prova atual de fatos operacionais ou externos.
-- Se o pedido exigir dados atuais do CTI, histórico, mercado/web, produtos, vendas, clientes ou oportunidades, consulte essas fontes na mesma execução.
+- Se o pedido exigir dados atuais do CTI, histórico, mercado/web, produtos, vendas, clientes ou oportunidades, consulte essas fontes na mesma execução, exceto quando a própria entidade-base já devolver os vínculos factuais explicitamente pedidos.
 - Não existe uma cota de consultas ou fontes por resposta. Continue investigando enquanto novas evidências úteis estiverem sendo obtidas.
 - Coletar evidência não basta: a resposta final deve USAR concretamente as evidências exigidas. Em pedidos multi-fonte, CTI, clientes, oportunidades, histórico, vendas e produtos são o núcleo da síntese; a web contextualiza e não pode dominar ou substituir a evidência interna.
 - Se a solicitação atual não exigir web e nenhuma web tiver sido consultada nesta execução, não reutilize fatos externos de respostas anteriores como se pertencessem à resposta atual.
@@ -130,7 +131,6 @@ def _semantica_oportunidade(registro: dict[str, Any]) -> dict[str, Any]:
     inconsistencias: list[str] = []
     probabilidade = item.get("probabilidade")
     data_fechamento_real = item.get("data_fechamento_real")
-
     try:
         prob_num = float(probabilidade) if probabilidade is not None else None
     except (TypeError, ValueError):
@@ -152,23 +152,40 @@ def _semantica_oportunidade(registro: dict[str, Any]) -> dict[str, Any]:
     return item
 
 
+def _pedido_relacional_vendas(mensagem: str) -> bool:
+    texto = _normalizar(mensagem)
+    return ("venda" in texto or "vendas" in texto) and any(
+        termo in texto for termo in ("relacionad", "vinculad", "associad")
+    )
+
+
 def _fontes_requeridas(mensagem: str) -> set[str]:
     texto = _normalizar(mensagem)
     requeridas: set[str] = set()
+    relacional_vendas = _pedido_relacional_vendas(mensagem)
+
     if any(t in texto for t in ("dados atuais do cti", "estado atual do cti", "situação atual do cti", "situacao atual do cti", "cti atual", "dados do cti")):
         requeridas.add("cti_atual")
     if "histórico" in texto or "historico" in texto or "anfir" in texto:
         requeridas.add("historico")
     if any(t in texto for t in ("mercado", "pesquise na web", "procure na web", "pesquisa web", "fontes externas", "informações externas", "informacoes externas", "notícias", "noticias", "tendências", "tendencias")):
         requeridas.add("web")
-    if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
-        requeridas.add("produtos")
     if "venda" in texto or "vendas" in texto:
         requeridas.add("vendas")
-    if "cliente" in texto or "clientes" in texto:
-        requeridas.add("clientes")
-    if "oportunidade" in texto or "oportunidades" in texto:
-        requeridas.add("oportunidades")
+
+    # Em perguntas relacionais de vendas, os vínculos resolvidos da própria venda são a fonte
+    # primária para cliente, produto e oportunidade. Consultas amplas só são necessárias quando
+    # o usuário pedir essas entidades fora do relacionamento explícito com as vendas.
+    if not relacional_vendas:
+        if any(t in texto for t in ("produto", "produtos", "linha", "linhas", "equipamento", "equipamentos", "modelo", "modelos")):
+            requeridas.add("produtos")
+        if "cliente" in texto or "clientes" in texto:
+            requeridas.add("clientes")
+        if "oportunidade" in texto or "oportunidades" in texto:
+            requeridas.add("oportunidades")
+    elif any(t in texto for t in ("produto", "produtos", "cliente", "clientes", "oportunidade", "oportunidades")):
+        requeridas.add("relacionamentos_vendas")
+
     return requeridas
 
 
@@ -191,6 +208,8 @@ def _evidencias_presentes(rastreio: list[dict[str, Any]], fontes_web: list[dict[
             dominio = str(argumentos.get("dominio") or "")
             if dominio in {"vendas", "clientes", "oportunidades"}:
                 presentes.add(dominio)
+            if dominio == "vendas":
+                presentes.add("relacionamentos_vendas")
     return presentes
 
 
@@ -203,6 +222,7 @@ def _instrucao_evidencias_faltantes(faltantes: set[str]) -> str:
         "vendas": "consulte consultar_dominio_cti no domínio vendas",
         "clientes": "consulte consultar_dominio_cti no domínio clientes",
         "oportunidades": "consulte consultar_dominio_cti no domínio oportunidades",
+        "relacionamentos_vendas": "consulte consultar_dominio_cti no domínio vendas e use exclusivamente vinculos_resolvidos para os relacionamentos pedidos",
     }
     passos = "; ".join(mapa[item] for item in sorted(faltantes) if item in mapa)
     return (
@@ -219,16 +239,22 @@ def _instrucao_sintese_final(evidencias: set[str]) -> str:
         if sem_web
         else "Use a web apenas para contextualizar a decisão, sem substituir as evidências internas. "
     )
+    regra_relacional = (
+        "A solicitação é relacional sobre vendas. Liste como clientes, produtos e oportunidades relacionados somente os vínculos explícitos existentes em vinculos_resolvidos de cada venda. Não acrescente outros clientes, produtos ou oportunidades do CTI apenas porque existem no mesmo domínio. Se uma venda não tiver oportunidade vinculada, diga explicitamente que não há oportunidade vinculada. "
+        if "relacionamentos_vendas" in evidencias
+        else ""
+    )
     return (
         "INSTRUÇÃO INTERNA DE SÍNTESE FINAL: todas as evidências obrigatórias já foram coletadas. "
         f"Evidências disponíveis: {', '.join(sorted(evidencias))}. Não faça novas consultas. "
         "Responda agora ao pedido original cruzando concretamente os resultados já presentes no contexto. "
         "Se vendas foram exigidas, use o total e os registros retornados em vendas e respeite vinculos_resolvidos; não deduza produto, cliente ou oportunidade por UUID. "
-        "Se clientes foram exigidos, cite clientes realmente retornados ou vinculados. Se oportunidades foram exigidas, cite oportunidades realmente retornadas ou vinculadas. "
+        + regra_relacional
+        + "Se clientes foram exigidos fora de um relacionamento explícito, cite clientes realmente retornados. Se oportunidades foram exigidas fora de um relacionamento explícito, cite oportunidades realmente retornadas. "
         "Para oportunidades, respeite obrigatoriamente semantica_pipeline: somente registros com pode_avancar_pipeline=true podem ser recomendados para avanço/conversão. "
         "GANHO é negócio encerrado e conquistado; nunca recomende avançar uma oportunidade GANHO. PERDIDO/CANCELADO/ENCERRADO também não pertencem ao pipeline ativo. "
         "Se inconsistencias_qualidade não estiver vazio, sinalize a divergência como qualidade de dado e preserve o significado do status registrado. "
-        "Se produtos foram exigidos, cite somente linhas/modelos sustentados pelo catálogo ou pelos vínculos factuais resolvidos nas vendas. "
+        "Se produtos foram exigidos fora de um relacionamento explícito, cite somente linhas/modelos sustentados pelo catálogo. "
         "Se histórico foi exigido, use fatos históricos específicos disponíveis. "
         + regra_web
         + "Não transforme a resposta em relatório genérico nem introduza RH, talentos, treinamentos ou gestão corporativa genérica. "
@@ -437,6 +463,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
         "controle_sintese": "obrigatoria_multi_fonte" if sintese_forcada else "direta",
         "controle_status_pipeline": "semantica_backend",
         "catalogo_ferramentas": "ia_002_semantico_paginavel",
+        "controle_relacionamentos": "vinculos_explicitos",
         "limite_emergencial_ciclos": LIMITE_EMERGENCIAL_CICLOS,
         "max_ciclos_sem_progresso": MAX_CICLOS_SEM_PROGRESSO,
     }
