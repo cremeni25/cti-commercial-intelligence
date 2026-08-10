@@ -17,9 +17,30 @@ PAPEIS_GLOBAIS = {
     "GERENTE_LATAM",
 }
 
+LINHAS_ALIASES = {
+    "tr": "TR",
+    "trailer": "TR",
+    "trailer refrigeration": "TR",
+    "dt": "DT",
+    "diesel truck": "DT",
+    "diesel-truck": "DT",
+    "dieseltruck": "DT",
+    "dd": "DD",
+    "direct drive": "DD",
+    "direct-drive": "DD",
+    "directdrive": "DD",
+}
+
 
 def _normalizar(valor: Any) -> str:
     return str(valor or "").strip().casefold()
+
+
+def normalizar_linha(valor: Any) -> str | None:
+    texto = _normalizar(valor)
+    if not texto:
+        return None
+    return LINHAS_ALIASES.get(texto, str(valor).strip().upper())
 
 
 def _numero(valor: Any) -> float:
@@ -148,14 +169,15 @@ def _filtrar(
     )
     ddd_normalizado = normalizar_ddd(ddd)
     uf_normalizada = str(uf or "").strip().upper() or None
+    linha_normalizada = normalizar_linha(linha)
     filtros_texto = {
         "cidade": cidade,
-        "linha": linha,
         "modelo": modelo,
         "cliente": cliente,
         "implementadora": implementadora,
         "fabricante_equipamento": fabricante_equipamento,
     }
+
     resultado: list[dict[str, Any]] = []
     for item in registros:
         if ddd_normalizado and normalizar_ddd(item.get("ddd") or item.get("codigo_ddd")) != ddd_normalizado:
@@ -163,21 +185,25 @@ def _filtrar(
         estado = str(item.get("estado") or item.get("uf") or "").strip().upper()
         if uf_normalizada and estado != uf_normalizada:
             continue
+        if linha_normalizada and normalizar_linha(item.get("linha")) != linha_normalizada:
+            continue
+
         data = data_registro(item)
         if inicio_data and (not data or data < inicio_data):
             continue
         if fim_data and (not data or data > fim_data):
             continue
+
         rejeitado = False
         for campo, valor in filtros_texto.items():
             if not valor:
                 continue
-            campo_real = "implementadora" if campo == "implementadora" else campo
-            if _normalizar(valor) not in _normalizar(item.get(campo_real)):
+            if _normalizar(valor) not in _normalizar(item.get(campo)):
                 rejeitado = True
                 break
         if rejeitado:
             continue
+
         if origem:
             origem_item = item.get("origem_base") or item.get("origem_dado")
             if _normalizar(origem) not in _normalizar(origem_item):
@@ -239,7 +265,7 @@ def _registro_publico(item: dict[str, Any]) -> dict[str, Any]:
         "ddd": normalizar_ddd(item.get("ddd")),
         "regiao": item.get("regiao"),
         "sub_regiao": item.get("sub_regiao"),
-        "linha": item.get("linha"),
+        "linha": normalizar_linha(item.get("linha")),
         "modelo": item.get("modelo"),
         "fabricante_equipamento": item.get("fabricante_equipamento"),
         "implementadora": item.get("implementadora"),
@@ -274,6 +300,8 @@ def _consultar(
 ) -> dict[str, Any]:
     limite = max(1, min(int(limite or 30), 100))
     offset = max(0, int(offset or 0))
+    periodo_normalizado = str(periodo or "TODO_HISTORICO").upper()
+
     try:
         base = list(repository.buscar_cti_anfir() or [])
     except Exception:
@@ -288,24 +316,41 @@ def _consultar(
             "resultado": [],
         }
 
+    filtros_comuns = {
+        "ddd": ddd,
+        "uf": uf,
+        "cidade": cidade,
+        "linha": linha,
+        "modelo": modelo,
+        "cliente": cliente,
+        "implementadora": implementadora,
+        "fabricante_equipamento": fabricante_equipamento,
+        "origem": origem,
+        "termo": termo,
+    }
     filtrados = _filtrar(
         base_autorizada,
-        ddd=ddd,
-        uf=uf,
-        cidade=cidade,
-        periodo=periodo,
+        periodo=periodo_normalizado,
         inicio=inicio,
         fim=fim,
-        linha=linha,
-        modelo=modelo,
-        cliente=cliente,
-        implementadora=implementadora,
-        fabricante_equipamento=fabricante_equipamento,
-        origem=origem,
-        termo=termo,
+        **filtros_comuns,
     )
+
+    historico_mesmo_recorte = filtrados
+    if periodo_normalizado != "TODO_HISTORICO" or inicio or fim:
+        historico_mesmo_recorte = _filtrar(
+            base_autorizada,
+            periodo="TODO_HISTORICO",
+            inicio=None,
+            fim=None,
+            **filtros_comuns,
+        )
+
     total = len(filtrados)
     pagina = filtrados[offset : offset + limite]
+    linha_normalizada = normalizar_linha(linha)
+    resumo_historico_disponivel = _resumir(historico_mesmo_recorte)
+
     return {
         "fonte": "cti_anfir",
         "escopo": escopo,
@@ -313,10 +358,11 @@ def _consultar(
             "ddd": normalizar_ddd(ddd),
             "uf": str(uf or "").strip().upper() or None,
             "cidade": cidade,
-            "periodo": periodo,
+            "periodo": periodo_normalizado,
             "inicio": inicio,
             "fim": fim,
-            "linha": linha,
+            "linha": linha_normalizada,
+            "linha_recebida": linha,
             "modelo": modelo,
             "cliente": cliente,
             "implementadora": implementadora,
@@ -325,12 +371,18 @@ def _consultar(
             "termo": termo,
         },
         "resumo": _resumir(filtrados),
+        "resumo_historico_disponivel": resumo_historico_disponivel,
+        "total_historico_disponivel": len(historico_mesmo_recorte),
         "total_encontrado": total,
         "offset": offset,
         "limite": limite,
         "tem_mais": offset + len(pagina) < total,
         "resultado": [_registro_publico(item) for item in pagina],
-        "observacao": "Contagens e rankings usam todo o recorte autorizado; resultado é a página detalhada solicitada.",
+        "observacao": (
+            "Contagens e rankings de resumo usam todo o recorte temporal solicitado; resultado é a página detalhada. "
+            "Quando há período específico, resumo_historico_disponivel mostra o mesmo recorte sem filtro temporal. "
+            "Zero no período não equivale a zero histórico."
+        ),
     }
 
 
