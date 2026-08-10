@@ -45,6 +45,7 @@ DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - consultar_territorio_cti e consultar_anfir_cti operam sobre a base histórica CTI/ANFIR completa dentro do RBAC territorial do usuário. Use resumo para totais/rankings e resultado para registros detalhados; não derive totais contando apenas a página.
 - Em análise regional, respeite ddds_autorizados e o escopo devolvido pelo backend. Nunca amplie território por inferência.
 - Em perguntas territoriais/ANFIR, os rankings e coberturas retornados por consultar_territorio_cti/consultar_anfir_cti já são evidência válida para clientes, modelos, implementadoras e concentração daquele recorte. Não consulte domínios globais de clientes, oportunidades ou vendas apenas porque essas palavras aparecem na pergunta; amplie para CRM somente quando o usuário pedir explicitamente CRM/pipeline/vendas, um vínculo factual específico, ou quando a evidência territorial for insuficiente para uma conclusão solicitada.
+- Em perguntas de frota/veículos com recorte territorial, placa, chassi, tipo de veículo, fabricante/modelo do caminhão e contagem de veículos identificáveis são dimensões da própria consulta territorial/ANFIR. "Registros históricos" nesse contexto significa registros do recorte, não o domínio histórico genérico. "Modelo de caminhão" não significa modelo do catálogo de equipamentos.
 - A expressão "oportunidade comercial", quando usada como pedido de diagnóstico, sinal ou recomendação, não significa automaticamente a entidade Oportunidade do CRM. Só trate como entidade de pipeline quando o contexto pedir oportunidades registradas, pipeline, status, estágio, probabilidade, ganho/perda ou vínculo CRM equivalente.
 - Em pergunta sobre modelos dentro de um recorte ANFIR/territorial, primeiro responda pela cobertura do próprio recorte. Catálogo informa portfólio atual, não histórico. Consulte catálogo como fonte adicional quando o usuário pedir portfólio/modelos disponíveis ou quando essa separação agregar valor explícito, sempre sem atribuir o catálogo ao histórico.
 - Vendas podem retornar vínculos factuais resolvidos pelo backend em vinculos_resolvidos. Use esses vínculos e nunca deduza produto, cliente ou oportunidade a partir de UUIDs ou nomes técnicos.
@@ -184,6 +185,10 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
         t in texto
         for t in ("ddd", "território", "territorio", "minha região", "minha regiao", "recorte regional", "territorial")
     )
+    contexto_frota_territorial = menciona_territorio and any(
+        t in texto
+        for t in ("frota", "veículo", "veiculo", "veículos", "veiculos", "caminhão", "caminhao", "caminhões", "caminhoes", "placa", "chassi")
+    )
     recorte_territorial_anfir = menciona_anfir and menciona_territorio
     oportunidade_crm_explicita = any(
         t in texto
@@ -216,7 +221,7 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
 
     if any(t in texto for t in ("dados atuais do cti", "estado atual do cti", "situação atual do cti", "situacao atual do cti", "cti atual", "dados do cti")):
         requeridas.add("cti_atual")
-    if ("histórico" in texto or "historico" in texto) and not recorte_territorial_anfir:
+    if ("histórico" in texto or "historico" in texto) and not recorte_territorial_anfir and not contexto_frota_territorial:
         requeridas.add("historico")
     if menciona_anfir:
         requeridas.add("anfir")
@@ -229,6 +234,11 @@ def _fontes_requeridas(mensagem: str) -> set[str]:
 
     if not relacional_vendas:
         if recorte_territorial_anfir:
+            if catalogo_explicito:
+                requeridas.add("produtos")
+            if oportunidade_crm_explicita:
+                requeridas.add("oportunidades")
+        elif contexto_frota_territorial:
             if catalogo_explicito:
                 requeridas.add("produtos")
             if oportunidade_crm_explicita:
@@ -429,8 +439,8 @@ def ferramentas_agente() -> list[dict[str, Any]]:
         {"type": "function", "name": "consultar_resumo_cti", "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Vendas incluem vínculos factuais resolvidos quando disponíveis; oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_historico_cti", "description": "Consulta indicadores históricos gerais e amostra recente da base comercial CTI/ANFIR.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},
-        {"type": "function", "name": "consultar_territorio_cti", "description": "Consulta semântica territorial da base histórica CTI/ANFIR por DDD, UF, cidade, período, linha, modelo, cliente e implementadora. Totais e rankings usam todo o recorte autorizado; detalhes são pagináveis. O RBAC territorial é aplicado pelo backend.", "parameters": _schema_territorial(), "strict": True},
-        {"type": "function", "name": "consultar_anfir_cti", "description": "Consulta semântica completa da base histórica CTI/ANFIR com filtros territoriais, temporais e de produto, incluindo consolidação e paginação. Use para análises ANFIR, histórico de mercado interno e comparação de recortes autorizados.", "parameters": _schema_territorial(), "strict": True},
+        {"type": "function", "name": "consultar_territorio_cti", "description": "Consulta semântica territorial da base histórica CTI/ANFIR por DDD, UF, cidade, período, linha, modelo, cliente, implementadora e dimensões de frota/veículos. Totais e rankings usam todo o recorte autorizado; detalhes são pagináveis. O RBAC territorial é aplicado pelo backend.", "parameters": _schema_territorial(), "strict": True},
+        {"type": "function", "name": "consultar_anfir_cti", "description": "Consulta semântica completa da base histórica CTI/ANFIR com filtros territoriais, temporais e de produto, incluindo consolidação, frota/veículos e paginação. Use para análises ANFIR, histórico de mercado interno e comparação de recortes autorizados.", "parameters": _schema_territorial(), "strict": True},
         {"type": "function", "name": "consultar_catalogo_produtos_cti", "description": "Consulta o catálogo oficial de linhas, modelos e aliases de produtos/equipamentos do CTI.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}}, "required": ["termo"], "additionalProperties": False}, "strict": True},
     ]
 
@@ -592,7 +602,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
         "controle_loop": "progresso_evidencial",
         "controle_sintese": "obrigatoria_multi_fonte" if sintese_forcada else "direta",
         "controle_status_pipeline": "semantica_backend",
-        "catalogo_ferramentas": "ia_002_semantico_paginavel_territorio_anfir",
+        "catalogo_ferramentas": "ia_002_semantico_paginavel_territorio_anfir_frota",
         "controle_relacionamentos": "vinculos_explicitos",
         "controle_territorial": "rbac_backend",
         "limite_emergencial_ciclos": LIMITE_EMERGENCIAL_CICLOS,
