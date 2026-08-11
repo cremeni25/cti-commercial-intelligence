@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from typing import Any
 
 from services import ia_comercial_agente as base
@@ -11,6 +12,8 @@ _ORIGINAL_EVIDENCIAS_PRESENTES = base._evidencias_presentes
 _ORIGINAL_INSTRUCAO_FALTANTES = base._instrucao_evidencias_faltantes
 _ORIGINAL_INSTRUCAO_SINTESE = base._instrucao_sintese_final
 _ORIGINAL_INSTRUCOES_AGENTE = base.INSTRUCOES_AGENTE
+_ORIGINAL_FERRAMENTAS_AGENTE = base.ferramentas_agente
+_EXECUCAO_WEB_PURA: ContextVar[bool] = ContextVar("ia003_execucao_web_pura", default=False)
 
 _INSTRUCOES_WEB_IA003 = """
 
@@ -194,17 +197,32 @@ def _instrucao_sintese_final_crm(evidencias: set[str]) -> str:
     return instrucao + (" REGRAS CRM/WEB: " + " ".join(regras) if regras else "")
 
 
+def _ferramentas_agente_ia003() -> list[dict[str, Any]]:
+    ferramentas = _ORIGINAL_FERRAMENTAS_AGENTE()
+    if _EXECUCAO_WEB_PURA.get():
+        return [item for item in ferramentas if item.get("type") == "web_search"]
+    return ferramentas
+
+
 def _aplicar_patch() -> None:
     base._fontes_requeridas = _fontes_requeridas_ia003
     base._evidencias_presentes = _evidencias_presentes_crm
     base._instrucao_evidencias_faltantes = _instrucao_evidencias_faltantes_crm
     base._instrucao_sintese_final = _instrucao_sintese_final_crm
+    base.ferramentas_agente = _ferramentas_agente_ia003
     base.INSTRUCOES_AGENTE = _ORIGINAL_INSTRUCOES_AGENTE + _INSTRUCOES_WEB_IA003
 
 
 def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuario_id: str, tipo_usuario: str):
-    _aplicar_patch()
-    texto, metadados = base.gerar_resposta_agente(mensagem, historico, usuario_id, tipo_usuario)
+    pergunta_original = base._mensagem_original_para_evidencias(mensagem)
+    evidencias_previstas = _fontes_requeridas_ia003(pergunta_original)
+    token_web_pura = _EXECUCAO_WEB_PURA.set(evidencias_previstas == {"web"})
+    try:
+        _aplicar_patch()
+        texto, metadados = base.gerar_resposta_agente(mensagem, historico, usuario_id, tipo_usuario)
+    finally:
+        _EXECUCAO_WEB_PURA.reset(token_web_pura)
+
     web_requerida = "web" in set(metadados.get("evidencias_requeridas") or [])
     fontes_web = [
         fonte for fonte in (metadados.get("fontes") or [])
@@ -215,7 +233,10 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
     metadados["web_fontes_validas"] = len(fontes_web)
     metadados["web_urls_auditaveis"] = [str(fonte.get("url")) for fonte in fontes_web]
     metadados["controle_cruzamento_web_cti"] = (
-        "explicito_usuario" if _pede_cruzamento_cti_explicito(mensagem) else "nao_solicitado"
+        "explicito_usuario" if _pede_cruzamento_cti_explicito(pergunta_original) else "nao_solicitado"
+    )
+    metadados["controle_ferramentas_web_pura"] = (
+        "somente_web_search" if evidencias_previstas == {"web"} else "catalogo_completo_autorizado"
     )
     if web_requerida and not fontes_web:
         raise base.IAComercialOpenAIError(
