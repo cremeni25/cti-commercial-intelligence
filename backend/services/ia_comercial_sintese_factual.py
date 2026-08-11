@@ -40,6 +40,8 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - "Oportunidade comercial" em sentido analítico é uma inferência/recomendação, não a entidade Oportunidade do CRM. Pode indicar sinais comerciais sustentados pelos dados, deixando claro que são inferências.
 - Cliente só pode ser chamado de ativo/inativo quando esse status estiver explicitamente presente na evidência consultada. Status de registro ANFIR não prova status do cliente no CRM.
 - Status operacional, documental ou ANFIR não prova venda, aceite, negócio concluído, relacionamento comercial ativo ou entrega.
+- Relações entre implementadora, cliente, linha e fabricante de equipamento em RESUMO_RELEVANTE significam somente coocorrência factual nos mesmos registros históricos do recorte. Não as transforme em contrato, parceria, preferência, venda, exclusividade, relacionamento ativo ou oportunidade CRM.
+- Fabricante de equipamento diferente de Carrier pode ser descrito como sinal concorrencial presente nos registros somente quando a evidência trouxer esse valor. Não afirme share, perda de venda, domínio competitivo ou substituição sem evidência adicional. Preserve grafias anômalas como limitação de qualidade do dado.
 - Nesta camada factual, não use "maioria", "predominante", "predominantes", "líder", "líderes", "domina", "dominam", "dominante" ou equivalentes para descrever distribuição. Informe sempre contagens e, quando útil, percentuais sobre o universo total do recorte.
 - Quando a cobertura de um campo for parcial, informe a contagem exata sobre o universo total ou qualifique explicitamente como "entre os registros preenchidos".
 - Preserve ausências e qualidade dos dados. Se um valor de fabricante/modelo/status tiver grafia anômala ou cobertura parcial, descreva a limitação sem normalizar silenciosamente o dado como se fosse completo.
@@ -164,9 +166,9 @@ def _dimensoes_territoriais_pedidas(pergunta_atual: str) -> set[str]:
         dimensoes.add("modelos")
     if any(t in texto for t in ("concentração", "concentracao", "territorial", "território", "territorio", "cidade", "ddd", "região", "regiao")):
         dimensoes.add("territorio")
-    if "implementadora" in texto:
+    if any(t in texto for t in ("implementadora", "implementador", "concorrência", "concorrencia", "concorrente", "concorrentes")):
         dimensoes.add("implementadoras")
-    if "fabricante" in texto or "marca" in texto:
+    if any(t in texto for t in ("fabricante", "marca", "concorrência", "concorrencia", "concorrente", "concorrentes")):
         dimensoes.add("fabricantes")
     if "linha" in texto:
         dimensoes.add("linhas")
@@ -216,6 +218,10 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
         relevante["ranking_cidades"] = resumo.get("ranking_cidades") or []
     if "implementadoras" in dimensoes:
         relevante["ranking_implementadoras"] = resumo.get("ranking_implementadoras") or []
+        relevante["relacoes_implementadoras"] = resumo.get("relacoes_implementadoras") or []
+        relevante["regra_relacoes_implementadoras"] = (
+            "cada relação é calculada apenas sobre registros do mesmo recorte; coocorrência histórica não prova venda, parceria, preferência, exclusividade, relacionamento ativo ou oportunidade CRM"
+        )
     if "fabricantes" in dimensoes:
         relevante["ranking_fabricantes_equipamento"] = resumo.get("ranking_fabricantes_equipamento") or []
     if "linhas" in dimensoes:
