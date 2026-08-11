@@ -63,6 +63,55 @@ def test_resposta_cti_de_fonte_unica_fica_rastreavel():
     assert auditoria["totais"]["afirmacoes_sem_evidencia_explicita"] == 0
 
 
+def test_pedido_nao_pode_provar_portfolio_atual_sem_catalogo():
+    metadados = {
+        "fontes": [{"tipo": "CTI", "descricao": "Ferramentas internas autorizadas do CTI."}],
+        "ferramentas": [
+            {
+                "tipo": "CTI",
+                "ferramenta": "consultar_dominio_cti",
+                "argumentos": {"dominio": "pedidos", "termo": "PED-001", "limite": 1},
+                "resumo": {"erro": None, "dominio": "pedidos", "total_retornado": 1},
+            }
+        ],
+        "evidencias_requeridas": ["pedidos"],
+        "evidencias_atendidas": ["pedidos"],
+    }
+    auditoria = construir_auditoria_evidencial(
+        "(2) DADOS INTERNOS CTI\n- O modelo X4-7500 integra o portfólio atual do CTI.",
+        metadados,
+        "Analise o pedido PED-001.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["fontes_evidencia"] == []
+    assert afirmacao["status_rastreabilidade"] == "SEM_EVIDENCIA_EXPLICITA"
+    assert auditoria["totais"]["afirmacoes_sem_evidencia_explicita"] == 1
+
+
+def test_fonte_unica_de_pedidos_nao_substitui_vendas_ou_produtos():
+    metadados = {
+        "fontes": [],
+        "ferramentas": [
+            {
+                "tipo": "CTI",
+                "ferramenta": "consultar_dominio_cti",
+                "argumentos": {"dominio": "pedidos", "termo": "PED-001", "limite": 1},
+                "resumo": {"erro": None, "dominio": "pedidos", "total_retornado": 1},
+            }
+        ],
+        "evidencias_requeridas": ["pedidos"],
+        "evidencias_atendidas": ["pedidos"],
+    }
+    auditoria = construir_auditoria_evidencial(
+        "(2) DADOS INTERNOS CTI\n- Há vendas recentes do modelo no portfólio atual.",
+        metadados,
+        "Analise o pedido PED-001.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["fontes_evidencia"] == []
+    assert afirmacao["status_rastreabilidade"] == "SEM_EVIDENCIA_EXPLICITA"
+
+
 def test_controle_ia006_publicado():
     resultado = construir_auditoria_evidencial("- Recomenda-se acompanhar o pedido.", {"fontes": [], "ferramentas": [], "evidencias_requeridas": [], "evidencias_atendidas": []}, "O que recomenda?")
     assert resultado["controle_auditoria_evidencial"] == "ia006_cadeia_afirmacao_evidencia_origem"
