@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from contextvars import ContextVar
 from copy import deepcopy
 from typing import Any
@@ -12,12 +13,14 @@ from services.ia_comercial_sintese_factual import sintetizar_fatos_execucao as s
 EVIDENCIAS_CRM = {"propostas", "pedidos", "atividades"}
 _DOMINIOS_CTI = {"clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"}
 _EVIDENCIAS_IA004: ContextVar[frozenset[str]] = ContextVar("ia004_evidencias", default=frozenset())
+_PERGUNTA_IA004: ContextVar[str] = ContextVar("ia004_pergunta", default="")
 
 _ORIGINAL_FONTES_IA003 = crm._fontes_requeridas_ia003
 _ORIGINAL_FERRAMENTAS_CRM = crm._ORIGINAL_FERRAMENTAS_AGENTE
 _ORIGINAL_INSTRUCOES_CRM = crm._ORIGINAL_INSTRUCOES_AGENTE
 _ORIGINAL_INSTRUCAO_SINTESE_CRM = crm._ORIGINAL_INSTRUCAO_SINTESE
 _ORIGINAL_GERAR_BASE = base.gerar_resposta_agente
+_ORIGINAL_EXECUTAR_FERRAMENTA = base._executar_ferramenta_cti
 
 _INSTRUCOES_IA004 = """
 
@@ -26,6 +29,8 @@ CRUZAMENTO MULTI-FONTE — IA-004:
 - Fato externo só pode ser sustentado pelas fontes web da execução. Fato interno só pode ser sustentado pelas ferramentas CTI efetivamente consultadas.
 - Uma fonte nunca completa, confirma ou substitui silenciosamente a outra: web não cria venda, cliente, oportunidade, pedido, frota ou registro CTI; CTI não prova tendência, participação ou fato do mercado externo.
 - Ausência significa somente ausência na fonte, domínio, filtro e recorte consultados. Nunca converta resultado interno vazio em ausência no mercado real, nem ausência web em ausência no CTI.
+- Pedido por "nosso portfólio" significa o catálogo oficial CTI como conjunto, não uma busca textual pela frase temática da pergunta. Pedido por "nossas vendas" significa o conjunto autorizado de vendas, salvo filtro específico explicitamente pedido pelo usuário.
+- Nunca declare ausência de clientes, oportunidades, pedidos, propostas ou outros domínios internos que não tenham sido efetivamente consultados na execução.
 - Em análise multi-fonte, organize a resposta em três camadas sem misturá-las: fatos externos verificados; dados internos CTI; cruzamento e implicações comerciais. A terceira camada é inferência/recomendação e deve ser apresentada como tal.
 - Se as fontes não permitirem um cruzamento pedido, declare a limitação em vez de preencher a lacuna por conhecimento prévio.
 - Catálogo CTI representa portfólio atual; ANFIR/território representam registros históricos do recorte; vendas/CRM representam registros operacionais. Não troque o papel dessas fontes.
@@ -40,6 +45,7 @@ def _eh_multifonte(evidencias: set[str] | frozenset[str]) -> bool:
 def _fontes_requeridas_ia004(mensagem: str) -> set[str]:
     requeridas = set(_ORIGINAL_FONTES_IA003(mensagem))
     _EVIDENCIAS_IA004.set(frozenset(requeridas))
+    _PERGUNTA_IA004.set(str(mensagem or ""))
     return requeridas
 
 
@@ -95,6 +101,46 @@ def _ferramentas_base_ia004() -> list[dict[str, Any]]:
     return ferramentas
 
 
+def _normalizar_argumentos_multifonte(
+    nome: str,
+    argumentos: dict[str, Any],
+    evidencias: set[str],
+    pergunta: str,
+) -> dict[str, Any]:
+    resultado = dict(argumentos or {})
+    if not _eh_multifonte(evidencias):
+        return resultado
+
+    texto = str(pergunta or "").casefold()
+    portfolio_amplo = any(t in texto for t in ("nosso portfólio", "nosso portfolio", "catálogo do cti", "catalogo do cti"))
+    vendas_amplas = any(t in texto for t in ("nossas vendas", "minhas vendas", "vendas do cti", "vendas no cti"))
+
+    if nome == "consultar_catalogo_produtos_cti" and "produtos" in evidencias and portfolio_amplo:
+        resultado["termo"] = None
+
+    if (
+        nome == "consultar_dominio_cti"
+        and "vendas" in evidencias
+        and str(resultado.get("dominio") or "") == "vendas"
+        and vendas_amplas
+    ):
+        resultado["termo"] = None
+        resultado["status"] = None
+        resultado["offset"] = 0
+        resultado["limite"] = max(100, int(resultado.get("limite") or 100))
+
+    return resultado
+
+
+def _executar_ferramenta_ia004(nome: str, argumentos: dict[str, Any], usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
+    evidencias = set(_EVIDENCIAS_IA004.get())
+    pergunta = _PERGUNTA_IA004.get()
+    normalizados = _normalizar_argumentos_multifonte(nome, argumentos, evidencias, pergunta)
+    argumentos.clear()
+    argumentos.update(normalizados)
+    return _ORIGINAL_EXECUTAR_FERRAMENTA(nome, argumentos, usuario_id, tipo_usuario)
+
+
 def _instrucao_sintese_ia004(evidencias: set[str]) -> str:
     instrucao = _ORIGINAL_INSTRUCAO_SINTESE_CRM(evidencias)
     if not _eh_multifonte(evidencias):
@@ -105,6 +151,8 @@ def _instrucao_sintese_ia004(evidencias: set[str]) -> str:
         "(1) FATOS EXTERNOS VERIFICADOS, citando apenas fatos sustentados pela web desta execução; "
         "(2) DADOS INTERNOS CTI, limitados aos domínios realmente consultados; "
         "(3) CRUZAMENTO E IMPLICAÇÕES COMERCIAIS, explicitamente tratados como inferências/recomendações. "
+        "Quando produtos forem exigidos por pedido de nosso portfólio, trate o catálogo retornado como conjunto do portfólio atual, sem transformar busca textual vazia em ausência geral. "
+        "Não declare ausência de clientes, oportunidades, pedidos, propostas ou outros domínios que não estejam entre as evidências desta execução. "
         "Não use uma origem para provar fato pertencente à outra e qualifique qualquer ausência pelo recorte consultado."
     )
 
@@ -136,6 +184,43 @@ def _auditar_ferramentas_multifonte(metadados: dict[str, Any], evidencias: set[s
         )
 
 
+def _sanitizar_ausencias_nao_consultadas(texto: str, evidencias: set[str]) -> tuple[str, int]:
+    linhas = str(texto or "").splitlines()
+    removidas = 0
+    dom = {
+        "clientes": ("cliente", "clientes", "carteira"),
+        "oportunidades": ("oportunidade", "oportunidades", "pipeline"),
+        "pedidos": ("pedido", "pedidos"),
+        "propostas": ("proposta", "propostas"),
+        "atividades": ("atividade", "atividades", "visita", "visitas"),
+    }
+    marcadores_ausencia = (
+        "não há", "nao ha", "não foram encontr", "nao foram encontr", "nenhum", "nenhuma",
+        "não existem", "nao existem", "ausência", "ausencia", "sem registros",
+    )
+
+    resultado: list[str] = []
+    for linha in linhas:
+        norm = linha.casefold()
+        nao_sustentada = False
+        if any(m in norm for m in marcadores_ausencia):
+            for evidencia, termos in dom.items():
+                if evidencia not in evidencias and any(t in norm for t in termos):
+                    nao_sustentada = True
+                    break
+        if nao_sustentada:
+            removidas += 1
+            continue
+        resultado.append(linha)
+
+    if removidas:
+        resultado.append("")
+        resultado.append(
+            "Limitação de evidência: clientes, oportunidades e demais domínios não consultados nesta execução não podem ser classificados como ausentes."
+        )
+    return "\n".join(resultado).strip(), removidas
+
+
 def _gerar_base_ia004(
     mensagem: str,
     historico: list[dict[str, str]],
@@ -148,6 +233,7 @@ def _gerar_base_ia004(
         return texto, metadados
 
     _auditar_ferramentas_multifonte(metadados, evidencias)
+    texto, ajustes_ausencia = _sanitizar_ausencias_nao_consultadas(texto, evidencias)
     fontes_web = [
         fonte for fonte in (metadados.get("fontes") or [])
         if isinstance(fonte, dict) and fonte.get("url")
@@ -162,6 +248,9 @@ def _gerar_base_ia004(
             "controle_multifonte_proveniencia": "externo_interno_inferencia_segregados",
             "controle_inferencia_multifonte": "inferencia_nao_e_evidencia",
             "controle_ausencia_multifonte": "ausencia_limitada_a_fonte_e_recorte_consultados",
+            "controle_consulta_portfolio": "catalogo_completo_quando_portfolio_amplo",
+            "controle_consulta_vendas": "universo_autorizado_quando_vendas_amplas",
+            "multifonte_ajustes_ausencia_nao_consultada": ajustes_ausencia,
         }
     )
     return texto, metadados
@@ -172,6 +261,7 @@ crm._fontes_requeridas_ia003 = _fontes_requeridas_ia004
 crm._ORIGINAL_FERRAMENTAS_AGENTE = _ferramentas_base_ia004
 crm._ORIGINAL_INSTRUCOES_AGENTE = _ORIGINAL_INSTRUCOES_CRM + _INSTRUCOES_IA004
 crm._ORIGINAL_INSTRUCAO_SINTESE = _instrucao_sintese_ia004
+base._executar_ferramenta_cti = _executar_ferramenta_ia004
 base.gerar_resposta_agente = _gerar_base_ia004
 
 
