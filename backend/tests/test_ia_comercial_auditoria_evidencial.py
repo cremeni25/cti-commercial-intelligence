@@ -63,8 +63,8 @@ def test_resposta_cti_de_fonte_unica_fica_rastreavel():
     assert auditoria["totais"]["afirmacoes_sem_evidencia_explicita"] == 0
 
 
-def test_pedido_nao_pode_provar_portfolio_atual_sem_catalogo():
-    metadados = {
+def metadados_so_pedidos():
+    return {
         "fontes": [{"tipo": "CTI", "descricao": "Ferramentas internas autorizadas do CTI."}],
         "ferramentas": [
             {
@@ -77,9 +77,12 @@ def test_pedido_nao_pode_provar_portfolio_atual_sem_catalogo():
         "evidencias_requeridas": ["pedidos"],
         "evidencias_atendidas": ["pedidos"],
     }
+
+
+def test_pedido_nao_pode_provar_portfolio_atual_sem_catalogo():
     auditoria = construir_auditoria_evidencial(
         "(2) DADOS INTERNOS CTI\n- O modelo X4-7500 integra o portfólio atual do CTI.",
-        metadados,
+        metadados_so_pedidos(),
         "Analise o pedido PED-001.",
     )["auditoria_evidencial"]
     afirmacao = auditoria["afirmacoes"][0]
@@ -89,27 +92,36 @@ def test_pedido_nao_pode_provar_portfolio_atual_sem_catalogo():
 
 
 def test_fonte_unica_de_pedidos_nao_substitui_vendas_ou_produtos():
-    metadados = {
-        "fontes": [],
-        "ferramentas": [
-            {
-                "tipo": "CTI",
-                "ferramenta": "consultar_dominio_cti",
-                "argumentos": {"dominio": "pedidos", "termo": "PED-001", "limite": 1},
-                "resumo": {"erro": None, "dominio": "pedidos", "total_retornado": 1},
-            }
-        ],
-        "evidencias_requeridas": ["pedidos"],
-        "evidencias_atendidas": ["pedidos"],
-    }
     auditoria = construir_auditoria_evidencial(
         "(2) DADOS INTERNOS CTI\n- Há vendas recentes do modelo no portfólio atual.",
-        metadados,
+        metadados_so_pedidos(),
         "Analise o pedido PED-001.",
     )["auditoria_evidencial"]
     afirmacao = auditoria["afirmacoes"][0]
     assert afirmacao["fontes_evidencia"] == []
     assert afirmacao["status_rastreabilidade"] == "SEM_EVIDENCIA_EXPLICITA"
+
+
+def test_portfolio_atual_continua_sem_evidencia_mesmo_quando_frase_tambem_cita_pedido():
+    auditoria = construir_auditoria_evidencial(
+        "(2) DADOS INTERNOS CTI\n- O portfólio atual da CTI inclui o modelo X4-7500 na linha Trailer, usado no pedido analisado.",
+        metadados_so_pedidos(),
+        "Analise o pedido PED-001.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["fontes_evidencia"] == []
+    assert afirmacao["status_rastreabilidade"] == "SEM_EVIDENCIA_EXPLICITA"
+
+
+def test_portfolio_atual_usa_catalogo_quando_catalogo_foi_consultado():
+    auditoria = construir_auditoria_evidencial(
+        "(2) DADOS INTERNOS CTI\n- O portfólio atual da CTI inclui o modelo X4-7500 na linha Trailer, usado no pedido analisado.",
+        metadados_multifonte(),
+        "Compare mercado, portfólio e vendas.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["fontes_evidencia"] == ["CTI_1"]
+    assert afirmacao["status_rastreabilidade"] == "RASTREAVEL"
 
 
 def test_controle_ia006_publicado():
