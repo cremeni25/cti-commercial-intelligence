@@ -110,4 +110,5 @@ def test_instrucoes_proibem_transformar_coocorrencia_em_relacionamento_ativo():
     instrucoes = sintese.INSTRUCOES_SINTESE_FATUAL.casefold()
     assert "coocorrência factual" in instrucoes
     assert "não as transforme em contrato" in instrucoes
-    assert "sinal concorrencial" in instrucoes
+    assert "classificacao_fabricantes_equipamento.concorrentes" in instrucoes
+    assert "nunca pode ser chamado de concorrente" in instrucoes
