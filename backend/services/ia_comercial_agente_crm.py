@@ -105,6 +105,28 @@ def _pede_cruzamento_cti_explicito(mensagem: str) -> bool:
     return any(t in texto for t in marcadores_internos) or any(t in texto for t in verbos_cruzamento)
 
 
+def _adicionar_evidencias_cruzamento_expresso(mensagem: str, requeridas: set[str]) -> set[str]:
+    texto = base._normalizar(mensagem)
+    resultado = set(requeridas)
+
+    if any(t in texto for t in ("nosso portfólio", "nosso portfolio", "catálogo do cti", "catalogo do cti")):
+        resultado.add("produtos")
+    if any(t in texto for t in ("nossas vendas", "minhas vendas", "vendas do cti", "vendas no cti", "vendas do crm", "vendas no crm")):
+        resultado.add("vendas")
+    if any(t in texto for t in ("nossos clientes", "meus clientes", "clientes do cti", "clientes no cti", "clientes do crm", "clientes no crm", "nossa carteira", "minha carteira")):
+        resultado.add("clientes")
+    if any(t in texto for t in ("nossas oportunidades", "oportunidades do cti", "oportunidades no cti", "oportunidades do crm", "oportunidades no crm", "pipeline")):
+        resultado.add("oportunidades")
+    if any(t in texto for t in ("nossos pedidos", "meus pedidos", "pedidos do cti", "pedidos no cti", "pedidos do crm", "pedidos no crm")):
+        resultado.add("pedidos")
+    if any(t in texto for t in ("nossas propostas", "propostas do cti", "propostas no cti", "propostas do crm", "propostas no crm")):
+        resultado.add("propostas")
+    if "anfir" in texto:
+        resultado.add("anfir")
+
+    return resultado
+
+
 def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
     requeridas = _fontes_requeridas_crm(mensagem)
     web_necessaria = _necessita_web_autonoma(mensagem)
@@ -114,6 +136,7 @@ def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
     if not _pede_cruzamento_cti_explicito(mensagem):
         return {"web"}
 
+    requeridas = _adicionar_evidencias_cruzamento_expresso(mensagem, requeridas)
     requeridas.add("web")
     return requeridas
 
