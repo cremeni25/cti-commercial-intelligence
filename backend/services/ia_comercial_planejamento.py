@@ -214,7 +214,7 @@ def _renderizar_plano(plano: dict[str, Any]) -> str:
     acoes = plano.get("acoes") or []
     if not acoes:
         return ""
-    linhas = ["", "PLANO COMERCIAL ESTRUTURADO", str(plano.get("objetivo") or "").strip()]
+    linhas = ["PLANO COMERCIAL ESTRUTURADO", str(plano.get("objetivo") or "").strip()]
     for item in acoes:
         qualificacao = str(item.get("qualificacao_evidencial") or "EVIDENCIA_COMPLETA")
         linhas.append(
@@ -291,7 +291,7 @@ def construir_planejamento_comercial(
 
     plano = validar_plano(plano_bruto if isinstance(plano_bruto, dict) else {}, auditoria)
     renderizado = _renderizar_plano(plano)
-    texto_final = resposta_texto if not renderizado else f"{resposta_texto.rstrip()}\n\n{renderizado}"
+    texto_final = resposta_texto if not renderizado else renderizado
 
     return texto_final, {
         "controle_planejamento_comercial": "ia007_plano_validado_por_evidencia",
@@ -302,4 +302,5 @@ def construir_planejamento_comercial(
         "planejamento_store": False,
         "planejamento_historico_como_evidencia": False,
         "controle_oportunidade_futura": "analitica_nao_entidade_crm_sem_pedido_explicito",
+        "controle_resposta_planejamento": "somente_plano_validado_sem_texto_livre_previo",
     }
