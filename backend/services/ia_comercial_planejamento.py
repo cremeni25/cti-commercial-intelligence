@@ -50,6 +50,20 @@ _MARCADORES_OPORTUNIDADE_CRM = (
     "oportunidades perdidas",
 )
 
+_MARCADORES_NEGACAO_AMPLA = (
+    "não há", "nao ha", "não existe", "nao existe", "não existem", "nao existem",
+    "nenhuma", "nenhum", "sem oportunidade", "sem oportunidades", "não foram encontr", "nao foram encontr",
+)
+
+_DOMINIO_TERMOS_NEGACAO: dict[str, tuple[str, ...]] = {
+    "oportunidades": ("oportunidade", "oportunidades", "pipeline"),
+    "clientes": ("cliente", "clientes", "carteira"),
+    "vendas": ("venda", "vendas"),
+    "propostas": ("proposta", "propostas"),
+    "pedidos": ("pedido", "pedidos"),
+    "atividades": ("atividade", "atividades", "visita", "visitas"),
+}
+
 _ORIGINAL_FONTES_BASE_IA007 = crm._ORIGINAL_FONTES_REQUERIDAS
 
 
@@ -112,11 +126,62 @@ def requer_planejamento(pergunta: str) -> bool:
     return bool(texto) and any(marcador in texto for marcador in _MARCADORES_PLANEJAMENTO)
 
 
+def _normalizar(texto: Any) -> str:
+    return str(texto or "").strip().casefold()
+
+
+def _origens_dominio(auditoria: dict[str, Any], dominio: str) -> list[dict[str, Any]]:
+    return [
+        origem
+        for origem in (auditoria.get("origens_execucao") or [])
+        if isinstance(origem, dict)
+        and origem.get("tipo") == "CTI"
+        and str(origem.get("dominio") or "") == dominio
+    ]
+
+
+def _dominio_so_tem_busca_filtrada_vazia(auditoria: dict[str, Any], dominio: str) -> bool:
+    origens = _origens_dominio(auditoria, dominio)
+    if not origens:
+        return False
+
+    houve_filtrada_zero = False
+    for origem in origens:
+        filtros = origem.get("filtros") or {}
+        termo = str(filtros.get("termo") or "").strip()
+        total = origem.get("total_retornado")
+        try:
+            total_num = int(total) if total is not None else None
+        except (TypeError, ValueError):
+            total_num = None
+
+        if termo and total_num == 0:
+            houve_filtrada_zero = True
+            continue
+
+        return False
+
+    return houve_filtrada_zero
+
+
+def _afirmacao_negativa_fragil(item: dict[str, Any], auditoria: dict[str, Any]) -> bool:
+    texto = _normalizar(item.get("texto"))
+    if not texto or not any(marcador in texto for marcador in _MARCADORES_NEGACAO_AMPLA):
+        return False
+
+    for dominio, termos in _DOMINIO_TERMOS_NEGACAO.items():
+        if any(termo in texto for termo in termos) and _dominio_so_tem_busca_filtrada_vazia(auditoria, dominio):
+            return True
+    return False
+
+
 def _afirmacoes_por_id(auditoria: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         str(item.get("id")): item
         for item in (auditoria.get("afirmacoes") or [])
-        if isinstance(item, dict) and item.get("id")
+        if isinstance(item, dict)
+        and item.get("id")
+        and not _afirmacao_negativa_fragil(item, auditoria)
     }
 
 
@@ -128,7 +193,9 @@ def _oportunidade_encerrada(auditoria: dict[str, Any]) -> bool:
     return any(
         padrao.search(str(item.get("texto") or ""))
         for item in (auditoria.get("afirmacoes") or [])
-        if isinstance(item, dict) and item.get("tipo") == "FATO_CTI"
+        if isinstance(item, dict)
+        and item.get("tipo") == "FATO_CTI"
+        and not _afirmacao_negativa_fragil(item, auditoria)
     )
 
 
@@ -222,6 +289,9 @@ def validar_plano(plano: dict[str, Any], auditoria: dict[str, Any]) -> dict[str,
         ):
             continue
 
+        if _afirmacao_negativa_fragil({"texto": acao}, auditoria):
+            continue
+
         status_fundamentos = {
             str(afirmacoes[fid].get("status_rastreabilidade") or "") for fid in fundamentos_validos
         }
@@ -313,14 +383,22 @@ def construir_planejamento_comercial(
             codigo="OPENAI_KEY_MISSING",
         )
 
+    afirmacoes_planejaveis = list(_afirmacoes_por_id(auditoria).values())
+    negativas_frageis = sum(
+        1
+        for item in (auditoria.get("afirmacoes") or [])
+        if isinstance(item, dict) and _afirmacao_negativa_fragil(item, auditoria)
+    )
+
     entrada = {
         "PERGUNTA_ATUAL": pergunta_atual,
         "RESPOSTA_AUDITADA": resposta_texto,
         "AUDITORIA": {
-            "afirmacoes": auditoria.get("afirmacoes") or [],
+            "afirmacoes": afirmacoes_planejaveis,
             "evidencias_requeridas": auditoria.get("evidencias_requeridas") or [],
             "evidencias_atendidas": auditoria.get("evidencias_atendidas") or [],
             "historico_conta_como_evidencia": False,
+            "regra_zero_filtrado": "resultado zero de busca textual filtrada não prova ausência relacional",
         },
     }
 
@@ -360,4 +438,6 @@ def construir_planejamento_comercial(
         "controle_oportunidade_futura": "analitica_nao_entidade_crm_sem_pedido_explicito",
         "controle_resposta_planejamento": "somente_plano_validado_sem_texto_livre_previo",
         "controle_lacunas_planejamento": "territorio_produtos_web_demanda_futura_qualificados_por_acao",
+        "controle_zero_filtrado": "busca_textual_zero_nao_prova_ausencia_relacional",
+        "planejamento_negacoes_frageis_excluidas": negativas_frageis,
     }
