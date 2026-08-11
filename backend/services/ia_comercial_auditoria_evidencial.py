@@ -77,6 +77,15 @@ _DOMINIOS_DOMINANTES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
+_WEB_ENTIDADES_IGNORADAS = {
+    "brasil", "brasileiro", "brasileira", "mercado", "transporte", "refrigerado", "refrigerada",
+    "refrigeração", "refrigeracao", "tecnologia", "tecnologias", "fabricante", "fabricantes",
+    "série", "serie", "dados", "externos", "verificados", "pedido", "cliente", "carrier", "trailer",
+    "equipamento", "equipamentos", "venda", "vendas", "modelo", "linha", "linhas", "monitoramento",
+    "digital", "sustentável", "sustentavel", "eficiência", "eficiencia", "fatos", "internos", "cti",
+    "cruzamento", "implicações", "implicacoes", "comerciais", "não", "nao", "uma", "mais",
+}
+
 
 def _normalizar(texto: Any) -> str:
     return str(texto or "").strip().casefold()
@@ -224,6 +233,31 @@ def _ids_cti_por_texto(texto: str, ids_por_evidencia: dict[str, list[str]], ids_
     return []
 
 
+def _entidades_web_texto(texto: str) -> list[str]:
+    entidades: list[str] = []
+    for token in re.findall(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ0-9_-]{3,}\b", str(texto or "")):
+        normalizado = token.casefold()
+        if normalizado in _WEB_ENTIDADES_IGNORADAS:
+            continue
+        entidades.append(normalizado)
+    return list(dict.fromkeys(entidades))
+
+
+def _ids_web_por_texto(texto: str, origens: list[dict[str, Any]], ids_web: list[str]) -> list[str]:
+    entidades = _entidades_web_texto(texto)
+    if not entidades:
+        return list(ids_web)
+
+    compativeis: list[str] = []
+    for origem in origens:
+        if origem.get("tipo") != "WEB":
+            continue
+        corpus = f"{str(origem.get('descricao') or '')} {str(origem.get('url') or '')}".casefold()
+        if any(entidade in corpus for entidade in entidades):
+            compativeis.append(str(origem.get("id")))
+    return list(dict.fromkeys(compativeis))
+
+
 def _eh_inferencia(texto: str, secao: str | None) -> bool:
     if secao == "INFERENCIA":
         return True
@@ -282,7 +316,7 @@ def construir_auditoria_evidencial(
         tipo = "FATO"
         if secao == "WEB":
             tipo = "FATO_WEB"
-            fontes_evidencia = list(ids_web)
+            fontes_evidencia = _ids_web_por_texto(texto, origens, ids_web)
         elif secao == "CTI":
             tipo = "FATO_CTI"
             fontes_evidencia = _ids_cti_por_texto(texto, ids_por_evidencia, ids_cti)
@@ -291,7 +325,7 @@ def construir_auditoria_evidencial(
             fontes_evidencia = _ids_cti_por_texto(texto, ids_por_evidencia, ids_cti)
         elif ids_web and not ids_cti:
             tipo = "FATO_WEB"
-            fontes_evidencia = list(ids_web)
+            fontes_evidencia = _ids_web_por_texto(texto, origens, ids_web)
         else:
             fontes_evidencia = _ids_cti_por_texto(texto, ids_por_evidencia, ids_cti)
             if fontes_evidencia:
