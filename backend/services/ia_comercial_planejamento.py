@@ -7,6 +7,7 @@ from typing import Any
 
 from openai import OpenAI
 
+from services import ia_comercial_agente_crm as crm
 from services.ia_comercial_cti import IAComercialOpenAIError, _classificar_falha_openai
 
 
@@ -19,6 +20,56 @@ _MARCADORES_PLANEJAMENTO = (
     "como avançar", "como avancar", "decisão", "decisao",
 )
 
+_MARCADORES_OPORTUNIDADE_ANALITICA = (
+    "oportunidade comercial",
+    "oportunidades comerciais",
+    "oportunidade futura",
+    "oportunidades futuras",
+    "sinal de oportunidade",
+    "sinais de oportunidade",
+    "potencial de oportunidade",
+    "potenciais oportunidades",
+)
+
+_MARCADORES_OPORTUNIDADE_CRM = (
+    "oportunidades do crm",
+    "oportunidade do crm",
+    "pipeline",
+    "oportunidade registrada",
+    "oportunidades registradas",
+    "oportunidade vinculada",
+    "oportunidades vinculadas",
+    "oportunidade relacionada",
+    "oportunidades relacionadas",
+    "status da oportunidade",
+    "estágio da oportunidade",
+    "estagio da oportunidade",
+    "probabilidade da oportunidade",
+    "oportunidades abertas",
+    "oportunidades ganhas",
+    "oportunidades perdidas",
+)
+
+_ORIGINAL_FONTES_BASE_IA007 = crm._ORIGINAL_FONTES_REQUERIDAS
+
+
+def _fontes_requeridas_semantica_ia007(mensagem: str) -> set[str]:
+    """Evita transformar oportunidade futura/analítica em consulta da entidade CRM."""
+    requeridas = set(_ORIGINAL_FONTES_BASE_IA007(mensagem))
+    texto = str(mensagem or "").casefold()
+    oportunidade_analitica = any(marcador in texto for marcador in _MARCADORES_OPORTUNIDADE_ANALITICA)
+    oportunidade_crm = any(marcador in texto for marcador in _MARCADORES_OPORTUNIDADE_CRM)
+    if oportunidade_analitica and not oportunidade_crm:
+        requeridas.discard("oportunidades")
+    return requeridas
+
+
+# A cadeia IA-003/IA-004 chama _fontes_requeridas_crm, que consulta este
+# original capturado. A substituição mantém a interface e apenas corrige a
+# semântica de oportunidade futura em perguntas de planejamento.
+crm._ORIGINAL_FONTES_REQUERIDAS = _fontes_requeridas_semantica_ia007
+
+
 _INSTRUCOES_PLANEJAMENTO = """Você é a camada IA-007 de planejamento comercial do CTI.
 Receba somente a pergunta atual, a resposta já entregue e a auditoria evidencial da MESMA execução.
 Sua função é transformar recomendações sustentadas em um plano comercial ordenado; não criar fatos novos.
@@ -29,6 +80,8 @@ REGRAS OBRIGATÓRIAS:
 - Não use afirmações com status SEM_EVIDENCIA_EXPLICITA como fundamento factual.
 - Se um fundamento estiver BASE_PARCIAL, mantenha a ação qualificada como BASE_PARCIAL e descreva a lacuna.
 - Não recomende avançar/converter oportunidade cujo estado factual seja GANHO, PERDIDO, CANCELADO ou ENCERRADO.
+- "Oportunidade futura" ou "oportunidade comercial" pode ser recomendação prospectiva; não afirme que existe ou não existe entidade Oportunidade no CRM sem evidência explícita dessa entidade.
+- Resultado vazio de busca textual não prova ausência de relacionamento com outra entidade.
 - Diferencie ação operacional imediata, acompanhamento e oportunidade futura.
 - Não invente prazo em dias, valor, cliente, produto, venda, probabilidade ou resultado quantitativo.
 - Horizonte deve ser somente IMEDIATO, CURTO_PRAZO ou MEDIO_PRAZO.
@@ -69,7 +122,10 @@ def _afirmacoes_por_id(auditoria: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _oportunidade_encerrada(auditoria: dict[str, Any]) -> bool:
-    padrao = re.compile(r"\boportunidade\b.*\b(GANHO|GANHA|PERDIDO|PERDIDA|CANCELADO|CANCELADA|ENCERRADO|ENCERRADA)\b", re.I)
+    padrao = re.compile(
+        r"\boportunidade\b.*\b(GANHO|GANHA|PERDIDO|PERDIDA|CANCELADO|CANCELADA|ENCERRADO|ENCERRADA)\b",
+        re.I,
+    )
     return any(
         padrao.search(str(item.get("texto") or ""))
         for item in (auditoria.get("afirmacoes") or [])
@@ -98,22 +154,29 @@ def validar_plano(plano: dict[str, Any], auditoria: dict[str, Any]) -> dict[str,
         fundamentos = [str(x) for x in (item.get("fundamentos") or []) if str(x) in afirmacoes]
         fundamentos = list(dict.fromkeys(fundamentos))
         fundamentos_validos = [
-            fid for fid in fundamentos
+            fid
+            for fid in fundamentos
             if str(afirmacoes[fid].get("status_rastreabilidade") or "") != "SEM_EVIDENCIA_EXPLICITA"
         ]
         if not fundamentos_validos:
             continue
 
         acao_norm = acao.casefold()
-        if oportunidade_encerrada and "oportunidade" in acao_norm and any(t in acao_norm for t in ("avanç", "avanc", "convert")):
+        if oportunidade_encerrada and "oportunidade" in acao_norm and any(
+            termo in acao_norm for termo in ("avanç", "avanc", "convert")
+        ):
             continue
 
-        status_fundamentos = {str(afirmacoes[fid].get("status_rastreabilidade") or "") for fid in fundamentos_validos}
+        status_fundamentos = {
+            str(afirmacoes[fid].get("status_rastreabilidade") or "") for fid in fundamentos_validos
+        }
         qualificacao = "BASE_PARCIAL" if "BASE_PARCIAL" in status_fundamentos else "EVIDENCIA_COMPLETA"
         lacunas: list[str] = []
         if qualificacao == "BASE_PARCIAL":
             for fid in fundamentos_validos:
-                lacunas.extend(str(x) for x in (afirmacoes[fid].get("premissas_fatuais_nao_sustentadas") or []))
+                lacunas.extend(
+                    str(x) for x in (afirmacoes[fid].get("premissas_fatuais_nao_sustentadas") or [])
+                )
             lacunas = list(dict.fromkeys(lacunas))
 
         prioridade = str(item.get("prioridade") or "MEDIA").upper()
@@ -139,7 +202,9 @@ def validar_plano(plano: dict[str, Any], auditoria: dict[str, Any]) -> dict[str,
         )
 
     return {
-        "objetivo": str(plano.get("objetivo") or "Plano comercial baseado nas evidências da execução atual.").strip()[:1200],
+        "objetivo": str(
+            plano.get("objetivo") or "Plano comercial baseado nas evidências da execução atual."
+        ).strip()[:1200],
         "acoes": acoes_validas[:8],
         "oportunidade_encerrada_detectada": oportunidade_encerrada,
     }
@@ -187,7 +252,10 @@ def construir_planejamento_comercial(
 
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
-        raise IAComercialOpenAIError("OPENAI_API_KEY não está configurada no backend.", codigo="OPENAI_KEY_MISSING")
+        raise IAComercialOpenAIError(
+            "OPENAI_API_KEY não está configurada no backend.",
+            codigo="OPENAI_KEY_MISSING",
+        )
 
     entrada = {
         "PERGUNTA_ATUAL": pergunta_atual,
@@ -233,4 +301,5 @@ def construir_planejamento_comercial(
         "planejamento_modelo": PLANNING_MODEL,
         "planejamento_store": False,
         "planejamento_historico_como_evidencia": False,
+        "controle_oportunidade_futura": "analitica_nao_entidade_crm_sem_pedido_explicito",
     }
