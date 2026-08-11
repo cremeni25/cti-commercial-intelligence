@@ -85,6 +85,41 @@ def test_ausencia_em_dominio_nao_consultado_e_removida_da_sintese():
     assert "não consultados" in texto
 
 
+def test_sintese_remove_termo_inventado_quando_vendas_foram_consultadas_sem_filtro():
+    metadados = {
+        "ferramentas": [
+            {
+                "tipo": "CTI",
+                "ferramenta": "consultar_dominio_cti",
+                "argumentos": {"dominio": "vendas", "termo": None, "status": None, "limite": 100, "offset": 0},
+            }
+        ]
+    }
+    texto, ajustes = multifonte._sanitizar_filtros_inexistentes(
+        'Entre as vendas recentes registradas no CTI relacionadas ao termo "elétrica" há três ocorrências.',
+        metadados,
+    )
+    assert ajustes == 1
+    assert "relacionadas ao termo" not in texto
+    assert "há três ocorrências" in texto
+
+
+def test_sintese_preserva_termo_quando_filtro_foi_realmente_executado():
+    metadados = {
+        "ferramentas": [
+            {
+                "tipo": "CTI",
+                "ferramenta": "consultar_dominio_cti",
+                "argumentos": {"dominio": "vendas", "termo": "elétrica", "status": None, "limite": 100, "offset": 0},
+            }
+        ]
+    }
+    original = 'Vendas relacionadas ao termo "elétrica": três ocorrências.'
+    texto, ajustes = multifonte._sanitizar_filtros_inexistentes(original, metadados)
+    assert ajustes == 0
+    assert texto == original
+
+
 def test_sintese_multifonte_registra_proveniencia_segregada():
     metadados = {
         "evidencias_requeridas": ["web", "produtos", "vendas"],
