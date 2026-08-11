@@ -169,6 +169,40 @@ def _classificar_fabricantes_equipamento(ranking: Any) -> dict[str, list[dict[st
     return classificados
 
 
+def _sanitizar_linguagem_relacional_territorial(texto: str, pergunta_atual: str) -> tuple[str, int]:
+    dimensoes = _dimensoes_territoriais_pedidas(pergunta_atual)
+    if not ({"implementadoras", "fabricantes"} & dimensoes):
+        return texto, 0
+
+    padroes = [
+        (r"\batua especialmente com\b", "aparece em registros com"),
+        (r"\bestá ligada principalmente a\b", "aparece em registros com"),
+        (r"\besta ligada principalmente a\b", "aparece em registros com"),
+        (r"\brelaciona-se bastante com\b", "aparece em registros com"),
+        (r"\batende\b", "aparece em registros com"),
+        (r"\bforte vínculo com\b", "coocorrência histórica com"),
+        (r"\bforte vinculo com\b", "coocorrência histórica com"),
+        (r"\batua principalmente em linhas\b", "aparece em registros nas linhas"),
+        (r"\busando equipamentos\b", "com registros de equipamentos"),
+        (r"\busando equipamento\b", "com registros de equipamento"),
+        (r"\bimplementadoras predominantes\b", "implementadoras com maiores contagens de registros"),
+        (r"\bpredominantes\b", "com maiores contagens observadas"),
+        (r"\bpredominante\b", "com maior contagem observada"),
+        (r"\blíderes\b", "com maiores contagens observadas"),
+        (r"\blideres\b", "com maiores contagens observadas"),
+        (r"\blíder\b", "com maior contagem observada"),
+        (r"\blider\b", "com maior contagem observada"),
+        (r"\bdominantes\b", "com maiores contagens observadas"),
+        (r"\bdominante\b", "com maior contagem observada"),
+    ]
+    resultado = texto
+    alteracoes = 0
+    for padrao, substituicao in padroes:
+        resultado, quantidade = re.subn(padrao, substituicao, resultado, flags=re.IGNORECASE)
+        alteracoes += quantidade
+    return resultado, alteracoes
+
+
 def _evidencias_atendidas(metadados: dict[str, Any]) -> set[str]:
     valores = metadados.get("evidencias_atendidas") or []
     return {str(item) for item in valores if str(item)}
@@ -426,6 +460,8 @@ def sintetizar_fatos_execucao(
             codigo="OPENAI_EMPTY_SYNTHESIS",
         )
 
+    texto, alteracoes_linguagem = _sanitizar_linguagem_relacional_territorial(texto, pergunta_atual)
+
     uso = getattr(resposta, "usage", None)
     return texto, {
         "controle_sintese_factual": "reconstruida_pergunta_fontes_e_dimensoes_requeridas",
@@ -436,4 +472,6 @@ def sintetizar_fatos_execucao(
         "sintese_factual_evidencias_permitidas": sorted(evidencias),
         "sintese_factual_dominios_nao_consultados": _dominios_nao_consultados(evidencias),
         "sintese_factual_dimensoes_territoriais": sorted(_dimensoes_territoriais_pedidas(pergunta_atual)),
+        "controle_linguagem_relacional": "normalizacao_deterministica_pos_sintese",
+        "sintese_factual_ajustes_linguagem": alteracoes_linguagem,
     }
