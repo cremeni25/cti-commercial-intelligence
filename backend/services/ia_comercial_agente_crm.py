@@ -34,6 +34,47 @@ def _fontes_requeridas_crm(mensagem: str) -> set[str]:
     requeridas = set(_ORIGINAL_FONTES_REQUERIDAS(mensagem))
     texto = base._normalizar(mensagem)
 
+    oportunidade_futura_conceitual = any(
+        t in texto
+        for t in (
+            "oportunidade futura",
+            "oportunidades futuras",
+            "nova oportunidade",
+            "novas oportunidades",
+            "oportunidade comercial futura",
+            "oportunidades comerciais futuras",
+            "oportunidades podem ser consideradas",
+            "oportunidade pode ser considerada",
+        )
+    )
+    oportunidade_crm_explicita = any(
+        t in texto
+        for t in (
+            "oportunidade do crm",
+            "oportunidades do crm",
+            "oportunidade no crm",
+            "oportunidades no crm",
+            "pipeline",
+            "status da oportunidade",
+            "estágio da oportunidade",
+            "estagio da oportunidade",
+            "probabilidade da oportunidade",
+            "oportunidade registrada",
+            "oportunidades registradas",
+            "oportunidade vinculada",
+            "oportunidades vinculadas",
+            "oportunidade relacionada",
+            "oportunidades relacionadas",
+            "oportunidade associada",
+            "oportunidades associadas",
+            "oportunidades abertas",
+            "oportunidades ganhas",
+            "oportunidades perdidas",
+        )
+    )
+    if oportunidade_futura_conceitual and not oportunidade_crm_explicita:
+        requeridas.discard("oportunidades")
+
     if any(t in texto for t in ("proposta", "propostas", "aceite", "aceita", "aceito", "recusada", "recusado")):
         requeridas.add("propostas")
     if any(
