@@ -80,6 +80,7 @@ REGRAS OBRIGATÓRIAS:
 - "Oportunidade futura" ou "oportunidade comercial" pode ser recomendação prospectiva; não afirme que existe ou não existe entidade Oportunidade no CRM sem evidência explícita dessa entidade.
 - Resultado vazio de busca textual não prova ausência de relacionamento com outra entidade.
 - Diferencie ação operacional imediata, acompanhamento e oportunidade futura.
+- Recomendações de prospecção, recompra, expansão ou nova venda são hipóteses prospectivas: um pedido atual prova o relacionamento daquele negócio, mas não prova demanda futura. Essas ações devem permanecer qualificadas quando não houver evidência específica de demanda/comportamento comercial futuro.
 - Recomendações sobre território/região, portfólio/produtos ou tendências/tecnologias externas devem permanecer qualificadas se a respectiva evidência não foi consultada nesta execução.
 - Não invente prazo em dias, valor, cliente, produto, venda, probabilidade ou resultado quantitativo.
 - Horizonte deve ser somente IMEDIATO, CURTO_PRAZO ou MEDIO_PRAZO.
@@ -178,6 +179,17 @@ def _lacunas_semanticas_acao(acao: str, auditoria: dict[str, Any]) -> list[str]:
     )
     if contexto_externo and "web" not in atendidas:
         lacunas.append("web")
+
+    contexto_prospeccao_futura = any(
+        t in texto
+        for t in (
+            "prospectar", "prospecção", "prospeccao", "nova venda", "novas vendas", "recompra",
+            "recompras", "expandir vendas", "ampliar vendas", "expansão comercial", "expansao comercial",
+            "novos negócios", "novos negocios", "nova oportunidade comercial", "novas oportunidades comerciais",
+        )
+    )
+    if contexto_prospeccao_futura:
+        lacunas.append("demanda_comercial_futura")
 
     return list(dict.fromkeys(lacunas))
 
@@ -347,5 +359,5 @@ def construir_planejamento_comercial(
         "planejamento_historico_como_evidencia": False,
         "controle_oportunidade_futura": "analitica_nao_entidade_crm_sem_pedido_explicito",
         "controle_resposta_planejamento": "somente_plano_validado_sem_texto_livre_previo",
-        "controle_lacunas_planejamento": "territorio_produtos_web_qualificados_por_acao",
+        "controle_lacunas_planejamento": "territorio_produtos_web_demanda_futura_qualificados_por_acao",
     }
