@@ -168,6 +168,29 @@ def test_acao_digital_sustentavel_sem_web_e_produtos_fica_base_parcial():
     assert set(acao["lacunas_evidenciais"]) == {"web", "produtos"}
 
 
+def test_tecnologias_emergentes_e_parcerias_comerciais_sem_fontes_ficam_parciais():
+    plano = validar_plano(
+        {
+            "objetivo": "Preparar expansão futura.",
+            "acoes": [
+                {
+                    "acao": (
+                        "Prospectar novas vendas com clientes da região e estudar possibilidades futuras de "
+                        "incorporação de tecnologias emergentes e parcerias comerciais para competitividade."
+                    ),
+                    "prioridade": "BAIXA",
+                    "horizonte": "MEDIO_PRAZO",
+                    "fundamentos": ["A1"],
+                }
+            ],
+        },
+        auditoria_base(),
+    )
+    acao = plano["acoes"][0]
+    assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
+    assert set(acao["lacunas_evidenciais"]) == {"territorio", "produtos", "web"}
+
+
 def test_lacuna_semantica_some_quando_fontes_correspondentes_foram_consultadas():
     auditoria = auditoria_base()
     auditoria["evidencias_atendidas"] = ["pedidos", "territorio", "produtos", "web"]
