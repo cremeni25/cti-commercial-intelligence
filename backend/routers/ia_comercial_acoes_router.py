@@ -59,6 +59,60 @@ def _por_id(registros: list[dict[str, Any]], registro_id: str) -> dict[str, Any]
     return next((item for item in registros if str(item.get("id") or "") == alvo), None)
 
 
+def _rotulo_cliente(cliente: dict[str, Any] | None) -> str:
+    if not isinstance(cliente, dict):
+        return "cliente selecionado"
+    for campo in ("razao_social", "nome", "cliente", "nome_fantasia"):
+        valor = str(cliente.get(campo) or "").strip()
+        if valor:
+            return valor
+    return "cliente selecionado"
+
+
+def _rotulo_pedido(pedido: dict[str, Any] | None) -> str:
+    if not isinstance(pedido, dict):
+        return "pedido selecionado"
+    numero = str(pedido.get("numero") or "").strip()
+    return numero or "pedido selecionado"
+
+
+def _rotulo_atividade(atividade: dict[str, Any] | None) -> str:
+    if not isinstance(atividade, dict):
+        return "atividade selecionada"
+    for campo in ("titulo", "descricao", "tipo"):
+        valor = str(atividade.get(campo) or "").strip()
+        if valor:
+            return valor[:160]
+    return "atividade selecionada"
+
+
+def _resultado_publico(resultado: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Mantém IDs técnicos na auditoria interna e os remove da resposta conversacional."""
+    if not isinstance(resultado, dict):
+        return resultado
+    publico = dict(resultado)
+    registro = publico.get("registro")
+    if isinstance(registro, dict):
+        registro_publico = {
+            chave: valor
+            for chave, valor in registro.items()
+            if chave not in {
+                "id",
+                "cliente_id",
+                "oportunidade_id",
+                "pedido_id",
+                "atividade_id",
+                "usuario_id",
+                "responsavel_id",
+                "proposta_id",
+                "aceite_id",
+                "item_oportunidade_id",
+            }
+        }
+        publico["registro"] = registro_publico
+    return publico
+
+
 def _normalizar_payload(
     tipo_acao: str,
     payload: dict[str, Any],
@@ -68,7 +122,8 @@ def _normalizar_payload(
 
     if tipo_acao == "CRIAR_ATIVIDADE_CRM":
         cliente_id = str(payload.get("cliente_id") or "").strip()
-        if not cliente_id or not _por_id(escopo.get("clientes") or [], cliente_id):
+        cliente = _por_id(escopo.get("clientes") or [], cliente_id)
+        if not cliente_id or not cliente:
             raise HTTPException(status_code=403, detail="Cliente fora do escopo autorizado da IA Comercial.")
 
         oportunidade_id = str(payload.get("oportunidade_id") or "").strip() or None
@@ -76,7 +131,8 @@ def _normalizar_payload(
             raise HTTPException(status_code=403, detail="Oportunidade fora do escopo autorizado da IA Comercial.")
 
         pedido_id = str(payload.get("pedido_id") or "").strip() or None
-        if pedido_id and not _por_id(escopo.get("pedidos") or [], pedido_id):
+        pedido = _por_id(escopo.get("pedidos") or [], pedido_id) if pedido_id else None
+        if pedido_id and not pedido:
             raise HTTPException(status_code=403, detail="Pedido fora do escopo autorizado da IA Comercial.")
 
         tipo = str(payload.get("tipo") or "ACOMPANHAMENTO").strip().upper()[:80]
@@ -96,7 +152,9 @@ def _normalizar_payload(
             "horario": horario,
             "status": "PENDENTE",
         }
-        return normalizado, f"Criar atividade {tipo} para o cliente {cliente_id}."
+        complemento_pedido = f" referente ao pedido {_rotulo_pedido(pedido)}" if pedido else ""
+        resumo = f"Criar atividade {tipo} para o cliente {_rotulo_cliente(cliente)}{complemento_pedido}."
+        return normalizado, resumo
 
     if tipo_acao == "ATUALIZAR_STATUS_ATIVIDADE":
         atividade_id = str(payload.get("atividade_id") or "").strip()
@@ -108,7 +166,12 @@ def _normalizar_payload(
             raise HTTPException(status_code=422, detail="Status de atividade não permitido para ação controlada.")
         if status == "CONCLUÍDA":
             status = "CONCLUIDA"
-        return {"atividade_id": atividade_id, "status": status}, f"Atualizar a atividade {atividade_id} para {status}."
+        cliente = _por_id(escopo.get("clientes") or [], str(atividade.get("cliente_id") or ""))
+        resumo = f"Atualizar a atividade {_rotulo_atividade(atividade)}"
+        if cliente:
+            resumo += f" do cliente {_rotulo_cliente(cliente)}"
+        resumo += f" para {status}."
+        return {"atividade_id": atividade_id, "status": status}, resumo
 
     if tipo_acao == "ATUALIZAR_CICLO_PEDIDO":
         pedido_id = str(payload.get("pedido_id") or "").strip()
@@ -129,7 +192,12 @@ def _normalizar_payload(
             "numero_serie_instalado": str(payload.get("numero_serie_instalado") or "").strip() or None,
             "observacao": str(payload.get("observacao") or "").strip()[:2000] or None,
         }
-        return normalizado, f"Atualizar o ciclo do pedido {pedido_id} para {etapa} usando as regras oficiais do CTI."
+        cliente = _por_id(escopo.get("clientes") or [], str(pedido.get("cliente_id") or ""))
+        resumo = f"Atualizar o ciclo do pedido {_rotulo_pedido(pedido)} para {etapa}"
+        if cliente:
+            resumo += f", cliente {_rotulo_cliente(cliente)}"
+        resumo += ", usando as regras oficiais do CTI."
+        return normalizado, resumo
 
     raise HTTPException(status_code=422, detail="Tipo de ação não permitido pela IA Comercial.")
 
@@ -227,13 +295,15 @@ def confirmar_acao(
 ):
     proposta = _carregar_proposta(acao_id, usuario)
     detalhes = dict(proposta.get("detalhes") or {})
+    resumo = str(detalhes.get("resumo") or "Ação controlada executada.")
 
     if detalhes.get("status") == "EXECUTADA":
         return {
             "acao_id": acao_id,
             "status": "EXECUTADA",
             "idempotencia": "JA_EXECUTADA_SEM_REPETICAO",
-            "resultado": detalhes.get("resultado"),
+            "resumo": resumo,
+            "resultado": _resultado_publico(detalhes.get("resultado")),
         }
     if detalhes.get("status") == "CANCELADA":
         raise HTTPException(status_code=409, detail="A ação foi cancelada e não pode mais ser executada.")
@@ -243,7 +313,11 @@ def confirmar_acao(
         raise HTTPException(status_code=422, detail="Confirmação explícita é obrigatória para executar a ação.")
 
     tipo_acao = str(detalhes.get("tipo_acao") or "")
-    payload_normalizado, _ = _normalizar_payload(tipo_acao, dict(detalhes.get("payload") or {}), usuario)
+    payload_normalizado, resumo_atualizado = _normalizar_payload(
+        tipo_acao,
+        dict(detalhes.get("payload") or {}),
+        usuario,
+    )
     resultado = _executar(tipo_acao, payload_normalizado, usuario)
 
     detalhes.update(
@@ -251,11 +325,17 @@ def confirmar_acao(
             "status": "EXECUTADA",
             "executada": True,
             "resultado": resultado,
+            "resumo": resumo_atualizado,
             "confirmada_por_usuario_id": usuario.id,
         }
     )
     supabase.table("cti_ia_auditoria").update({"detalhes": detalhes}).eq("id", acao_id).eq("usuario_id", usuario.id).execute()
-    return {"acao_id": acao_id, "status": "EXECUTADA", "resultado": resultado}
+    return {
+        "acao_id": acao_id,
+        "status": "EXECUTADA",
+        "resumo": resumo_atualizado,
+        "resultado": _resultado_publico(resultado),
+    }
 
 
 @router.post("/{acao_id}/cancelar")
