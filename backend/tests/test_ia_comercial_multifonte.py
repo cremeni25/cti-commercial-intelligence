@@ -51,6 +51,40 @@ def test_auditoria_rejeita_dominio_cti_fora_do_escopo_multifonte():
     assert exc.value.codigo == "AGENT_MULTISOURCE_SCOPE_VIOLATION"
 
 
+def test_portfolio_amplo_nao_usa_tema_generico_como_filtro_textual():
+    argumentos = multifonte._normalizar_argumentos_multifonte(
+        "consultar_catalogo_produtos_cti",
+        {"termo": "transporte refrigerado"},
+        {"web", "produtos", "vendas"},
+        "Compare o mercado com nosso portfólio e nossas vendas no CTI.",
+    )
+    assert argumentos["termo"] is None
+
+
+def test_vendas_amplas_nao_usam_tema_generico_como_filtro_textual():
+    argumentos = multifonte._normalizar_argumentos_multifonte(
+        "consultar_dominio_cti",
+        {"dominio": "vendas", "termo": "transporte refrigerado", "status": None, "limite": 10, "offset": 0},
+        {"web", "produtos", "vendas"},
+        "Compare o mercado com nosso portfólio e nossas vendas no CTI.",
+    )
+    assert argumentos["termo"] is None
+    assert argumentos["status"] is None
+    assert argumentos["offset"] == 0
+    assert argumentos["limite"] == 100
+
+
+def test_ausencia_em_dominio_nao_consultado_e_removida_da_sintese():
+    texto, ajustes = multifonte._sanitizar_ausencias_nao_consultadas(
+        "DADOS INTERNOS CTI:\n- Não foram encontradas oportunidades comerciais ativas nem registros de clientes vinculados.\n- Existem três vendas registradas.",
+        {"web", "produtos", "vendas"},
+    )
+    assert ajustes == 1
+    assert "Não foram encontradas oportunidades" not in texto
+    assert "Existem três vendas registradas" in texto
+    assert "não consultados" in texto
+
+
 def test_sintese_multifonte_registra_proveniencia_segregada():
     metadados = {
         "evidencias_requeridas": ["web", "produtos", "vendas"],
