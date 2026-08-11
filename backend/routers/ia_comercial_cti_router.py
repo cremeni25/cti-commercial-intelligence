@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from services.ia_comercial_agente_crm import gerar_resposta_agente
+from services.ia_comercial_auditoria_evidencial import construir_auditoria_evidencial
 from services.ia_comercial_cti import IAComercialOpenAIError
 from services.ia_comercial_sintese_crm import sintetizar_fatos_execucao
 
@@ -161,6 +162,7 @@ def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
             "pesquisa web",
             "cruzamento multi-fonte",
             "continuidade conversacional controlada",
+            "cadeia estruturada de evidências",
             "rastreio auditável",
         ],
         "somente_leitura": True,
@@ -250,6 +252,7 @@ def enviar_mensagem(
         metadados["controle_historico_agente"] = "ia005_contexto_referencial_nao_evidencial"
         metadados["historico_mensagens_utilizadas"] = len(historico)
         metadados["historico_limite_mensagens"] = _HISTORICO_MAX_MENSAGENS
+        metadados.update(construir_auditoria_evidencial(resposta_texto, metadados, mensagem))
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
