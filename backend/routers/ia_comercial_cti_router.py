@@ -8,9 +8,9 @@ from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from services.ia_comercial_agente import gerar_resposta_agente
+from services.ia_comercial_agente_crm import gerar_resposta_agente
 from services.ia_comercial_cti import IAComercialOpenAIError
-from services.ia_comercial_sintese_factual import sintetizar_fatos_execucao
+from services.ia_comercial_sintese_crm import sintetizar_fatos_execucao
 
 router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
