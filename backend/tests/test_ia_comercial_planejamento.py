@@ -32,7 +32,8 @@ def auditoria_base():
                 "texto": "Há uma venda recente.",
                 "status_rastreabilidade": "SEM_EVIDENCIA_EXPLICITA",
             },
-        ]
+        ],
+        "evidencias_atendidas": ["pedidos"],
     }
 
 
@@ -125,6 +126,68 @@ def test_ordem_prioridade_e_horizonte_sao_normalizados():
     assert acao["ordem"] == 1
     assert acao["prioridade"] == "MEDIA"
     assert acao["horizonte"] == "CURTO_PRAZO"
+
+
+def test_acao_regional_sem_territorio_fica_base_parcial():
+    plano = validar_plano(
+        {
+            "objetivo": "Expandir comercialmente.",
+            "acoes": [
+                {
+                    "acao": "Prospectar potenciais clientes na região de São Bernardo do Campo.",
+                    "prioridade": "BAIXA",
+                    "horizonte": "MEDIO_PRAZO",
+                    "fundamentos": ["A1"],
+                }
+            ],
+        },
+        auditoria_base(),
+    )
+    acao = plano["acoes"][0]
+    assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
+    assert "territorio" in acao["lacunas_evidenciais"]
+
+
+def test_acao_digital_sustentavel_sem_web_e_produtos_fica_base_parcial():
+    plano = validar_plano(
+        {
+            "objetivo": "Preparar oferta futura.",
+            "acoes": [
+                {
+                    "acao": "Explorar parcerias tecnológicas para oferta integrada de soluções digitais e sustentáveis.",
+                    "prioridade": "BAIXA",
+                    "horizonte": "MEDIO_PRAZO",
+                    "fundamentos": ["A1"],
+                }
+            ],
+        },
+        auditoria_base(),
+    )
+    acao = plano["acoes"][0]
+    assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
+    assert set(acao["lacunas_evidenciais"]) == {"web", "produtos"}
+
+
+def test_lacuna_semantica_some_quando_fontes_correspondentes_foram_consultadas():
+    auditoria = auditoria_base()
+    auditoria["evidencias_atendidas"] = ["pedidos", "territorio", "produtos", "web"]
+    plano = validar_plano(
+        {
+            "objetivo": "Expandir.",
+            "acoes": [
+                {
+                    "acao": "Prospectar potenciais clientes na região e explorar oferta integrada de soluções digitais e sustentáveis.",
+                    "prioridade": "BAIXA",
+                    "horizonte": "MEDIO_PRAZO",
+                    "fundamentos": ["A1"],
+                }
+            ],
+        },
+        auditoria,
+    )
+    acao = plano["acoes"][0]
+    assert acao["qualificacao_evidencial"] == "EVIDENCIA_COMPLETA"
+    assert acao["lacunas_evidenciais"] == []
 
 
 def test_resposta_final_remove_texto_livre_que_nao_passou_pela_validacao(monkeypatch):
