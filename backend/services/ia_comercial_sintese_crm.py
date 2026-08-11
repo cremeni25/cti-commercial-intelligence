@@ -1,11 +1,178 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
+from copy import deepcopy
 from typing import Any
 
+from services import ia_comercial_agente as base
+from services import ia_comercial_agente_crm as crm
 from services.ia_comercial_sintese_factual import sintetizar_fatos_execucao as sintetizar_fatos_base
 
 
 EVIDENCIAS_CRM = {"propostas", "pedidos", "atividades"}
+_DOMINIOS_CTI = {"clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"}
+_EVIDENCIAS_IA004: ContextVar[frozenset[str]] = ContextVar("ia004_evidencias", default=frozenset())
+
+_ORIGINAL_FONTES_IA003 = crm._fontes_requeridas_ia003
+_ORIGINAL_FERRAMENTAS_CRM = crm._ORIGINAL_FERRAMENTAS_AGENTE
+_ORIGINAL_INSTRUCOES_CRM = crm._ORIGINAL_INSTRUCOES_AGENTE
+_ORIGINAL_INSTRUCAO_SINTESE_CRM = crm._ORIGINAL_INSTRUCAO_SINTESE
+_ORIGINAL_GERAR_BASE = base.gerar_resposta_agente
+
+_INSTRUCOES_IA004 = """
+
+CRUZAMENTO MULTI-FONTE — IA-004:
+- Quando a pergunta exigir simultaneamente WEB e dados internos CTI, trate cada origem como evidência independente.
+- Fato externo só pode ser sustentado pelas fontes web da execução. Fato interno só pode ser sustentado pelas ferramentas CTI efetivamente consultadas.
+- Uma fonte nunca completa, confirma ou substitui silenciosamente a outra: web não cria venda, cliente, oportunidade, pedido, frota ou registro CTI; CTI não prova tendência, participação ou fato do mercado externo.
+- Ausência significa somente ausência na fonte, domínio, filtro e recorte consultados. Nunca converta resultado interno vazio em ausência no mercado real, nem ausência web em ausência no CTI.
+- Em análise multi-fonte, organize a resposta em três camadas sem misturá-las: fatos externos verificados; dados internos CTI; cruzamento e implicações comerciais. A terceira camada é inferência/recomendação e deve ser apresentada como tal.
+- Se as fontes não permitirem um cruzamento pedido, declare a limitação em vez de preencher a lacuna por conhecimento prévio.
+- Catálogo CTI representa portfólio atual; ANFIR/território representam registros históricos do recorte; vendas/CRM representam registros operacionais. Não troque o papel dessas fontes.
+- Não calcule share, liderança ou participação de mercado sem denominador compatível e explicitamente consultado.
+"""
+
+
+def _eh_multifonte(evidencias: set[str] | frozenset[str]) -> bool:
+    return "web" in evidencias and bool(set(evidencias) - {"web"})
+
+
+def _fontes_requeridas_ia004(mensagem: str) -> set[str]:
+    requeridas = set(_ORIGINAL_FONTES_IA003(mensagem))
+    _EVIDENCIAS_IA004.set(frozenset(requeridas))
+    return requeridas
+
+
+def _dominios_permitidos(evidencias: set[str]) -> set[str]:
+    permitidos = evidencias & _DOMINIOS_CTI
+    if "relacionamentos_vendas" in evidencias:
+        permitidos.add("vendas")
+    return permitidos
+
+
+def _ferramentas_permitidas_multifonte(evidencias: set[str]) -> tuple[list[dict[str, Any]], set[str]]:
+    ferramentas = _ORIGINAL_FERRAMENTAS_CRM()
+    if not _eh_multifonte(evidencias):
+        return ferramentas, set()
+
+    nomes: set[str] = set()
+    if "web" in evidencias:
+        nomes.add("web_search")
+    if evidencias & {"cti_atual", "resumo_cti"}:
+        nomes.add("consultar_resumo_cti")
+    if "historico" in evidencias:
+        nomes.add("consultar_historico_cti")
+    if "territorio" in evidencias:
+        nomes.add("consultar_territorio_cti")
+    if "anfir" in evidencias:
+        nomes.add("consultar_anfir_cti")
+    if "produtos" in evidencias:
+        nomes.add("consultar_catalogo_produtos_cti")
+
+    dominios = _dominios_permitidos(evidencias)
+    if dominios:
+        nomes.add("consultar_dominio_cti")
+
+    resultado: list[dict[str, Any]] = []
+    for ferramenta in ferramentas:
+        tipo = ferramenta.get("type")
+        nome = "web_search" if tipo == "web_search" else str(ferramenta.get("name") or "")
+        if nome not in nomes:
+            continue
+        item = deepcopy(ferramenta)
+        if nome == "consultar_dominio_cti" and dominios:
+            try:
+                item["parameters"]["properties"]["dominio"]["enum"] = sorted(dominios)
+            except (KeyError, TypeError):
+                pass
+        resultado.append(item)
+    return resultado, nomes
+
+
+def _ferramentas_base_ia004() -> list[dict[str, Any]]:
+    evidencias = set(_EVIDENCIAS_IA004.get())
+    ferramentas, _ = _ferramentas_permitidas_multifonte(evidencias)
+    return ferramentas
+
+
+def _instrucao_sintese_ia004(evidencias: set[str]) -> str:
+    instrucao = _ORIGINAL_INSTRUCAO_SINTESE_CRM(evidencias)
+    if not _eh_multifonte(evidencias):
+        return instrucao
+    return (
+        instrucao
+        + " INSTRUÇÃO INTERNA IA-004: produza a resposta final separando claramente: "
+        "(1) FATOS EXTERNOS VERIFICADOS, citando apenas fatos sustentados pela web desta execução; "
+        "(2) DADOS INTERNOS CTI, limitados aos domínios realmente consultados; "
+        "(3) CRUZAMENTO E IMPLICAÇÕES COMERCIAIS, explicitamente tratados como inferências/recomendações. "
+        "Não use uma origem para provar fato pertencente à outra e qualifique qualquer ausência pelo recorte consultado."
+    )
+
+
+def _auditar_ferramentas_multifonte(metadados: dict[str, Any], evidencias: set[str]) -> None:
+    if not _eh_multifonte(evidencias):
+        return
+
+    _, nomes_permitidos = _ferramentas_permitidas_multifonte(evidencias)
+    dominios_permitidos = _dominios_permitidos(evidencias)
+    indevidas: list[str] = []
+
+    for item in metadados.get("ferramentas") or []:
+        if not isinstance(item, dict) or item.get("tipo") != "CTI":
+            continue
+        nome = str(item.get("ferramenta") or "")
+        if nome not in nomes_permitidos:
+            indevidas.append(nome or "ferramenta_cti_desconhecida")
+            continue
+        if nome == "consultar_dominio_cti":
+            dominio = str((item.get("argumentos") or {}).get("dominio") or "")
+            if dominio not in dominios_permitidos:
+                indevidas.append(f"consultar_dominio_cti:{dominio}")
+
+    if indevidas:
+        raise base.IAComercialOpenAIError(
+            "A execução multi-fonte tentou consultar uma fonte interna fora do escopo solicitado.",
+            codigo="AGENT_MULTISOURCE_SCOPE_VIOLATION",
+        )
+
+
+def _gerar_base_ia004(
+    mensagem: str,
+    historico: list[dict[str, str]],
+    usuario_id: str,
+    tipo_usuario: str,
+):
+    texto, metadados = _ORIGINAL_GERAR_BASE(mensagem, historico, usuario_id, tipo_usuario)
+    evidencias = set(str(x) for x in (metadados.get("evidencias_requeridas") or _EVIDENCIAS_IA004.get()))
+    if not _eh_multifonte(evidencias):
+        return texto, metadados
+
+    _auditar_ferramentas_multifonte(metadados, evidencias)
+    fontes_web = [
+        fonte for fonte in (metadados.get("fontes") or [])
+        if isinstance(fonte, dict) and fonte.get("url")
+    ]
+    internas = sorted(evidencias - {"web"})
+    metadados.update(
+        {
+            "controle_multifonte": "ia004_fontes_restritas_e_proveniencia",
+            "multifonte_evidencias_requeridas": sorted(evidencias),
+            "multifonte_fontes_internas": internas,
+            "multifonte_fontes_web": len(fontes_web),
+            "controle_multifonte_proveniencia": "externo_interno_inferencia_segregados",
+            "controle_inferencia_multifonte": "inferencia_nao_e_evidencia",
+            "controle_ausencia_multifonte": "ausencia_limitada_a_fonte_e_recorte_consultados",
+        }
+    )
+    return texto, metadados
+
+
+# Instala a camada IA-004 sem alterar a interface pública já importada pelo router.
+crm._fontes_requeridas_ia003 = _fontes_requeridas_ia004
+crm._ORIGINAL_FERRAMENTAS_AGENTE = _ferramentas_base_ia004
+crm._ORIGINAL_INSTRUCOES_AGENTE = _ORIGINAL_INSTRUCOES_CRM + _INSTRUCOES_IA004
+crm._ORIGINAL_INSTRUCAO_SINTESE = _instrucao_sintese_ia004
+base.gerar_resposta_agente = _gerar_base_ia004
 
 
 def sintetizar_fatos_execucao(
@@ -15,10 +182,22 @@ def sintetizar_fatos_execucao(
     tipo_usuario: str,
 ):
     evidencias = {str(x) for x in (metadados.get("evidencias_atendidas") or [])}
+    requeridas = {str(x) for x in (metadados.get("evidencias_requeridas") or [])}
     fontes_web = [
         fonte for fonte in (metadados.get("fontes") or [])
         if isinstance(fonte, dict) and fonte.get("url")
     ]
+
+    if _eh_multifonte(requeridas):
+        return None, {
+            "controle_sintese_factual": "ia004_multifonte_preservada_com_proveniencia",
+            "controle_multifonte": "ia004_fontes_restritas_e_proveniencia",
+            "controle_multifonte_proveniencia": "externo_interno_inferencia_segregados",
+            "multifonte_fontes_internas_sintese": sorted(requeridas - {"web"}),
+            "web_fontes_sintese": len(fontes_web),
+            "web_urls_sintese": [str(fonte.get("url")) for fonte in fontes_web],
+            "crm_evidencias": sorted(evidencias & EVIDENCIAS_CRM),
+        }
 
     if "web" in evidencias:
         return None, {
