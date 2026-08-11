@@ -150,6 +150,48 @@ def _historico_conversacional(conversa_id: str, usuario: UsuarioAutenticado) -> 
     return historico
 
 
+def _renderizar_plano_validado(metadados: dict) -> str | None:
+    if not metadados.get("planejamento_comercial_ativo"):
+        return None
+    plano = metadados.get("plano_comercial") or {}
+    acoes = plano.get("acoes") or []
+    if not isinstance(acoes, list) or not acoes:
+        return None
+
+    linhas = ["PLANO COMERCIAL ESTRUTURADO"]
+    objetivo = str(plano.get("objetivo") or "").strip()
+    if objetivo:
+        linhas.append(objetivo)
+
+    for item in acoes:
+        if not isinstance(item, dict):
+            continue
+        ordem = item.get("ordem")
+        prioridade = str(item.get("prioridade") or "MEDIA")
+        horizonte = str(item.get("horizonte") or "CURTO_PRAZO")
+        acao = str(item.get("acao") or "").strip()
+        if not acao:
+            continue
+        fundamentos = [str(x) for x in (item.get("fundamentos") or []) if str(x)]
+        qualificacao = str(item.get("qualificacao_evidencial") or "EVIDENCIA_COMPLETA")
+        base = f"base: {', '.join(fundamentos)}; evidência: {qualificacao}" if fundamentos else f"evidência: {qualificacao}"
+        linhas.append(f"{ordem}. [{prioridade} | {horizonte}] {acao} ({base})")
+        dependencias = [str(x) for x in (item.get("dependencias") or []) if str(x).strip()]
+        riscos = [str(x) for x in (item.get("riscos") or []) if str(x).strip()]
+        resultado = str(item.get("resultado_esperado") or "").strip()
+        lacunas = [str(x) for x in (item.get("lacunas_evidenciais") or []) if str(x).strip()]
+        if dependencias:
+            linhas.append("   Dependências: " + "; ".join(dependencias))
+        if riscos:
+            linhas.append("   Riscos: " + "; ".join(riscos))
+        if resultado:
+            linhas.append("   Resultado esperado: " + resultado)
+        if lacunas:
+            linhas.append("   Lacunas evidenciais: " + ", ".join(lacunas))
+
+    return "\n".join(linhas).strip()
+
+
 @router.get("/status")
 def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return {
@@ -253,6 +295,11 @@ def enviar_mensagem(
         metadados["historico_mensagens_utilizadas"] = len(historico)
         metadados["historico_limite_mensagens"] = _HISTORICO_MAX_MENSAGENS
         metadados.update(construir_auditoria_evidencial(resposta_texto, metadados, mensagem))
+        resposta_planejada = _renderizar_plano_validado(metadados)
+        if resposta_planejada:
+            resposta_texto = resposta_planejada
+            metadados["planejamento_texto_renderizado"] = resposta_planejada
+            metadados["controle_resposta_planejamento"] = "somente_plano_validado_sem_texto_livre_previo"
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
