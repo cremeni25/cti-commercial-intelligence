@@ -244,7 +244,11 @@ FABRICANTES_EQUIPAMENTO = [
     "FRIGOKING",
     "THERMOSTAR",
     "RODOFRIO",
-    "THERMOFLEX"
+    "THERMOFLEX",
+    "PALÁCIO",
+    "PALACIO",
+    "PALÁCIO DO ISOLAMENTO",
+    "PALACIO DO ISOLAMENTO"
 ]
 
 # ============================================================
