@@ -10,6 +10,19 @@ _ORIGINAL_FONTES_REQUERIDAS = base._fontes_requeridas
 _ORIGINAL_EVIDENCIAS_PRESENTES = base._evidencias_presentes
 _ORIGINAL_INSTRUCAO_FALTANTES = base._instrucao_evidencias_faltantes
 _ORIGINAL_INSTRUCAO_SINTESE = base._instrucao_sintese_final
+_ORIGINAL_INSTRUCOES_AGENTE = base.INSTRUCOES_AGENTE
+
+_INSTRUCOES_WEB_IA003 = """
+
+WEB NATIVA AUTÔNOMA — IA-003:
+- Informação externa que possa ter mudado, especialmente lançamentos, disponibilidade, preços, especificações vigentes, legislação/regulação, notícias, movimentos de fabricantes/concorrentes e fatos atuais de mercado, exige pesquisa web real na mesma execução.
+- O usuário não precisa escrever "pesquise na web". Decida pela natureza temporal e externa da informação.
+- Nunca apresente conhecimento prévio do modelo como se fosse fato externo atual verificado.
+- Quando a web for necessária, a execução só possui evidência web se houver fontes reais com URL capturadas pela ferramenta. Uma tentativa de pesquisa sem fonte recuperada não valida o fato.
+- Na resposta, separe semanticamente: (1) fatos externos verificados nas fontes da execução; (2) fatos internos CTI, quando consultados; (3) inferências/recomendações comerciais. Não transforme inferência em fato.
+- Para concorrentes, fabricante externo, produto externo ou mercado, descreva somente o que as fontes sustentam e preserve incertezas/divergências entre fontes.
+- Fontes externas contextualizam a decisão comercial; não criam vendas, oportunidades, clientes, frota ou qualquer registro interno do CTI.
+"""
 
 
 def _fontes_requeridas_crm(mensagem: str) -> set[str]:
@@ -30,6 +43,52 @@ def _fontes_requeridas_crm(mensagem: str) -> set[str]:
     if any(t in texto for t in ("atividade", "atividades", "visita", "visitas", "agenda", "última interação", "ultima interacao")):
         requeridas.add("atividades")
 
+    return requeridas
+
+
+def _necessita_web_autonoma(mensagem: str) -> bool:
+    texto = base._normalizar(mensagem)
+    if not texto:
+        return False
+
+    explicita = any(
+        termo in texto
+        for termo in (
+            "pesquise na web", "procure na web", "pesquisa web", "fontes externas", "fonte externa",
+            "informações externas", "informacoes externas", "notícias", "noticias", "mercado",
+            "tendências", "tendencias", "internet", "site oficial", "fonte oficial",
+        )
+    )
+    if explicita:
+        return True
+
+    atualidade = any(
+        termo in texto
+        for termo in (
+            "atualmente", "atual", "mais recente", "mais recentes", "recentemente", "hoje",
+            "últimas", "ultimas", "últimos", "ultimos", "novidade", "novidades", "lançamento",
+            "lancamento", "lançamentos", "lancamentos", "disponível agora", "disponivel agora",
+            "vigente", "vigentes", "em 2026",
+        )
+    )
+    externo_comercial = any(
+        termo in texto
+        for termo in (
+            "thermo king", "thermoking", "frigoking", "thermostar", "thermoflex", "rodofrio",
+            "palácio", "palacio", "concorrente", "concorrentes", "fabricante", "fabricantes",
+            "produto concorrente", "equipamento concorrente", "preço", "preco", "regulação",
+            "regulacao", "legislação", "legislacao", "norma", "normas", "governo", "anfavea",
+            "anfir nacional", "transportes frigorificados", "refrigeração de transporte",
+            "refrigeracao de transporte",
+        )
+    )
+    return atualidade and externo_comercial
+
+
+def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
+    requeridas = _fontes_requeridas_crm(mensagem)
+    if _necessita_web_autonoma(mensagem):
+        requeridas.add("web")
     return requeridas
 
 
@@ -79,16 +138,36 @@ def _instrucao_sintese_final_crm(evidencias: set[str]) -> str:
         regras.append(
             "Para atividades/visitas, use apenas cliente e oportunidade presentes em vinculos_resolvidos; ausência de atividade registrada não prova ausência de contato no mundo real."
         )
-    return instrucao + (" REGRAS CRM OPERACIONAL: " + " ".join(regras) if regras else "")
+    if "web" in evidencias:
+        regras.append(
+            "Para fatos externos atuais, use somente a pesquisa web desta execução. Diferencie explicitamente fatos externos verificados de inferências/recomendações comerciais e não atribua fatos web ao CTI."
+        )
+    return instrucao + (" REGRAS CRM/WEB: " + " ".join(regras) if regras else "")
 
 
 def _aplicar_patch() -> None:
-    base._fontes_requeridas = _fontes_requeridas_crm
+    base._fontes_requeridas = _fontes_requeridas_ia003
     base._evidencias_presentes = _evidencias_presentes_crm
     base._instrucao_evidencias_faltantes = _instrucao_evidencias_faltantes_crm
     base._instrucao_sintese_final = _instrucao_sintese_final_crm
+    base.INSTRUCOES_AGENTE = _ORIGINAL_INSTRUCOES_AGENTE + _INSTRUCOES_WEB_IA003
 
 
 def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuario_id: str, tipo_usuario: str):
     _aplicar_patch()
-    return base.gerar_resposta_agente(mensagem, historico, usuario_id, tipo_usuario)
+    texto, metadados = base.gerar_resposta_agente(mensagem, historico, usuario_id, tipo_usuario)
+    web_requerida = "web" in set(metadados.get("evidencias_requeridas") or [])
+    fontes_web = [
+        fonte for fonte in (metadados.get("fontes") or [])
+        if isinstance(fonte, dict) and fonte.get("url")
+    ]
+    metadados["controle_web_nativa"] = "ia003_web_autonoma_com_proveniencia"
+    metadados["web_requerida"] = web_requerida
+    metadados["web_fontes_validas"] = len(fontes_web)
+    metadados["web_urls_auditaveis"] = [str(fonte.get("url")) for fonte in fontes_web]
+    if web_requerida and not fontes_web:
+        raise base.IAComercialOpenAIError(
+            "A IA não conseguiu obter fontes externas verificáveis para responder com segurança.",
+            codigo="AGENT_WEB_SOURCE_MISSING",
+        )
+    return texto, metadados
