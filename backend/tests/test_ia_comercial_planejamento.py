@@ -1,3 +1,6 @@
+from types import SimpleNamespace
+
+from services import ia_comercial_planejamento as planejamento
 from services.ia_comercial_planejamento import requer_planejamento, validar_plano
 
 
@@ -122,3 +125,55 @@ def test_ordem_prioridade_e_horizonte_sao_normalizados():
     assert acao["ordem"] == 1
     assert acao["prioridade"] == "MEDIA"
     assert acao["horizonte"] == "CURTO_PRAZO"
+
+
+def test_resposta_final_remove_texto_livre_que_nao_passou_pela_validacao(monkeypatch):
+    resposta_modelo = {
+        "objetivo": "Conduzir o pedido.",
+        "acoes": [
+            {
+                "acao": "Enviar o pedido à Carrier.",
+                "prioridade": "ALTA",
+                "horizonte": "IMEDIATO",
+                "fundamentos": ["A1"],
+                "dependencias": [],
+                "riscos": [],
+                "resultado_esperado": "Avançar o ciclo do pedido.",
+            },
+            {
+                "acao": "Criar parceria tecnológica sem evidência.",
+                "prioridade": "MEDIA",
+                "horizonte": "MEDIO_PRAZO",
+                "fundamentos": ["A4"],
+                "dependencias": [],
+                "riscos": [],
+                "resultado_esperado": "Nova oferta.",
+            },
+        ],
+    }
+
+    class Responses:
+        def create(self, **kwargs):
+            import json
+            return SimpleNamespace(output_text=json.dumps(resposta_modelo, ensure_ascii=False))
+
+    class Client:
+        responses = Responses()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(planejamento, "OpenAI", lambda **kwargs: Client())
+
+    metadados = {
+        "auditoria_evidencial": auditoria_base(),
+    }
+    texto, meta = planejamento.construir_planejamento_comercial(
+        "Monte um plano e diga o que fazer.",
+        "Texto livre anterior com parceria tecnológica sem evidência.",
+        metadados,
+    )
+
+    assert texto.startswith("PLANO COMERCIAL ESTRUTURADO")
+    assert "Texto livre anterior" not in texto
+    assert "parceria tecnológica" not in texto
+    assert "Enviar o pedido à Carrier" in texto
+    assert meta["controle_resposta_planejamento"] == "somente_plano_validado_sem_texto_livre_previo"
