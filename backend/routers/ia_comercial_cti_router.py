@@ -8,6 +8,13 @@ from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
+from routers.ia_comercial_acoes_router import (
+    ConfirmarAcaoRequest,
+    ProporAcaoRequest,
+    cancelar_acao,
+    confirmar_acao,
+    propor_acao,
+)
 from services.ia_comercial_agente_crm import gerar_resposta_agente
 from services.ia_comercial_auditoria_evidencial import construir_auditoria_evidencial
 from services.ia_comercial_cti import IAComercialOpenAIError
@@ -17,6 +24,9 @@ router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
 _HISTORICO_MAX_MENSAGENS = 24
 _HISTORICO_MAX_CARACTERES_POR_MENSAGEM = 8000
+_RE_CONFIRMACAO_ACAO = re.compile(r"^\s*confirmar\s+a[cç][aã]o\s+([0-9a-f-]{36})\s*[.!]?\s*$", re.I)
+_RE_CANCELAMENTO_ACAO = re.compile(r"^\s*cancelar\s+a[cç][aã]o\s+([0-9a-f-]{36})\s*[.!]?\s*$", re.I)
+_RE_NUMERO_PEDIDO = re.compile(r"\bPED-\d{8}-[A-Z0-9]+\b", re.I)
 
 
 class NovaConversa(BaseModel):
@@ -192,12 +202,178 @@ def _renderizar_plano_validado(metadados: dict) -> str | None:
     return "\n".join(linhas).strip()
 
 
+def _registrar_mensagem_usuario(conversa_id: str, usuario: UsuarioAutenticado, mensagem: str) -> None:
+    supabase.table("cti_ia_mensagens").insert(
+        {
+            "conversa_id": conversa_id,
+            "usuario_id": usuario.id,
+            "papel": "user",
+            "conteudo": mensagem,
+            "fontes": [],
+            "metadados": {},
+        }
+    ).execute()
+
+
+def _resposta_direta(
+    conversa_id: str,
+    usuario: UsuarioAutenticado,
+    conteudo: str,
+    metadados: dict,
+) -> dict:
+    criado = _dados(
+        supabase.table("cti_ia_mensagens")
+        .insert(
+            {
+                "conversa_id": conversa_id,
+                "usuario_id": usuario.id,
+                "papel": "assistant",
+                "conteudo": conteudo,
+                "fontes": [],
+                "metadados": metadados,
+            }
+        )
+        .execute()
+    )
+    supabase.table("cti_ia_conversas").update(
+        {"updated_at": datetime.now(timezone.utc).isoformat()}
+    ).eq("id", conversa_id).execute()
+    supabase.table("cti_ia_auditoria").insert(
+        {
+            "conversa_id": conversa_id,
+            "usuario_id": usuario.id,
+            "acao": "IA008_INTERACAO_CONTROLADA",
+            "detalhes": metadados,
+        }
+    ).execute()
+    return criado[0] if criado else {
+        "conversa_id": conversa_id,
+        "papel": "assistant",
+        "conteudo": conteudo,
+        "fontes": [],
+        "metadados": metadados,
+    }
+
+
+def _proposta_atividade_conversacional(
+    conversa_id: str,
+    mensagem: str,
+    usuario: UsuarioAutenticado,
+) -> dict | None:
+    texto = mensagem.casefold()
+    pede_registro = any(t in texto for t in ("registre", "registrar", "crie", "criar"))
+    pede_atividade = any(t in texto for t in ("atividade", "acompanhamento", "visita"))
+    if not (pede_registro and pede_atividade):
+        return None
+
+    numero_match = _RE_NUMERO_PEDIDO.search(mensagem)
+    if not numero_match:
+        return None
+    numero = numero_match.group(0).upper()
+    pedidos = _dados(
+        supabase.table("cti_pedidos")
+        .select("id,numero,cliente_id")
+        .eq("numero", numero)
+        .limit(1)
+        .execute()
+    )
+    if not pedidos:
+        return None
+    pedido = pedidos[0]
+    tipo = "VISITA" if "visita" in texto else "ACOMPANHAMENTO"
+    titulo = f"{tipo.title()} do pedido {numero}"
+    return propor_acao(
+        ProporAcaoRequest(
+            conversa_id=conversa_id,
+            tipo_acao="CRIAR_ATIVIDADE_CRM",
+            payload={
+                "cliente_id": pedido.get("cliente_id"),
+                "pedido_id": pedido.get("id"),
+                "tipo": tipo,
+                "titulo": titulo,
+                "descricao": mensagem,
+            },
+        ),
+        usuario,
+    )
+
+
+def _tratar_acao_controlada(
+    conversa_id: str,
+    mensagem: str,
+    usuario: UsuarioAutenticado,
+) -> dict | None:
+    confirmar_match = _RE_CONFIRMACAO_ACAO.match(mensagem)
+    if confirmar_match:
+        resultado = confirmar_acao(
+            confirmar_match.group(1),
+            ConfirmarAcaoRequest(confirmar=True),
+            usuario,
+        )
+        registro = (resultado.get("resultado") or {}).get("registro") or {}
+        registro_id = registro.get("id")
+        conteudo = "AÇÃO CONTROLADA EXECUTADA\nA confirmação foi validada e a ação foi executada uma única vez."
+        if registro_id:
+            conteudo += f"\nRegistro criado/atualizado: {registro_id}."
+        return _resposta_direta(
+            conversa_id,
+            usuario,
+            conteudo,
+            {
+                "controle_acao_controlada": "ia008_confirmacao_explicita_executada",
+                "acao_id": confirmar_match.group(1),
+                "status": "EXECUTADA",
+                "idempotencia": resultado.get("idempotencia") or "EXECUCAO_UNICA",
+                "resultado": resultado.get("resultado"),
+            },
+        )
+
+    cancelar_match = _RE_CANCELAMENTO_ACAO.match(mensagem)
+    if cancelar_match:
+        resultado = cancelar_acao(cancelar_match.group(1), usuario)
+        return _resposta_direta(
+            conversa_id,
+            usuario,
+            "AÇÃO CONTROLADA CANCELADA\nNenhuma alteração operacional foi executada.",
+            {
+                "controle_acao_controlada": "ia008_cancelamento_explicito",
+                "acao_id": cancelar_match.group(1),
+                "status": resultado.get("status"),
+            },
+        )
+
+    proposta = _proposta_atividade_conversacional(conversa_id, mensagem, usuario)
+    if proposta:
+        acao_id = str(proposta.get("acao_id") or "")
+        conteudo = (
+            "AÇÃO CONTROLADA PENDENTE DE CONFIRMAÇÃO\n"
+            f"{proposta.get('resumo')}\n"
+            "Nenhuma alteração foi executada ainda.\n"
+            f"Para executar, responda exatamente: CONFIRMAR AÇÃO {acao_id}\n"
+            f"Para desistir, responda: CANCELAR AÇÃO {acao_id}"
+        )
+        return _resposta_direta(
+            conversa_id,
+            usuario,
+            conteudo,
+            {
+                "controle_acao_controlada": "ia008_proposta_pendente_confirmacao",
+                "acao_id": acao_id,
+                "status": "PENDENTE_CONFIRMACAO",
+                "tipo_acao": proposta.get("tipo_acao"),
+                "confirmacao_necessaria": True,
+            },
+        )
+
+    return None
+
+
 @router.get("/status")
 def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return {
         "status": "ready",
         "nome": "IA Comercial CTI",
-        "modo": "agente_orquestrador_cti_web",
+        "modo": "agente_orquestrador_cti_web_acoes_controladas",
         "capacidades": [
             "conversa contextual",
             "escolha autônoma de ferramentas CTI",
@@ -206,8 +382,12 @@ def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
             "continuidade conversacional controlada",
             "cadeia estruturada de evidências",
             "rastreio auditável",
+            "planejamento comercial estruturado",
+            "ações comerciais controladas com confirmação explícita",
         ],
-        "somente_leitura": True,
+        "somente_leitura": False,
+        "escrita_controlada": True,
+        "confirmacao_explicita_para_escrita": True,
         "usuario": {"id": usuario.id, "nome": usuario.nome, "perfil": usuario.tipo_usuario},
     }
 
@@ -256,18 +436,14 @@ def enviar_mensagem(
 ):
     conversa = _conversa_do_usuario(conversa_id, usuario)
     mensagem = payload.mensagem.strip()
-    mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(mensagem)
     historico = _historico_conversacional(conversa_id, usuario)
-    supabase.table("cti_ia_mensagens").insert(
-        {
-            "conversa_id": conversa_id,
-            "usuario_id": usuario.id,
-            "papel": "user",
-            "conteudo": mensagem,
-            "fontes": [],
-            "metadados": {},
-        }
-    ).execute()
+    _registrar_mensagem_usuario(conversa_id, usuario, mensagem)
+
+    resposta_acao = _tratar_acao_controlada(conversa_id, mensagem, usuario)
+    if resposta_acao:
+        return resposta_acao
+
+    mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(mensagem)
 
     try:
         resposta_texto, metadados = gerar_resposta_agente(
