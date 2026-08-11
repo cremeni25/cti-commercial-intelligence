@@ -188,7 +188,7 @@ export default function IaComercialPage() {
                   <MessageSquarePlus size={18} /> <span className="hidden sm:inline">Nova conversa</span>
                 </button>
               </div>
-              <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400 sm:mt-3 sm:text-xs"><ShieldCheck size={14} className="shrink-0 text-emerald-400" /> <span className="line-clamp-1 sm:line-clamp-none">Fase inicial: leitura, análise e respostas auditáveis. Nenhum registro é alterado.</span></div>
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-slate-400 sm:mt-3 sm:text-xs"><ShieldCheck size={14} className="shrink-0 text-emerald-400" /> <span className="line-clamp-1 sm:line-clamp-none">Análise auditável e ações controladas. Nenhuma alteração ocorre sem confirmação explícita.</span></div>
             </header>
 
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 md:p-6">
