@@ -148,6 +148,44 @@ def test_inferencia_com_premissas_consultadas_fica_rastreavel():
     assert afirmacao["premissas_fatuais_nao_sustentadas"] == []
 
 
+def test_fato_web_nomeado_usa_apenas_fonte_compativel():
+    metadados = {
+        "fontes": [
+            {"tipo": "WEB", "descricao": "Aurora Coop apresenta carreta de 32 pallets", "url": "https://example.com/aurora-carreta"},
+            {"tipo": "WEB", "descricao": "Librelato Série Evolut 2026", "url": "https://example.com/librelato-evolut"},
+        ],
+        "ferramentas": [],
+        "evidencias_requeridas": ["web"],
+        "evidencias_atendidas": ["web"],
+    }
+    auditoria = construir_auditoria_evidencial(
+        "(1) FATOS EXTERNOS VERIFICADOS\n- A Aurora Coop lançou carreta frigorífica de 32 pallets.\n- A Librelato atualizou a Série Evolut 2026.",
+        metadados,
+        "Quais as novidades recentes?",
+    )["auditoria_evidencial"]
+    assert auditoria["afirmacoes"][0]["fontes_evidencia"] == ["WEB_1"]
+    assert auditoria["afirmacoes"][1]["fontes_evidencia"] == ["WEB_2"]
+
+
+def test_fato_web_nomeado_sem_origem_compativel_nao_fica_rastreavel():
+    metadados = {
+        "fontes": [
+            {"tipo": "WEB", "descricao": "Aurora Coop apresenta carreta de 32 pallets", "url": "https://example.com/aurora-carreta"},
+            {"tipo": "WEB", "descricao": "Librelato Série Evolut 2026", "url": "https://example.com/librelato-evolut"},
+        ],
+        "ferramentas": [],
+        "evidencias_requeridas": ["web"],
+        "evidencias_atendidas": ["web"],
+    }
+    auditoria = construir_auditoria_evidencial(
+        "(1) FATOS EXTERNOS VERIFICADOS\n- A Mondelez adotou placas eutéticas.\n- A Maersk adotou monitoramento digital.",
+        metadados,
+        "Quais as novidades recentes?",
+    )["auditoria_evidencial"]
+    assert all(a["fontes_evidencia"] == [] for a in auditoria["afirmacoes"])
+    assert all(a["status_rastreabilidade"] == "SEM_EVIDENCIA_EXPLICITA" for a in auditoria["afirmacoes"])
+
+
 def test_controle_ia006_publicado():
     resultado = construir_auditoria_evidencial("- Recomenda-se acompanhar o pedido.", {"fontes": [], "ferramentas": [], "evidencias_requeridas": [], "evidencias_atendidas": []}, "O que recomenda?")
     assert resultado["controle_auditoria_evidencial"] == "ia006_cadeia_afirmacao_evidencia_origem"
