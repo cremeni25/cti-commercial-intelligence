@@ -14,6 +14,9 @@ from services.ia_comercial_sintese_crm import sintetizar_fatos_execucao
 
 router = APIRouter(prefix="/ia-comercial-cti", tags=["IA Comercial CTI"])
 
+_HISTORICO_MAX_MENSAGENS = 24
+_HISTORICO_MAX_CARACTERES_POR_MENSAGEM = 8000
+
 
 class NovaConversa(BaseModel):
     titulo: str = Field(default="Nova conversa", max_length=120)
@@ -95,13 +98,13 @@ def _mensagem_com_contexto_temporal(mensagem: str) -> tuple[str, str]:
         "explicitamente preenchido na fonte consultada. Ao descrever cobertura de campos, use contagens exatas "
         "quando disponíveis: por exemplo, se todos os registros do recorte estão sem modelo, diga que todos estão "
         "sem modelo ou informe X de X, e não 'na maioria dos casos'."
-        " REGRA DE EVIDÊNCIA DA EXECUÇÃO ATUAL: nesta etapa IA-002, a execução factual é isolada de todo histórico "
-        "anterior da conversa. Toda afirmação factual sobre estado atual ou recorte pesquisado deve ser sustentada "
-        "por uma fonte efetivamente consultada nesta execução. Não afirme pipeline, oportunidades ou seus status sem "
-        "consultar a fonte de oportunidades nesta execução; não afirme vendas ou vínculos de venda sem consultar "
-        "vendas; não nomeie modelos disponíveis do portfólio sem consultar o catálogo. Quando uma fonte necessária "
-        "não tiver sido consultada, limite-se ao que as fontes atuais sustentam ou declare que aquele ponto não foi "
-        "verificado nesta execução."
+        " REGRA DE EVIDÊNCIA DA EXECUÇÃO ATUAL: o histórico da conversa pode ser usado para compreender continuidade, "
+        "resolver referências como 'esse cliente', 'esse pedido', 'o anterior' e preservar a intenção já estabelecida, "
+        "mas nunca conta como evidência factual da execução atual. Toda afirmação factual sobre estado operacional, "
+        "dados CTI ou fatos externos que exija validação deve ser sustentada por fonte efetivamente consultada nesta "
+        "execução. Ao receber uma pergunta factual de continuidade, use o histórico apenas para identificar o referente "
+        "e reconsulte a ferramenta adequada antes de responder. Não reutilize silenciosamente números, status, vendas, "
+        "pipeline, catálogo, ANFIR, território ou fatos web de respostas anteriores como se fossem evidência atual."
     )
     return f"{mensagem}\n\n{instrucao_temporal}{instrucao_recorte}", controle
 
@@ -121,6 +124,31 @@ def _conversa_do_usuario(conversa_id: str, usuario: UsuarioAutenticado) -> dict:
     return linhas[0]
 
 
+def _historico_conversacional(conversa_id: str, usuario: UsuarioAutenticado) -> list[dict[str, str]]:
+    linhas = _dados(
+        supabase.table("cti_ia_mensagens")
+        .select("papel,conteudo,created_at")
+        .eq("conversa_id", conversa_id)
+        .eq("usuario_id", usuario.id)
+        .order("created_at", desc=True)
+        .limit(_HISTORICO_MAX_MENSAGENS)
+        .execute()
+    )
+    historico: list[dict[str, str]] = []
+    for item in reversed(linhas):
+        papel = str(item.get("papel") or "").strip().casefold()
+        conteudo = str(item.get("conteudo") or "").strip()
+        if papel not in {"user", "assistant"} or not conteudo:
+            continue
+        historico.append(
+            {
+                "role": papel,
+                "content": conteudo[:_HISTORICO_MAX_CARACTERES_POR_MENSAGEM],
+            }
+        )
+    return historico
+
+
 @router.get("/status")
 def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return {
@@ -132,6 +160,7 @@ def status_ia(usuario: UsuarioAutenticado = Depends(usuario_atual)):
             "escolha autônoma de ferramentas CTI",
             "pesquisa web",
             "cruzamento multi-fonte",
+            "continuidade conversacional controlada",
             "rastreio auditável",
         ],
         "somente_leitura": True,
@@ -184,7 +213,7 @@ def enviar_mensagem(
     conversa = _conversa_do_usuario(conversa_id, usuario)
     mensagem = payload.mensagem.strip()
     mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(mensagem)
-    historico: list[dict[str, str]] = []
+    historico = _historico_conversacional(conversa_id, usuario)
     supabase.table("cti_ia_mensagens").insert(
         {
             "conversa_id": conversa_id,
@@ -218,7 +247,9 @@ def enviar_mensagem(
         metadados["controle_proveniencia_evidencia"] = "fonte_explicita"
         metadados["controle_precisao_factual"] = "qualificacoes_exigem_evidencia_explicita"
         metadados["controle_evidencia_execucao"] = "fatos_somente_fontes_consultadas_na_execucao_atual"
-        metadados["controle_historico_agente"] = "isolado_sem_historico_na_ia002"
+        metadados["controle_historico_agente"] = "ia005_contexto_referencial_nao_evidencial"
+        metadados["historico_mensagens_utilizadas"] = len(historico)
+        metadados["historico_limite_mensagens"] = _HISTORICO_MAX_MENSAGENS
     except IAComercialOpenAIError as exc:
         supabase.table("cti_ia_auditoria").insert(
             {
