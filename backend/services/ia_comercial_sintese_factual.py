@@ -33,8 +33,10 @@ FABRICANTES_CONCORRENTES = {
     "THERMOSTAR": "THERMOSTAR",
     "RODOFRIO": "RODOFRIO",
     "THERMOFLEX": "THERMOFLEX",
+    "PALACIO": "PALÁCIO",
+    "PALACIODOISOLAMENTO": "PALÁCIO DO ISOLAMENTO",
 }
-VALORES_NAO_FABRICANTE = {"DOCUMENTACAO", "PALACIO"}
+VALORES_NAO_FABRICANTE = {"DOCUMENTACAO"}
 
 INSTRUCOES_SINTESE_FATUAL = """Você é a camada de síntese factual da IA Comercial CTI.
 Sua única função é responder à PERGUNTA_ATUAL usando exclusivamente as EVIDENCIAS_EXECUCAO fornecidas no JSON de entrada.
@@ -51,7 +53,7 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - Cliente só pode ser chamado de ativo/inativo quando esse status estiver explicitamente presente na evidência consultada. Status de registro ANFIR não prova status do cliente no CRM.
 - Status operacional, documental ou ANFIR não prova venda, aceite, negócio concluído, relacionamento comercial ativo ou entrega.
 - Relações entre implementadora, cliente, linha e fabricante de equipamento em RESUMO_RELEVANTE significam somente coocorrência factual nos mesmos registros históricos do recorte. Não as transforme em contrato, parceria, preferência, venda, exclusividade, relacionamento ativo ou oportunidade CRM.
-- Para concorrência de fabricante de equipamento, use SOMENTE classificacao_fabricantes_equipamento.concorrentes. classificacao_fabricantes_equipamento.proprio representa Carrier, inclusive grafias anômalas como CARRRIER, e NUNCA pode ser chamado de concorrente. valores_nao_fabricante e nao_classificados também não podem ser apresentados como concorrentes.
+- Para concorrência de fabricante de equipamento, use SOMENTE classificacao_fabricantes_equipamento.concorrentes. classificacao_fabricantes_equipamento.proprio representa Carrier, inclusive grafias anômalas como CARRRIER, e NUNCA pode ser chamado de concorrente. Palácio é fabricante concorrente reconhecido pela taxonomia. valores_nao_fabricante e nao_classificados também não podem ser apresentados como concorrentes.
 - Não afirme share, perda de venda, domínio competitivo ou substituição sem evidência adicional. Preserve grafias anômalas como limitação de qualidade do dado.
 - Nesta camada factual, não use "maioria", "predominante", "predominantes", "líder", "líderes", "domina", "dominam", "dominante" ou equivalentes para descrever distribuição. Informe sempre contagens e, quando útil, percentuais sobre o universo total do recorte.
 - Quando a cobertura de um campo for parcial, informe a contagem exata sobre o universo total ou qualifique explicitamente como "entre os registros preenchidos".
@@ -279,7 +281,7 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
             resumo.get("ranking_fabricantes_equipamento") or []
         )
         relevante["regra_classificacao_fabricantes"] = (
-            "somente itens em concorrentes podem ser chamados de fabricantes concorrentes; proprio é Carrier, inclusive grafias anômalas; valores_nao_fabricante e nao_classificados não são concorrentes"
+            "somente itens em concorrentes podem ser chamados de fabricantes concorrentes; proprio é Carrier, inclusive grafias anômalas; Palácio é concorrente; valores_nao_fabricante e nao_classificados não são concorrentes"
         )
     if "linhas" in dimensoes:
         relevante["ranking_linhas"] = resumo.get("ranking_linhas") or []
