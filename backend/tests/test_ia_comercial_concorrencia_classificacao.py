@@ -22,11 +22,11 @@ def test_classificacao_fabricantes_separa_proprio_concorrentes_e_ruido():
         "THERMOFLEX",
         "THERMOSTAR",
         "RODOFRIO",
+        "PALÁCIO",
     ]
-    assert [item["registros"] for item in resultado["concorrentes"]] == [34, 32, 22, 10]
+    assert [item["registros"] for item in resultado["concorrentes"]] == [34, 32, 22, 10, 2]
     assert [item["valor"] for item in resultado["valores_nao_fabricante"]] == [
         "DOCUMENTAÇÃO",
-        "PALÁCIO",
     ]
     assert resultado["nao_classificados"] == []
 
@@ -43,6 +43,7 @@ def test_resumo_concorrencia_expoe_classificacao_sem_ranking_bruto():
                 {"valor": "CARRRIER", "registros": 18},
                 {"valor": "THERMOKING", "registros": 34},
                 {"valor": "DOCUMENTAÇÃO", "registros": 10},
+                {"valor": "PALÁCIO", "registros": 2},
             ],
             "ranking_linhas": [],
         },
@@ -56,11 +57,12 @@ def test_resumo_concorrencia_expoe_classificacao_sem_ranking_bruto():
     assert "ranking_fabricantes_equipamento" not in resumo
     classificacao = resumo["classificacao_fabricantes_equipamento"]
     assert classificacao["proprio"][0]["fabricante_canonico"] == "CARRIER"
-    assert classificacao["concorrentes"][0]["valor"] == "THERMOKING"
+    assert [item["valor"] for item in classificacao["concorrentes"]] == ["THERMOKING", "PALÁCIO"]
     assert classificacao["valores_nao_fabricante"][0]["valor"] == "DOCUMENTAÇÃO"
 
 
-def test_instrucao_proibe_carrier_como_concorrente():
+def test_instrucao_proibe_carrier_como_concorrente_e_reconhece_palacio():
     instrucoes = sintese.INSTRUCOES_SINTESE_FATUAL
     assert "NUNCA pode ser chamado de concorrente" in instrucoes
     assert "SOMENTE classificacao_fabricantes_equipamento.concorrentes" in instrucoes
+    assert "Palácio é fabricante concorrente" in instrucoes
