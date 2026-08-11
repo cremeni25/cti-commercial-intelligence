@@ -71,6 +71,8 @@ _DOMINIOS_DOMINANTES: tuple[tuple[str, tuple[str, ...]], ...] = (
             "historico de vendas",
             "vendas do modelo",
             "vendas do equipamento",
+            "já teve vendas confirmadas",
+            "ja teve vendas confirmadas",
         ),
     ),
 )
@@ -181,20 +183,23 @@ def _linhas_afirmativas(texto: str) -> list[tuple[str, str | None]]:
     return afirmacoes
 
 
-def _dominio_dominante(texto: str) -> str | None:
+def _dominios_dominantes(texto: str) -> list[str]:
     normalizado = _normalizar(texto)
+    dominios: list[str] = []
     for dominio, expressoes in _DOMINIOS_DOMINANTES:
         if any(expressao in normalizado for expressao in expressoes):
-            return dominio
-    return None
+            dominios.append(dominio)
+    return list(dict.fromkeys(dominios))
+
+
+def _dominio_dominante(texto: str) -> str | None:
+    dominios = _dominios_dominantes(texto)
+    return dominios[0] if dominios else None
 
 
 def _ids_cti_por_texto(texto: str, ids_por_evidencia: dict[str, list[str]], ids_cti: list[str]) -> list[str]:
     normalizado = _normalizar(texto)
 
-    # Afirmações que declaram explicitamente estado de portfólio/catálogo ou histórico
-    # amplo de vendas têm um domínio probatório dominante. Outros domínios citados na
-    # mesma frase (ex.: "usado no pedido analisado") não podem emprestar evidência.
     dominante = _dominio_dominante(texto)
     if dominante:
         return list(dict.fromkeys(ids_por_evidencia.get(dominante, [])))
@@ -226,6 +231,15 @@ def _eh_inferencia(texto: str, secao: str | None) -> bool:
     return any(marcador in normalizado for marcador in _INFERENCIA_MARCADORES)
 
 
+def _premissas_fatuais_inferencia(
+    texto: str,
+    ids_por_evidencia: dict[str, list[str]],
+) -> tuple[list[str], list[str]]:
+    exigidas = _dominios_dominantes(texto)
+    nao_sustentadas = [dominio for dominio in exigidas if not ids_por_evidencia.get(dominio)]
+    return exigidas, nao_sustentadas
+
+
 def construir_auditoria_evidencial(
     resposta_texto: str,
     metadados: dict[str, Any],
@@ -238,9 +252,18 @@ def construir_auditoria_evidencial(
 
     afirmacoes: list[dict[str, Any]] = []
     sem_evidencia = 0
+    inferencias_base_parcial = 0
     for indice, (texto, secao) in enumerate(_linhas_afirmativas(resposta_texto), start=1):
         if _eh_inferencia(texto, secao):
             derivada_de = list(dict.fromkeys(ids_cti + ids_web))
+            premissas_exigidas, premissas_nao_sustentadas = _premissas_fatuais_inferencia(texto, ids_por_evidencia)
+            if premissas_nao_sustentadas:
+                status = "BASE_PARCIAL"
+                inferencias_base_parcial += 1
+            elif derivada_de:
+                status = "RASTREAVEL"
+            else:
+                status = "SEM_BASE_EXPLICITA"
             afirmacoes.append(
                 {
                     "id": f"A{indice}",
@@ -248,7 +271,9 @@ def construir_auditoria_evidencial(
                     "tipo": "INFERENCIA_RECOMENDACAO",
                     "fontes_evidencia": [],
                     "derivada_de": derivada_de,
-                    "status_rastreabilidade": "RASTREAVEL" if derivada_de else "SEM_BASE_EXPLICITA",
+                    "premissas_fatuais_exigidas": premissas_exigidas,
+                    "premissas_fatuais_nao_sustentadas": premissas_nao_sustentadas,
+                    "status_rastreabilidade": status,
                 }
             )
             continue
@@ -303,6 +328,7 @@ def construir_auditoria_evidencial(
             "afirmacoes": len(afirmacoes),
             "afirmacoes_sem_evidencia_explicita": sem_evidencia,
             "inferencias_recomendacoes": sum(1 for item in afirmacoes if item.get("tipo") == "INFERENCIA_RECOMENDACAO"),
+            "inferencias_base_parcial": inferencias_base_parcial,
         },
     }
 
@@ -311,6 +337,7 @@ def construir_auditoria_evidencial(
         "auditoria_evidencial": auditoria,
         "auditoria_afirmacoes_total": len(afirmacoes),
         "auditoria_afirmacoes_sem_evidencia": sem_evidencia,
+        "auditoria_inferencias_base_parcial": inferencias_base_parcial,
         "auditoria_fontes_total": len(origens),
         "auditoria_evidencias_faltantes": faltantes,
     }
