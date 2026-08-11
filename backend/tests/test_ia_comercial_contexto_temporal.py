@@ -136,36 +136,39 @@ def test_cobertura_de_campo_deve_ser_exata():
     assert "não 'na maioria dos casos'" in mensagem_agente
 
 
-def test_ia002_isola_execucao_factual_de_todo_historico_anterior():
+def test_ia005_historico_e_contextual_mas_nao_evidencial():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal(
         "Compare Trailer no DDD 011 com a ANFIR."
     )
 
-    assert "nesta etapa IA-002, a execução factual é isolada de todo histórico anterior da conversa" in mensagem_agente
+    assert "o histórico da conversa pode ser usado para compreender continuidade" in mensagem_agente
+    assert "mas nunca conta como evidência factual da execução atual" in mensagem_agente
     assert "fonte efetivamente consultada nesta execução" in mensagem_agente
 
 
-def test_pipeline_nao_pode_ser_afirmado_sem_fonte_de_oportunidades_na_execucao():
+def test_ia005_continuidade_factual_exige_reconsulta_da_fonte_adequada():
+    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
+        "E esse pedido, em que etapa está agora?"
+    )
+
+    assert "use o histórico apenas para identificar o referente" in mensagem_agente
+    assert "reconsulte a ferramenta adequada antes de responder" in mensagem_agente
+
+
+def test_ia005_nao_reutiliza_catalogo_pipeline_ou_vendas_como_evidencia_passada():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal(
         "Compare Trailer no DDD 011 com a ANFIR."
     )
 
-    assert "Não afirme pipeline, oportunidades ou seus status sem" in mensagem_agente
-    assert "consultar a fonte de oportunidades nesta execução" in mensagem_agente
+    assert "Não reutilize silenciosamente números, status, vendas" in mensagem_agente
+    assert "pipeline, catálogo, ANFIR, território" in mensagem_agente
+    assert "como se fossem evidência atual" in mensagem_agente
 
 
-def test_catalogo_nao_pode_ser_afirmado_sem_consulta_atual():
+def test_ia005_fatos_web_anteriores_tambem_nao_substituem_validacao_atual():
     mensagem_agente, _ = router._mensagem_com_contexto_temporal(
-        "Compare Trailer no DDD 011 com a ANFIR."
+        "E aquela novidade de mercado, continua válida?"
     )
 
-    assert "não nomeie modelos disponíveis do portfólio sem consultar o catálogo" in mensagem_agente
-
-
-def test_vendas_nao_podem_ser_afirmadas_sem_consulta_atual():
-    mensagem_agente, _ = router._mensagem_com_contexto_temporal(
-        "Compare Trailer no DDD 011 com a ANFIR."
-    )
-
-    assert "não afirme vendas ou vínculos de venda sem consultar vendas" in mensagem_agente
-    assert "não foi verificado nesta execução" in mensagem_agente
+    assert "fatos web de respostas anteriores" in mensagem_agente
+    assert "como se fossem evidência atual" in mensagem_agente
