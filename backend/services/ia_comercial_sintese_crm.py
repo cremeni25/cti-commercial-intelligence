@@ -38,6 +38,15 @@ CRUZAMENTO MULTI-FONTE — IA-004:
 - Não calcule share, liderança ou participação de mercado sem denominador compatível e explicitamente consultado.
 """
 
+_WEB_ENTIDADES_IGNORADAS = {
+    "brasil", "brasileiro", "brasileira", "mercado", "transporte", "refrigerado", "refrigerada",
+    "refrigeração", "refrigeracao", "tecnologia", "tecnologias", "fabricante", "fabricantes",
+    "série", "serie", "dados", "externos", "verificados", "pedido", "cliente", "carrier", "trailer",
+    "equipamento", "equipamentos", "venda", "vendas", "modelo", "linha", "linhas", "monitoramento",
+    "digital", "sustentável", "sustentavel", "eficiência", "eficiencia", "fatos", "dados", "internos",
+    "cti", "cruzamento", "implicações", "implicacoes", "comerciais", "não", "nao", "uma", "mais",
+}
+
 
 def _eh_multifonte(evidencias: set[str] | frozenset[str]) -> bool:
     return "web" in evidencias and bool(set(evidencias) - {"web"})
@@ -248,14 +257,76 @@ def _sanitizar_filtros_inexistentes(texto: str, metadados: dict[str, Any]) -> tu
     return ajustado, quantidade
 
 
+def _entidades_web_linha(linha: str) -> list[str]:
+    entidades: list[str] = []
+    for token in re.findall(r"\b[A-ZÁÉÍÓÚÂÊÔÃÕÇ][A-Za-zÀ-ÿ0-9_-]{3,}\b", str(linha or "")):
+        normalizado = token.casefold()
+        if normalizado in _WEB_ENTIDADES_IGNORADAS:
+            continue
+        entidades.append(normalizado)
+    return list(dict.fromkeys(entidades))
+
+
+def _fonte_web_compativel(linha: str, fontes_web: list[dict[str, Any]]) -> bool:
+    entidades = _entidades_web_linha(linha)
+    if not entidades:
+        return True
+    corpus = " ".join(
+        f"{str(fonte.get('descricao') or '')} {str(fonte.get('url') or '')}".casefold()
+        for fonte in fontes_web
+        if isinstance(fonte, dict)
+    )
+    return any(entidade in corpus for entidade in entidades)
+
+
+def _sanitizar_fatos_web_sem_proveniencia(texto: str, fontes_web: list[dict[str, Any]]) -> tuple[str, int]:
+    linhas = str(texto or "").splitlines()
+    resultado: list[str] = []
+    secao_web = False
+    removidas = 0
+
+    for linha in linhas:
+        normalizada = linha.strip().casefold()
+        if "fatos externos verificados" in normalizada:
+            secao_web = True
+            resultado.append(linha)
+            continue
+        if "dados internos cti" in normalizada or "cruzamento e implica" in normalizada:
+            secao_web = False
+            resultado.append(linha)
+            continue
+        if secao_web and linha.strip().startswith(("-", "•", "*")) and not _fonte_web_compativel(linha, fontes_web):
+            removidas += 1
+            continue
+        resultado.append(linha)
+
+    return "\n".join(resultado).strip(), removidas
+
+
+def _historico_para_execucao_web(historico: list[dict[str, str]], evidencias_previstas: set[str]) -> list[dict[str, str]]:
+    if "web" not in evidencias_previstas:
+        return historico
+    somente_usuario = [
+        item for item in historico
+        if str(item.get("role") or "").casefold() == "user" and str(item.get("content") or "").strip()
+    ]
+    return somente_usuario[-12:]
+
+
 def _gerar_base_ia004(
     mensagem: str,
     historico: list[dict[str, str]],
     usuario_id: str,
     tipo_usuario: str,
 ):
-    texto, metadados = _ORIGINAL_GERAR_BASE(mensagem, historico, usuario_id, tipo_usuario)
+    pergunta_original = base._mensagem_original_para_evidencias(mensagem)
+    evidencias_previstas = set(_fontes_requeridas_ia004(pergunta_original))
+    historico_execucao = _historico_para_execucao_web(historico, evidencias_previstas)
+    texto, metadados = _ORIGINAL_GERAR_BASE(mensagem, historico_execucao, usuario_id, tipo_usuario)
     evidencias = set(str(x) for x in (metadados.get("evidencias_requeridas") or _EVIDENCIAS_IA004.get()))
+    if "web" in evidencias_previstas:
+        metadados["controle_historico_web"] = "somente_turnos_usuario_sem_respostas_web_anteriores"
+        metadados["historico_web_mensagens_utilizadas"] = len(historico_execucao)
     if not _eh_multifonte(evidencias):
         return texto, metadados
 
@@ -266,6 +337,7 @@ def _gerar_base_ia004(
         fonte for fonte in (metadados.get("fontes") or [])
         if isinstance(fonte, dict) and fonte.get("url")
     ]
+    texto, ajustes_web = _sanitizar_fatos_web_sem_proveniencia(texto, fontes_web)
     internas = sorted(evidencias - {"web"})
     metadados.update(
         {
@@ -279,14 +351,15 @@ def _gerar_base_ia004(
             "controle_consulta_portfolio": "catalogo_completo_quando_portfolio_amplo",
             "controle_consulta_vendas": "universo_autorizado_quando_vendas_amplas",
             "controle_filtros_multifonte": "qualificacao_textual_somente_se_filtro_executado",
+            "controle_web_por_afirmacao": "entidade_compativel_com_titulo_ou_url_da_execucao",
             "multifonte_ajustes_ausencia_nao_consultada": ajustes_ausencia,
             "multifonte_ajustes_filtro_inexistente": ajustes_filtro,
+            "multifonte_ajustes_web_sem_proveniencia": ajustes_web,
         }
     )
     return texto, metadados
 
 
-# Instala a camada IA-004 sem alterar a interface pública já importada pelo router.
 crm._fontes_requeridas_ia003 = _fontes_requeridas_ia004
 crm._ORIGINAL_FERRAMENTAS_AGENTE = _ferramentas_base_ia004
 crm._ORIGINAL_INSTRUCOES_AGENTE = _ORIGINAL_INSTRUCOES_CRM + _INSTRUCOES_IA004
