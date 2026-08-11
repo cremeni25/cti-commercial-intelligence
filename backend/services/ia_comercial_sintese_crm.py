@@ -30,6 +30,7 @@ CRUZAMENTO MULTI-FONTE — IA-004:
 - Uma fonte nunca completa, confirma ou substitui silenciosamente a outra: web não cria venda, cliente, oportunidade, pedido, frota ou registro CTI; CTI não prova tendência, participação ou fato do mercado externo.
 - Ausência significa somente ausência na fonte, domínio, filtro e recorte consultados. Nunca converta resultado interno vazio em ausência no mercado real, nem ausência web em ausência no CTI.
 - Pedido por "nosso portfólio" significa o catálogo oficial CTI como conjunto, não uma busca textual pela frase temática da pergunta. Pedido por "nossas vendas" significa o conjunto autorizado de vendas, salvo filtro específico explicitamente pedido pelo usuário.
+- Nunca descreva registros como "relacionados ao termo", "associados ao termo" ou equivalente quando a consulta executada estiver sem filtro textual.
 - Nunca declare ausência de clientes, oportunidades, pedidos, propostas ou outros domínios internos que não tenham sido efetivamente consultados na execução.
 - Em análise multi-fonte, organize a resposta em três camadas sem misturá-las: fatos externos verificados; dados internos CTI; cruzamento e implicações comerciais. A terceira camada é inferência/recomendação e deve ser apresentada como tal.
 - Se as fontes não permitirem um cruzamento pedido, declare a limitação em vez de preencher a lacuna por conhecimento prévio.
@@ -152,6 +153,7 @@ def _instrucao_sintese_ia004(evidencias: set[str]) -> str:
         "(2) DADOS INTERNOS CTI, limitados aos domínios realmente consultados; "
         "(3) CRUZAMENTO E IMPLICAÇÕES COMERCIAIS, explicitamente tratados como inferências/recomendações. "
         "Quando produtos forem exigidos por pedido de nosso portfólio, trate o catálogo retornado como conjunto do portfólio atual, sem transformar busca textual vazia em ausência geral. "
+        "Quando vendas forem consultadas sem termo, descreva-as como vendas retornadas no universo autorizado; nunca invente um termo de busca para qualificá-las. "
         "Não declare ausência de clientes, oportunidades, pedidos, propostas ou outros domínios que não estejam entre as evidências desta execução. "
         "Não use uma origem para provar fato pertencente à outra e qualifique qualquer ausência pelo recorte consultado."
     )
@@ -221,6 +223,31 @@ def _sanitizar_ausencias_nao_consultadas(texto: str, evidencias: set[str]) -> tu
     return "\n".join(resultado).strip(), removidas
 
 
+def _vendas_foram_consultadas_sem_termo(metadados: dict[str, Any]) -> bool:
+    consultas = []
+    for item in metadados.get("ferramentas") or []:
+        if not isinstance(item, dict) or item.get("tipo") != "CTI":
+            continue
+        if item.get("ferramenta") != "consultar_dominio_cti":
+            continue
+        argumentos = item.get("argumentos") or {}
+        if str(argumentos.get("dominio") or "") == "vendas":
+            consultas.append(argumentos)
+    return bool(consultas) and all(not str(item.get("termo") or "").strip() for item in consultas)
+
+
+def _sanitizar_filtros_inexistentes(texto: str, metadados: dict[str, Any]) -> tuple[str, int]:
+    if not _vendas_foram_consultadas_sem_termo(metadados):
+        return str(texto or ""), 0
+
+    padrao = re.compile(
+        r"\s+(?:relacionad[ao]s?|associad[ao]s?|vinculad[ao]s?)\s+ao\s+termo\s+[\"“'][^\"”']+[\"”']",
+        flags=re.IGNORECASE,
+    )
+    ajustado, quantidade = padrao.subn("", str(texto or ""))
+    return ajustado, quantidade
+
+
 def _gerar_base_ia004(
     mensagem: str,
     historico: list[dict[str, str]],
@@ -234,6 +261,7 @@ def _gerar_base_ia004(
 
     _auditar_ferramentas_multifonte(metadados, evidencias)
     texto, ajustes_ausencia = _sanitizar_ausencias_nao_consultadas(texto, evidencias)
+    texto, ajustes_filtro = _sanitizar_filtros_inexistentes(texto, metadados)
     fontes_web = [
         fonte for fonte in (metadados.get("fontes") or [])
         if isinstance(fonte, dict) and fonte.get("url")
@@ -250,7 +278,9 @@ def _gerar_base_ia004(
             "controle_ausencia_multifonte": "ausencia_limitada_a_fonte_e_recorte_consultados",
             "controle_consulta_portfolio": "catalogo_completo_quando_portfolio_amplo",
             "controle_consulta_vendas": "universo_autorizado_quando_vendas_amplas",
+            "controle_filtros_multifonte": "qualificacao_textual_somente_se_filtro_executado",
             "multifonte_ajustes_ausencia_nao_consultada": ajustes_ausencia,
+            "multifonte_ajustes_filtro_inexistente": ajustes_filtro,
         }
     )
     return texto, metadados
