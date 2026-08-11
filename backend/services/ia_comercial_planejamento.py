@@ -143,11 +143,26 @@ def _lacunas_semanticas_acao(acao: str, auditoria: dict[str, Any]) -> list[str]:
     atendidas = {str(x) for x in (auditoria.get("evidencias_atendidas") or [])}
     lacunas: list[str] = []
 
-    if any(t in texto for t in ("portfólio", "portfolio", "catálogo", "catalogo", "modelos disponíveis", "produtos disponíveis")):
-        if "produtos" not in atendidas:
-            lacunas.append("produtos")
+    contexto_produto = any(
+        t in texto
+        for t in (
+            "portfólio", "portfolio", "catálogo", "catalogo", "modelos disponíveis", "produtos disponíveis",
+            "incorporação de tecnologia", "incorporacao de tecnologia", "incorporação de tecnologias",
+            "incorporacao de tecnologias", "tecnologias emergentes", "tecnologia emergente",
+            "oferta integrada", "solução integrada", "soluções integradas", "solucao integrada", "solucoes integradas",
+        )
+    )
+    if contexto_produto and "produtos" not in atendidas:
+        lacunas.append("produtos")
 
-    if any(t in texto for t in ("região", "regiao", "território", "territorio", "potenciais clientes na região", "potenciais clientes da região")):
+    if any(
+        t in texto
+        for t in (
+            "região", "regiao", "território", "territorio",
+            "potenciais clientes na região", "potenciais clientes da região",
+            "clientes na região", "clientes da região",
+        )
+    ):
         if not ({"territorio", "anfir"} & atendidas):
             lacunas.append("territorio")
 
@@ -155,17 +170,14 @@ def _lacunas_semanticas_acao(acao: str, auditoria: dict[str, Any]) -> list[str]:
         t in texto
         for t in (
             "tendência de mercado", "tendências de mercado", "tendencia de mercado", "tendencias de mercado",
-            "mercado brasileiro", "tecnologia recente", "tecnologias recentes", "digital", "digitais",
-            "sustentável", "sustentavel", "sustentáveis", "sustentaveis", "parceria tecnológica",
-            "parcerias tecnológicas", "parceria tecnologica", "parcerias tecnologicas",
+            "mercado brasileiro", "tecnologia recente", "tecnologias recentes", "tecnologia emergente",
+            "tecnologias emergentes", "digital", "digitais", "sustentável", "sustentavel",
+            "sustentáveis", "sustentaveis", "parceria tecnológica", "parcerias tecnológicas",
+            "parceria tecnologica", "parcerias tecnologicas", "parceria comercial", "parcerias comerciais",
         )
     )
     if contexto_externo and "web" not in atendidas:
         lacunas.append("web")
-
-    if any(t in texto for t in ("oferta integrada", "solução integrada", "soluções integradas", "solucao integrada", "solucoes integradas")):
-        if "produtos" not in atendidas:
-            lacunas.append("produtos")
 
     return list(dict.fromkeys(lacunas))
 
