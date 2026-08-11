@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from services.ia_comercial_planejamento import construir_planejamento_comercial, requer_planejamento
+
 
 _INFERENCIA_MARCADORES = (
     "recomenda",
@@ -366,7 +368,7 @@ def construir_auditoria_evidencial(
         },
     }
 
-    return {
+    resultado = {
         "controle_auditoria_evidencial": "ia006_cadeia_afirmacao_evidencia_origem",
         "auditoria_evidencial": auditoria,
         "auditoria_afirmacoes_total": len(afirmacoes),
@@ -375,3 +377,20 @@ def construir_auditoria_evidencial(
         "auditoria_fontes_total": len(origens),
         "auditoria_evidencias_faltantes": faltantes,
     }
+
+    fatos_rastreaveis = any(
+        item.get("tipo") in {"FATO_CTI", "FATO_WEB"}
+        and item.get("status_rastreabilidade") == "RASTREAVEL"
+        for item in afirmacoes
+    )
+    if requer_planejamento(pergunta_atual) and fatos_rastreaveis:
+        texto_planejado, metadados_planejamento = construir_planejamento_comercial(
+            pergunta_atual=pergunta_atual,
+            resposta_texto=resposta_texto,
+            metadados={"auditoria_evidencial": auditoria},
+        )
+        resultado.update(metadados_planejamento)
+        if texto_planejado.startswith(resposta_texto):
+            resultado["planejamento_texto_renderizado"] = texto_planejado[len(resposta_texto):].strip()
+
+    return resultado
