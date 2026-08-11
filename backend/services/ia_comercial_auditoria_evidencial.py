@@ -155,12 +155,24 @@ def _linhas_afirmativas(texto: str) -> list[tuple[str, str | None]]:
 def _ids_cti_por_texto(texto: str, ids_por_evidencia: dict[str, list[str]], ids_cti: list[str]) -> list[str]:
     normalizado = _normalizar(texto)
     candidatos: list[str] = []
+    evidencias_reconhecidas: list[str] = []
+
     for evidencia, termos in _DOMINIO_TERMOS.items():
         if any(termo in normalizado for termo in termos):
+            evidencias_reconhecidas.append(evidencia)
             candidatos.extend(ids_por_evidencia.get(evidencia, []))
+
     candidatos = list(dict.fromkeys(candidatos))
     if candidatos:
         return candidatos
+
+    # IA-006: se o próprio texto nomeia um domínio factual conhecido, não é permitido
+    # usar a "única fonte CTI disponível" como substituta de uma fonte daquele domínio.
+    # Ex.: consulta de pedidos não prova "portfólio atual" sem catálogo/produtos.
+    if evidencias_reconhecidas:
+        return []
+
+    # Fallback conservador apenas para frases genéricas que não nomeiam domínio distinto.
     if len(ids_cti) == 1:
         return list(ids_cti)
     return []
