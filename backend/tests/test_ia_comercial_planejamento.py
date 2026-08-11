@@ -146,6 +146,7 @@ def test_acao_regional_sem_territorio_fica_base_parcial():
     acao = plano["acoes"][0]
     assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
     assert "territorio" in acao["lacunas_evidenciais"]
+    assert "demanda_comercial_futura" in acao["lacunas_evidenciais"]
 
 
 def test_acao_digital_sustentavel_sem_web_e_produtos_fica_base_parcial():
@@ -188,10 +189,35 @@ def test_tecnologias_emergentes_e_parcerias_comerciais_sem_fontes_ficam_parciais
     )
     acao = plano["acoes"][0]
     assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
-    assert set(acao["lacunas_evidenciais"]) == {"territorio", "produtos", "web"}
+    assert set(acao["lacunas_evidenciais"]) == {
+        "territorio",
+        "produtos",
+        "web",
+        "demanda_comercial_futura",
+    }
 
 
-def test_lacuna_semantica_some_quando_fontes_correspondentes_foram_consultadas():
+def test_prospectar_nova_venda_com_cliente_do_pedido_nao_vira_evidencia_completa():
+    plano = validar_plano(
+        {
+            "objetivo": "Preparar relacionamento futuro.",
+            "acoes": [
+                {
+                    "acao": "Prospectar novas vendas com o cliente ABC CARGAS LTDA à medida que o relacionamento comercial se consolida.",
+                    "prioridade": "MEDIA",
+                    "horizonte": "MEDIO_PRAZO",
+                    "fundamentos": ["A1"],
+                }
+            ],
+        },
+        auditoria_base(),
+    )
+    acao = plano["acoes"][0]
+    assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
+    assert acao["lacunas_evidenciais"] == ["demanda_comercial_futura"]
+
+
+def test_fontes_territorio_produtos_web_nao_provam_demanda_futura():
     auditoria = auditoria_base()
     auditoria["evidencias_atendidas"] = ["pedidos", "territorio", "produtos", "web"]
     plano = validar_plano(
@@ -209,8 +235,8 @@ def test_lacuna_semantica_some_quando_fontes_correspondentes_foram_consultadas()
         auditoria,
     )
     acao = plano["acoes"][0]
-    assert acao["qualificacao_evidencial"] == "EVIDENCIA_COMPLETA"
-    assert acao["lacunas_evidenciais"] == []
+    assert acao["qualificacao_evidencial"] == "BASE_PARCIAL"
+    assert acao["lacunas_evidenciais"] == ["demanda_comercial_futura"]
 
 
 def test_resposta_final_remove_texto_livre_que_nao_passou_pela_validacao(monkeypatch):
