@@ -26,6 +26,16 @@ DOMINIOS_FACTUAIS = {
     "relacionamentos_vendas",
 }
 
+FABRICANTES_PROPRIOS = {"CARRIER", "CARRRIER"}
+FABRICANTES_CONCORRENTES = {
+    "THERMOKING": "THERMO KING",
+    "FRIGOKING": "FRIGOKING",
+    "THERMOSTAR": "THERMOSTAR",
+    "RODOFRIO": "RODOFRIO",
+    "THERMOFLEX": "THERMOFLEX",
+}
+VALORES_NAO_FABRICANTE = {"DOCUMENTACAO", "PALACIO"}
+
 INSTRUCOES_SINTESE_FATUAL = """Você é a camada de síntese factual da IA Comercial CTI.
 Sua única função é responder à PERGUNTA_ATUAL usando exclusivamente as EVIDENCIAS_EXECUCAO fornecidas no JSON de entrada.
 Você não recebe histórico de conversa, resposta preliminar do agente nem conhecimento operacional implícito como evidência.
@@ -41,7 +51,8 @@ REGRAS ABSOLUTAS DE EVIDÊNCIA:
 - Cliente só pode ser chamado de ativo/inativo quando esse status estiver explicitamente presente na evidência consultada. Status de registro ANFIR não prova status do cliente no CRM.
 - Status operacional, documental ou ANFIR não prova venda, aceite, negócio concluído, relacionamento comercial ativo ou entrega.
 - Relações entre implementadora, cliente, linha e fabricante de equipamento em RESUMO_RELEVANTE significam somente coocorrência factual nos mesmos registros históricos do recorte. Não as transforme em contrato, parceria, preferência, venda, exclusividade, relacionamento ativo ou oportunidade CRM.
-- Fabricante de equipamento diferente de Carrier pode ser descrito como sinal concorrencial presente nos registros somente quando a evidência trouxer esse valor. Não afirme share, perda de venda, domínio competitivo ou substituição sem evidência adicional. Preserve grafias anômalas como limitação de qualidade do dado.
+- Para concorrência de fabricante de equipamento, use SOMENTE classificacao_fabricantes_equipamento.concorrentes. classificacao_fabricantes_equipamento.proprio representa Carrier, inclusive grafias anômalas como CARRRIER, e NUNCA pode ser chamado de concorrente. valores_nao_fabricante e nao_classificados também não podem ser apresentados como concorrentes.
+- Não afirme share, perda de venda, domínio competitivo ou substituição sem evidência adicional. Preserve grafias anômalas como limitação de qualidade do dado.
 - Nesta camada factual, não use "maioria", "predominante", "predominantes", "líder", "líderes", "domina", "dominam", "dominante" ou equivalentes para descrever distribuição. Informe sempre contagens e, quando útil, percentuais sobre o universo total do recorte.
 - Quando a cobertura de um campo for parcial, informe a contagem exata sobre o universo total ou qualifique explicitamente como "entre os registros preenchidos".
 - Preserve ausências e qualidade dos dados. Se um valor de fabricante/modelo/status tiver grafia anômala ou cobertura parcial, descreva a limitação sem normalizar silenciosamente o dado como se fosse completo.
@@ -113,6 +124,47 @@ def _ranking_canonico_frota(ranking: Any) -> list[dict[str, Any]]:
         for grupo in grupos.values()
     ]
     return sorted(consolidados, key=lambda item: (-int(item["registros"]), str(item["valor"])))
+
+
+def _classificar_fabricantes_equipamento(ranking: Any) -> dict[str, list[dict[str, Any]]]:
+    classificados: dict[str, list[dict[str, Any]]] = {
+        "proprio": [],
+        "concorrentes": [],
+        "valores_nao_fabricante": [],
+        "nao_classificados": [],
+    }
+    if not isinstance(ranking, list):
+        return classificados
+
+    for item in ranking:
+        if not isinstance(item, dict):
+            continue
+        valor = str(item.get("valor") or "").strip()
+        try:
+            registros = int(item.get("registros") or 0)
+        except (TypeError, ValueError):
+            registros = 0
+        if not valor or registros <= 0:
+            continue
+        chave = _chave_canonica_frota(valor)
+        base = {"valor": valor, "registros": registros}
+        if chave in FABRICANTES_PROPRIOS:
+            classificados["proprio"].append({**base, "fabricante_canonico": "CARRIER"})
+        elif chave in FABRICANTES_CONCORRENTES:
+            classificados["concorrentes"].append(
+                {**base, "fabricante_canonico": FABRICANTES_CONCORRENTES[chave]}
+            )
+        elif chave in VALORES_NAO_FABRICANTE:
+            classificados["valores_nao_fabricante"].append(base)
+        else:
+            classificados["nao_classificados"].append(base)
+
+    for chave in classificados:
+        classificados[chave] = sorted(
+            classificados[chave],
+            key=lambda item: (-int(item.get("registros") or 0), str(item.get("valor") or "")),
+        )
+    return classificados
 
 
 def _evidencias_atendidas(metadados: dict[str, Any]) -> set[str]:
@@ -223,7 +275,12 @@ def _resumo_territorial_relevante(resultado: dict[str, Any], pergunta_atual: str
             "cada relação é calculada apenas sobre registros do mesmo recorte; coocorrência histórica não prova venda, parceria, preferência, exclusividade, relacionamento ativo ou oportunidade CRM"
         )
     if "fabricantes" in dimensoes:
-        relevante["ranking_fabricantes_equipamento"] = resumo.get("ranking_fabricantes_equipamento") or []
+        relevante["classificacao_fabricantes_equipamento"] = _classificar_fabricantes_equipamento(
+            resumo.get("ranking_fabricantes_equipamento") or []
+        )
+        relevante["regra_classificacao_fabricantes"] = (
+            "somente itens em concorrentes podem ser chamados de fabricantes concorrentes; proprio é Carrier, inclusive grafias anômalas; valores_nao_fabricante e nao_classificados não são concorrentes"
+        )
     if "linhas" in dimensoes:
         relevante["ranking_linhas"] = resumo.get("ranking_linhas") or []
     if "frota" in dimensoes:
