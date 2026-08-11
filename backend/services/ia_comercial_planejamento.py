@@ -64,9 +64,6 @@ def _fontes_requeridas_semantica_ia007(mensagem: str) -> set[str]:
     return requeridas
 
 
-# A cadeia IA-003/IA-004 chama _fontes_requeridas_crm, que consulta este
-# original capturado. A substituição mantém a interface e apenas corrige a
-# semântica de oportunidade futura em perguntas de planejamento.
 crm._ORIGINAL_FONTES_REQUERIDAS = _fontes_requeridas_semantica_ia007
 
 
@@ -83,6 +80,7 @@ REGRAS OBRIGATÓRIAS:
 - "Oportunidade futura" ou "oportunidade comercial" pode ser recomendação prospectiva; não afirme que existe ou não existe entidade Oportunidade no CRM sem evidência explícita dessa entidade.
 - Resultado vazio de busca textual não prova ausência de relacionamento com outra entidade.
 - Diferencie ação operacional imediata, acompanhamento e oportunidade futura.
+- Recomendações sobre território/região, portfólio/produtos ou tendências/tecnologias externas devem permanecer qualificadas se a respectiva evidência não foi consultada nesta execução.
 - Não invente prazo em dias, valor, cliente, produto, venda, probabilidade ou resultado quantitativo.
 - Horizonte deve ser somente IMEDIATO, CURTO_PRAZO ou MEDIO_PRAZO.
 - Prioridade deve ser somente ALTA, MEDIA ou BAIXA.
@@ -139,6 +137,39 @@ def _normalizar_lista(valor: Any, limite: int = 5) -> list[str]:
     return [str(item).strip()[:500] for item in valor if str(item).strip()][:limite]
 
 
+def _lacunas_semanticas_acao(acao: str, auditoria: dict[str, Any]) -> list[str]:
+    """Qualifica extrapolações futuras sem transformá-las em fatos comprovados."""
+    texto = str(acao or "").casefold()
+    atendidas = {str(x) for x in (auditoria.get("evidencias_atendidas") or [])}
+    lacunas: list[str] = []
+
+    if any(t in texto for t in ("portfólio", "portfolio", "catálogo", "catalogo", "modelos disponíveis", "produtos disponíveis")):
+        if "produtos" not in atendidas:
+            lacunas.append("produtos")
+
+    if any(t in texto for t in ("região", "regiao", "território", "territorio", "potenciais clientes na região", "potenciais clientes da região")):
+        if not ({"territorio", "anfir"} & atendidas):
+            lacunas.append("territorio")
+
+    contexto_externo = any(
+        t in texto
+        for t in (
+            "tendência de mercado", "tendências de mercado", "tendencia de mercado", "tendencias de mercado",
+            "mercado brasileiro", "tecnologia recente", "tecnologias recentes", "digital", "digitais",
+            "sustentável", "sustentavel", "sustentáveis", "sustentaveis", "parceria tecnológica",
+            "parcerias tecnológicas", "parceria tecnologica", "parcerias tecnologicas",
+        )
+    )
+    if contexto_externo and "web" not in atendidas:
+        lacunas.append("web")
+
+    if any(t in texto for t in ("oferta integrada", "solução integrada", "soluções integradas", "solucao integrada", "solucoes integradas")):
+        if "produtos" not in atendidas:
+            lacunas.append("produtos")
+
+    return list(dict.fromkeys(lacunas))
+
+
 def validar_plano(plano: dict[str, Any], auditoria: dict[str, Any]) -> dict[str, Any]:
     afirmacoes = _afirmacoes_por_id(auditoria)
     oportunidade_encerrada = _oportunidade_encerrada(auditoria)
@@ -170,14 +201,15 @@ def validar_plano(plano: dict[str, Any], auditoria: dict[str, Any]) -> dict[str,
         status_fundamentos = {
             str(afirmacoes[fid].get("status_rastreabilidade") or "") for fid in fundamentos_validos
         }
-        qualificacao = "BASE_PARCIAL" if "BASE_PARCIAL" in status_fundamentos else "EVIDENCIA_COMPLETA"
         lacunas: list[str] = []
-        if qualificacao == "BASE_PARCIAL":
+        if "BASE_PARCIAL" in status_fundamentos:
             for fid in fundamentos_validos:
                 lacunas.extend(
                     str(x) for x in (afirmacoes[fid].get("premissas_fatuais_nao_sustentadas") or [])
                 )
-            lacunas = list(dict.fromkeys(lacunas))
+        lacunas.extend(_lacunas_semanticas_acao(acao, auditoria))
+        lacunas = list(dict.fromkeys(lacunas))
+        qualificacao = "BASE_PARCIAL" if lacunas or "BASE_PARCIAL" in status_fundamentos else "EVIDENCIA_COMPLETA"
 
         prioridade = str(item.get("prioridade") or "MEDIA").upper()
         if prioridade not in {"ALTA", "MEDIA", "BAIXA"}:
@@ -303,4 +335,5 @@ def construir_planejamento_comercial(
         "planejamento_historico_como_evidencia": False,
         "controle_oportunidade_futura": "analitica_nao_entidade_crm_sem_pedido_explicito",
         "controle_resposta_planejamento": "somente_plano_validado_sem_texto_livre_previo",
+        "controle_lacunas_planejamento": "territorio_produtos_web_qualificados_por_acao",
     }
