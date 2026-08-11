@@ -20,6 +20,8 @@ WEB NATIVA AUTÔNOMA — IA-003:
 - Nunca apresente conhecimento prévio do modelo como se fosse fato externo atual verificado.
 - Quando a web for necessária, a execução só possui evidência web se houver fontes reais com URL capturadas pela ferramenta. Uma tentativa de pesquisa sem fonte recuperada não valida o fato.
 - Na resposta, separe semanticamente: (1) fatos externos verificados nas fontes da execução; (2) fatos internos CTI, quando consultados; (3) inferências/recomendações comerciais. Não transforme inferência em fato.
+- Uma pergunta externa de mercado permanece WEB pura quando o usuário não pedir cruzamento com dados internos. Palavras genéricas como venda, equipamento, cliente, produto, mercado ou impacto comercial não autorizam abrir CRM, catálogo, ANFIR ou vendas internas.
+- Dados internos só entram numa pergunta externa quando houver intenção explícita de cruzamento com CTI/CRM/ANFIR, nossos dados, nosso portfólio, nossas vendas, nossos clientes, nossos pedidos ou expressão equivalente.
 - Para concorrentes, fabricante externo, produto externo ou mercado, descreva somente o que as fontes sustentam e preserve incertezas/divergências entre fontes.
 - Fontes externas contextualizam a decisão comercial; não criam vendas, oportunidades, clientes, frota ou qualquer registro interno do CTI.
 """
@@ -85,10 +87,34 @@ def _necessita_web_autonoma(mensagem: str) -> bool:
     return atualidade and externo_comercial
 
 
+def _pede_cruzamento_cti_explicito(mensagem: str) -> bool:
+    texto = base._normalizar(mensagem)
+    if not texto:
+        return False
+
+    marcadores_internos = (
+        "dados do cti", "dados internos", "base interna", "no cti", "do cti", "crm", "no crm", "do crm",
+        "anfir", "nosso portfólio", "nosso portfolio", "catálogo do cti", "catalogo do cti",
+        "nossas vendas", "nossos clientes", "nossos pedidos", "nossas oportunidades", "nossas propostas",
+        "nossa carteira", "meus clientes", "minhas vendas", "meus pedidos", "minha carteira",
+    )
+    verbos_cruzamento = (
+        "cruze com", "cruzar com", "compare com", "comparar com", "relacione com", "relacionar com",
+        "confronte com", "combine com", "à luz dos nossos", "a luz dos nossos",
+    )
+    return any(t in texto for t in marcadores_internos) or any(t in texto for t in verbos_cruzamento)
+
+
 def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
     requeridas = _fontes_requeridas_crm(mensagem)
-    if _necessita_web_autonoma(mensagem):
-        requeridas.add("web")
+    web_necessaria = _necessita_web_autonoma(mensagem)
+    if not web_necessaria:
+        return requeridas
+
+    if not _pede_cruzamento_cti_explicito(mensagem):
+        return {"web"}
+
+    requeridas.add("web")
     return requeridas
 
 
@@ -165,6 +191,9 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
     metadados["web_requerida"] = web_requerida
     metadados["web_fontes_validas"] = len(fontes_web)
     metadados["web_urls_auditaveis"] = [str(fonte.get("url")) for fonte in fontes_web]
+    metadados["controle_cruzamento_web_cti"] = (
+        "explicito_usuario" if _pede_cruzamento_cti_explicito(mensagem) else "nao_solicitado"
+    )
     if web_requerida and not fontes_web:
         raise base.IAComercialOpenAIError(
             "A IA não conseguiu obter fontes externas verificáveis para responder com segurança.",
