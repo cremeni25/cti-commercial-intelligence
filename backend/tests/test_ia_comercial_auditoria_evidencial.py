@@ -124,6 +124,30 @@ def test_portfolio_atual_usa_catalogo_quando_catalogo_foi_consultado():
     assert afirmacao["status_rastreabilidade"] == "RASTREAVEL"
 
 
+def test_inferencia_com_premissa_de_portfolio_nao_consultado_fica_base_parcial():
+    auditoria = construir_auditoria_evidencial(
+        "(3) CRUZAMENTO E IMPLICAÇÕES COMERCIAIS\n- O equipamento X4-7500 faz parte do portfólio atual da CTI e já teve vendas confirmadas, mostrando aderência ao mercado.",
+        metadados_so_pedidos(),
+        "Compare o pedido com o mercado.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["tipo"] == "INFERENCIA_RECOMENDACAO"
+    assert afirmacao["status_rastreabilidade"] == "BASE_PARCIAL"
+    assert set(afirmacao["premissas_fatuais_nao_sustentadas"]) == {"produtos", "vendas"}
+    assert auditoria["totais"]["inferencias_base_parcial"] == 1
+
+
+def test_inferencia_com_premissas_consultadas_fica_rastreavel():
+    auditoria = construir_auditoria_evidencial(
+        "(3) CRUZAMENTO E IMPLICAÇÕES COMERCIAIS\n- O equipamento faz parte do portfólio atual e já teve vendas confirmadas; recomenda-se priorizar sua expansão.",
+        metadados_multifonte(),
+        "Compare mercado, portfólio e vendas.",
+    )["auditoria_evidencial"]
+    afirmacao = auditoria["afirmacoes"][0]
+    assert afirmacao["status_rastreabilidade"] == "RASTREAVEL"
+    assert afirmacao["premissas_fatuais_nao_sustentadas"] == []
+
+
 def test_controle_ia006_publicado():
     resultado = construir_auditoria_evidencial("- Recomenda-se acompanhar o pedido.", {"fontes": [], "ferramentas": [], "evidencias_requeridas": [], "evidencias_atendidas": []}, "O que recomenda?")
     assert resultado["controle_auditoria_evidencial"] == "ia006_cadeia_afirmacao_evidencia_origem"
