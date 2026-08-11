@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from services.ia_comercial_agente_crm import (
+    _EXECUCAO_WEB_PURA,
+    _ferramentas_agente_ia003,
     _fontes_requeridas_ia003,
     _necessita_web_autonoma,
     _pede_cruzamento_cti_explicito,
@@ -25,6 +27,17 @@ def test_pergunta_externa_de_mercado_nao_abre_produtos_vendas_ou_anfir_por_vocab
     assert _necessita_web_autonoma(pergunta) is True
     assert _pede_cruzamento_cti_explicito(pergunta) is False
     assert _fontes_requeridas_ia003(pergunta) == {"web"}
+
+
+def test_execucao_web_pura_expoe_fisicamente_apenas_web_search():
+    token = _EXECUCAO_WEB_PURA.set(True)
+    try:
+        ferramentas = _ferramentas_agente_ia003()
+    finally:
+        _EXECUCAO_WEB_PURA.reset(token)
+    assert ferramentas
+    assert all(item.get("type") == "web_search" for item in ferramentas)
+    assert not any(item.get("type") == "function" for item in ferramentas)
 
 
 def test_cruzamento_web_com_dados_internos_so_ocorre_quando_usuario_pede_explicitamente():
