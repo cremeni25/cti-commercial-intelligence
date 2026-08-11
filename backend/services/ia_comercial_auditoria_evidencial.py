@@ -46,6 +46,35 @@ _DOMINIO_TERMOS: dict[str, tuple[str, ...]] = {
     "historico": ("histórico", "historico"),
 }
 
+_DOMINIOS_DOMINANTES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "produtos",
+        (
+            "portfólio atual",
+            "portfolio atual",
+            "portfólio vigente",
+            "portfolio vigente",
+            "catálogo atual",
+            "catalogo atual",
+            "catálogo oficial",
+            "catalogo oficial",
+            "modelos disponíveis",
+            "modelos disponiveis",
+        ),
+    ),
+    (
+        "vendas",
+        (
+            "vendas registradas",
+            "vendas recentes",
+            "histórico de vendas",
+            "historico de vendas",
+            "vendas do modelo",
+            "vendas do equipamento",
+        ),
+    ),
+)
+
 
 def _normalizar(texto: Any) -> str:
     return str(texto or "").strip().casefold()
@@ -152,8 +181,24 @@ def _linhas_afirmativas(texto: str) -> list[tuple[str, str | None]]:
     return afirmacoes
 
 
+def _dominio_dominante(texto: str) -> str | None:
+    normalizado = _normalizar(texto)
+    for dominio, expressoes in _DOMINIOS_DOMINANTES:
+        if any(expressao in normalizado for expressao in expressoes):
+            return dominio
+    return None
+
+
 def _ids_cti_por_texto(texto: str, ids_por_evidencia: dict[str, list[str]], ids_cti: list[str]) -> list[str]:
     normalizado = _normalizar(texto)
+
+    # Afirmações que declaram explicitamente estado de portfólio/catálogo ou histórico
+    # amplo de vendas têm um domínio probatório dominante. Outros domínios citados na
+    # mesma frase (ex.: "usado no pedido analisado") não podem emprestar evidência.
+    dominante = _dominio_dominante(texto)
+    if dominante:
+        return list(dict.fromkeys(ids_por_evidencia.get(dominante, [])))
+
     candidatos: list[str] = []
     evidencias_reconhecidas: list[str] = []
 
@@ -166,13 +211,9 @@ def _ids_cti_por_texto(texto: str, ids_por_evidencia: dict[str, list[str]], ids_
     if candidatos:
         return candidatos
 
-    # IA-006: se o próprio texto nomeia um domínio factual conhecido, não é permitido
-    # usar a "única fonte CTI disponível" como substituta de uma fonte daquele domínio.
-    # Ex.: consulta de pedidos não prova "portfólio atual" sem catálogo/produtos.
     if evidencias_reconhecidas:
         return []
 
-    # Fallback conservador apenas para frases genéricas que não nomeiam domínio distinto.
     if len(ids_cti) == 1:
         return list(ids_cti)
     return []
