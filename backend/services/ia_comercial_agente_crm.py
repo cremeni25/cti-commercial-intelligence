@@ -10,6 +10,7 @@ from services.ia_comercial_universo import catalogar_universo_cti, consultar_uni
 # Fachada de compatibilidade para IA-004/IA-006/IA-007.
 # Estes nomes permanecem estáveis para as camadas posteriores, mas a execução
 # efetiva é substituída abaixo pela arquitetura universal de leitura.
+_DOMINIOS_CRM = {"propostas", "pedidos", "atividades"}
 _ORIGINAL_FONTES_REQUERIDAS = base._fontes_requeridas
 _ORIGINAL_EVIDENCIAS_PRESENTES = base._evidencias_presentes
 _ORIGINAL_INSTRUCAO_FALTANTES = base._instrucao_evidencias_faltantes
@@ -93,6 +94,64 @@ def _fontes_requeridas_universais(mensagem: str) -> set[str]:
     if _necessita_web(mensagem):
         requeridas.add("web")
     return requeridas
+
+
+# Contratos semânticos legados preservados para planejamento/auditoria.
+# Eles não escolhem as ferramentas da execução universal; servem apenas como
+# API estável para as camadas antigas e seus testes de semântica operacional.
+def _fontes_requeridas_crm(mensagem: str) -> set[str]:
+    requeridas = set(_ORIGINAL_FONTES_REQUERIDAS(mensagem))
+    texto = base._normalizar(mensagem)
+
+    oportunidade_futura_conceitual = any(
+        t in texto
+        for t in (
+            "oportunidade futura", "oportunidades futuras", "nova oportunidade", "novas oportunidades",
+            "oportunidade comercial futura", "oportunidades comerciais futuras",
+            "oportunidades podem ser consideradas", "oportunidade pode ser considerada",
+        )
+    )
+    oportunidade_crm_explicita = any(
+        t in texto
+        for t in (
+            "oportunidade do crm", "oportunidades do crm", "oportunidade no crm", "oportunidades no crm",
+            "pipeline", "status da oportunidade", "estágio da oportunidade", "estagio da oportunidade",
+            "probabilidade da oportunidade", "oportunidade registrada", "oportunidades registradas",
+            "oportunidade vinculada", "oportunidades vinculadas", "oportunidade relacionada",
+            "oportunidades relacionadas", "oportunidade associada", "oportunidades associadas",
+            "oportunidades abertas", "oportunidades ganhas", "oportunidades perdidas",
+        )
+    )
+    if oportunidade_futura_conceitual and not oportunidade_crm_explicita:
+        requeridas.discard("oportunidades")
+
+    if any(t in texto for t in ("proposta", "propostas", "aceite", "aceita", "aceito", "recusada", "recusado")):
+        requeridas.add("propostas")
+    if any(
+        t in texto
+        for t in (
+            "pedido", "pedidos", "acompanhamento", "ciclo operacional", "carrier", "faturado",
+            "faturamento", "entregue", "entrega", "instalado", "instalação", "instalacao", "encerrado",
+            "número da nf", "numero da nf", "número de série", "numero de serie",
+        )
+    ):
+        requeridas.add("pedidos")
+    if any(t in texto for t in ("atividade", "atividades", "visita", "visitas", "agenda", "última interação", "ultima interacao")):
+        requeridas.add("atividades")
+    return requeridas
+
+
+def _evidencias_presentes_crm(rastreio: list[dict[str, Any]], fontes_web: list[dict[str, str]]) -> set[str]:
+    presentes = set(_ORIGINAL_EVIDENCIAS_PRESENTES(rastreio, fontes_web))
+    for item in rastreio:
+        if item.get("tipo") != "CTI":
+            continue
+        if str(item.get("ferramenta") or "") != "consultar_dominio_cti":
+            continue
+        dominio = str((item.get("argumentos") or {}).get("dominio") or "")
+        if dominio in _DOMINIOS_CRM:
+            presentes.add(dominio)
+    return presentes
 
 
 # Aliases públicos legados preservados de forma deliberada.
