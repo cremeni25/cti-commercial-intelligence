@@ -5,6 +5,7 @@ import unicodedata
 from typing import Any
 
 from . import ia_comercial_agente_crm as _agente
+from .ia009_continuidade_semantica import eh_transformacao_pura, pediu_atualizacao_explicita
 from .ia_comercial_artefatos import detectar_intencao_artefato
 
 
@@ -28,24 +29,6 @@ def _ultima_mensagem(historico: list[dict[str, str]], papel: str) -> str:
     return ""
 
 
-def _pedido_transformacao_artefato(mensagem_usuario: str, solicitados: set[str]) -> bool:
-    if not solicitados:
-        return False
-    texto = _normalizar(mensagem_usuario)
-    referencias = (
-        "resposta acima",
-        "informacoes acima",
-        "informacoes apresentadas",
-        "dados apresentados",
-        "resposta anterior",
-        "analise acima",
-        "resultado acima",
-        "disposicao das respostas",
-        "com base no que foi apresentado",
-    )
-    return any(ref in texto for ref in referencias)
-
-
 def _snapshot_id(texto: str) -> str:
     return hashlib.sha256(str(texto or "").encode("utf-8")).hexdigest()[:24]
 
@@ -64,12 +47,14 @@ def gerar_resposta_agente(
 
     transforma_snapshot = bool(
         resposta_anterior
-        and _pedido_transformacao_artefato(pergunta, solicitados)
+        and solicitados
+        and eh_transformacao_pura(pergunta)
     )
     repete_pergunta = bool(
         resposta_anterior
         and pergunta_anterior
         and _normalizar(pergunta) == _normalizar(pergunta_anterior)
+        and not pediu_atualizacao_explicita(pergunta)
     )
 
     if transforma_snapshot or repete_pergunta:
@@ -86,6 +71,7 @@ def gerar_resposta_agente(
             "snapshot_evidencial_id": snapshot,
             "controle_snapshot_evidencial": "reutilizado_sem_nova_leitura",
             "controle_fontes_snapshot": "uma_execucao_multifonte_um_snapshot",
+            "controle_continuidade_semantica": "transformacao_pura_sem_novo_escopo" if transforma_snapshot else "repeticao_literal_sem_atualizacao",
             "ia009_contexto_pos_sintese": {
                 "solicitados": sorted(solicitados),
                 "referencia_texto": resposta_anterior,
@@ -107,9 +93,10 @@ def gerar_resposta_agente(
     )
     metadados = dict(metadados or {})
     metadados["controle_fontes_snapshot"] = "uma_execucao_multifonte_um_snapshot"
+    metadados["controle_continuidade_semantica"] = "novo_escopo_exige_nova_execucao_unica"
     metadados["ia009_contexto_pos_sintese"] = {
         "solicitados": sorted(solicitados),
-        "referencia_texto": resposta_anterior if _pedido_transformacao_artefato(pergunta, solicitados) else "",
+        "referencia_texto": "",
         "modo": "NOVA_EXECUCAO_UNICA",
     }
     return resposta_texto, metadados
