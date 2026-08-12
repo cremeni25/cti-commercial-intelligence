@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Loader2, Search } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -26,6 +27,7 @@ const tiposOportunidade = [
 ] as const
 
 function texto(valor: unknown): string { return String(valor ?? "").trim() }
+function chave(valor: unknown): string { return texto(valor).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR") }
 function campanhaTecnica(valor: string): string {
   return texto(valor).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "")
 }
@@ -37,6 +39,9 @@ function normalizarCliente(item: Registro): Cliente | null {
 
 export default function NovaOportunidadePage() {
   const { usuario } = useAuth()
+  const search = useSearchParams()
+  const clienteContexto = texto(search.get("cliente"))
+  const nomeContexto = texto(search.get("nome"))
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscaCliente, setBuscaCliente] = useState("")
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
@@ -52,10 +57,17 @@ export default function NovaOportunidadePage() {
     let ativo = true
     fetch("/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO", { cache: "no-store" })
       .then(async (resposta) => (resposta.ok ? resposta.json() : []))
-      .then((dados) => { if (ativo) setClientes((Array.isArray(dados) ? dados : []).map((item) => normalizarCliente(item as Registro)).filter(Boolean).sort((a, b) => (a as Cliente).nome.localeCompare((b as Cliente).nome, "pt-BR")) as Cliente[]) })
+      .then((dados) => {
+        if (!ativo) return
+        const listaClientes = (Array.isArray(dados) ? dados : []).map((item) => normalizarCliente(item as Registro)).filter(Boolean).sort((a, b) => (a as Cliente).nome.localeCompare((b as Cliente).nome, "pt-BR")) as Cliente[]
+        setClientes(listaClientes)
+        const inicial = listaClientes.find((item) => clienteContexto && item.id === clienteContexto) || listaClientes.find((item) => nomeContexto && chave(item.nome) === chave(nomeContexto))
+        if (inicial) { setClienteSelecionado(inicial); setBuscaCliente(inicial.nome) }
+        else if (nomeContexto) setBuscaCliente(nomeContexto)
+      })
       .catch(() => { if (ativo) setClientes([]) })
     return () => { ativo = false }
-  }, [])
+  }, [clienteContexto, nomeContexto])
 
   const sugestoes = useMemo(() => {
     const termo = buscaCliente.trim().toLocaleLowerCase("pt-BR")
@@ -125,7 +137,7 @@ export default function NovaOportunidadePage() {
   return <main className="min-h-[100dvh] bg-[#020817] pb-24 text-white">
     <header className="sticky top-0 z-30 border-b border-[#16325c] bg-[#061126]/95 px-4 py-3"><div className="mx-auto flex w-full max-w-3xl items-center gap-3"><Link href="/crm-app/oportunidades" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20} /></Link><div><p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-xl font-bold">Nova oportunidade</h1><p className="text-xs text-slate-400">Cadastro direto no núcleo comercial</p></div></div></header>
     <div className="mx-auto w-full max-w-3xl px-4 py-5">
-      <section className="mb-4 rounded-3xl border border-[#16325c] bg-[#0a2242] p-5"><div className="flex items-center gap-3"><div className="grid size-12 place-items-center rounded-2xl bg-cyan-500/10 text-cyan-300"><BriefcaseBusiness /></div><div><p className="text-xs text-slate-400">Operação comercial</p><h2 className="text-lg font-bold">Abrir nova negociação</h2></div></div></section>
+      <section className="mb-4 rounded-3xl border border-[#16325c] bg-[#0a2242] p-5"><div className="flex items-center gap-3"><div className="grid size-12 place-items-center rounded-2xl bg-cyan-500/10 text-cyan-300"><BriefcaseBusiness /></div><div><p className="text-xs text-slate-400">Operação comercial</p><h2 className="text-lg font-bold">Abrir nova negociação</h2>{clienteSelecionado && <p className="mt-1 text-xs text-emerald-300">Cliente preservado do dossiê: {clienteSelecionado.nome}</p>}</div></div></section>
       {erro && <div className="mb-4 rounded-2xl border border-red-500/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">{erro}</div>}
       {sucesso && <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-950/25 px-4 py-3 text-sm text-emerald-200"><CheckCircle2 size={18} />{sucesso}</div>}
       <form onSubmit={salvar} className="space-y-4 rounded-3xl border border-[#16325c] bg-[#071a33] p-5">
