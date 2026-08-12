@@ -1,3 +1,4 @@
+from services.ia009_continuidade_semantica import eh_transformacao_pura, residual_factual_transformacao
 from services.ia_comercial_artefatos import (
     construir_artefatos,
     detectar_intencao_artefato,
@@ -6,7 +7,7 @@ from services.ia_comercial_artefatos import (
     gerar_svg_grafico,
 )
 from services.ia_comercial_artefatos_patch import _pedido_transformacao_artefato
-from services.ia_comercial_artefatos_pos_sintese import _graficos_multifonte
+from services.ia_comercial_artefatos_pos_sintese import _graficos_multifonte, _separar_blocos
 
 
 RESPOSTA_IMPLEMENTADORAS = """Pela análise do histórico ANFIR disponível no CTI, as cinco implementadoras mais frequentes são:
@@ -37,11 +38,44 @@ Complementando com dados da web, as cinco maiores por unidades emplacadas são:
 5. Truckvan — 2.123 unidades (2,39%)
 """
 
+RESPOSTA_MULTIFONTE_COM_TABELA_CTI_DEPOIS = RESPOSTA_MULTIFONTE + """
 
-def test_pedido_real_reconhece_grafico():
+---
+
+**Gráfico comparativo — número de registros CTI das 5 implementadoras mais frequentes:**
+
+| Implementadora | Registros CTI |
+|----------------|---------------|
+| IBIPORÃ        | 1118          |
+| PAVAN          | 763           |
+| FIBRA WEST     | 514           |
+| HIGH FLEX      | 305           |
+| RANDON         | 240           |
+
+**Resumo:**
+- Ranking CTI: frequência histórica.
+- Ranking Web: unidades emplacadas.
+"""
+
+
+def test_pedido_real_reconhece_grafico_e_transformacao_pura():
     pedido = "De acordo com a resposta acima, gere um grafico utilizando a disposição das respostas apresentadas"
     assert detectar_intencao_artefato(pedido) == {"GRAFICO"}
+    assert eh_transformacao_pura(pedido) is True
+    assert residual_factual_transformacao(pedido) == ""
     assert _pedido_transformacao_artefato(pedido, {"GRAFICO"}) is True
+
+
+def test_novo_recorte_factual_nao_reutiliza_snapshot():
+    pedido = (
+        "Pesquise e liste as 05 maiores implementadoras com base no CTI e compare com as 05 maiores implementadoras "
+        "com base na web do Brasil, preciso que sejam dados de implementos frigoríficos, gere também gráfico utilizando "
+        "a disposição das respostas apresentadas"
+    )
+    assert detectar_intencao_artefato(pedido) == {"GRAFICO"}
+    assert eh_transformacao_pura(pedido) is False
+    assert "frigorificos" in residual_factual_transformacao(pedido)
+    assert _pedido_transformacao_artefato(pedido, {"GRAFICO"}) is False
 
 
 def test_relatorio_implica_pdf_baixavel():
@@ -82,6 +116,19 @@ def test_snapshot_final_multifonte_gera_dois_graficos_com_as_metricas_da_mesma_r
     assert [item["valor"] for item in externo["dados"]] == [22226.0, 21173.0, 10874.0, 7409.0, 2123.0]
     assert all(item["unidade"] == "unidades" for item in externo["dados"])
     assert externo["dados"][0]["detalhe"] == "25,07% do mercado"
+
+
+def test_bloco_web_termina_antes_de_tabela_cti_repetida():
+    bloco_cti, bloco_web = _separar_blocos(RESPOSTA_MULTIFONTE_COM_TABELA_CTI_DEPOIS)
+    assert "Ibiporã — 1.118 registros" in bloco_cti
+    assert "Randon — 22.226 unidades" in bloco_web
+    assert "| IBIPORÃ        | 1118" not in bloco_web
+
+    graficos = _graficos_multifonte(RESPOSTA_MULTIFONTE_COM_TABELA_CTI_DEPOIS)
+    assert len(graficos) == 2
+    externo = graficos[1]
+    assert [item["label"] for item in externo["dados"]] == ["Randon", "Facchini", "Librelato", "Guerra", "Truckvan"]
+    assert len(externo["dados"]) == 5
 
 
 def test_formatos_linha_e_pizza_sao_deterministicos():
