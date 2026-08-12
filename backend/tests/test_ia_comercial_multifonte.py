@@ -2,28 +2,28 @@ from __future__ import annotations
 
 import pytest
 
+from services import ia_comercial_agente_crm as agente_crm
 from services import ia_comercial_sintese_crm as multifonte
 from services.ia_comercial_cti import IAComercialOpenAIError
 
 
-def test_cruzamento_expresso_web_portfolio_vendas_restringe_fontes():
+def test_cruzamento_expresso_web_portfolio_vendas_usa_universo_cti_mais_web():
     pergunta = (
         "Quais são as novidades recentes do mercado de transporte refrigerado e como elas se comparam "
         "com nosso portfólio e nossas vendas no CTI?"
     )
-    requeridas = multifonte._fontes_requeridas_ia004(pergunta)
-    assert requeridas == {"web", "produtos", "vendas"}
+    requeridas = agente_crm._fontes_requeridas_universais(pergunta)
+    assert requeridas == {"universo_cti", "web"}
 
-    ferramentas, nomes = multifonte._ferramentas_permitidas_multifonte(requeridas)
-    assert nomes == {"web_search", "consultar_catalogo_produtos_cti", "consultar_dominio_cti"}
-    assert all(
-        (item.get("type") == "web_search")
-        or item.get("name") in {"consultar_catalogo_produtos_cti", "consultar_dominio_cti"}
-        for item in ferramentas
-    )
+    token = agente_crm._EXECUCAO_WEB_PURA.set(False)
+    try:
+        ferramentas = agente_crm._ferramentas_universais()
+    finally:
+        agente_crm._EXECUCAO_WEB_PURA.reset(token)
 
-    dominio = next(item for item in ferramentas if item.get("name") == "consultar_dominio_cti")
-    assert dominio["parameters"]["properties"]["dominio"]["enum"] == ["vendas"]
+    nomes = {item.get("name") for item in ferramentas if item.get("type") == "function"}
+    assert nomes == {"catalogar_universo_cti", "consultar_universo_cti"}
+    assert any(item.get("type") == "web_search" for item in ferramentas)
 
 
 def test_multifonte_nao_libera_anfir_territorio_clientes_sem_pedido():
