@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, Check, ClipboardCheck, Loader2, MapPinned, Search } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -16,14 +15,12 @@ function chave(valor: unknown): string { return texto(valor).normalize("NFD").re
 
 export default function NovaAtividadePage() {
   const { usuario } = useAuth()
-  const search = useSearchParams()
-  const clienteContexto = texto(search.get("cliente"))
-  const oportunidadeContexto = texto(search.get("oportunidade"))
   const [clientes,setClientes]=useState<Cliente[]>([]), [negociacoes,setNegociacoes]=useState<Negociacao[]>([])
   const [clienteBusca,setClienteBusca]=useState(""), [cliente,setCliente]=useState<Cliente|null>(null), [oportunidadeId,setOportunidadeId]=useState(""), [tipo,setTipo]=useState("FOLLOW_UP")
   const [carregando,setCarregando]=useState(true), [salvando,setSalvando]=useState(false), [erro,setErro]=useState(""), [sucesso,setSucesso]=useState("")
 
   useEffect(()=>{let ativo=true; void (async()=>{setCarregando(true);setErro("");try{
+    const params=new URLSearchParams(window.location.search),clienteContexto=texto(params.get("cliente")),oportunidadeContexto=texto(params.get("oportunidade"))
     const [clientesResposta,nucleoResposta]=await Promise.all([fetch("/api/crm-proxy/crm-app/clientes",{cache:"no-store"}),fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"})])
     const clientesDados=await clientesResposta.json().catch(()=>[]), nucleoDados=await nucleoResposta.json().catch(()=>[])
     if(!clientesResposta.ok) throw new Error(String((clientesDados as Registro).detail||`Clientes: HTTP ${clientesResposta.status}`))
@@ -33,14 +30,13 @@ export default function NovaAtividadePage() {
     const listaNegociacoes=(Array.isArray(nucleoDados)?nucleoDados:[]).map((item:Registro)=>({oportunidade_id:texto(item.oportunidade_id),cliente_id:texto(item.cliente_id),cliente_nome:texto(item.cliente_nome),titulo:texto(item.titulo)||"Oportunidade comercial",etapa:texto(item.etapa)||"OPORTUNIDADE",proposta_id:texto(item.proposta_id)||null,proposta_numero:texto(item.proposta_numero)||null,pedido_id:texto(item.pedido_id)||null,pedido_numero:texto(item.pedido_numero)||null,encerrada:Boolean(item.encerrada)})).filter((item)=>item.oportunidade_id)
     setClientes(listaClientes)
     setNegociacoes(listaNegociacoes)
-
     const negociacaoInicial=oportunidadeContexto?listaNegociacoes.find((item)=>item.oportunidade_id===oportunidadeContexto):undefined
     const idClienteInicial=clienteContexto||negociacaoInicial?.cliente_id||""
     const nomeClienteInicial=negociacaoInicial?.cliente_nome||""
     const clienteInicial=listaClientes.find((item)=>item.id===idClienteInicial)||listaClientes.find((item)=>nomeClienteInicial&&chave(item.nome)===chave(nomeClienteInicial))
     if(clienteInicial){setCliente(clienteInicial);setClienteBusca(clienteInicial.nome)}
     if(negociacaoInicial)setOportunidadeId(negociacaoInicial.oportunidade_id)
-  }catch(falha){if(ativo)setErro(falha instanceof Error?falha.message:"Não foi possível carregar clientes e negociações.")}finally{if(ativo)setCarregando(false)}})();return()=>{ativo=false}},[clienteContexto,oportunidadeContexto])
+  }catch(falha){if(ativo)setErro(falha instanceof Error?falha.message:"Não foi possível carregar clientes e negociações.")}finally{if(ativo)setCarregando(false)}})();return()=>{ativo=false}},[])
 
   const sugestoes=useMemo(()=>{const termo=clienteBusca.trim().toLocaleLowerCase("pt-BR");if(termo.length<2||cliente)return[];return clientes.filter((item)=>`${item.nome} ${item.cidade||""} ${item.estado||""}`.toLocaleLowerCase("pt-BR").includes(termo)).slice(0,12)},[clienteBusca,cliente,clientes])
   const negociacoesDoCliente=useMemo(()=>negociacoes.filter((item)=>!item.encerrada&&(item.cliente_id===cliente?.id||item.cliente_nome?.toLocaleLowerCase("pt-BR")===cliente?.nome.toLocaleLowerCase("pt-BR"))),[cliente,negociacoes])
