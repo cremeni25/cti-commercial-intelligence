@@ -90,8 +90,6 @@ async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
     return NextResponse.json([])
   }
 
-  // O cadastro de oportunidade não depende da listagem legada. Uma falha
-  // dessa leitura não pode bloquear a abertura nem o envio do formulário.
   if (caminho === "crm/oportunidades") {
     return NextResponse.json([])
   }
@@ -153,13 +151,25 @@ async function encaminhar(
       if (alternativa) return alternativa
     }
 
-    const corpo = await resposta.text()
-    return new NextResponse(corpo, {
+    const tipoResposta = resposta.headers.get("content-type") || "application/json"
+    const disposicao = resposta.headers.get("content-disposition")
+    const headersResposta = new Headers({ "content-type": tipoResposta })
+    if (disposicao) headersResposta.set("content-disposition", disposicao)
+
+    if (
+      tipoResposta.includes("application/pdf") ||
+      tipoResposta.includes("image/") ||
+      tipoResposta.includes("application/octet-stream")
+    ) {
+      return new NextResponse(await resposta.arrayBuffer(), {
+        status: resposta.status,
+        headers: headersResposta,
+      })
+    }
+
+    return new NextResponse(await resposta.text(), {
       status: resposta.status,
-      headers: {
-        "content-type":
-          resposta.headers.get("content-type") || "application/json",
-      },
+      headers: headersResposta,
     })
   } catch (erro) {
     if (request.method === "GET") {
