@@ -1,58 +1,68 @@
 from services import ia_comercial_agente_crm as crm
 
 
-def test_pergunta_real_exige_cti_e_web():
+def test_pergunta_real_exige_consulta_universal_e_web():
     pergunta = "entre os dados contidos no cti e através de pesquisa na web, relacione as 05 maiores implementadoras do Brasil"
 
-    requeridas = crm._fontes_requeridas_ia003(pergunta)
+    requeridas = crm._fontes_requeridas_universais(pergunta)
 
-    assert "implementadoras_cti" in requeridas
-    assert "web" in requeridas
-    assert requeridas != {"web"}
+    assert requeridas == {"universo_cti", "web"}
 
 
-def test_pesquisa_na_web_e_reconhecida_como_web_explicita():
-    pergunta = "através de pesquisa na web, verifique as maiores implementadoras"
+def test_qualquer_pergunta_cti_nao_depende_de_palavra_chave_de_dominio():
+    perguntas = [
+        "quem aparece mais vezes?",
+        "onde temos maior concentração?",
+        "o que merece atenção hoje?",
+        "qual cliente tem mais histórico?",
+        "quais são as maiores implementadoras?",
+    ]
 
-    assert crm._necessita_web_autonoma(pergunta) is True
-
-
-def test_referencia_generica_ao_cti_e_reconhecida_como_cruzamento():
-    pergunta = "entre os dados contidos no CTI, quais implementadoras mais aparecem?"
-
-    assert crm._pede_cruzamento_cti_explicito(pergunta) is True
-
-
-def test_implementadora_sem_web_continua_ancorada_no_cti():
-    pergunta = "quais são as maiores implementadoras do Brasil?"
-
-    requeridas = crm._fontes_requeridas_ia003(pergunta)
-
-    assert requeridas == {"implementadoras_cti"}
+    for pergunta in perguntas:
+        assert "universo_cti" in crm._fontes_requeridas_universais(pergunta)
 
 
-def test_instrucao_de_evidencia_separa_implementadora_de_fabricante():
-    instrucao = crm._instrucao_evidencias_faltantes_crm({"implementadoras_cti"})
+def test_catalogo_so_nao_satisfaz_evidencia_factual():
+    rastreio = [
+        {"tipo": "CTI", "ferramenta": "catalogar_universo_cti", "argumentos": {}, "resumo": {"erro": None}},
+    ]
 
-    assert "consultar_territorio_cti" in instrucao
-    assert "ranking_implementadoras" in instrucao
-    assert "ranking_fabricantes_equipamento" in instrucao
-    assert "não use" in instrucao
+    presentes = crm._evidencias_presentes_universais(rastreio, [])
 
-
-def test_sintese_cti_first_nao_permite_substituicao_por_fabricantes():
-    instrucao = crm._instrucao_sintese_final_crm({"implementadoras_cti", "web"})
-
-    assert "ranking_implementadoras" in instrucao
-    assert "Não substitua implementadoras por fabricantes de equipamento" in instrucao
-    assert "frequência/volume de registros históricos" in instrucao
-    assert "mesmas implementadoras" in instrucao
+    assert "catalogo_cti" in presentes
+    assert "universo_cti" not in presentes
 
 
-def test_grounding_semantico_faz_parte_do_prompt_final():
+def test_consulta_universal_satisfaz_evidencia_factual():
+    rastreio = [
+        {"tipo": "CTI", "ferramenta": "consultar_universo_cti", "argumentos": {"fonte": "historico_anfir"}, "resumo": {"erro": None}},
+    ]
+
+    presentes = crm._evidencias_presentes_universais(rastreio, [])
+
+    assert "universo_cti" in presentes
+
+
+def test_prompt_final_proibe_dicionario_de_palavras_chave_e_sql_livre():
     crm._aplicar_patch()
+    instrucoes = crm.base.INSTRUCOES_AGENTE.casefold()
 
-    assert "GROUNDING SEMÂNTICO CTI" in crm.base.INSTRUCOES_AGENTE
-    assert "linguagem comercial natural" in crm.base.INSTRUCOES_AGENTE
-    assert "IMPLEMENTADORA" in crm.base.INSTRUCOES_AGENTE
-    assert "FABRICANTE DE EQUIPAMENTO" in crm.base.INSTRUCOES_AGENTE
+    assert "linguagem natural livre" in instrucoes
+    assert "nunca exija palavras-chave" in instrucoes
+    assert "não existe uma ferramenta diferente para cada palavra ou entidade" in instrucoes
+    assert "não é sql livre" in instrucoes
+    assert "implementadora e fabricante de equipamento são conceitos distintos" in instrucoes
+
+
+def test_ferramentas_universais_nao_expoem_dominio_especifico():
+    token = crm._EXECUCAO_WEB_PURA.set(False)
+    try:
+        ferramentas = crm._ferramentas_universais()
+    finally:
+        crm._EXECUCAO_WEB_PURA.reset(token)
+
+    nomes = {item.get("name") for item in ferramentas if item.get("type") == "function"}
+    assert nomes == {"catalogar_universo_cti", "consultar_universo_cti"}
+    assert not any("implementadora" in str(nome) for nome in nomes)
+    assert not any("cliente" in str(nome) for nome in nomes)
+    assert not any("pedido" in str(nome) for nome in nomes)
