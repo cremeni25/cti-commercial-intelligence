@@ -165,55 +165,66 @@ def sintetizar_fatos_execucao(
     usuario_id: str,
     tipo_usuario: str,
 ):
-    resposta_factual, metadados_sintese = _ORIGINAL_SINTETIZAR(
-        pergunta_atual=pergunta_atual,
-        metadados=metadados,
-        usuario_id=usuario_id,
-        tipo_usuario=tipo_usuario,
-    )
-    metadados_sintese = dict(metadados_sintese or {})
     contexto = dict((metadados or {}).get("ia009_contexto_pos_sintese") or {})
+    modo = str(contexto.get("modo") or "")
     solicitados = set(contexto.get("solicitados") or [])
-    if not solicitados:
-        return resposta_factual, metadados_sintese
+    reutiliza_snapshot = modo in {"TRANSFORMACAO_ARTEFATO", "REPETICAO_PERGUNTA"}
+
+    if reutiliza_snapshot:
+        resposta_factual = None
+        metadados_sintese: dict[str, Any] = {
+            "controle_ressintese": "bloqueada_snapshot_reutilizado",
+        }
+    else:
+        resposta_factual, metadados_sintese = _ORIGINAL_SINTETIZAR(
+            pergunta_atual=pergunta_atual,
+            metadados=metadados,
+            usuario_id=usuario_id,
+            tipo_usuario=tipo_usuario,
+        )
+        metadados_sintese = dict(metadados_sintese or {})
 
     referencia = str(contexto.get("referencia_texto") or "").strip()
     texto_final = referencia or str(resposta_factual or "").strip()
-    if not texto_final:
-        return resposta_factual, metadados_sintese
 
-    artefatos: list[dict[str, Any]] = []
-    if "GRAFICO" in solicitados:
-        artefatos.extend(_graficos_multifonte(texto_final))
-        if not artefatos:
-            artefatos = construir_artefatos(
-                mensagem=pergunta_atual,
-                resposta_texto=texto_final,
-                historico=[],
-                fontes=(metadados or {}).get("fontes") or [],
-            )
+    if solicitados and texto_final:
+        artefatos: list[dict[str, Any]] = []
+        if "GRAFICO" in solicitados:
+            artefatos.extend(_graficos_multifonte(texto_final))
+            if not artefatos:
+                artefatos = construir_artefatos(
+                    mensagem=pergunta_atual,
+                    resposta_texto=texto_final,
+                    historico=[],
+                    fontes=(metadados or {}).get("fontes") or [],
+                )
 
-    if "PDF" in solicitados or "RELATORIO" in solicitados:
-        if not any(item.get("tipo") == "RELATORIO_PDF" for item in artefatos):
-            artefatos.append(
-                {
-                    "tipo": "RELATORIO_PDF",
-                    "titulo": "Relatório — IA Comercial CTI",
-                    "fonte_dados": "snapshot_final",
-                    "inclui_grafico": any(item.get("tipo") == "GRAFICO" and item.get("dados") for item in artefatos),
-                    "fontes": (metadados or {}).get("fontes") or [],
-                    "auditavel": True,
-                }
-            )
+        if "PDF" in solicitados or "RELATORIO" in solicitados:
+            if not any(item.get("tipo") == "RELATORIO_PDF" for item in artefatos):
+                artefatos.append(
+                    {
+                        "tipo": "RELATORIO_PDF",
+                        "titulo": "Relatório — IA Comercial CTI",
+                        "fonte_dados": "snapshot_final",
+                        "inclui_grafico": any(item.get("tipo") == "GRAFICO" and item.get("dados") for item in artefatos),
+                        "fontes": (metadados or {}).get("fontes") or [],
+                        "auditavel": True,
+                    }
+                )
 
-    snapshot = str(contexto.get("snapshot_evidencial_id") or "") or _snapshot_id(texto_final)
-    metadados_sintese["artefatos"] = artefatos
-    metadados_sintese["ia009_artefatos_solicitados"] = sorted(solicitados)
-    metadados_sintese["snapshot_evidencial_id"] = snapshot
-    metadados_sintese["controle_snapshot_evidencial"] = "congelado_pos_sintese_final"
-    metadados_sintese["controle_fontes_snapshot"] = "uma_execucao_multifonte_um_snapshot"
-    metadados_sintese["controle_artefatos_multifonte"] = "texto_grafico_pdf_mesmo_snapshot_final"
-    metadados_sintese["artefatos_auditaveis"] = True
+        snapshot = str(contexto.get("snapshot_evidencial_id") or "") or _snapshot_id(texto_final)
+        metadados_sintese["artefatos"] = artefatos
+        metadados_sintese["ia009_artefatos_solicitados"] = sorted(solicitados)
+        metadados_sintese["snapshot_evidencial_id"] = snapshot
+        metadados_sintese["controle_snapshot_evidencial"] = "congelado_pos_sintese_final"
+        metadados_sintese["controle_fontes_snapshot"] = "uma_execucao_multifonte_um_snapshot"
+        metadados_sintese["controle_artefatos_multifonte"] = "texto_grafico_pdf_mesmo_snapshot_final"
+        metadados_sintese["artefatos_auditaveis"] = True
+    elif reutiliza_snapshot and referencia:
+        metadados_sintese["snapshot_evidencial_id"] = str(contexto.get("snapshot_evidencial_id") or "") or _snapshot_id(referencia)
+        metadados_sintese["controle_snapshot_evidencial"] = "reutilizado_sem_nova_leitura"
+        metadados_sintese["controle_fontes_snapshot"] = "uma_execucao_multifonte_um_snapshot"
+
     return resposta_factual, metadados_sintese
 
 
