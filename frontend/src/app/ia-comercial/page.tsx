@@ -5,14 +5,24 @@ import { FormEvent, useEffect, useRef, useState } from "react"
 import { Bot, Loader2, MessageSquarePlus, Send, ShieldCheck } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import IaArtefatos from "@/components/ia/IaArtefatos"
 import { getSupabaseClient } from "@/core/database/supabase"
 
 type Conversa = { id: string; titulo: string; updated_at?: string }
+type ArtefatoMensagem = {
+  tipo: string
+  formato?: string
+  titulo?: string
+  dados?: Array<{ label: string; valor: number; unidade?: string }>
+  status?: string
+  mensagem?: string
+}
 type Mensagem = {
   id?: string
   papel: "user" | "assistant" | "system"
   conteudo: string
   fontes?: Array<{ tipo?: string; descricao?: string }>
+  metadados?: { artefatos?: ArtefatoMensagem[] }
   created_at?: string
 }
 
@@ -204,6 +214,9 @@ export default function IaComercialPage() {
                 {mensagens.map((mensagem, indice) => (
                   <article key={mensagem.id || `${mensagem.papel}-${indice}`} className={`max-w-[96%] rounded-2xl px-4 py-3 text-sm leading-6 sm:max-w-[92%] md:px-5 md:py-4 md:text-[15px] xl:max-w-[88%] ${mensagem.papel === "user" ? "ml-auto bg-cyan-500 text-slate-950" : "border border-[#18345e] bg-[#091a33] text-slate-200"}`}>
                     <div className="whitespace-pre-wrap break-words">{mensagem.conteudo}</div>
+                    {mensagem.papel === "assistant" ? (
+                      <IaArtefatos mensagemId={mensagem.id} artefatos={mensagem.metadados?.artefatos} />
+                    ) : null}
                     {mensagem.papel === "assistant" && mensagem.fontes?.length ? (
                       <div className="mt-3 border-t border-[#18345e] pt-2 text-xs text-slate-500">Fonte: {mensagem.fontes.map((fonte) => fonte.descricao || fonte.tipo).join(" · ")}</div>
                     ) : null}
