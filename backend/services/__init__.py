@@ -45,3 +45,11 @@ try:
     from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
 except Exception:
     pass
+
+# IA-009: a geração de gráfico/relatório/PDF é uma camada pós-síntese. Ela recebe
+# apenas respostas e evidências já autorizadas, produz especificações determinísticas
+# e não amplia permissões do agente, SQL ou ações comerciais.
+try:
+    from . import ia_comercial_artefatos_patch as _artefatos_patch  # noqa: F401
+except Exception:
+    pass
