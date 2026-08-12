@@ -37,3 +37,11 @@ try:
     from . import ia_comercial_ontologia as _ontologia  # noqa: F401
 except Exception:
     pass
+
+# Guard final: se uma execução ainda tentar produzir ranking com fonte cadastral
+# ou derivar a web para outro setor, refaz a investigação uma vez e bloqueia a
+# resposta caso a ontologia continue inconsistente.
+try:
+    from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
+except Exception:
+    pass
