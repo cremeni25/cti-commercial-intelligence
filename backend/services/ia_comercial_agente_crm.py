@@ -76,15 +76,15 @@ def _necessita_web(mensagem: str) -> bool:
         return False
     if _somente_web_explicito(mensagem):
         return True
-    return any(
-        termo in texto
-        for termo in (
-            "web", "internet", "pesquise", "pesquisa", "procure", "mercado atual",
-            "atualmente", "hoje", "mais recente", "mais recentes", "notícia", "noticia",
-            "notícias", "noticias", "fonte externa", "fontes externas", "site oficial",
-            "vigente", "lançamento", "lancamento", "preço atual", "preco atual",
-        )
+
+    marcadores_externos_ou_temporais = (
+        "web", "internet", "pesquise", "pesquisa", "procure", "mercado", "mercado atual",
+        "atualmente", "hoje", "recente", "recentes", "mais recente", "mais recentes",
+        "novidade", "novidades", "notícia", "noticia", "notícias", "noticias",
+        "fonte externa", "fontes externas", "site oficial", "vigente", "vigentes",
+        "lançamento", "lancamento", "lançamentos", "lancamentos", "preço atual", "preco atual",
     )
+    return any(termo in texto for termo in marcadores_externos_ou_temporais)
 
 
 def _fontes_requeridas_universais(mensagem: str) -> set[str]:
