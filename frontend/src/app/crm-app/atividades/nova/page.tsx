@@ -20,7 +20,7 @@ export default function NovaAtividadePage() {
   const [carregando,setCarregando]=useState(true), [salvando,setSalvando]=useState(false), [erro,setErro]=useState(""), [sucesso,setSucesso]=useState("")
 
   useEffect(()=>{let ativo=true; void (async()=>{setCarregando(true);setErro("");try{
-    const params=new URLSearchParams(window.location.search),clienteContexto=texto(params.get("cliente")),oportunidadeContexto=texto(params.get("oportunidade"))
+    const params=new URLSearchParams(window.location.search),clienteContexto=texto(params.get("cliente")),oportunidadeContexto=texto(params.get("oportunidade")),tipoContexto=texto(params.get("tipo")).toUpperCase()
     const [clientesResposta,nucleoResposta]=await Promise.all([fetch("/api/crm-proxy/crm-app/clientes",{cache:"no-store"}),fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"})])
     const clientesDados=await clientesResposta.json().catch(()=>[]), nucleoDados=await nucleoResposta.json().catch(()=>[])
     if(!clientesResposta.ok) throw new Error(String((clientesDados as Registro).detail||`Clientes: HTTP ${clientesResposta.status}`))
@@ -30,6 +30,7 @@ export default function NovaAtividadePage() {
     const listaNegociacoes=(Array.isArray(nucleoDados)?nucleoDados:[]).map((item:Registro)=>({oportunidade_id:texto(item.oportunidade_id),cliente_id:texto(item.cliente_id),cliente_nome:texto(item.cliente_nome),titulo:texto(item.titulo)||"Oportunidade comercial",etapa:texto(item.etapa)||"OPORTUNIDADE",proposta_id:texto(item.proposta_id)||null,proposta_numero:texto(item.proposta_numero)||null,pedido_id:texto(item.pedido_id)||null,pedido_numero:texto(item.pedido_numero)||null,encerrada:Boolean(item.encerrada)})).filter((item)=>item.oportunidade_id)
     setClientes(listaClientes)
     setNegociacoes(listaNegociacoes)
+    if(tipoContexto&&tipos.some(([valor])=>valor===tipoContexto))setTipo(tipoContexto)
     const negociacaoInicial=oportunidadeContexto?listaNegociacoes.find((item)=>item.oportunidade_id===oportunidadeContexto):undefined
     const idClienteInicial=clienteContexto||negociacaoInicial?.cliente_id||""
     const nomeClienteInicial=negociacaoInicial?.cliente_nome||""
