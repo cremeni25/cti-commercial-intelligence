@@ -68,7 +68,7 @@ export default function PipelineOperacional() {
     finally { setCarregando(false) }
   }
 
-  useEffect(() => { void carregar() }, [])
+  useEffect(() => { queueMicrotask(() => void carregar()) }, [])
 
   const visiveis = useMemo(() => dados.filter((item) => mostrarEncerrados || !item.encerrada), [dados, mostrarEncerrados])
   const etapasVisiveis = useMemo(() => {
