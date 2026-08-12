@@ -22,7 +22,7 @@ type Props = {
 
 async function baixarAutenticado(url: string, nomeFallback: string) {
   const supabase = getSupabaseClient()
-  let { data } = await supabase.auth.getSession()
+  const { data } = await supabase.auth.getSession()
   let token = data.session?.access_token
   if (!token) {
     const renovada = await supabase.auth.refreshSession()
