@@ -5,6 +5,7 @@ from services.ia_comercial_artefatos import (
     gerar_pdf_relatorio,
     gerar_svg_grafico,
 )
+from services.ia_comercial_artefatos_patch import _artefatos_multifonte_da_resposta
 
 
 RESPOSTA_IMPLEMENTADORAS = """Pela análise do histórico ANFIR disponível no CTI, as cinco implementadoras mais frequentes são:
@@ -16,6 +17,23 @@ RESPOSTA_IMPLEMENTADORAS = """Pela análise do histórico ANFIR disponível no C
 5. Randon — 240 registros
 
 Esse ranking mede frequência histórica de registros.
+"""
+
+RESPOSTA_MULTIFONTE = """Internamente, pelo universo histórico ANFIR disponível no CTI, as cinco implementadoras com maior número de registros são:
+
+1. Ibiporã — 1.118 registros
+2. Pavan — 763 registros
+3. Fibra West — 514 registros
+4. High Flex — 305 registros
+5. Randon — 240 registros
+
+Externamente, a pesquisa na web relata que as maiores implementadoras do Brasil incluem:
+
+- Facchini S.A.
+- Randon Implementos
+- Librelato S.A.
+- Guerra Implementos Rodoviários
+- Ibiporã Implementos Rodoviários
 """
 
 
@@ -47,6 +65,25 @@ def test_grafico_de_continuidade_usa_resposta_anterior_e_barra_por_padrao():
     assert grafico["formato"] == "BAR"
     assert len(grafico["dados"]) == 5
     assert grafico["dados"][0]["valor"] == 1118.0
+
+
+def test_multifonte_gera_dois_graficos_sem_reconsulta_ou_inventar_metrica():
+    graficos = _artefatos_multifonte_da_resposta(
+        "De acordo com a resposta acima, gere um gráfico utilizando a disposição das respostas apresentadas",
+        [{"role": "assistant", "content": RESPOSTA_MULTIFONTE}],
+    )
+    assert len(graficos) == 2
+    interno, externo = graficos
+    assert interno["proveniencia"] == "CTI"
+    assert interno["formato"] == "BAR"
+    assert [item["valor"] for item in interno["dados"]] == [1118.0, 763.0, 514.0, 305.0, 240.0]
+    assert externo["proveniencia"] == "WEB"
+    assert externo["formato"] == "RANKING"
+    assert [item["label"] for item in externo["dados"]] == [
+        "Facchini S.A", "Randon Implementos", "Librelato S.A", "Guerra Implementos Rodoviários", "Ibiporã Implementos Rodoviários"
+    ]
+    assert [item["valor"] for item in externo["dados"]] == [1.0, 2.0, 3.0, 4.0, 5.0]
+    assert all(item["unidade"] == "posição" for item in externo["dados"])
 
 
 def test_formatos_linha_e_pizza_sao_deterministicos():

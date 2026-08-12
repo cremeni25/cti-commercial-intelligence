@@ -39,19 +39,24 @@ def _artefatos(mensagem: dict) -> list[dict]:
 @router.get("/{mensagem_id}/grafico.svg")
 def baixar_grafico_svg(
     mensagem_id: str,
+    indice: int = 0,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     mensagem = _mensagem_do_usuario(mensagem_id, usuario)
-    if not any(item.get("tipo") == "GRAFICO" and item.get("dados") for item in _artefatos(mensagem)):
-        raise HTTPException(status_code=404, detail="Esta mensagem não possui gráfico baixável.")
+    graficos = [item for item in _artefatos(mensagem) if item.get("tipo") == "GRAFICO" and item.get("dados")]
+    if indice < 0 or indice >= len(graficos):
+        raise HTTPException(status_code=404, detail="Gráfico solicitado não encontrado nesta mensagem.")
+    metadados = dict(mensagem.get("metadados") or {})
+    demais = [item for item in _artefatos(mensagem) if item.get("tipo") != "GRAFICO"]
+    metadados["artefatos"] = [graficos[indice], *demais]
     try:
-        conteudo = gerar_svg_grafico(mensagem.get("metadados") or {})
+        conteudo = gerar_svg_grafico(metadados)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     return Response(
         content=conteudo,
         media_type="image/svg+xml",
-        headers={"Content-Disposition": f'attachment; filename="cti-grafico-{mensagem_id[:8]}.svg"'},
+        headers={"Content-Disposition": f'attachment; filename="cti-grafico-{mensagem_id[:8]}-{indice + 1}.svg"'},
     )
 
 
