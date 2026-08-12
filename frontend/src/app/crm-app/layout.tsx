@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 
+import { CrmAppShellNav } from "@/components/crm-app/CrmAppShellNav"
 import { PwaRegister } from "@/components/pwa/PwaRegister"
 
 export const metadata: Metadata = {
@@ -19,6 +20,7 @@ export default function CrmAppLayout({ children }: { children: React.ReactNode }
     <>
       <PwaRegister />
       {children}
+      <CrmAppShellNav />
     </>
   )
 }
