@@ -179,3 +179,61 @@ def test_status_atividade_restrito(monkeypatch):
             usuario_admin(),
         )
     assert exc.value.status_code == 422
+
+
+def test_confirmacao_concorrente_sem_reserva_nao_executa(monkeypatch):
+    proposta_pendente = {
+        "id": "acao-1",
+        "detalhes": {
+            "status": "PENDENTE_CONFIRMACAO",
+            "tipo_acao": "CRIAR_ATIVIDADE_CRM",
+            "payload": {"cliente_id": "cli-1", "tipo": "ACOMPANHAMENTO"},
+            "resumo": "Criar atividade ACOMPANHAMENTO para o cliente ABC CARGAS LTDA.",
+        },
+    }
+    proposta_em_execucao = {
+        "id": "acao-1",
+        "detalhes": {
+            **proposta_pendente["detalhes"],
+            "status": "EM_EXECUCAO",
+        },
+    }
+    leituras = iter([proposta_pendente, proposta_em_execucao])
+    monkeypatch.setattr(acoes, "_carregar_proposta", lambda *_: next(leituras))
+    monkeypatch.setattr(acoes, "_escopo_autorizado", lambda *_: escopo_base())
+    monkeypatch.setattr(acoes, "_reservar_execucao", lambda *_: False)
+    chamado = {"executar": 0}
+
+    def nunca_executar(*_args, **_kwargs):
+        chamado["executar"] += 1
+        raise AssertionError("requisição que perdeu a reserva não pode executar")
+
+    monkeypatch.setattr(acoes, "_executar", nunca_executar)
+    with pytest.raises(HTTPException) as exc:
+        acoes.confirmar_acao(
+            "acao-1",
+            acoes.ConfirmarAcaoRequest(confirmar=True),
+            usuario_admin(),
+        )
+    assert exc.value.status_code == 409
+    assert "já está em execução" in exc.value.detail
+    assert chamado["executar"] == 0
+
+
+def test_cancelamento_recusa_acao_em_execucao(monkeypatch):
+    monkeypatch.setattr(
+        acoes,
+        "_carregar_proposta",
+        lambda *_: {
+            "id": "acao-1",
+            "detalhes": {
+                "status": "EM_EXECUCAO",
+                "tipo_acao": "CRIAR_ATIVIDADE_CRM",
+                "resumo": "Criar atividade ACOMPANHAMENTO para o cliente ABC CARGAS LTDA.",
+            },
+        },
+    )
+    with pytest.raises(HTTPException) as exc:
+        acoes.cancelar_acao("acao-1", usuario_admin())
+    assert exc.value.status_code == 409
+    assert "em execução" in exc.value.detail
