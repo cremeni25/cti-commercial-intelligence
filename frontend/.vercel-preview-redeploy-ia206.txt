@@ -1,1 +1,0 @@
-Forca novo evento de frontend na branch agent/ia-nucleo-orquestrador para reacionar a integracao Vercel do PR #206 apos a correcao responsiva da IA Comercial. Sem efeito funcional em producao e sem alteracao de backend.
