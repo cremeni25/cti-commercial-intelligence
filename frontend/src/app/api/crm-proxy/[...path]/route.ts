@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { caminhoCanonicoLeitura } from "@/lib/crm-canonical"
+
 const BACKEND_CTI = "https://cti-backend-5ugf.onrender.com"
 
 type Registro = Record<string, unknown>
@@ -124,7 +126,8 @@ async function encaminhar(
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params
-  const caminho = path.join("/")
+  const caminhoSolicitado = path.join("/")
+  const caminho = caminhoCanonicoLeitura(caminhoSolicitado, request.method)
   const destino = new URL(`${BACKEND_CTI}/${caminho}`)
   request.nextUrl.searchParams.forEach((valor, chave) =>
     destino.searchParams.set(chave, valor),
@@ -147,7 +150,7 @@ async function encaminhar(
     })
 
     if (!resposta.ok && request.method === "GET") {
-      const alternativa = await fallbackSeguro(caminho)
+      const alternativa = await fallbackSeguro(caminhoSolicitado)
       if (alternativa) return alternativa
     }
 
@@ -173,7 +176,7 @@ async function encaminhar(
     })
   } catch (erro) {
     if (request.method === "GET") {
-      const alternativa = await fallbackSeguro(caminho).catch(() => null)
+      const alternativa = await fallbackSeguro(caminhoSolicitado).catch(() => null)
       if (alternativa) return alternativa
     }
 
