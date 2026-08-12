@@ -40,6 +40,11 @@ def _secao_implicita(texto: str, atual: str | None) -> str | None:
         "registros históricos no cti",
         "registros historicos no cti",
         "ranking interno cti",
+        "histórico anfir disponível no cti",
+        "historico anfir disponivel no cti",
+        "histórico anfir do cti",
+        "historico anfir do cti",
+        "banco do cti",
     )
     marcadores_cruzamento = (
         "ranking interno cti e o ranking",
