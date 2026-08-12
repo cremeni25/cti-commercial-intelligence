@@ -29,6 +29,11 @@ def _ultima_mensagem(historico: list[dict[str, str]], papel: str) -> str:
     return ""
 
 
+def _pedido_transformacao_artefato(mensagem_usuario: str, solicitados: set[str]) -> bool:
+    """Compatibilidade: agora só considera transformação quando não há novo conteúdo factual."""
+    return bool(solicitados) and eh_transformacao_pura(mensagem_usuario)
+
+
 def _snapshot_id(texto: str) -> str:
     return hashlib.sha256(str(texto or "").encode("utf-8")).hexdigest()[:24]
 
@@ -47,8 +52,7 @@ def gerar_resposta_agente(
 
     transforma_snapshot = bool(
         resposta_anterior
-        and solicitados
-        and eh_transformacao_pura(pergunta)
+        and _pedido_transformacao_artefato(pergunta, solicitados)
     )
     repete_pergunta = bool(
         resposta_anterior
