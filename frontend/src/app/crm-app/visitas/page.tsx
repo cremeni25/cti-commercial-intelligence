@@ -1,7 +1,8 @@
 "use client"
 
 import Link from "next/link"
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Loader2, MapPinned, Play, Plus, Search, Target, X } from "lucide-react"
 import { useAuth } from "@/core/auth"
 
@@ -14,6 +15,7 @@ type OpcaoBusca = { valor: string; titulo: string; complemento?: string }
 const CONCLUIDOS = new Set(["CONCLUIDA", "CONCLUÍDA", "REALIZADA"])
 
 function texto(valor: unknown) { return String(valor ?? "").trim() }
+function chave(valor: unknown) { return texto(valor).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR") }
 function hoje() { return new Date().toISOString().slice(0, 10) }
 function dataBr(data: string) { return data ? new Date(`${data}T12:00:00`).toLocaleDateString("pt-BR") : "Data não informada" }
 function lista(payload: unknown): Registro[] {
@@ -51,6 +53,10 @@ function objetivoDa(descricaoAtual: string) {
 
 export default function VisitasPage() {
   const { usuario } = useAuth()
+  const search = useSearchParams()
+  const clienteContexto = texto(search.get("cliente"))
+  const oportunidadeContexto = texto(search.get("oportunidade"))
+  const contextoAplicado = useRef(false)
   const [visitas, setVisitas] = useState<Visita[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
@@ -91,7 +97,8 @@ export default function VisitasPage() {
           uf: texto(item.estado || item.uf).toUpperCase(),
         }
       }).filter(Boolean) as Cliente[]
-      setClientes([...new Map(clientesNormalizados.map((item) => [item.id, item])).values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")))
+      const clientesUnicos = [...new Map(clientesNormalizados.map((item) => [item.id, item])).values()].sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"))
+      setClientes(clientesUnicos)
 
       const oportunidadesNormalizadas = lista(oportunidadesPayload).map((item) => ({
         id: texto(item.id || item.oportunidade_id),
@@ -100,6 +107,24 @@ export default function VisitasPage() {
         titulo: texto(item.titulo || item.equipamento) || "Oportunidade",
       })).filter((item) => item.id)
       setOportunidades(oportunidadesNormalizadas)
+
+      if (!contextoAplicado.current && (clienteContexto || oportunidadeContexto)) {
+        const oportunidadeInicial = oportunidadeContexto ? oportunidadesNormalizadas.find((item) => item.id === oportunidadeContexto) : undefined
+        const clienteInicial = clientesUnicos.find((item) => clienteContexto && item.id === clienteContexto)
+          || clientesUnicos.find((item) => oportunidadeInicial?.clienteId && item.id === oportunidadeInicial.clienteId)
+          || clientesUnicos.find((item) => oportunidadeInicial?.cliente && chave(item.nome) === chave(oportunidadeInicial.cliente))
+        if (clienteInicial) {
+          setClienteId(clienteInicial.id)
+          setClienteBusca(clienteInicial.nome)
+          setNovaAberta(true)
+        }
+        if (oportunidadeInicial) {
+          setOportunidadeId(oportunidadeInicial.id)
+          setOportunidadeBusca(oportunidadeInicial.titulo)
+          setNovaAberta(true)
+        }
+        contextoAplicado.current = true
+      }
 
       const nomesClientes = new Map(clientesNormalizados.map((item) => [item.id, item.nome]))
       const nomesOportunidades = new Map(oportunidadesNormalizadas.map((item) => [item.id, item.titulo]))
@@ -127,7 +152,7 @@ export default function VisitasPage() {
     } finally {
       setCarregando(false)
     }
-  }, [])
+  }, [clienteContexto, oportunidadeContexto])
 
   useEffect(() => { void carregar() }, [carregar])
 
