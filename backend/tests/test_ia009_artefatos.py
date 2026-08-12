@@ -35,7 +35,7 @@ def test_extracao_numerica_preserva_valores_reais():
     assert all(item["unidade"] == "registros" for item in serie)
 
 
-def test_grafico_de_continuidade_usa_resposta_anterior():
+def test_grafico_de_continuidade_usa_resposta_anterior_e_barra_por_padrao():
     artefatos = construir_artefatos(
         mensagem="De acordo com a resposta acima, gere um gráfico utilizando a disposição das respostas apresentadas",
         resposta_texto="Segue a mesma análise em formato solicitado.",
@@ -44,8 +44,28 @@ def test_grafico_de_continuidade_usa_resposta_anterior():
     )
     grafico = next(item for item in artefatos if item["tipo"] == "GRAFICO")
     assert grafico["fonte_dados"] == "resposta_anterior"
+    assert grafico["formato"] == "BAR"
     assert len(grafico["dados"]) == 5
     assert grafico["dados"][0]["valor"] == 1118.0
+
+
+def test_formatos_linha_e_pizza_sao_deterministicos():
+    linha = construir_artefatos(
+        mensagem="gere um gráfico de linha desta evolução",
+        resposta_texto=RESPOSTA_IMPLEMENTADORAS,
+        historico=[],
+        fontes=[],
+    )
+    pizza = construir_artefatos(
+        mensagem="gere um gráfico de pizza desta composição",
+        resposta_texto=RESPOSTA_IMPLEMENTADORAS,
+        historico=[],
+        fontes=[],
+    )
+    assert linha[0]["formato"] == "LINE"
+    assert pizza[0]["formato"] == "PIE"
+    assert b"<polyline" in gerar_svg_grafico({"artefatos": linha})
+    assert b"<path" in gerar_svg_grafico({"artefatos": pizza})
 
 
 def test_sem_serie_numerica_nao_inventa_grafico():
