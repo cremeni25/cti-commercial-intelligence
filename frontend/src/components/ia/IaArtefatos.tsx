@@ -27,6 +27,8 @@ type Artefato = {
   dados?: DadoGrafico[]
   status?: string
   mensagem?: string
+  metrica?: string
+  proveniencia?: string
 }
 
 type Props = {
@@ -73,6 +75,20 @@ function VisualizacaoGrafico({ formato, dados }: { formato: string; dados: DadoG
     background: "#071427",
     border: "1px solid #164e63",
     borderRadius: 10,
+  }
+
+  if (formato === "RANKING") {
+    return (
+      <div className="flex h-full flex-col justify-center gap-2 px-1 sm:px-3">
+        {dados.map((item, indice) => (
+          <div key={`${item.label}-${indice}`} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-3">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-cyan-500 font-bold text-slate-950">{Math.round(item.valor)}</span>
+            <span className="min-w-0 flex-1 text-sm font-medium text-slate-100">{item.label}</span>
+            <span className="text-xs text-slate-400">posição</span>
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (formato === "LINE") {
@@ -124,26 +140,33 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
   if (!mensagemId || !artefatos?.length) return null
 
   const id = mensagemId
-  const grafico = artefatos.find((item) => item.tipo === "GRAFICO")
+  const graficos = artefatos.filter((item) => item.tipo === "GRAFICO")
   const relatorio = artefatos.find((item) => item.tipo === "RELATORIO_PDF")
-  const dados = Array.isArray(grafico?.dados) ? grafico.dados : []
-  const formato = String(grafico?.formato || "BAR").toUpperCase()
 
-  async function baixar(tipo: "grafico" | "relatorio") {
+  async function baixarGrafico(indice: number) {
+    const chave = `grafico-${indice}`
     setErro("")
-    setBaixando(tipo)
+    setBaixando(chave)
     try {
-      if (tipo === "grafico") {
-        await baixarAutenticado(
-          `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/grafico.svg`,
-          `cti-grafico-${id.slice(0, 8)}.svg`,
-        )
-      } else {
-        await baixarAutenticado(
-          `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/relatorio.pdf`,
-          `cti-relatorio-${id.slice(0, 8)}.pdf`,
-        )
-      }
+      await baixarAutenticado(
+        `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/grafico.svg?indice=${indice}`,
+        `cti-grafico-${id.slice(0, 8)}-${indice + 1}.svg`,
+      )
+    } catch (falha) {
+      setErro(falha instanceof Error ? falha.message : "Falha ao baixar artefato.")
+    } finally {
+      setBaixando("")
+    }
+  }
+
+  async function baixarRelatorio() {
+    setErro("")
+    setBaixando("relatorio")
+    try {
+      await baixarAutenticado(
+        `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/relatorio.pdf`,
+        `cti-relatorio-${id.slice(0, 8)}.pdf`,
+      )
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Falha ao baixar artefato.")
     } finally {
@@ -153,36 +176,45 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
 
   return (
     <div className="mt-4 space-y-3 border-t border-[#18345e] pt-4">
-      {grafico && dados.length > 0 ? (
-        <section className="rounded-2xl border border-cyan-900/70 bg-[#061126] p-3 sm:p-4">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-400">Gráfico IA-009 · {formato}</p>
-              <h3 className="mt-1 text-sm font-semibold text-slate-100 sm:text-base">{grafico.titulo || "Análise gráfica CTI"}</h3>
+      {graficos.map((grafico, indice) => {
+        const dados = Array.isArray(grafico.dados) ? grafico.dados : []
+        const formato = String(grafico.formato || "BAR").toUpperCase()
+        if (!dados.length) {
+          return grafico.status === "SEM_SERIE_NUMERICA" ? (
+            <div key={`grafico-${indice}`} className="rounded-xl border border-amber-900/70 bg-amber-950/20 p-3 text-xs text-amber-200">
+              {grafico.mensagem || "Não há série numérica suficiente para gerar o gráfico sem inventar dados."}
             </div>
-            <button
-              type="button"
-              onClick={() => void baixar("grafico")}
-              disabled={baixando === "grafico"}
-              className="inline-flex items-center gap-2 rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-950/50 disabled:opacity-50"
-            >
-              <Download size={15} /> {baixando === "grafico" ? "Baixando..." : "Baixar SVG"}
-            </button>
-          </div>
-          <div className="h-[320px] w-full sm:h-[380px]">
-            <VisualizacaoGrafico formato={formato} dados={dados} />
-          </div>
-        </section>
-      ) : grafico?.status === "SEM_SERIE_NUMERICA" ? (
-        <div className="rounded-xl border border-amber-900/70 bg-amber-950/20 p-3 text-xs text-amber-200">
-          {grafico.mensagem || "Não há série numérica suficiente para gerar o gráfico sem inventar dados."}
-        </div>
-      ) : null}
+          ) : null
+        }
+        const chave = `grafico-${indice}`
+        return (
+          <section key={chave} className="rounded-2xl border border-cyan-900/70 bg-[#061126] p-3 sm:p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-cyan-400">Gráfico IA-009 · {formato}{grafico.proveniencia ? ` · ${grafico.proveniencia}` : ""}</p>
+                <h3 className="mt-1 text-sm font-semibold text-slate-100 sm:text-base">{grafico.titulo || "Análise gráfica CTI"}</h3>
+                {grafico.metrica ? <p className="mt-1 text-xs text-slate-400">Métrica: {grafico.metrica}</p> : null}
+              </div>
+              <button
+                type="button"
+                onClick={() => void baixarGrafico(indice)}
+                disabled={baixando === chave}
+                className="inline-flex items-center gap-2 rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-950/50 disabled:opacity-50"
+              >
+                <Download size={15} /> {baixando === chave ? "Baixando..." : "Baixar SVG"}
+              </button>
+            </div>
+            <div className="h-[320px] w-full sm:h-[380px]">
+              <VisualizacaoGrafico formato={formato} dados={dados} />
+            </div>
+          </section>
+        )
+      })}
 
       {relatorio ? (
         <button
           type="button"
-          onClick={() => void baixar("relatorio")}
+          onClick={() => void baixarRelatorio()}
           disabled={baixando === "relatorio"}
           className="inline-flex items-center gap-2 rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-950 hover:bg-white disabled:opacity-50"
         >
