@@ -20,3 +20,12 @@ except Exception:
     # O pacote services também é usado por módulos que não carregam a IA.
     # Falhas de importação reais continuam sendo reveladas quando a IA é importada.
     pass
+
+# A auditoria IA-006 histórica classifica a proveniência por seções formais. A
+# leitura universal pode responder em prosa contínua; carregamos uma correção que
+# preserva a API existente e evita atribuir fatos web ao CTI por coincidência de
+# entidade ou pela existência de uma única consulta interna.
+try:
+    from . import ia_comercial_auditoria_proveniencia as _auditoria_proveniencia  # noqa: F401
+except Exception:
+    pass
