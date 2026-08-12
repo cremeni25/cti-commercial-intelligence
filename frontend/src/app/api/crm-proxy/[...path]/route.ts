@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 
+import { caminhoCanonicoLeitura } from "@/lib/crm-canonical"
+
 const BACKEND_CTI = "https://cti-backend-5ugf.onrender.com"
 
 type Registro = Record<string, unknown>
@@ -54,30 +56,6 @@ function mapearOportunidades(linhas: Registro[]) {
   }))
 }
 
-function clientesDas(linhas: Registro[]) {
-  const clientes = new Map<string, Registro>()
-  for (const item of linhas) {
-    const nome = texto(
-      item.cliente_nome || item.razao_social || item.nome || item.nome_fantasia,
-    )
-    if (!nome) continue
-    const chave = nome.toLocaleUpperCase("pt-BR")
-    if (!clientes.has(chave)) {
-      clientes.set(chave, {
-        id: texto(item.cliente_id || item.id) || nome,
-        nome,
-        razao_social: nome,
-        cidade: texto(item.municipio || item.cidade) || null,
-        estado: texto(item.estado || item.uf) || null,
-        ddd: texto(item.ddd) || null,
-        sub_regiao: texto(item.sub_regiao) || null,
-        segmento: texto(item.segmento) || "TRANSPORTADOR",
-      })
-    }
-  }
-  return [...clientes.values()]
-}
-
 async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
   if (caminho.startsWith("crm/agenda")) {
     return NextResponse.json({
@@ -90,33 +68,29 @@ async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
     return NextResponse.json([])
   }
 
+  if (caminho.startsWith("modulos/clientes")) {
+    return null
+  }
+
   if (caminho === "crm/oportunidades") {
     return NextResponse.json([])
   }
 
-  if (
-    !caminho.startsWith("crm/oportunidades") &&
-    !caminho.startsWith("modulos/clientes")
-  ) {
+  if (!caminho.startsWith("crm/oportunidades")) {
     return null
   }
 
   const nucleo = linhasDo(await buscarJson("crm/nucleo-comercial"))
   const base = nucleo.length > 0 ? nucleo : []
-
-  if (caminho.startsWith("crm/oportunidades")) {
-    const oportunidadeId = caminho.split("/")[2]
-    const oportunidades = mapearOportunidades(base)
-    if (oportunidadeId) {
-      const encontrada = oportunidades.find((item) => item.id === oportunidadeId)
-      return encontrada
-        ? NextResponse.json(encontrada)
-        : NextResponse.json({ detail: "Oportunidade não encontrada" }, { status: 404 })
-    }
-    return NextResponse.json(oportunidades)
+  const oportunidadeId = caminho.split("/")[2]
+  const oportunidades = mapearOportunidades(base)
+  if (oportunidadeId) {
+    const encontrada = oportunidades.find((item) => item.id === oportunidadeId)
+    return encontrada
+      ? NextResponse.json(encontrada)
+      : NextResponse.json({ detail: "Oportunidade não encontrada" }, { status: 404 })
   }
-
-  return NextResponse.json(clientesDas(base))
+  return NextResponse.json(oportunidades)
 }
 
 async function encaminhar(
@@ -124,7 +98,8 @@ async function encaminhar(
   context: { params: Promise<{ path: string[] }> },
 ) {
   const { path } = await context.params
-  const caminho = path.join("/")
+  const caminhoSolicitado = path.join("/")
+  const caminho = caminhoCanonicoLeitura(caminhoSolicitado, request.method)
   const destino = new URL(`${BACKEND_CTI}/${caminho}`)
   request.nextUrl.searchParams.forEach((valor, chave) =>
     destino.searchParams.set(chave, valor),
@@ -147,7 +122,7 @@ async function encaminhar(
     })
 
     if (!resposta.ok && request.method === "GET") {
-      const alternativa = await fallbackSeguro(caminho)
+      const alternativa = await fallbackSeguro(caminhoSolicitado)
       if (alternativa) return alternativa
     }
 
@@ -173,7 +148,7 @@ async function encaminhar(
     })
   } catch (erro) {
     if (request.method === "GET") {
-      const alternativa = await fallbackSeguro(caminho).catch(() => null)
+      const alternativa = await fallbackSeguro(caminhoSolicitado).catch(() => null)
       if (alternativa) return alternativa
     }
 
