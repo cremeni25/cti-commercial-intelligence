@@ -109,6 +109,8 @@ export default function IaComercialPage() {
   }
 
   useEffect(() => {
+    const prompt = new URLSearchParams(window.location.search).get("prompt")
+    if (prompt?.trim()) setEntrada(prompt.trim())
     let ativo = true
     carregarConversas()
       .catch((falha) => { if (ativo) setErro(falha instanceof Error ? falha.message : "Falha ao carregar conversas.") })
