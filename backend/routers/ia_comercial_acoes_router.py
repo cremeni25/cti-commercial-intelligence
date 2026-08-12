@@ -217,6 +217,52 @@ def _carregar_proposta(acao_id: str, usuario: UsuarioAutenticado) -> dict[str, A
     return linhas[0]
 
 
+def _reservar_execucao(
+    acao_id: str,
+    usuario: UsuarioAutenticado,
+    detalhes: dict[str, Any],
+) -> bool:
+    """Reserva atomicamente uma ação pendente para impedir dupla execução concorrente."""
+    reservados = dict(detalhes)
+    reservados.update(
+        {
+            "status": "EM_EXECUCAO",
+            "executada": False,
+            "confirmada_por_usuario_id": usuario.id,
+        }
+    )
+    resposta = (
+        supabase.table("cti_ia_auditoria")
+        .update({"detalhes": reservados})
+        .eq("id", acao_id)
+        .eq("usuario_id", usuario.id)
+        .eq("acao", "IA008_ACAO_CONTROLADA")
+        .eq("detalhes->>status", "PENDENTE_CONFIRMACAO")
+        .execute()
+    )
+    return bool(_dados(resposta))
+
+
+def _registrar_falha_execucao(
+    acao_id: str,
+    usuario: UsuarioAutenticado,
+    detalhes: dict[str, Any],
+    erro: Exception,
+) -> None:
+    falha = dict(detalhes)
+    falha.update(
+        {
+            "status": "FALHA_EXECUCAO",
+            "executada": False,
+            "erro_execucao": {
+                "tipo": type(erro).__name__,
+                "detalhe": str(erro)[:500],
+            },
+        }
+    )
+    supabase.table("cti_ia_auditoria").update({"detalhes": falha}).eq("id", acao_id).eq("usuario_id", usuario.id).eq("acao", "IA008_ACAO_CONTROLADA").execute()
+
+
 def _executar(tipo_acao: str, payload: dict[str, Any], usuario: UsuarioAutenticado) -> dict[str, Any]:
     if tipo_acao == "CRIAR_ATIVIDADE_CRM":
         registro = {chave: valor for chave, valor in payload.items() if valor is not None}
@@ -307,6 +353,10 @@ def confirmar_acao(
         }
     if detalhes.get("status") == "CANCELADA":
         raise HTTPException(status_code=409, detail="A ação foi cancelada e não pode mais ser executada.")
+    if detalhes.get("status") == "EM_EXECUCAO":
+        raise HTTPException(status_code=409, detail="A ação já está em execução e não será repetida.")
+    if detalhes.get("status") == "FALHA_EXECUCAO":
+        raise HTTPException(status_code=409, detail="A ação falhou após ser reservada e não será repetida automaticamente.")
     if detalhes.get("status") != "PENDENTE_CONFIRMACAO":
         raise HTTPException(status_code=409, detail="A ação não está disponível para confirmação.")
     if not payload.confirmar:
@@ -318,7 +368,38 @@ def confirmar_acao(
         dict(detalhes.get("payload") or {}),
         usuario,
     )
-    resultado = _executar(tipo_acao, payload_normalizado, usuario)
+
+    detalhes["resumo"] = resumo_atualizado
+    if not _reservar_execucao(acao_id, usuario, detalhes):
+        atual = _carregar_proposta(acao_id, usuario)
+        detalhes_atuais = dict(atual.get("detalhes") or {})
+        status_atual = detalhes_atuais.get("status")
+        if status_atual == "EXECUTADA":
+            return {
+                "acao_id": acao_id,
+                "status": "EXECUTADA",
+                "idempotencia": "JA_EXECUTADA_SEM_REPETICAO",
+                "resumo": str(detalhes_atuais.get("resumo") or resumo_atualizado),
+                "resultado": _resultado_publico(detalhes_atuais.get("resultado")),
+            }
+        if status_atual == "EM_EXECUCAO":
+            raise HTTPException(status_code=409, detail="A ação já está em execução e não será repetida.")
+        if status_atual == "CANCELADA":
+            raise HTTPException(status_code=409, detail="A ação foi cancelada e não pode mais ser executada.")
+        raise HTTPException(status_code=409, detail="A ação perdeu a reserva de execução e não será repetida.")
+
+    detalhes.update(
+        {
+            "status": "EM_EXECUCAO",
+            "executada": False,
+            "confirmada_por_usuario_id": usuario.id,
+        }
+    )
+    try:
+        resultado = _executar(tipo_acao, payload_normalizado, usuario)
+    except Exception as exc:
+        _registrar_falha_execucao(acao_id, usuario, detalhes, exc)
+        raise
 
     detalhes.update(
         {
@@ -329,7 +410,7 @@ def confirmar_acao(
             "confirmada_por_usuario_id": usuario.id,
         }
     )
-    supabase.table("cti_ia_auditoria").update({"detalhes": detalhes}).eq("id", acao_id).eq("usuario_id", usuario.id).execute()
+    supabase.table("cti_ia_auditoria").update({"detalhes": detalhes}).eq("id", acao_id).eq("usuario_id", usuario.id).eq("acao", "IA008_ACAO_CONTROLADA").eq("detalhes->>status", "EM_EXECUCAO").execute()
     return {
         "acao_id": acao_id,
         "status": "EXECUTADA",
@@ -342,9 +423,28 @@ def confirmar_acao(
 def cancelar_acao(acao_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     proposta = _carregar_proposta(acao_id, usuario)
     detalhes = dict(proposta.get("detalhes") or {})
-    if detalhes.get("status") == "EXECUTADA":
+    status = detalhes.get("status")
+    if status == "CANCELADA":
+        return {"acao_id": acao_id, "status": "CANCELADA", "idempotencia": "JA_CANCELADA"}
+    if status == "EXECUTADA":
         raise HTTPException(status_code=409, detail="Ação já executada não pode ser cancelada por este endpoint.")
-    detalhes["status"] = "CANCELADA"
-    detalhes["executada"] = False
-    supabase.table("cti_ia_auditoria").update({"detalhes": detalhes}).eq("id", acao_id).eq("usuario_id", usuario.id).execute()
+    if status == "EM_EXECUCAO":
+        raise HTTPException(status_code=409, detail="Ação em execução não pode ser cancelada.")
+    if status != "PENDENTE_CONFIRMACAO":
+        raise HTTPException(status_code=409, detail="A ação não está disponível para cancelamento.")
+
+    cancelados = dict(detalhes)
+    cancelados["status"] = "CANCELADA"
+    cancelados["executada"] = False
+    resposta = (
+        supabase.table("cti_ia_auditoria")
+        .update({"detalhes": cancelados})
+        .eq("id", acao_id)
+        .eq("usuario_id", usuario.id)
+        .eq("acao", "IA008_ACAO_CONTROLADA")
+        .eq("detalhes->>status", "PENDENTE_CONFIRMACAO")
+        .execute()
+    )
+    if not _dados(resposta):
+        raise HTTPException(status_code=409, detail="A ação mudou de estado e não foi cancelada.")
     return {"acao_id": acao_id, "status": "CANCELADA"}
