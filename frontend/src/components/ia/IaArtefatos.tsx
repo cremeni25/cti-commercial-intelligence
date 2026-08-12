@@ -57,9 +57,10 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
   const [erro, setErro] = useState("")
   if (!mensagemId || !artefatos?.length) return null
 
+  const id = mensagemId
   const grafico = artefatos.find((item) => item.tipo === "GRAFICO")
   const relatorio = artefatos.find((item) => item.tipo === "RELATORIO_PDF")
-  const dados = Array.isArray(grafico?.dados) ? grafico?.dados : []
+  const dados = Array.isArray(grafico?.dados) ? grafico.dados : []
 
   async function baixar(tipo: "grafico" | "relatorio") {
     setErro("")
@@ -67,13 +68,13 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
     try {
       if (tipo === "grafico") {
         await baixarAutenticado(
-          `/api/crm-proxy/ia-comercial-cti/artefatos/${mensagemId}/grafico.svg`,
-          `cti-grafico-${mensagemId.slice(0, 8)}.svg`,
+          `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/grafico.svg`,
+          `cti-grafico-${id.slice(0, 8)}.svg`,
         )
       } else {
         await baixarAutenticado(
-          `/api/crm-proxy/ia-comercial-cti/artefatos/${mensagemId}/relatorio.pdf`,
-          `cti-relatorio-${mensagemId.slice(0, 8)}.pdf`,
+          `/api/crm-proxy/ia-comercial-cti/artefatos/${id}/relatorio.pdf`,
+          `cti-relatorio-${id.slice(0, 8)}.pdf`,
         )
       }
     } catch (falha) {
@@ -110,10 +111,6 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
                 <Tooltip
                   contentStyle={{ background: "#071427", border: "1px solid #164e63", borderRadius: 10 }}
                   labelStyle={{ color: "#e2e8f0" }}
-                  formatter={(valor: number | string, _nome, item) => {
-                    const unidade = (item?.payload as DadoGrafico | undefined)?.unidade || ""
-                    return [`${Number(valor).toLocaleString("pt-BR")} ${unidade}`.trim(), "Valor"]
-                  }}
                 />
                 <Bar dataKey="valor" fill="#06b6d4" radius={[0, 7, 7, 0]} />
               </BarChart>
