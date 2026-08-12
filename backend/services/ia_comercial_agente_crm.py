@@ -7,7 +7,15 @@ from services import ia_comercial_agente as base
 from services.ia_comercial_universo import catalogar_universo_cti, consultar_universo_cti
 
 
+# Fachada de compatibilidade para IA-004/IA-006/IA-007.
+# Estes nomes permanecem estáveis para as camadas posteriores, mas a execução
+# efetiva é substituída abaixo pela arquitetura universal de leitura.
+_ORIGINAL_FONTES_REQUERIDAS = base._fontes_requeridas
+_ORIGINAL_EVIDENCIAS_PRESENTES = base._evidencias_presentes
+_ORIGINAL_INSTRUCAO_FALTANTES = base._instrucao_evidencias_faltantes
+_ORIGINAL_INSTRUCAO_SINTESE = base._instrucao_sintese_final
 _ORIGINAL_INSTRUCOES_AGENTE = base.INSTRUCOES_AGENTE
+_ORIGINAL_FERRAMENTAS_AGENTE = base.ferramentas_agente
 _ORIGINAL_EXECUTOR = base._executar_ferramenta_cti
 _EXECUCAO_WEB_PURA: ContextVar[bool] = ContextVar("ia_universal_execucao_web_pura", default=False)
 
@@ -85,6 +93,21 @@ def _fontes_requeridas_universais(mensagem: str) -> set[str]:
     if _necessita_web(mensagem):
         requeridas.add("web")
     return requeridas
+
+
+# Aliases públicos legados preservados de forma deliberada.
+# As camadas antigas podem continuar importando estes nomes sem controlar
+# o roteamento real, que permanece universal.
+def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
+    return _fontes_requeridas_universais(mensagem)
+
+
+def _necessita_web_autonoma(mensagem: str) -> bool:
+    return _necessita_web(mensagem)
+
+
+def _pede_cruzamento_cti_explicito(mensagem: str) -> bool:
+    return not _somente_web_explicito(mensagem)
 
 
 def _evidencias_presentes_universais(rastreio: list[dict[str, Any]], fontes_web: list[dict[str, str]]) -> set[str]:
