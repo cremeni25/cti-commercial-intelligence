@@ -5,7 +5,8 @@ from services.ia_comercial_artefatos import (
     gerar_pdf_relatorio,
     gerar_svg_grafico,
 )
-from services.ia_comercial_artefatos_patch import _artefatos_multifonte_da_resposta
+from services.ia_comercial_artefatos_patch import _pedido_transformacao_artefato
+from services.ia_comercial_artefatos_pos_sintese import _graficos_multifonte
 
 
 RESPOSTA_IMPLEMENTADORAS = """Pela análise do histórico ANFIR disponível no CTI, as cinco implementadoras mais frequentes são:
@@ -27,19 +28,20 @@ RESPOSTA_MULTIFONTE = """Internamente, pelo universo histórico ANFIR disponíve
 4. High Flex — 305 registros
 5. Randon — 240 registros
 
-Externamente, a pesquisa na web relata que as maiores implementadoras do Brasil incluem:
+Complementando com dados da web, as cinco maiores por unidades emplacadas são:
 
-- Facchini S.A.
-- Randon Implementos
-- Librelato S.A.
-- Guerra Implementos Rodoviários
-- Ibiporã Implementos Rodoviários
+1. Randon — 22.226 unidades (25,07% do mercado)
+2. Facchini — 21.173 unidades (23,88%)
+3. Librelato — 10.874 unidades (12,26%)
+4. Guerra — 7.409 unidades (8,36%)
+5. Truckvan — 2.123 unidades (2,39%)
 """
 
 
 def test_pedido_real_reconhece_grafico():
     pedido = "De acordo com a resposta acima, gere um grafico utilizando a disposição das respostas apresentadas"
     assert detectar_intencao_artefato(pedido) == {"GRAFICO"}
+    assert _pedido_transformacao_artefato(pedido, {"GRAFICO"}) is True
 
 
 def test_relatorio_implica_pdf_baixavel():
@@ -67,23 +69,19 @@ def test_grafico_de_continuidade_usa_resposta_anterior_e_barra_por_padrao():
     assert grafico["dados"][0]["valor"] == 1118.0
 
 
-def test_multifonte_gera_dois_graficos_sem_reconsulta_ou_inventar_metrica():
-    graficos = _artefatos_multifonte_da_resposta(
-        "De acordo com a resposta acima, gere um gráfico utilizando a disposição das respostas apresentadas",
-        [{"role": "assistant", "content": RESPOSTA_MULTIFONTE}],
-    )
+def test_snapshot_final_multifonte_gera_dois_graficos_com_as_metricas_da_mesma_resposta():
+    graficos = _graficos_multifonte(RESPOSTA_MULTIFONTE)
     assert len(graficos) == 2
     interno, externo = graficos
     assert interno["proveniencia"] == "CTI"
     assert interno["formato"] == "BAR"
     assert [item["valor"] for item in interno["dados"]] == [1118.0, 763.0, 514.0, 305.0, 240.0]
     assert externo["proveniencia"] == "WEB"
-    assert externo["formato"] == "RANKING"
-    assert [item["label"] for item in externo["dados"]] == [
-        "Facchini S.A", "Randon Implementos", "Librelato S.A", "Guerra Implementos Rodoviários", "Ibiporã Implementos Rodoviários"
-    ]
-    assert [item["valor"] for item in externo["dados"]] == [1.0, 2.0, 3.0, 4.0, 5.0]
-    assert all(item["unidade"] == "posição" for item in externo["dados"])
+    assert externo["formato"] == "BAR"
+    assert [item["label"] for item in externo["dados"]] == ["Randon", "Facchini", "Librelato", "Guerra", "Truckvan"]
+    assert [item["valor"] for item in externo["dados"]] == [22226.0, 21173.0, 10874.0, 7409.0, 2123.0]
+    assert all(item["unidade"] == "unidades" for item in externo["dados"])
+    assert externo["dados"][0]["detalhe"] == "25,07% do mercado"
 
 
 def test_formatos_linha_e_pizza_sao_deterministicos():

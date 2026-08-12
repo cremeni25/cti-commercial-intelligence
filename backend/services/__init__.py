@@ -46,10 +46,15 @@ try:
 except Exception:
     pass
 
-# IA-009: a geração de gráfico/relatório/PDF é uma camada pós-síntese. Ela recebe
-# apenas respostas e evidências já autorizadas, produz especificações determinísticas
-# e não amplia permissões do agente, SQL ou ações comerciais.
+# IA-009: o patch do agente apenas detecta a intenção e congela o contexto da
+# execução. A geração efetiva dos artefatos ocorre somente após a síntese factual
+# final, garantindo texto, gráfico e PDF derivados do mesmo snapshot evidencial.
 try:
     from . import ia_comercial_artefatos_patch as _artefatos_patch  # noqa: F401
+except Exception:
+    pass
+
+try:
+    from . import ia_comercial_artefatos_pos_sintese as _artefatos_pos_sintese  # noqa: F401
 except Exception:
     pass
