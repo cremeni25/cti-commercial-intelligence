@@ -11,57 +11,43 @@ def normalizar(texto: str) -> str:
     return re.sub(r"\s+", " ", base).strip()
 
 
-_REFERENCIAS = (
-    r"de acordo com (?:a|as|o|os)? ?resposta(?:s)? acima",
-    r"com base (?:na|nas|no|nos)? ?resposta(?:s)? acima",
-    r"com base no que foi apresentado",
-    r"a partir (?:da|das|do|dos)? ?(?:resposta|dados|informacoes|analise|resultado)(?:s)? (?:acima|anterior(?:es)?)",
-    r"(?:resposta|dados|informacoes|analise|resultado)(?:s)? (?:acima|anterior(?:es)?)",
-    r"utilizando a disposicao (?:da|das|do|dos)? ?resposta(?:s)? apresentad(?:a|as|o|os)",
-    r"utilizando (?:a|as|o|os)? ?(?:informacoes|dados) apresentad(?:a|as|o|os)",
+_TOKENS_APRESENTACAO = {
+    "a", "acima", "acordo", "agora", "analise", "anterior", "anteriores", "apresentada", "apresentadas", "apresentado", "apresentados",
+    "as", "base", "baixar", "com", "crie", "da", "das", "dados", "de", "disponibilize", "disposicao", "do", "dos", "download", "e",
+    "em", "gere", "grafico", "graficos", "informacoes", "isso", "me", "mim", "na", "nas", "no", "nos", "o", "os", "para", "partir",
+    "pdf", "por", "relatorio", "relatorios", "resposta", "respostas", "resultado", "resultados", "tambem", "transforme", "um", "uma", "utilizando",
+}
+
+_REFERENCIAS_EXPLICITAS = (
+    "resposta acima",
+    "respostas acima",
+    "resposta anterior",
+    "respostas anteriores",
+    "dados apresentados",
+    "informacoes apresentadas",
+    "analise acima",
+    "resultado acima",
+    "com base no que foi apresentado",
+    "disposicao das respostas apresentadas",
 )
 
-_ARTEFATOS = (
-    r"gere(?: para mim)? (?:um|uma|os|as)? ?grafico(?:s)?",
-    r"crie(?: para mim)? (?:um|uma|os|as)? ?grafico(?:s)?",
-    r"transforme(?: isso)? em (?:um|uma)? ?grafico(?:s)?",
-    r"gere(?: para mim)? (?:um|uma)? ?pdf",
-    r"transforme(?: isso)? em (?:um|uma)? ?pdf",
-    r"gere(?: para mim)? (?:um|uma|os|as)? ?relatorio(?:s)?",
-    r"transforme(?: isso)? em (?:um|uma)? ?relatorio(?:s)?",
-    r"disponibilize(?: para)? download",
-    r"para baixar",
-)
+_ARTEFATOS = {"grafico", "graficos", "pdf", "relatorio", "relatorios"}
 
-_CONECTORES_APRESENTACAO = (
-    "e",
-    "tambem",
-    "por favor",
-    "agora",
-    "utilizando",
-    "a disposicao",
-    "das respostas apresentadas",
-    "dos dados apresentados",
-    "das informacoes apresentadas",
-)
+
+def _tokens(texto: str) -> list[str]:
+    return re.findall(r"[a-z0-9%/_+\-.]+", normalizar(texto))
 
 
 def residual_factual_transformacao(mensagem: str) -> str:
-    texto = normalizar(mensagem)
-    for padrao in _REFERENCIAS:
-        texto = re.sub(padrao, " ", texto)
-    for padrao in _ARTEFATOS:
-        texto = re.sub(padrao, " ", texto)
-    for trecho in _CONECTORES_APRESENTACAO:
-        texto = re.sub(rf"\b{re.escape(trecho)}\b", " ", texto)
-    texto = re.sub(r"\b(?:um|uma|o|a|os|as|de|do|da|dos|das|no|na|nos|nas|com|em|para)\b", " ", texto)
-    return re.sub(r"\s+", " ", texto).strip(" ,.;:-")
+    restantes = [token for token in _tokens(mensagem) if token not in _TOKENS_APRESENTACAO]
+    return " ".join(restantes)
 
 
 def eh_transformacao_pura(mensagem: str) -> bool:
     texto = normalizar(mensagem)
-    tem_referencia = any(re.search(padrao, texto) for padrao in _REFERENCIAS)
-    tem_artefato = any(re.search(padrao, texto) for padrao in _ARTEFATOS)
+    tokens = set(_tokens(texto))
+    tem_referencia = any(ref in texto for ref in _REFERENCIAS_EXPLICITAS)
+    tem_artefato = bool(tokens & _ARTEFATOS)
     if not (tem_referencia and tem_artefato):
         return False
     return residual_factual_transformacao(mensagem) == ""
