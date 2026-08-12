@@ -7,13 +7,13 @@ from services import ia_comercial_sintese_crm as multifonte
 from services.ia_comercial_cti import IAComercialOpenAIError
 
 
-def test_cruzamento_expresso_web_portfolio_vendas_usa_universo_cti_mais_web():
+def test_cruzamento_expresso_web_portfolio_vendas_usa_catalogo_universo_cti_e_web():
     pergunta = (
         "Quais são as novidades recentes do mercado de transporte refrigerado e como elas se comparam "
         "com nosso portfólio e nossas vendas no CTI?"
     )
     requeridas = agente_crm._fontes_requeridas_universais(pergunta)
-    assert requeridas == {"universo_cti", "web"}
+    assert requeridas == {"catalogo_cti", "universo_cti", "web"}
 
     token = agente_crm._EXECUCAO_WEB_PURA.set(False)
     try:

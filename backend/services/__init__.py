@@ -29,3 +29,19 @@ try:
     from . import ia_comercial_auditoria_proveniencia as _auditoria_proveniencia  # noqa: F401
 except Exception:
     pass
+
+# A ontologia comercial é carregada por último para envolver a leitura universal
+# já montada: fixa o significado das entidades do CTI, declara a finalidade
+# analítica das fontes e obriga a web a preservar o mesmo contexto comercial.
+try:
+    from . import ia_comercial_ontologia as _ontologia  # noqa: F401
+except Exception:
+    pass
+
+# Guard final: se uma execução ainda tentar produzir ranking com fonte cadastral
+# ou derivar a web para outro setor, refaz a investigação uma vez e bloqueia a
+# resposta caso a ontologia continue inconsistente.
+try:
+    from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
+except Exception:
+    pass

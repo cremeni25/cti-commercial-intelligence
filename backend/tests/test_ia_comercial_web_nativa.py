@@ -4,11 +4,11 @@ from services import ia_comercial_agente_crm as crm
 from services.ia_comercial_sintese_crm import sintetizar_fatos_execucao
 
 
-def test_web_explicita_soma_web_ao_universo_cti_por_padrao():
+def test_web_explicita_soma_catalogo_web_ao_universo_cti_por_padrao():
     pergunta = "entre os dados contidos no cti e através de pesquisa na web, relacione as 05 maiores implementadoras do Brasil"
 
     assert crm._necessita_web(pergunta) is True
-    assert crm._fontes_requeridas_universais(pergunta) == {"universo_cti", "web"}
+    assert crm._fontes_requeridas_universais(pergunta) == {"catalogo_cti", "universo_cti", "web"}
 
 
 def test_web_so_fica_pura_quando_usuario_exclui_cti_explicitamente():
@@ -28,7 +28,9 @@ def test_pergunta_interna_nao_depende_de_vocabulario_de_dominio():
     ]
 
     for pergunta in perguntas:
-        assert "universo_cti" in crm._fontes_requeridas_universais(pergunta)
+        requeridas = crm._fontes_requeridas_universais(pergunta)
+        assert "catalogo_cti" in requeridas
+        assert "universo_cti" in requeridas
 
 
 def test_execucao_web_pura_expoe_fisicamente_apenas_web_search():

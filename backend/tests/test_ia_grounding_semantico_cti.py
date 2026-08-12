@@ -1,12 +1,12 @@
 from services import ia_comercial_agente_crm as crm
 
 
-def test_pergunta_real_exige_consulta_universal_e_web():
+def test_pergunta_real_exige_catalogo_consulta_universal_e_web():
     pergunta = "entre os dados contidos no cti e através de pesquisa na web, relacione as 05 maiores implementadoras do Brasil"
 
     requeridas = crm._fontes_requeridas_universais(pergunta)
 
-    assert requeridas == {"universo_cti", "web"}
+    assert requeridas == {"catalogo_cti", "universo_cti", "web"}
 
 
 def test_qualquer_pergunta_cti_nao_depende_de_palavra_chave_de_dominio():
@@ -19,7 +19,9 @@ def test_qualquer_pergunta_cti_nao_depende_de_palavra_chave_de_dominio():
     ]
 
     for pergunta in perguntas:
-        assert "universo_cti" in crm._fontes_requeridas_universais(pergunta)
+        requeridas = crm._fontes_requeridas_universais(pergunta)
+        assert "catalogo_cti" in requeridas
+        assert "universo_cti" in requeridas
 
 
 def test_catalogo_so_nao_satisfaz_evidencia_factual():
@@ -52,6 +54,7 @@ def test_prompt_final_proibe_dicionario_de_palavras_chave_e_sql_livre():
     assert "não existe uma ferramenta diferente para cada palavra ou entidade" in instrucoes
     assert "não é sql livre" in instrucoes
     assert "implementadora e fabricante de equipamento são conceitos distintos" in instrucoes
+    assert "ontologia comercial cti" in instrucoes
 
 
 def test_ferramentas_universais_nao_expoem_dominio_especifico():
