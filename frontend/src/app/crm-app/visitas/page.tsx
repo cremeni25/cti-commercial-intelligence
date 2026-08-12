@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Loader2, MapPinned, Play, Plus, Search, Target, X } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -53,9 +52,6 @@ function objetivoDa(descricaoAtual: string) {
 
 export default function VisitasPage() {
   const { usuario } = useAuth()
-  const search = useSearchParams()
-  const clienteContexto = texto(search.get("cliente"))
-  const oportunidadeContexto = texto(search.get("oportunidade"))
   const contextoAplicado = useRef(false)
   const [visitas, setVisitas] = useState<Visita[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -77,6 +73,9 @@ export default function VisitasPage() {
     setCarregando(true)
     setErro("")
     try {
+      const params = new URLSearchParams(window.location.search)
+      const clienteContexto = texto(params.get("cliente"))
+      const oportunidadeContexto = texto(params.get("oportunidade"))
       const [atividadesResposta, clientesResposta, oportunidadesResposta] = await Promise.all([
         fetch("/api/crm-proxy/crm/atividades", { cache: "no-store" }),
         fetch("/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO", { cache: "no-store" }),
@@ -152,7 +151,7 @@ export default function VisitasPage() {
     } finally {
       setCarregando(false)
     }
-  }, [clienteContexto, oportunidadeContexto])
+  }, [])
 
   useEffect(() => { void carregar() }, [carregar])
 
