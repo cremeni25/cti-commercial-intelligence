@@ -11,9 +11,11 @@ type Atividade = {
   descricao?: string
   tipo: string
   cliente_id?: string
+  cliente_nome?: string
   oportunidade_id?: string
   oportunidade_titulo?: string
   responsavel_id?: string
+  responsavel_nome?: string
   usuario_id?: string
   status: string
   situacao: "ATRASADA" | "HOJE" | "FUTURA" | "SEM_DATA" | "CONCLUIDA" | "CANCELADA"
@@ -26,7 +28,7 @@ type AgendaResponse = {
   resumo: { total: number; atrasadas: number; hoje: number; futuras: number; sem_data: number; concluidas: number }
 }
 
-type ClienteMestre = { nome: string }
+type ClienteMestre = { id?: string; nome: string }
 type Oportunidade = { id: string; titulo: string; cliente_id?: string }
 
 const tipos = ["FOLLOW_UP", "LIGACAO", "VISITA_COMERCIAL", "VISITA_TECNICA", "REUNIAO", "EMAIL", "WHATSAPP", "TAREFA", "LEMBRETE"]
@@ -102,6 +104,17 @@ export default function AtividadesPage() {
     }
   }
 
+  function clienteLegivel(item: Atividade) {
+    if (item.cliente_nome) return item.cliente_nome
+    const encontrado = clientes.find((cliente) => cliente.id && cliente.id === item.cliente_id)
+    return encontrado?.nome || (item.cliente_id ? "Cliente vinculado" : "-")
+  }
+
+  function responsavelLegivel(item: Atividade) {
+    if (item.responsavel_nome) return item.responsavel_nome
+    return item.responsavel_id || item.usuario_id ? "Responsável vinculado" : "-"
+  }
+
   const itensFiltrados = agenda.itens.filter((item) => {
     if (filtro === "TODAS") return true
     if (filtro === "ABERTAS") return !["CONCLUIDA", "CANCELADA"].includes(item.situacao)
@@ -125,7 +138,7 @@ export default function AtividadesPage() {
 
       <div className="flex flex-wrap gap-2">{["ABERTAS", "ATRASADA", "HOJE", "FUTURA", "CONCLUIDA", "TODAS"].map((item) => <button key={item} type="button" onClick={() => setFiltro(item)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${filtro === item ? "bg-cyan-500 text-slate-950" : "border border-[#20345e] text-gray-300"}`}>{item}</button>)}</div>
 
-      <div className="overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <div className="p-10 text-gray-400">Carregando agenda...</div> : itensFiltrados.length === 0 ? <div className="p-10 text-gray-300">Nenhuma atividade encontrada neste filtro.</div> : <table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">Situação</th><th className="p-4">Data/Hora</th><th className="p-4">Atividade</th><th className="p-4">Cliente</th><th className="p-4">Oportunidade</th><th className="p-4">Responsável</th><th className="p-4">Ação</th></tr></thead><tbody>{itensFiltrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] text-gray-200"><td className="p-4"><Situacao valor={item.situacao} /></td><td className="p-4 text-yellow-300">{formatarData(item.data)} {item.horario || ""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo || item.tipo}</div><div className="text-xs text-gray-400">{item.tipo}</div></td><td className="p-4 text-cyan-300">{item.cliente_id || "-"}</td><td className="p-4">{item.oportunidade_titulo || "-"}</td><td className="p-4">{item.responsavel_id || item.usuario_id || "-"}</td><td className="p-4">{!["CONCLUIDA", "CANCELADA"].includes(item.situacao) && <button type="button" onClick={() => void concluir(item.id)} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">Concluir</button>}</td></tr>)}</tbody></table>}</div>
+      <div className="overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <div className="p-10 text-gray-400">Carregando agenda...</div> : itensFiltrados.length === 0 ? <div className="p-10 text-gray-300">Nenhuma atividade encontrada neste filtro.</div> : <table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">Situação</th><th className="p-4">Data/Hora</th><th className="p-4">Atividade</th><th className="p-4">Cliente</th><th className="p-4">Oportunidade</th><th className="p-4">Responsável</th><th className="p-4">Ação</th></tr></thead><tbody>{itensFiltrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] text-gray-200"><td className="p-4"><Situacao valor={item.situacao} /></td><td className="p-4 text-yellow-300">{formatarData(item.data)} {item.horario || ""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo || item.tipo}</div><div className="text-xs text-gray-400">{item.tipo}</div></td><td className="p-4 text-cyan-300">{clienteLegivel(item)}</td><td className="p-4">{item.oportunidade_titulo || "-"}</td><td className="p-4">{responsavelLegivel(item)}</td><td className="p-4">{!["CONCLUIDA", "CANCELADA"].includes(item.situacao) && <button type="button" onClick={() => void concluir(item.id)} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">Concluir</button>}</td></tr>)}</tbody></table>}</div>
     </div></section></main>
   )
 }

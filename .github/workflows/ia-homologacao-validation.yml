@@ -1,4 +1,4 @@
-# Validação atual da IA Comercial CTI: testes e compilação do código realmente presente no repositório.
+# Validação dedicada da IA Comercial CTI: núcleo agente, integrações e compilação do código em uso.
 name: IA Homologacao Validation
 
 on:
@@ -6,7 +6,10 @@ on:
     branches: [main]
     paths:
       - "backend/services/ia_comercial_cti.py"
+      - "backend/services/ia_comercial_agente.py"
+      - "backend/routers/ia_comercial_cti_router.py"
       - "backend/tests/test_ia_comercial_fontes.py"
+      - "backend/tests/test_ia_comercial_agente.py"
       - ".github/workflows/ia-homologacao-validation.yml"
   workflow_dispatch:
 
@@ -44,8 +47,11 @@ jobs:
 
       - name: Validar testes isolados da IA
         working-directory: backend
-        run: pytest -q tests/test_ia_comercial_fontes.py
+        run: pytest -q tests/test_ia_comercial_fontes.py tests/test_ia_comercial_agente.py tests/test_ia_comercial_contexto_real.py
 
       - name: Validar compilacao Python
         working-directory: backend
-        run: python -m py_compile services/ia_comercial_cti.py
+        run: |
+          python -m py_compile services/ia_comercial_cti.py
+          python -m py_compile services/ia_comercial_agente.py
+          python -m py_compile routers/ia_comercial_cti_router.py
