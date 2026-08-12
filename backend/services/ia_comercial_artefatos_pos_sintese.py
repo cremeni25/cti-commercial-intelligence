@@ -94,6 +94,19 @@ def _ranking_ordinal(texto: str, limite: int = 10) -> list[dict[str, Any]]:
     return dados
 
 
+def _linha_reabre_bloco_cti(linha: str) -> bool:
+    normalizada = _normalizar(linha).strip(" *#:-")
+    if not normalizada:
+        return False
+    if normalizada.startswith(("resumo", "ranking cti", "dados cti", "internamente", "no cti")):
+        return True
+    if normalizada.startswith("grafico") and "cti" in normalizada:
+        return True
+    if normalizada.startswith("tabela") and "cti" in normalizada:
+        return True
+    return False
+
+
 def _separar_blocos(texto: str) -> tuple[str, str]:
     linhas = str(texto or "").splitlines()
     indice_web: int | None = None
@@ -114,7 +127,16 @@ def _separar_blocos(texto: str) -> tuple[str, str]:
             break
     if indice_web is None:
         return str(texto or ""), ""
-    return "\n".join(linhas[:indice_web]), "\n".join(linhas[indice_web:])
+
+    fim_web = len(linhas)
+    for indice in range(indice_web + 1, len(linhas)):
+        if _linha_reabre_bloco_cti(linhas[indice]):
+            fim_web = indice
+            break
+
+    bloco_cti = "\n".join(linhas[:indice_web])
+    bloco_web = "\n".join(linhas[indice_web:fim_web])
+    return bloco_cti, bloco_web
 
 
 def _graficos_multifonte(texto: str) -> list[dict[str, Any]]:
@@ -219,6 +241,7 @@ def sintetizar_fatos_execucao(
         metadados_sintese["controle_snapshot_evidencial"] = "congelado_pos_sintese_final"
         metadados_sintese["controle_fontes_snapshot"] = "uma_execucao_multifonte_um_snapshot"
         metadados_sintese["controle_artefatos_multifonte"] = "texto_grafico_pdf_mesmo_snapshot_final"
+        metadados_sintese["controle_delimitacao_proveniencia"] = "blocos_cti_web_nao_se_sobrepoem"
         metadados_sintese["artefatos_auditaveis"] = True
     elif reutiliza_snapshot and referencia:
         metadados_sintese["snapshot_evidencial_id"] = str(contexto.get("snapshot_evidencial_id") or "") or _snapshot_id(referencia)
