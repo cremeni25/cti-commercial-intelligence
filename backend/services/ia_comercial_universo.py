@@ -17,7 +17,7 @@ CAMPOS_SENSIVEIS = {
 }
 
 FONTES_PUBLICAS = {
-    "historico_anfir": "Histórico comercial/ANFIR autorizado, com território, frota, cliente, implementadora, equipamento, linha, modelo e demais campos disponíveis.",
+    "historico_anfir": "Fonte analítica histórica comercial/ANFIR autorizada, com território, frota, cliente, implementadora, equipamento, linha, modelo e demais campos disponíveis. Use esta fonte para frequência histórica, rankings por ocorrência, tendências e análises ao longo do histórico.",
     "clientes": "Clientes do CRM dentro do escopo autorizado do usuário.",
     "oportunidades": "Oportunidades comerciais do CRM dentro do escopo autorizado.",
     "itens_oportunidade": "Itens/equipamentos vinculados às oportunidades autorizadas.",
@@ -26,7 +26,7 @@ FONTES_PUBLICAS = {
     "pedidos": "Pedidos comerciais autorizados e seu ciclo operacional.",
     "atividades": "Atividades, visitas e acompanhamentos autorizados.",
     "vendas": "Vendas autorizadas e seus vínculos registrados.",
-    "implementadoras_cadastro": "Cadastro canônico de implementadoras do CTI.",
+    "implementadoras_cadastro": "Cadastro canônico atual de implementadoras do CTI. Use para existência, identidade, status e listagem cadastral atual; não usar como substituto do histórico ANFIR para ranking por frequência ou atuação histórica.",
     "catalogo_produtos": "Catálogo oficial de linhas, modelos e aliases de equipamentos do CTI.",
     "perfil_usuario": "Perfil operacional do usuário atual, sem credenciais ou segredos.",
 }
@@ -123,6 +123,54 @@ def _campos(registros: list[dict[str, Any]]) -> list[str]:
     return sorted(campos)
 
 
+def _validar_plano_campos(
+    registros: list[dict[str, Any]],
+    *,
+    filtros: list[dict[str, Any]],
+    agrupar_por: list[str],
+    metricas: list[dict[str, Any]],
+    ordenar_por: str | None,
+) -> dict[str, Any] | None:
+    campos_disponiveis = _campos(registros)
+    disponiveis = set(campos_disponiveis)
+    invalidos: set[str] = set()
+
+    for filtro in filtros:
+        if not isinstance(filtro, dict):
+            continue
+        campo = str(filtro.get("campo") or "").strip()
+        if campo and campo not in disponiveis:
+            invalidos.add(campo)
+
+    for campo in agrupar_por:
+        campo = str(campo or "").strip()
+        if campo and campo not in disponiveis:
+            invalidos.add(campo)
+
+    aliases_metricas: set[str] = set()
+    for metrica in metricas:
+        if not isinstance(metrica, dict):
+            continue
+        campo = str(metrica.get("campo") or "").strip()
+        alias = str(metrica.get("alias") or "").strip()
+        if alias:
+            aliases_metricas.add(alias)
+        if campo and campo not in disponiveis:
+            invalidos.add(campo)
+
+    campo_ordenacao = str(ordenar_por or "").strip()
+    if campo_ordenacao and campo_ordenacao not in disponiveis and campo_ordenacao not in aliases_metricas and campo_ordenacao not in set(agrupar_por):
+        invalidos.add(campo_ordenacao)
+
+    if not invalidos:
+        return None
+    return {
+        "erro": "Plano de consulta contém campo(s) inexistente(s) na fonte selecionada. Consulte o catálogo e refaça o plano com campos disponíveis.",
+        "campos_invalidos": sorted(invalidos),
+        "campos_disponiveis": campos_disponiveis,
+    }
+
+
 def catalogar_universo_cti(usuario_id: str, tipo_usuario: str) -> dict[str, Any]:
     fontes, metadados = _carregar_fontes(usuario_id, tipo_usuario)
     catalogo = []
@@ -141,7 +189,7 @@ def catalogar_universo_cti(usuario_id: str, tipo_usuario: str) -> dict[str, Any]
         "modo": "somente_leitura",
         "fontes": catalogo,
         "escopo": metadados,
-        "regra": "Descubra os dados pelo catálogo e consulte por plano estruturado; não existe SQL livre nem escrita nesta camada.",
+        "regra": "Descubra os dados pelo catálogo, respeite a função analítica descrita de cada fonte e consulte por plano estruturado; não existe SQL livre nem escrita nesta camada.",
     }
 
 
@@ -265,10 +313,28 @@ def consultar_universo_cti(
         }
 
     registros = fontes[nome]
-    filtrados = _aplicar_filtros(registros, filtros or [], termo)
-    total_filtrado = len(filtrados)
+    filtros_seguros = [item for item in (filtros or []) if isinstance(item, dict)]
     agrupamentos = [str(item) for item in (agrupar_por or []) if str(item).strip()][:3]
     metricas_seguras = [item for item in (metricas or []) if isinstance(item, dict)][:8]
+
+    erro_plano = _validar_plano_campos(
+        registros,
+        filtros=filtros_seguros,
+        agrupar_por=agrupamentos,
+        metricas=metricas_seguras,
+        ordenar_por=ordenar_por,
+    )
+    if erro_plano:
+        return {
+            "fonte": nome,
+            "descricao": FONTES_PUBLICAS[nome],
+            "modo": "somente_leitura",
+            "escopo": metadados,
+            **erro_plano,
+        }
+
+    filtrados = _aplicar_filtros(registros, filtros_seguros, termo)
+    total_filtrado = len(filtrados)
 
     if agrupamentos:
         if not metricas_seguras:
@@ -295,7 +361,7 @@ def consultar_universo_cti(
         "tem_mais": offset + limite < len(saida),
         "campos_disponiveis": _campos(registros),
         "plano_executado": {
-            "filtros": filtros or [],
+            "filtros": filtros_seguros,
             "termo": termo,
             "agrupar_por": agrupamentos,
             "metricas": metricas_seguras,
