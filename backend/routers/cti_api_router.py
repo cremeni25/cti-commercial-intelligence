@@ -23,6 +23,7 @@ from routers.validacao_operacional_documentos_router import router as validacao_
 from routers.testes_campo_master_router import router as testes_campo_master_router
 from routers.ia_comercial_cti_router import router as ia_comercial_cti_router
 from routers.ia_comercial_acoes_router import router as ia_comercial_acoes_router
+from routers.ia_comercial_artefatos_router import router as ia_comercial_artefatos_router
 
 router = APIRouter()
 router.include_router(product_catalog_router)
@@ -48,6 +49,7 @@ router.include_router(validacao_operacional_documentos_router)
 router.include_router(testes_campo_master_router)
 router.include_router(ia_comercial_cti_router)
 router.include_router(ia_comercial_acoes_router)
+router.include_router(ia_comercial_artefatos_router)
 
 
 @router.post("/upload")
