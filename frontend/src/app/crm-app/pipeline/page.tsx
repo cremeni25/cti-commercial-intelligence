@@ -1,5 +1,5 @@
-import NegociosNativos from "../_components/NegociosNativos"
+import PipelineOperacional from "../_components/PipelineOperacional"
 
 export default function CrmAppPipelinePage() {
-  return <NegociosNativos modo="pipeline" />
+  return <PipelineOperacional />
 }
