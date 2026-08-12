@@ -99,3 +99,40 @@ Separadamente, pesquisa na web indica empresas reconhecidas no mercado:
     assert len(randons) == 1
     assert randons[0]["tipo"] == "FATO_WEB"
     assert all(fonte.startswith("WEB_") for fonte in randons[0]["fontes_evidencia"])
+
+
+def test_narrativa_natural_historico_anfir_disponivel_no_cti_e_rastreavel():
+    resposta = """Pela análise do histórico ANFIR disponível no CTI, as cinco implementadoras mais frequentes são:
+
+1. Ibiporã – 1.118 registros
+2. Pavan – 763 registros
+3. Fibra West – 514 registros
+4. High Flex – 305 registros
+5. Randon – 240 registros
+
+Esse ranking reflete o número de registros históricos relacionados a essas implementadoras no banco do CTI.
+
+Em complemento, a pesquisa na web identificou outro ranking de implementadoras de implementos rodoviários.
+- Facchini S.A.
+- Randon Implementos
+"""
+    resultado = construir_auditoria_evidencial(
+        resposta_texto=resposta,
+        metadados=_metadados_multifonte(),
+        pergunta_atual="relacione as maiores usando CTI e web",
+    )
+    afirmacoes = resultado["auditoria_evidencial"]["afirmacoes"]
+    por_texto = {item["texto"]: item for item in afirmacoes}
+
+    for texto in (
+        "Ibiporã – 1.118 registros",
+        "Pavan – 763 registros",
+        "Fibra West – 514 registros",
+        "High Flex – 305 registros",
+        "Randon – 240 registros",
+    ):
+        assert por_texto[texto]["tipo"] == "FATO_CTI"
+        assert por_texto[texto]["status_rastreabilidade"] == "RASTREAVEL"
+        assert por_texto[texto]["fontes_evidencia"] == ["CTI_1"]
+
+    assert resultado["auditoria_afirmacoes_sem_evidencia"] == 0
