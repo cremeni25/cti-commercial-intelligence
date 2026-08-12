@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Loader2, Search } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -39,9 +38,6 @@ function normalizarCliente(item: Registro): Cliente | null {
 
 export default function NovaOportunidadePage() {
   const { usuario } = useAuth()
-  const search = useSearchParams()
-  const clienteContexto = texto(search.get("cliente"))
-  const nomeContexto = texto(search.get("nome"))
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [buscaCliente, setBuscaCliente] = useState("")
   const [clienteSelecionado, setClienteSelecionado] = useState<Cliente | null>(null)
@@ -55,6 +51,9 @@ export default function NovaOportunidadePage() {
 
   useEffect(() => {
     let ativo = true
+    const params = new URLSearchParams(window.location.search)
+    const clienteContexto = texto(params.get("cliente"))
+    const nomeContexto = texto(params.get("nome"))
     fetch("/api/crm-proxy/modulos/clientes?contexto=viena-sp&periodo=TODO_HISTORICO", { cache: "no-store" })
       .then(async (resposta) => (resposta.ok ? resposta.json() : []))
       .then((dados) => {
@@ -67,7 +66,7 @@ export default function NovaOportunidadePage() {
       })
       .catch(() => { if (ativo) setClientes([]) })
     return () => { ativo = false }
-  }, [clienteContexto, nomeContexto])
+  }, [])
 
   const sugestoes = useMemo(() => {
     const termo = buscaCliente.trim().toLocaleLowerCase("pt-BR")
