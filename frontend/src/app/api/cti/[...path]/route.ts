@@ -22,7 +22,7 @@ async function encaminhar(request: NextRequest, contexto: ContextoRota) {
     headers,
     body: METODOS_COM_CORPO.has(request.method) ? await request.arrayBuffer() : undefined,
     cache: "no-store",
-    redirect: "manual",
+    redirect: "follow",
   })
 
   const corpo = await resposta.arrayBuffer()
@@ -32,8 +32,8 @@ async function encaminhar(request: NextRequest, contexto: ContextoRota) {
   })
   const contentType = resposta.headers.get("content-type")
   if (contentType) retornoHeaders.set("content-type", contentType)
-  const location = resposta.headers.get("location")
-  if (location) retornoHeaders.set("location", location)
+  const contentDisposition = resposta.headers.get("content-disposition")
+  if (contentDisposition) retornoHeaders.set("content-disposition", contentDisposition)
 
   return new NextResponse(corpo, {
     status: resposta.status,
