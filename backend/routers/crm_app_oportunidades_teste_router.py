@@ -18,23 +18,39 @@ def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _auditar(oportunidade: dict, *, acao: str, usuario_id: str, status_anterior: str, status_resultante: str, motivo: str):
+    supabase.table("cti_oportunidades_arquivo_auditoria").insert({
+        "oportunidade_id": oportunidade.get("id"),
+        "acao": acao,
+        "usuario_id": usuario_id,
+        "motivo": motivo,
+        "status_anterior": status_anterior,
+        "status_resultante": status_resultante,
+        "snapshot": oportunidade,
+    }).execute()
+
+
 @router.post("/{oportunidade_id}/arquivar-teste")
 def arquivar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_admin)):
     registros = supabase.table("cti_oportunidades").select("*").eq("id", oportunidade_id).limit(1).execute().data or []
     if not registros:
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada.")
     atual = registros[0]
+    status_anterior = str(atual.get("status") or "OPORTUNIDADE")
+    motivo = "Registro criado para teste/homologação"
     payload = {
         "registro_teste": True,
         "arquivado_em": _agora(),
         "arquivado_por": usuario.id,
-        "motivo_arquivamento": "Registro criado para teste/homologação",
-        "status_antes_arquivamento": str(atual.get("status") or "OPORTUNIDADE"),
+        "motivo_arquivamento": motivo,
+        "status_antes_arquivamento": status_anterior,
         "status": "ARQUIVADO_TESTE",
         "updated_at": _agora(),
     }
-    atualizado = supabase.table("cti_oportunidades").update(payload).eq("id", oportunidade_id).execute().data or []
-    return {"success": True, "oportunidade": atualizado[0] if atualizado else {**atual, **payload}}
+    supabase.table("cti_oportunidades").update(payload).eq("id", oportunidade_id).execute()
+    arquivado = {**atual, **payload}
+    _auditar(arquivado, acao="ARQUIVAR_TESTE", usuario_id=usuario.id, status_anterior=status_anterior, status_resultante="ARQUIVADO_TESTE", motivo=motivo)
+    return {"success": True, "oportunidade": arquivado}
 
 
 @router.get("/testes-arquivados")
