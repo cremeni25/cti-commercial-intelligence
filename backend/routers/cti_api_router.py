@@ -27,6 +27,7 @@ from routers.ia_comercial_artefatos_router import router as ia_comercial_artefat
 from routers.crm_app_clientes_edicao_router import router as crm_app_clientes_edicao_router
 from routers.crm_app_proposta_envio_router import router as crm_app_proposta_envio_router
 from routers.crm_app_oportunidade_propostas_envio_router import router as crm_app_oportunidade_propostas_envio_router
+from routers.crm_app_oportunidades_teste_router import router as crm_app_oportunidades_teste_router
 
 router = APIRouter()
 router.include_router(product_catalog_router)
@@ -56,6 +57,7 @@ router.include_router(ia_comercial_artefatos_router)
 router.include_router(crm_app_clientes_edicao_router)
 router.include_router(crm_app_proposta_envio_router)
 router.include_router(crm_app_oportunidade_propostas_envio_router)
+router.include_router(crm_app_oportunidades_teste_router)
 
 
 @router.post("/upload")
