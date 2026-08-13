@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import { ArrowRight, CalendarDays, CircleAlert, History, Loader2, MessageSquarePlus, RefreshCw, TrendingUp } from "lucide-react"
+import { ArrowLeft, ArrowRight, CalendarDays, CircleAlert, History, Loader2, MessageSquarePlus, RefreshCw, TrendingUp } from "lucide-react"
 
 type Registro = Record<string, unknown>
 type Negocio = {
@@ -100,10 +100,10 @@ export default function PipelineOperacional() {
 
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6">
     <div className="mx-auto max-w-[1500px]">
-      <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Pipeline comercial</h1><p className="text-sm text-slate-400">Quadro operacional dos mesmos negócios do núcleo CTI</p></div><div className="flex gap-2"><button onClick={() => void carregar()} className="grid size-12 place-items-center rounded-2xl border border-[#24466f] text-cyan-300" aria-label="Atualizar"><RefreshCw size={18}/></button><Link href="/crm-app/forecast" className="flex items-center gap-2 rounded-2xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><TrendingUp size={17}/>Forecast</Link></div></header>
+      <header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-start gap-3"><Link href="/crm-app" aria-label="Voltar ao CRM" className="grid size-11 shrink-0 place-items-center rounded-2xl border border-[#24466f] bg-[#07162b] text-cyan-300"><ArrowLeft size={19}/></Link><div className="min-w-0"><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Pipeline comercial</h1><p className="text-sm text-slate-400">Quadro operacional dos mesmos negócios do núcleo CTI</p></div></div><div className="flex gap-2"><button onClick={() => void carregar()} className="grid size-12 place-items-center rounded-2xl border border-[#24466f] text-cyan-300" aria-label="Atualizar"><RefreshCw size={18}/></button><Link href="/crm-app/forecast" className="flex items-center gap-2 rounded-2xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><TrendingUp size={17}/>Forecast</Link></div></header>
       {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
       {sucesso && <div className="mb-4 rounded-2xl border border-emerald-900 bg-emerald-950/40 p-4 text-emerald-200">{sucesso}</div>}
-      <section className="mb-4 grid gap-3 sm:grid-cols-5"><Kpi label="Negócios" valor={String(visiveis.length)}/><Kpi label="Valor total" valor={moeda(total)}/><Kpi label="Ponderado" valor={moeda(ponderado)}/><Kpi label="Sem interação" valor={String(semInteracao)} alerta={semInteracao>0}/><Kpi label="Fechamento vencido" valor={String(vencidos)} alerta={vencidos>0}/></section>
+      <section className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"><Kpi label="Negócios" valor={String(visiveis.length)}/><Kpi label="Valor total" valor={moeda(total)}/><Kpi label="Ponderado" valor={moeda(ponderado)}/><Kpi label="Sem interação" valor={String(semInteracao)} alerta={semInteracao>0}/><Kpi label="Fechamento vencido" valor={String(vencidos)} alerta={vencidos>0}/></section>
       <label className="mb-4 inline-flex items-center gap-2 rounded-xl border border-[#24466f] bg-[#07162b] px-4 py-3 text-sm text-slate-300"><input type="checkbox" checked={mostrarEncerrados} onChange={(e)=>setMostrarEncerrados(e.target.checked)}/>Mostrar negócios encerrados</label>
       {carregando ? <div className="grid min-h-72 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : etapasVisiveis.length === 0 ? <div className="rounded-3xl border border-dashed border-[#24466f] p-10 text-center text-slate-400">Nenhum negócio no pipeline.</div> : <div className="overflow-x-auto pb-4"><div className="flex min-w-max gap-4">{etapasVisiveis.map((etapa) => {
         const negocios = visiveis.filter((item) => item.etapa === etapa)
@@ -117,4 +117,4 @@ export default function PipelineOperacional() {
   </main>
 }
 
-function Kpi({label,valor,alerta=false}:{label:string;valor:string;alerta?:boolean}) { return <div className={`rounded-2xl border p-4 ${alerta?"border-amber-800 bg-amber-950/20":"border-[#16325c] bg-[#07162b]"}`}><p className="text-xs text-slate-400">{label}</p><strong className={`mt-1 block text-lg ${alerta?"text-amber-300":"text-cyan-300"}`}>{valor}</strong></div> }
+function Kpi({label,valor,alerta=false}:{label:string;valor:string;alerta?:boolean}) { return <div className={`min-w-0 overflow-hidden rounded-2xl border p-4 ${alerta?"border-amber-800 bg-amber-950/20":"border-[#16325c] bg-[#07162b]"}`}><p className="text-xs text-slate-400">{label}</p><strong className={`mt-1 block max-w-full break-words text-base leading-tight tabular-nums sm:text-lg ${alerta?"text-amber-300":"text-cyan-300"}`}>{valor}</strong></div> }
