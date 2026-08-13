@@ -1,9 +1,20 @@
+import { getSupabaseClient } from "@/core/database/supabase"
+
 const API_URL = "/api/cti"
 
 export type OperationalContextValue = "brasil" | "viena-sp" | `uf-${string}` | `ddd-${string}`
 
+async function authHeaders(extra?: HeadersInit) {
+  const headers = new Headers(extra)
+  const supabase = getSupabaseClient()
+  const { data } = await supabase.auth.getSession()
+  if (data.session?.access_token) headers.set("Authorization", `Bearer ${data.session.access_token}`)
+  if (!headers.has("Accept")) headers.set("Accept", "application/json")
+  return headers
+}
+
 async function request(endpoint: string) {
-  const response = await fetch(`${API_URL}${endpoint}`, { cache: "no-store" })
+  const response = await fetch(`${API_URL}${endpoint}`, { cache: "no-store", headers: await authHeaders() })
   const contentType = response.headers.get("content-type") || ""
   if (!contentType.includes("application/json")) {
     const trecho = (await response.text()).slice(0, 160).replace(/\s+/g, " ")
@@ -38,7 +49,7 @@ export async function getPipelineStatus() { return request("/pipeline/status") }
 
 export async function uploadArquivo(file: File, contexto: OperationalContextValue = "brasil") {
   const formData = new FormData(); formData.append("file", file); formData.append("contexto_operacional", contexto)
-  const response = await fetch(`${API_URL}/upload/anfir/seguro`, { method: "POST", body: formData })
+  const response = await fetch(`${API_URL}/upload/anfir/seguro`, { method: "POST", body: formData, headers: await authHeaders() })
   if (!response.ok) throw new Error("Erro ao realizar upload")
   return response.json()
 }
