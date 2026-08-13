@@ -10,6 +10,7 @@ from .ia_comercial_artefatos import detectar_intencao_artefato
 
 
 _ORIGINAL_GERAR_RESPOSTA = _agente.gerar_resposta_agente
+_PREFIXO_RELATORIO_CRM = "RELATÓRIO CRM —"
 
 
 def _normalizar(texto: str) -> str:
@@ -20,6 +21,10 @@ def _normalizar(texto: str) -> str:
 def _mensagem_usuario(mensagem: str) -> str:
     marcador = "\n\nCONTEXTO INTERNO DA IA CTI:"
     return str(mensagem or "").split(marcador, 1)[0].strip()
+
+
+def _relatorio_crm_isolado(mensagem_usuario: str) -> bool:
+    return str(mensagem_usuario or "").lstrip().upper().startswith(_PREFIXO_RELATORIO_CRM)
 
 
 def _ultima_mensagem(historico: list[dict[str, str]], papel: str) -> str:
@@ -44,8 +49,9 @@ def gerar_resposta_agente(
     usuario_id: str,
     tipo_usuario: str,
 ) -> tuple[str, dict[str, Any]]:
-    historico_atual = historico or []
     pergunta = _mensagem_usuario(mensagem)
+    relatorio_isolado = _relatorio_crm_isolado(pergunta)
+    historico_atual = [] if relatorio_isolado else (historico or [])
     solicitados = detectar_intencao_artefato(pergunta)
     resposta_anterior = _ultima_mensagem(historico_atual, "assistant")
     pergunta_anterior = _ultima_mensagem(historico_atual, "user")
@@ -103,6 +109,10 @@ def gerar_resposta_agente(
         "referencia_texto": "",
         "modo": "NOVA_EXECUCAO_UNICA",
     }
+    if relatorio_isolado:
+        metadados["controle_relatorio_crm"] = "execucao_tematica_isolada_sem_historico"
+        metadados["historico_relatorio_reutilizado"] = False
+        metadados["snapshot_relatorio_origem"] = "execucao_atual"
     return resposta_texto, metadados
 
 
