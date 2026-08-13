@@ -24,8 +24,6 @@ def arquivar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_
     if not registros:
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada.")
     atual = registros[0]
-    if atual.get("arquivado_em"):
-        return {"success": True, "oportunidade": atual, "already_archived": True}
     payload = {
         "registro_teste": True,
         "arquivado_em": _agora(),
@@ -37,3 +35,18 @@ def arquivar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_
     }
     atualizado = supabase.table("cti_oportunidades").update(payload).eq("id", oportunidade_id).execute().data or []
     return {"success": True, "oportunidade": atualizado[0] if atualizado else {**atual, **payload}}
+
+
+@router.get("/testes-arquivados")
+def listar_testes_arquivados(usuario: UsuarioAutenticado = Depends(_admin)):
+    _ = usuario
+    return (
+        supabase.table("cti_oportunidades_registros")
+        .select("*")
+        .eq("registro_teste", True)
+        .not_.is_("arquivado_em", "null")
+        .order("arquivado_em", desc=True)
+        .execute()
+        .data
+        or []
+    )
