@@ -32,8 +32,8 @@ const relatorios = [
   },
 ] as const
 
-function destino(tema: string, prompt: string) {
-  return `/ia-comercial?tema=${encodeURIComponent(tema)}&prompt=${encodeURIComponent(prompt)}`
+function destino(titulo: string, prompt: string) {
+  return `/crm-app/relatorios/executar?titulo=${encodeURIComponent(titulo)}&prompt=${encodeURIComponent(prompt)}`
 }
 
 export default function RelatoriosCrmPage() {
@@ -41,15 +41,15 @@ export default function RelatoriosCrmPage() {
     <div className="mx-auto max-w-6xl">
       <header className="mb-5 flex items-center gap-3">
         <Link href="/crm-app" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link>
-        <div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM · IA-009</p><h1 className="text-2xl font-bold">Central de Relatórios</h1><p className="text-sm text-slate-400">Cada modelo executa uma leitura própria; texto, gráfico e PDF usam somente o snapshot daquele tema.</p></div>
+        <div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM · IA-009</p><h1 className="text-2xl font-bold">Central de Relatórios</h1><p className="text-sm text-slate-400">Cada modelo cria um contexto novo, executa a leitura do tema e só então abre o resultado na IA Comercial.</p></div>
       </header>
 
       <section className="mb-5 rounded-3xl border border-emerald-900/70 bg-emerald-950/20 p-5">
-        <div className="flex items-start gap-3"><Bot className="mt-1 shrink-0 text-emerald-300"/><div><h2 className="font-bold text-emerald-200">Um relatório, uma leitura, um snapshot temático</h2><p className="mt-1 text-sm leading-6 text-emerald-100/70">Pipeline, Atividades, Forecast e Carteira são tratados como execuções factuais independentes. A IA não reutiliza histórico, números, pesquisa ou snapshot de outro tema para construir o relatório atual. A IA-009 continua responsável pelos gráficos, PDF e downloads auditáveis.</p></div></div>
+        <div className="flex items-start gap-3"><Bot className="mt-1 shrink-0 text-emerald-300"/><div><h2 className="font-bold text-emerald-200">Um relatório, uma conversa, uma leitura, um snapshot</h2><p className="mt-1 text-sm leading-6 text-emerald-100/70">Pipeline, Atividades, Forecast e Carteira são executados em conversas novas e independentes. O relatório é processado antes de abrir a IA Comercial, eliminando visualmente e factual­mente qualquer reaproveitamento da conversa anterior.</p></div></div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2">{relatorios.map(({tema,titulo,descricao,icon:Icon,prompt}) => <Link key={tema} href={destino(tema,prompt)} className="group rounded-3xl border border-[#16325c] bg-[#07162b] p-5 transition hover:border-cyan-600">
-        <div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cyan-950/50 text-cyan-300"><Icon size={22}/></span><div className="min-w-0"><h2 className="text-lg font-bold group-hover:text-cyan-200">{titulo}</h2><p className="mt-1 text-sm leading-6 text-slate-400">{descricao}</p><span className="mt-4 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"><FileDown size={15}/>Preparar relatório</span></div></div>
+      <section className="grid gap-4 md:grid-cols-2">{relatorios.map(({tema,titulo,descricao,icon:Icon,prompt}) => <Link key={tema} href={destino(titulo,prompt)} className="group rounded-3xl border border-[#16325c] bg-[#07162b] p-5 transition hover:border-cyan-600">
+        <div className="flex items-start gap-4"><span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-cyan-950/50 text-cyan-300"><Icon size={22}/></span><div className="min-w-0"><h2 className="text-lg font-bold group-hover:text-cyan-200">{titulo}</h2><p className="mt-1 text-sm leading-6 text-slate-400">{descricao}</p><span className="mt-4 inline-flex items-center gap-2 rounded-xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950"><FileDown size={15}/>Gerar relatório</span></div></div>
       </Link>)}</section>
 
       <section className="mt-5 rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
