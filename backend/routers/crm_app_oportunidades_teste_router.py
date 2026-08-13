@@ -38,15 +38,7 @@ def arquivar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_
     atual = registros[0]
     status_anterior = str(atual.get("status") or "OPORTUNIDADE")
     motivo = "Registro criado para teste/homologação"
-    payload = {
-        "registro_teste": True,
-        "arquivado_em": _agora(),
-        "arquivado_por": usuario.id,
-        "motivo_arquivamento": motivo,
-        "status_antes_arquivamento": status_anterior,
-        "status": "ARQUIVADO_TESTE",
-        "updated_at": _agora(),
-    }
+    payload = {"registro_teste": True, "arquivado_em": _agora(), "arquivado_por": usuario.id, "motivo_arquivamento": motivo, "status_antes_arquivamento": status_anterior, "status": "ARQUIVADO_TESTE", "updated_at": _agora()}
     supabase.table("cti_oportunidades").update(payload).eq("id", oportunidade_id).execute()
     arquivado = {**atual, **payload}
     _auditar(arquivado, acao="ARQUIVAR_TESTE", usuario_id=usuario.id, status_anterior=status_anterior, status_resultante="ARQUIVADO_TESTE", motivo=motivo)
@@ -56,13 +48,20 @@ def arquivar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_
 @router.get("/testes-arquivados")
 def listar_testes_arquivados(usuario: UsuarioAutenticado = Depends(_admin)):
     _ = usuario
-    return (
-        supabase.table("cti_oportunidades_registros")
-        .select("*")
-        .eq("registro_teste", True)
-        .not_.is_("arquivado_em", "null")
-        .order("arquivado_em", desc=True)
-        .execute()
-        .data
-        or []
-    )
+    return supabase.table("cti_oportunidades_registros").select("*").eq("registro_teste", True).not_.is_("arquivado_em", "null").order("arquivado_em", desc=True).execute().data or []
+
+
+@router.post("/{oportunidade_id}/restaurar-teste")
+def restaurar_teste(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(_admin)):
+    registros = supabase.table("cti_oportunidades_registros").select("*").eq("id", oportunidade_id).limit(1).execute().data or []
+    if not registros:
+        raise HTTPException(status_code=404, detail="Oportunidade arquivada não encontrada.")
+    atual = registros[0]
+    if not atual.get("arquivado_em"):
+        return {"success": True, "oportunidade": atual, "already_active": True}
+    status_restaurado = str(atual.get("status_antes_arquivamento") or "OPORTUNIDADE")
+    payload = {"registro_teste": False, "arquivado_em": None, "arquivado_por": None, "motivo_arquivamento": None, "status": status_restaurado, "status_antes_arquivamento": None, "updated_at": _agora()}
+    atualizado = supabase.table("cti_oportunidades_registros").update(payload).eq("id", oportunidade_id).execute().data or []
+    restaurado = atualizado[0] if atualizado else {**atual, **payload}
+    _auditar(restaurado, acao="RESTAURAR_TESTE", usuario_id=usuario.id, status_anterior="ARQUIVADO_TESTE", status_resultante=status_restaurado, motivo="Restauração administrativa")
+    return {"success": True, "oportunidade": restaurado}
