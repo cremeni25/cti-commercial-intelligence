@@ -75,7 +75,7 @@ export default function EditarClientePage() {
       })
       const retorno = await resposta.json().catch(() => ({})) as Registro
       if (!resposta.ok) throw new Error(texto(retorno.detail) || `Não foi possível atualizar o cliente (${resposta.status}).`)
-      const atualizado = retorno.cliente && typeof retorno.cliente === "object" ? retorno.cliente as Registro : payload
+      const atualizado: Registro = retorno.cliente && typeof retorno.cliente === "object" ? retorno.cliente as Registro : { ...payload }
       setCliente(atualizado)
       setSucesso("Cadastro atualizado e disponível em toda a jornada comercial.")
       window.setTimeout(() => router.push(`/crm-app/clientes/${encodeURIComponent(texto(atualizado.id) || clienteId)}?nome=${encodeURIComponent(payload.nome)}`), 700)
