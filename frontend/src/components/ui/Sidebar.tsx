@@ -13,7 +13,7 @@ const perfilAtual = "ADMIN_MASTER"
 
 const permissoesMenu = {
   ADMIN_MASTER: [
-    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
+    "/dashboard", "/historico-comercial", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
     "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais",
@@ -36,6 +36,7 @@ const menuGroups: MenuGroup[] = [
     titulo: "Principal",
     itens: [
       { label: "Dashboard Executivo", href: "/dashboard", icon: "📊", type: "emoji" },
+      { label: "Histórico Comercial", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
       { label: "IA Comercial", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
   },
