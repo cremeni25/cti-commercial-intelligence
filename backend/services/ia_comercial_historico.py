@@ -5,6 +5,10 @@ from typing import Any
 
 from repositories.cti_repository import repository
 from services.base_analytics import consolidar_dashboard
+from services.historical_commercial_source import (
+    carregar_historico_comercial,
+    resumir_historico_comercial,
+)
 from services.operational_filters import data_registro, filtrar_registros
 
 MAX_REGISTROS_RECENTES = 160
@@ -23,6 +27,7 @@ def _texto(registro: dict[str, Any], *campos: str) -> str | None:
 def _registro_resumido(registro: dict[str, Any]) -> dict[str, Any]:
     data = data_registro(registro)
     return {
+        "origem_semantica": "CTI_ANFIR",
         "data": data.isoformat() if data else None,
         "cliente": _texto(registro, "cliente", "razao_social", "nome_cliente", "nome"),
         "linha": _texto(registro, "linha", "linha_produto", "familia"),
@@ -40,34 +45,61 @@ def _registro_resumido(registro: dict[str, Any]) -> dict[str, Any]:
 
 def contexto_historico(tipo_usuario: str) -> dict[str, Any]:
     try:
-        base = list(repository.buscar_cti_anfir() or [])
+        base_anfir = list(repository.buscar_cti_anfir() or [])
     except Exception:
-        base = []
+        base_anfir = []
 
     contexto = "brasil" if tipo_usuario == "ADMIN_MASTER" else "viena-sp"
-    registros = filtrar_registros(base, contexto=contexto)
+    registros_anfir = filtrar_registros(base_anfir, contexto=contexto)
     hoje = date.today()
     inicio_90_dias = hoje - timedelta(days=89)
-    recentes = [
-        registro for registro in registros
+    recentes_anfir = [
+        registro for registro in registros_anfir
         if (data := data_registro(registro)) is not None and inicio_90_dias <= data <= hoje
     ]
-    recentes.sort(key=lambda item: data_registro(item) or date.min, reverse=True)
+    recentes_anfir.sort(key=lambda item: data_registro(item) or date.min, reverse=True)
+
+    try:
+        comercial = carregar_historico_comercial()
+        resumo_comercial = resumir_historico_comercial(comercial)
+    except Exception as exc:
+        comercial = ()
+        resumo_comercial = {"disponivel": False, "erro": str(exc)}
+
+    pool_consultavel = list(comercial) + [
+        _registro_resumido(item) for item in recentes_anfir[:MAX_REGISTROS_RECENTES]
+    ]
 
     return {
-        "fonte": "Base histórica CTI/ANFIR usada pelo Dashboard Executivo",
+        "fonte": "Fontes homologadas CTI/ANFIR + Histórico Comercial 2023–2026",
+        "fontes": {
+            "cti_anfir": {
+                "homologado": True,
+                "escopo": contexto,
+                "total_registros_escopo": len(registros_anfir),
+            },
+            "historico_comercial": {
+                "homologado": True,
+                "total_registros": len(comercial),
+                "somente_leitura": True,
+                "nao_promove_crm": True,
+            },
+        },
         "escopo": contexto,
         "periodo_recente": {
             "inicio": inicio_90_dias.isoformat(),
             "fim": hoje.isoformat(),
-            "total_registros": len(recentes),
+            "total_registros_anfir": len(recentes_anfir),
         },
-        "dashboard_historico": consolidar_dashboard(registros),
-        "registros_ultimos_90_dias": [
-            _registro_resumido(item) for item in recentes[:MAX_REGISTROS_RECENTES]
-        ],
+        "dashboard_historico": {
+            "cti_anfir": consolidar_dashboard(registros_anfir),
+            "historico_comercial": resumo_comercial,
+        },
+        "registros_ultimos_90_dias": pool_consultavel,
+        "registros_consultaveis": pool_consultavel,
         "observacao_amostragem": (
-            f"Foram enviados ao modelo até {MAX_REGISTROS_RECENTES} registros recentes, "
-            "ordenados da data mais nova para a mais antiga. As contagens do dashboard usam a base completa."
+            f"Pool semântico: {len(comercial)} registros do histórico comercial homologado e até "
+            f"{MAX_REGISTROS_RECENTES} registros recentes CTI/ANFIR. Os resumos usam as bases completas. "
+            "O histórico comercial é somente leitura e não cria nem altera Pipeline, Forecast ou CRM ativo."
         ),
     }

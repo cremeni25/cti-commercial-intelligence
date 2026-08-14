@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import Any
 
 from repositories.cti_repository import repository
+from services.historical_commercial_source import carregar_historico_comercial
 from services.ia_comercial_cti import _consulta_segura
 from services.ia_comercial_dados_semanticos import _escopo_autorizado
 from services.ia_comercial_territorio_anfir import _aplicar_rbac, resolver_escopo_territorial
@@ -18,6 +19,7 @@ CAMPOS_SENSIVEIS = {
 
 FONTES_PUBLICAS = {
     "historico_anfir": "Fonte analítica histórica comercial/ANFIR autorizada, com território, frota, cliente, implementadora, equipamento, linha, modelo e demais campos disponíveis. Use esta fonte para frequência histórica, rankings por ocorrência, tendências e análises ao longo do histórico.",
+    "historico_comercial": "Histórico comercial homologado 2023–2026 do funil Viena, com BACKLOG, OPORTUNIDADE e INTERMEDIAÇÃO-OEM. Contém cliente, equipamento, quantidade, valores nominais, observações, status reconstruído, motivo de perda, canal, implementadora, representante histórico e responsabilidade atual. É somente leitura, preserva proveniência e não representa Pipeline ativo.",
     "clientes": "Clientes do CRM dentro do escopo autorizado do usuário.",
     "oportunidades": "Oportunidades comerciais do CRM dentro do escopo autorizado.",
     "itens_oportunidade": "Itens/equipamentos vinculados às oportunidades autorizadas.",
@@ -82,6 +84,14 @@ def _fonte_perfil_usuario(usuario_id: str) -> list[dict[str, Any]]:
     return []
 
 
+def _fonte_historico_comercial(tipo_usuario: str) -> list[dict[str, Any]]:
+    # A fonte foi homologada pelo ADMIN_MASTER. Até existir regra territorial
+    # determinística para todos os perfis, não ampliar acesso de terceiros.
+    if str(tipo_usuario or "").upper() != "ADMIN_MASTER":
+        return []
+    return [_sanitizar_registro(dict(item)) for item in carregar_historico_comercial()]
+
+
 def _carregar_fontes(usuario_id: str, tipo_usuario: str) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
     crm = _escopo_autorizado(usuario_id, tipo_usuario)
     historico = repository.buscar_cti_anfir()
@@ -89,6 +99,7 @@ def _carregar_fontes(usuario_id: str, tipo_usuario: str) -> tuple[dict[str, list
     if erro_rbac:
         historico = []
 
+    historico_comercial = _fonte_historico_comercial(tipo_usuario)
     implementadoras = [
         _sanitizar_registro(item)
         for item in _consulta_segura("cti_implementadoras")
@@ -97,6 +108,7 @@ def _carregar_fontes(usuario_id: str, tipo_usuario: str) -> tuple[dict[str, list
 
     fontes = {
         "historico_anfir": [_sanitizar_registro(item) for item in historico],
+        "historico_comercial": historico_comercial,
         "clientes": [_sanitizar_registro(item) for item in crm.get("clientes", [])],
         "oportunidades": [_sanitizar_registro(item) for item in crm.get("oportunidades", [])],
         "itens_oportunidade": [_sanitizar_registro(item) for item in crm.get("itens", [])],
@@ -112,6 +124,12 @@ def _carregar_fontes(usuario_id: str, tipo_usuario: str) -> tuple[dict[str, list
     metadados = {
         "escopo_territorial": escopo_territorial,
         "erro_rbac_historico": erro_rbac,
+        "historico_comercial": {
+            "autorizado": str(tipo_usuario or "").upper() == "ADMIN_MASTER",
+            "total_registros": len(historico_comercial),
+            "modo": "somente_leitura",
+            "nao_promove_crm": True,
+        },
     }
     return fontes, metadados
 
