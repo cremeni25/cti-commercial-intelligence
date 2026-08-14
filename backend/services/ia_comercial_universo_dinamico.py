@@ -136,3 +136,9 @@ def consultar_universo_cti(usuario_id: str, tipo_usuario: str, *, fonte: str, fi
         "campos_disponiveis": base._campos(registros),
         "resultado": saida[offset:offset + limite],
     }
+
+
+def ativar_no_agente() -> None:
+    from services import ia_comercial_agente_crm as agente
+    agente.catalogar_universo_cti = catalogar_universo_cti
+    agente.consultar_universo_cti = consultar_universo_cti
