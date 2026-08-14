@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
+from services.universal_source_interpreter import interpretar_fonte
 
 router = APIRouter(prefix="/backoffice-fontes", tags=["Back Office Universal de Fontes"])
 
@@ -49,6 +50,10 @@ TRANSICOES_ADMIN = {
     "ERRO": {"REJEITADO"},
     "REJEITADO": set(),
 }
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _admin_master(usuario: UsuarioAutenticado = Depends(usuario_atual)) -> UsuarioAutenticado:
@@ -211,6 +216,55 @@ async def receber_fonte(
     return {"fonte": criado[0], "duplicado": False}
 
 
+@router.post("/{fonte_id}/interpretar")
+def interpretar_fonte_recebida(
+    fonte_id: str,
+    usuario: UsuarioAutenticado = Depends(_admin_master),
+):
+    atual = _dados(supabase.table("cti_fontes_universais").select("*").eq("id", fonte_id).limit(1).execute())
+    if not atual:
+        raise HTTPException(status_code=404, detail="Fonte não encontrada.")
+    fonte = atual[0]
+    if str(fonte.get("status_governanca") or "") != "RECEBIDO":
+        raise HTTPException(status_code=409, detail="Somente fontes RECEBIDAS podem iniciar interpretação nesta execução.")
+    try:
+        conteudo = supabase.storage.from_(str(fonte.get("storage_bucket") or BUCKET)).download(str(fonte.get("storage_path") or ""))
+        resumo = interpretar_fonte(
+            str(fonte.get("nome_arquivo") or "arquivo"),
+            str(fonte.get("tipo_detectado") or "DESCONHECIDO"),
+            conteudo,
+        )
+        atualizado = _dados(
+            supabase.table("cti_fontes_universais").update({
+                "status_governanca": "INTERPRETADO",
+                "interpretacao_resumo": resumo,
+                "updated_at": _agora(),
+            }).eq("id", fonte_id).execute()
+        )
+        _registrar_evento(
+            fonte_id,
+            "FONTE_INTERPRETADA",
+            usuario.id,
+            anterior="RECEBIDO",
+            novo="INTERPRETADO",
+            detalhes={"resumo": resumo},
+        )
+        return {"fonte": atualizado[0] if atualizado else {**fonte, "status_governanca": "INTERPRETADO", "interpretacao_resumo": resumo}}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        try:
+            supabase.table("cti_fontes_universais").update({
+                "status_governanca": "ERRO",
+                "alertas": [{"tipo": "INTERPRETACAO", "mensagem": str(exc)[:500]}],
+                "updated_at": _agora(),
+            }).eq("id", fonte_id).execute()
+            _registrar_evento(fonte_id, "ERRO_INTERPRETACAO", usuario.id, anterior="RECEBIDO", novo="ERRO")
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail="A fonte foi preservada, mas a interpretação não foi concluída.") from exc
+
+
 @router.patch("/{fonte_id}/governanca")
 def atualizar_governanca(
     fonte_id: str,
@@ -224,15 +278,12 @@ def atualizar_governanca(
     anterior = str(fonte.get("status_governanca") or "")
     novo = request.status.strip().upper()
     if novo not in TRANSICOES_ADMIN.get(anterior, set()):
-        raise HTTPException(
-            status_code=409,
-            detail=f"Transição {anterior} → {novo} não é permitida pelo gate atual de governança.",
-        )
-    alteracoes: dict[str, Any] = {"status_governanca": novo}
+        raise HTTPException(status_code=409, detail=f"Transição {anterior} → {novo} não é permitida pelo gate atual de governança.")
+    alteracoes: dict[str, Any] = {"status_governanca": novo, "updated_at": _agora()}
     if request.classificacao_negocio:
         alteracoes["classificacao_negocio"] = request.classificacao_negocio.strip().upper()
     if novo == "HOMOLOGADO":
-        alteracoes.update({"homologado_por": usuario.id, "homologado_em": datetime.now(timezone.utc).isoformat()})
+        alteracoes.update({"homologado_por": usuario.id, "homologado_em": _agora()})
     atualizado = _dados(
         supabase.table("cti_fontes_universais")
         .update(alteracoes)
