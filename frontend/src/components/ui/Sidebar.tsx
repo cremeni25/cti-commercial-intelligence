@@ -16,7 +16,7 @@ const permissoesMenu = {
     "/dashboard", "/historico-comercial", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
     "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
-    "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais",
+    "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais", "/backoffice-fontes",
   ],
   DIRETOR: [
     "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
@@ -73,6 +73,7 @@ const menuGroups: MenuGroup[] = [
   {
     titulo: "Administração",
     itens: [
+      { label: "Fontes & IA", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
       { label: "Usuários", href: "/usuarios", icon: "👥", type: "emoji" },
       { label: "Configurações", href: "/configuracoes", icon: "⚙️", type: "emoji" },
       { label: "Modelos oficiais", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
