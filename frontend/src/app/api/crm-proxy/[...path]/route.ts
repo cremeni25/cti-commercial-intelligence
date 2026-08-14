@@ -117,7 +117,7 @@ async function encaminhar(
       headers,
       body: ["GET", "HEAD"].includes(request.method)
         ? undefined
-        : await request.text(),
+        : await request.arrayBuffer(),
       cache: "no-store",
     })
 
