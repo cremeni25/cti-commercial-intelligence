@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
 import re
@@ -231,7 +232,7 @@ def atualizar_governanca(
     if request.classificacao_negocio:
         alteracoes["classificacao_negocio"] = request.classificacao_negocio.strip().upper()
     if novo == "HOMOLOGADO":
-        alteracoes.update({"homologado_por": usuario.id, "homologado_em": "now()"})
+        alteracoes.update({"homologado_por": usuario.id, "homologado_em": datetime.now(timezone.utc).isoformat()})
     atualizado = _dados(
         supabase.table("cti_fontes_universais")
         .update(alteracoes)
