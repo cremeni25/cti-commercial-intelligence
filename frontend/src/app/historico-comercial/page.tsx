@@ -36,7 +36,7 @@ export default function HistoricoComercialPage() {
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
       <Sidebar />
-      <section className="min-w-0 flex-1 overflow-hidden">
+      <section className="min-w-0 flex-1 overflow-x-hidden">
         <Topbar />
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           <header>
@@ -48,7 +48,7 @@ export default function HistoricoComercialPage() {
             <p className="mt-2 max-w-5xl text-sm text-slate-400">Superfície de homologação do arquivo histórico. Estes dados não alteram Pipeline, Forecast, Pedidos, Vendas, Clientes nem a IA oficial.</p>
           </header>
 
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="grid gap-3 sm:grid-cols-2 min-[1800px]:grid-cols-4">
             <Kpi title="Registros" value={source.records.toLocaleString("pt-BR")} note="277 + 518 + 111" />
             <Kpi title="Unidades nominais" value={source.units.toLocaleString("pt-BR")} note="Medida de auditoria" />
             <Kpi title="Valor nominal" value={money(source.nominalValue)} note="Não classificado como receita" />
@@ -57,9 +57,9 @@ export default function HistoricoComercialPage() {
 
           <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
             <div className="grid gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-lg font-semibold">Rastreabilidade da fonte</h2>
-                <p className="mt-2 text-sm text-slate-400">{source.file}</p>
+                <p className="mt-2 break-words text-sm text-slate-400">{source.file}</p>
                 <p className="mt-1 break-all font-mono text-xs text-slate-500">SHA-256: {source.sha256}</p>
               </div>
               <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">Fonte imutável confirmada · 906 registros</div>
@@ -112,13 +112,13 @@ export default function HistoricoComercialPage() {
 }
 
 function Kpi({ title, value, note, tone }: { title: string; value: string; note: string; tone?: "good" }) {
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><p className="text-xs uppercase tracking-wider text-slate-500">{title}</p><p className={`mt-2 text-3xl font-bold ${tone === "good" ? "text-emerald-300" : "text-white"}`}>{value}</p><p className="mt-2 text-xs text-slate-500">{note}</p></div>
+  return <div className="min-w-0 rounded-2xl border border-[#17304d] bg-[#071226] p-5"><p className="text-xs uppercase tracking-wider text-slate-500">{title}</p><p className={`mt-2 break-words text-[clamp(1.5rem,2.35vw,1.875rem)] font-bold leading-tight ${tone === "good" ? "text-emerald-300" : "text-white"}`}>{value}</p><p className="mt-2 text-xs text-slate-500">{note}</p></div>
 }
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="mb-4 text-lg font-semibold">{title}</h2>{children}</section>
+  return <section className="min-w-0 rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="mb-4 text-lg font-semibold">{title}</h2>{children}</section>
 }
 function Rows({ items, total, compact = false }: { items: (string | number)[][]; total: number; compact?: boolean }) {
-  return <div className={compact ? "grid gap-2 sm:grid-cols-2" : "space-y-2"}>{items.map(([label, raw]) => { const value = Number(raw); const pct = total ? value / total * 100 : 0; return <div key={String(label)} className="rounded-xl border border-[#13203f] bg-[#08162d] p-3"><div className="flex items-center justify-between gap-3 text-sm"><span className="truncate text-slate-300">{label}</span><strong>{value.toLocaleString("pt-BR")}</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#13203f]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} /></div><p className="mt-1 text-right text-[11px] text-slate-500">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</p></div> })}</div>
+  return <div className={compact ? "grid gap-2 sm:grid-cols-2" : "space-y-2"}>{items.map(([label, raw]) => { const value = Number(raw); const pct = total ? value / total * 100 : 0; return <div key={String(label)} className="min-w-0 rounded-xl border border-[#13203f] bg-[#08162d] p-3"><div className="flex items-center justify-between gap-3 text-sm"><span className="min-w-0 truncate text-slate-300">{label}</span><strong>{value.toLocaleString("pt-BR")}</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#13203f]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.max(2, Math.min(100, pct))}%` }} /></div><p className="mt-1 text-right text-[11px] text-slate-500">{pct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</p></div> })}</div>
 }
 function Checklist({ label }: { label: string }) { return <div className="mb-2 flex items-center gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3 text-sm text-emerald-100"><span className="text-emerald-400">✓</span><span>{label}</span></div> }
 function money(value: number) { return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) }
