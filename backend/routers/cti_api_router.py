@@ -25,6 +25,7 @@ from routers.ia_comercial_cti_router import router as ia_comercial_cti_router
 from routers.ia_comercial_acoes_router import router as ia_comercial_acoes_router
 from routers.ia_comercial_artefatos_router import router as ia_comercial_artefatos_router
 from routers.crm_app_clientes_edicao_router import router as crm_app_clientes_edicao_router
+from routers.crm_app_cnpj_router import router as crm_app_cnpj_router
 from routers.crm_app_proposta_envio_router import router as crm_app_proposta_envio_router
 from routers.crm_app_oportunidade_propostas_envio_router import router as crm_app_oportunidade_propostas_envio_router
 from routers.crm_app_oportunidades_teste_router import router as crm_app_oportunidades_teste_router
@@ -56,6 +57,7 @@ router.include_router(ia_comercial_cti_router)
 router.include_router(ia_comercial_acoes_router)
 router.include_router(ia_comercial_artefatos_router)
 router.include_router(crm_app_clientes_edicao_router)
+router.include_router(crm_app_cnpj_router)
 router.include_router(crm_app_proposta_envio_router)
 router.include_router(crm_app_oportunidade_propostas_envio_router)
 router.include_router(crm_app_oportunidades_teste_router)
