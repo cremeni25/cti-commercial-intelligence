@@ -9,10 +9,7 @@ from services.historical_commercial_source import (
     carregar_historico_comercial,
     resumir_historico_comercial,
 )
-from services.ia_comercial_universo_historico import registrar_historico_comercial_no_universo
 from services.operational_filters import data_registro, filtrar_registros
-
-registrar_historico_comercial_no_universo()
 
 MAX_REGISTROS_RECENTES = 160
 
