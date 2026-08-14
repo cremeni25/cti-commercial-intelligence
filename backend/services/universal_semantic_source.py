@@ -5,8 +5,10 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+import zipfile
 
 from openpyxl import load_workbook
+from pypdf import PdfReader
 
 MAX_REGISTROS = 5000
 MAX_TEXTO_REGISTRO = 6000
@@ -41,25 +43,83 @@ def _classificar(texto: str, tipo: str) -> tuple[str, float]:
     return nome, round(confianca, 4)
 
 
+def _registro_textual(indice: int, texto: str, tipo_registro: str, metadados: dict[str, Any]) -> dict[str, Any]:
+    trecho = re.sub(r"\s+", " ", texto or "").strip()[:MAX_TEXTO_REGISTRO]
+    return {
+        "indice": indice,
+        "tipo_registro": tipo_registro,
+        "conteudo_texto": trecho,
+        "dados": {"texto": trecho},
+        "metadados": metadados,
+    }
+
+
 def _chunks_texto(texto: str, *, origem: str) -> list[dict[str, Any]]:
     texto = re.sub(r"\s+", " ", texto or "").strip()
     if not texto:
         return []
     registros: list[dict[str, Any]] = []
-    indice = 0
-    for inicio in range(0, len(texto), MAX_TEXTO_REGISTRO):
+    for indice, inicio in enumerate(range(0, len(texto), MAX_TEXTO_REGISTRO)):
+        if indice >= MAX_REGISTROS:
+            break
         trecho = texto[inicio:inicio + MAX_TEXTO_REGISTRO].strip()
-        if not trecho:
+        if trecho:
+            registros.append(_registro_textual(indice, trecho, "TRECHO_TEXTUAL", {"origem": origem, "inicio_caractere": inicio}))
+    return registros
+
+
+def _pdf(conteudo: bytes) -> tuple[list[dict[str, Any]], list[str], str]:
+    leitor = PdfReader(BytesIO(conteudo))
+    saida: list[dict[str, Any]] = []
+    amostras: list[str] = []
+    for pagina_num, pagina in enumerate(leitor.pages, start=1):
+        if len(saida) >= MAX_REGISTROS:
+            break
+        texto = (pagina.extract_text() or "").strip()
+        if not texto:
             continue
-        registros.append({
-            "indice": indice,
-            "tipo_registro": "TRECHO_TEXTUAL",
-            "conteudo_texto": trecho,
-            "dados": {"texto": trecho},
-            "metadados": {"origem": origem, "inicio_caractere": inicio},
-        })
-        indice += 1
-    return registros[:MAX_REGISTROS]
+        amostras.append(texto[:1200])
+        partes = _chunks_texto(texto, origem=f"PDF_PAGINA_{pagina_num}")
+        for parte in partes:
+            parte["indice"] = len(saida)
+            parte["tipo_registro"] = "PAGINA_PDF"
+            parte["metadados"] = {"pagina": pagina_num}
+            saida.append(parte)
+            if len(saida) >= MAX_REGISTROS:
+                break
+    return saida, ["texto"], "\n".join(amostras[:80])
+
+
+def _texto_openxml(conteudo: bytes, prefixo: str) -> list[tuple[str, str]]:
+    saida: list[tuple[str, str]] = []
+    with zipfile.ZipFile(BytesIO(conteudo)) as pacote:
+        nomes = sorted(nome for nome in pacote.namelist() if nome.startswith(prefixo) and nome.endswith(".xml"))
+        for nome in nomes:
+            bruto = pacote.read(nome).decode("utf-8", errors="ignore")
+            texto = re.sub(r"<[^>]+>", " ", bruto)
+            texto = re.sub(r"\s+", " ", texto).strip()
+            if texto:
+                saida.append((nome, texto))
+    return saida
+
+
+def _openxml(conteudo: bytes, tipo: str) -> tuple[list[dict[str, Any]], list[str], str]:
+    prefixo = "word/" if tipo == "WORD" else "ppt/slides/"
+    partes = _texto_openxml(conteudo, prefixo)
+    saida: list[dict[str, Any]] = []
+    amostras: list[str] = []
+    for nome_parte, texto in partes:
+        amostras.append(texto[:1200])
+        for trecho in _chunks_texto(texto, origem=nome_parte):
+            if len(saida) >= MAX_REGISTROS:
+                break
+            trecho["indice"] = len(saida)
+            trecho["tipo_registro"] = "TRECHO_WORD" if tipo == "WORD" else "SLIDE_POWERPOINT"
+            trecho["metadados"] = {"parte_openxml": nome_parte}
+            saida.append(trecho)
+        if len(saida) >= MAX_REGISTROS:
+            break
+    return saida, ["texto"], "\n".join(amostras[:80])
 
 
 def _planilha(conteudo: bytes) -> tuple[list[dict[str, Any]], list[str], str]:
@@ -95,7 +155,7 @@ def _planilha(conteudo: bytes) -> tuple[list[dict[str, Any]], list[str], str]:
                 break
         if indice >= MAX_REGISTROS:
             break
-    return saida, sorted(campos), "\n".join(amostras[:40])
+    return saida, sorted(campos), "\n".join(amostras[:80])
 
 
 def _json(conteudo: bytes) -> tuple[list[dict[str, Any]], list[str], str]:
@@ -113,7 +173,7 @@ def _json(conteudo: bytes) -> tuple[list[dict[str, Any]], list[str], str]:
             "dados": dados,
             "metadados": {},
         })
-    return saida, sorted(campos), json.dumps(itens[:20], ensure_ascii=False, default=str)[:12000]
+    return saida, sorted(campos), json.dumps(itens[:80], ensure_ascii=False, default=str)[:60000]
 
 
 def gerar_semantica(nome: str, tipo: str, conteudo: bytes, resumo_estrutural: dict[str, Any]) -> dict[str, Any]:
@@ -122,12 +182,18 @@ def gerar_semantica(nome: str, tipo: str, conteudo: bytes, resumo_estrutural: di
     campos: list[str] = []
     texto_classificacao = _texto(resumo_estrutural.get("amostra_textual"))
 
-    if tipo == "PLANILHA" and extensao in {".xlsx", ".xlsm"}:
-        registros, campos, texto_planilha = _planilha(conteudo)
-        texto_classificacao = texto_planilha or texto_classificacao
+    if tipo == "PDF":
+        registros, campos, texto_classificacao = _pdf(conteudo)
+    elif tipo == "PLANILHA" and extensao in {".xlsx", ".xlsm"}:
+        registros, campos, texto_classificacao = _planilha(conteudo)
+    elif tipo in {"WORD", "POWERPOINT"} and extensao in {".docx", ".pptx"}:
+        registros, campos, texto_classificacao = _openxml(conteudo, tipo)
     elif tipo == "DADOS_ESTRUTURADOS" and extensao == ".json":
-        registros, campos, texto_json = _json(conteudo)
-        texto_classificacao = texto_json or texto_classificacao
+        registros, campos, texto_classificacao = _json(conteudo)
+    elif tipo == "TEXTO":
+        texto_classificacao = conteudo.decode("utf-8", errors="replace")
+        registros = _chunks_texto(texto_classificacao, origem="TEXTO")
+        campos = ["texto"] if registros else []
     else:
         registros = _chunks_texto(texto_classificacao, origem=tipo)
         campos = ["texto"] if registros else []
