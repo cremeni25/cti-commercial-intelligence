@@ -29,28 +29,37 @@ def _dados(resposta: Any) -> list[dict[str, Any]]:
 def _carregar_publicadas(tipo_usuario: str) -> list[dict[str, Any]]:
     if str(tipo_usuario or "").upper() != "ADMIN_MASTER":
         return []
-    fontes = _dados(
-        supabase.table("cti_fontes_universais")
-        .select("id,nome_arquivo,nome_exibicao,tipo_detectado,classificacao_negocio,classificacao_sugerida,descricao_semantica,sha256,created_at,publicado_ia_em")
-        .eq("publicado_ia", True)
-        .eq("status_governanca", "PUBLICADO_IA")
-        .order("created_at", desc=True)
-        .execute()
-    )
+    try:
+        fontes = _dados(
+            supabase.table("cti_fontes_universais")
+            .select("id,nome_arquivo,nome_exibicao,tipo_detectado,classificacao_negocio,classificacao_sugerida,descricao_semantica,sha256,created_at,publicado_ia_em")
+            .eq("publicado_ia", True)
+            .eq("status_governanca", "PUBLICADO_IA")
+            .order("created_at", desc=True)
+            .execute()
+        )
+    except Exception:
+        # A camada universal é complementar. Se o repositório dinâmico estiver
+        # indisponível, as fontes nativas do CTI continuam consultáveis e a IA
+        # não deve falhar por causa de um upload externo temporariamente inacessível.
+        return []
     if not fontes:
         return []
 
     por_id = {str(item.get("id")): item for item in fontes if item.get("id")}
     registros: list[dict[str, Any]] = []
     for fonte_id, fonte in por_id.items():
-        semanticos = _dados(
-            supabase.table("cti_fontes_semanticas")
-            .select("indice,tipo_registro,conteudo_texto,dados,metadados")
-            .eq("fonte_id", fonte_id)
-            .order("indice")
-            .limit(5000)
-            .execute()
-        )
+        try:
+            semanticos = _dados(
+                supabase.table("cti_fontes_semanticas")
+                .select("indice,tipo_registro,conteudo_texto,dados,metadados")
+                .eq("fonte_id", fonte_id)
+                .order("indice")
+                .limit(5000)
+                .execute()
+            )
+        except Exception:
+            continue
         for item in semanticos:
             dados = item.get("dados") if isinstance(item.get("dados"), dict) else {}
             metadados = item.get("metadados") if isinstance(item.get("metadados"), dict) else {}
