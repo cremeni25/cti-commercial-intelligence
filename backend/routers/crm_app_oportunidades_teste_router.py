@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Any
+import unicodedata
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -17,6 +18,10 @@ class ArquivarHomologacaoPayload(BaseModel):
     oportunidade_ids: list[str]
     confirmacao: str
     motivo: str = "Registros criados para teste/homologação"
+
+
+class PreviaHomologacaoPayload(BaseModel):
+    oportunidade_ids: list[str]
 
 
 class RestaurarHomologacaoPayload(BaseModel):
@@ -40,8 +45,32 @@ def _dados(tabela: str) -> list[dict[str, Any]]:
         return []
 
 
-def _impacto_homologacao() -> dict[str, Any]:
-    oportunidades = _dados("cti_oportunidades")
+def _normalizar_confirmacao(valor: str) -> str:
+    texto = unicodedata.normalize("NFKD", valor.replace("\u00a0", " "))
+    texto = "".join(ch for ch in texto if not unicodedata.combining(ch))
+    return " ".join(texto.upper().split())
+
+
+def _ids_ativos() -> set[str]:
+    return {str(item.get("id")) for item in _dados("cti_oportunidades") if item.get("id")}
+
+
+def _validar_ids_ativos(ids: list[str]) -> list[str]:
+    selecionados = sorted({item.strip() for item in ids if item.strip()})
+    if not selecionados:
+        return []
+    ativos = _ids_ativos()
+    invalidos = [item for item in selecionados if item not in ativos]
+    if invalidos:
+        raise HTTPException(status_code=409, detail="A prévia ficou desatualizada. Recarregue a tela antes de continuar.")
+    return selecionados
+
+
+def _impacto_homologacao(selecionados: set[str] | None = None) -> dict[str, Any]:
+    oportunidades_ativas = _dados("cti_oportunidades")
+    oportunidades = oportunidades_ativas if selecionados is None else [
+        item for item in oportunidades_ativas if str(item.get("id") or "") in selecionados
+    ]
     oportunidade_ids = {str(item.get("id")) for item in oportunidades if item.get("id")}
     itens = [item for item in _dados("cti_oportunidade_itens") if str(item.get("oportunidade_id") or "") in oportunidade_ids]
     item_ids = {str(item.get("id")) for item in itens if item.get("id")}
@@ -76,7 +105,7 @@ def _impacto_homologacao() -> dict[str, Any]:
         "oportunidade_ids": sorted(oportunidade_ids),
         "resumo": resumo,
         "oportunidades": oportunidades_resumo,
-        "aviso_clientes": "Os cadastros mestres de clientes são preservados; esta ação arquiva o histórico transacional de homologação.",
+        "aviso_clientes": "Os cadastros mestres de clientes são preservados; esta ação arquiva apenas o histórico transacional das oportunidades selecionadas.",
         "confirmacao_exigida": CONFIRMACAO_ARQUIVAR,
     }
 
@@ -87,13 +116,20 @@ def previa_homologacao(usuario: UsuarioAutenticado = Depends(_admin)):
     return _impacto_homologacao()
 
 
+@router.post("/homologacao/previa-selecao")
+def previa_homologacao_selecao(dados: PreviaHomologacaoPayload, usuario: UsuarioAutenticado = Depends(_admin)):
+    _ = usuario
+    ids = _validar_ids_ativos(dados.oportunidade_ids)
+    return _impacto_homologacao(set(ids))
+
+
 @router.post("/homologacao/arquivar")
 def arquivar_homologacao(dados: ArquivarHomologacaoPayload, usuario: UsuarioAutenticado = Depends(_admin)):
-    if dados.confirmacao.strip().upper() != CONFIRMACAO_ARQUIVAR:
-        raise HTTPException(status_code=422, detail=f"Digite exatamente: {CONFIRMACAO_ARQUIVAR}")
-    ids = sorted({item.strip() for item in dados.oportunidade_ids if item.strip()})
+    if _normalizar_confirmacao(dados.confirmacao) != CONFIRMACAO_ARQUIVAR:
+        raise HTTPException(status_code=422, detail=f"Digite a confirmação: {CONFIRMACAO_ARQUIVAR}")
+    ids = _validar_ids_ativos(dados.oportunidade_ids)
     if not ids:
-        raise HTTPException(status_code=422, detail="Nenhuma oportunidade foi selecionada.")
+        raise HTTPException(status_code=422, detail="Selecione pelo menos uma oportunidade.")
     try:
         resposta = supabase.rpc("cti_arquivar_homologacao_crm", {
             "p_oportunidade_ids": ids,
@@ -113,8 +149,8 @@ def listar_lotes_homologacao(usuario: UsuarioAutenticado = Depends(_admin)):
 
 @router.post("/homologacao/lotes/{lote_id}/restaurar")
 def restaurar_lote_homologacao(lote_id: str, dados: RestaurarHomologacaoPayload, usuario: UsuarioAutenticado = Depends(_admin)):
-    if dados.confirmacao.strip().upper() != CONFIRMACAO_RESTAURAR:
-        raise HTTPException(status_code=422, detail=f"Digite exatamente: {CONFIRMACAO_RESTAURAR}")
+    if _normalizar_confirmacao(dados.confirmacao) != CONFIRMACAO_RESTAURAR:
+        raise HTTPException(status_code=422, detail=f"Digite a confirmação: {CONFIRMACAO_RESTAURAR}")
     try:
         resposta = supabase.rpc("cti_restaurar_homologacao_crm", {"p_lote_id": lote_id, "p_usuario_id": usuario.id}).execute().data
     except Exception as erro:
