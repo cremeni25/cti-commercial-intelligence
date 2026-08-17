@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, ArrowLeft, Archive, Loader2, RotateCcw, ShieldCheck } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { getSupabaseClient } from "@/core/database/supabase"
 
 type Registro = Record<string, unknown>
 type Previa = {
@@ -22,6 +23,20 @@ async function lerJson(resposta: Response) {
   return payload
 }
 
+async function authHeaders(extra?: HeadersInit) {
+  const headers = new Headers(extra)
+  const supabase = getSupabaseClient()
+  const { data } = await supabase.auth.getSession()
+  if (!data.session?.access_token) throw new Error("Sessão expirada. Entre novamente no CRM App.")
+  headers.set("Authorization", `Bearer ${data.session.access_token}`)
+  if (!headers.has("Accept")) headers.set("Accept", "application/json")
+  return headers
+}
+
+async function fetchProtegido(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, { ...init, headers: await authHeaders(init.headers) })
+}
+
 export default function HomologacaoPage() {
   const { usuario } = useAuth()
   const [previa, setPrevia] = useState<Previa | null>(null)
@@ -38,8 +53,8 @@ export default function HomologacaoPage() {
     setCarregando(true); setErro("")
     try {
       const [previaResposta, lotesResposta] = await Promise.all([
-        fetch("/api/crm-proxy/crm-app/oportunidades/homologacao/previa", { cache: "no-store" }),
-        fetch("/api/crm-proxy/crm-app/oportunidades/homologacao/lotes", { cache: "no-store" }),
+        fetchProtegido("/api/crm-proxy/crm-app/oportunidades/homologacao/previa", { cache: "no-store" }),
+        fetchProtegido("/api/crm-proxy/crm-app/oportunidades/homologacao/lotes", { cache: "no-store" }),
       ])
       const p = await lerJson(previaResposta) as unknown as Previa
       const l = await lerJson(lotesResposta)
@@ -57,7 +72,7 @@ export default function HomologacaoPage() {
     if (!previa || confirmacao.trim().toUpperCase() !== previa.confirmacao_exigida) return
     setProcessando(true); setErro(""); setSucesso("")
     try {
-      const resposta = await fetch("/api/crm-proxy/crm-app/oportunidades/homologacao/arquivar", {
+      const resposta = await fetchProtegido("/api/crm-proxy/crm-app/oportunidades/homologacao/arquivar", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ oportunidade_ids: previa.oportunidade_ids, confirmacao, motivo: "Limpeza do histórico criado para teste/homologação do CRM App" }),
       })
@@ -75,7 +90,7 @@ export default function HomologacaoPage() {
     if (digitado.trim().toUpperCase() !== "RESTAURAR LOTE") return
     setProcessando(true); setErro(""); setSucesso("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-app/oportunidades/homologacao/lotes/${encodeURIComponent(loteId)}/restaurar`, {
+      const resposta = await fetchProtegido(`/api/crm-proxy/crm-app/oportunidades/homologacao/lotes/${encodeURIComponent(loteId)}/restaurar`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmacao: digitado }),
       })
       await lerJson(resposta)
