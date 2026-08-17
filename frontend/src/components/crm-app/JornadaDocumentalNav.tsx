@@ -2,6 +2,8 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { ShieldCheck } from "lucide-react"
+import { useAuth } from "@/core/auth"
 
 const etapas = [
   { href: "/crm-app/oportunidades", label: "Oportunidades", descricao: "qualificar e conduzir a negociação" },
@@ -13,9 +15,14 @@ const etapas = [
 
 export default function JornadaDocumentalNav() {
   const pathname = usePathname()
+  const { usuario } = useAuth()
+  const adminMaster = usuario?.tipo_usuario === "ADMIN_MASTER"
   return <section className="mb-4 rounded-3xl border border-[#16325c] bg-[#07162b] p-4">
-    <p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-400">Jornada comercial completa</p>
-    <p className="mt-1 text-sm text-slate-400">O mesmo negócio evolui sem criar uma segunda fonte de verdade: oportunidade → proposta → pedido → venda → pós-venda.</p>
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-400">Jornada comercial completa</p>
+      <p className="mt-1 text-sm text-slate-400">O mesmo negócio evolui sem criar uma segunda fonte de verdade: oportunidade → proposta → pedido → venda → pós-venda.</p></div>
+      {adminMaster && <Link href="/crm-app/oportunidades/homologacao" className="inline-flex items-center gap-2 rounded-xl border border-amber-700/70 bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-200"><ShieldCheck size={16}/>Administrar homologação</Link>}
+    </div>
     <div className="mt-3 grid gap-2 sm:grid-cols-5">{etapas.map((item, indice) => {
       const ativo = pathname === item.href.split("?")[0] || pathname.startsWith(`${item.href.split("?")[0]}/`)
       return <div key={item.href} className="relative">
