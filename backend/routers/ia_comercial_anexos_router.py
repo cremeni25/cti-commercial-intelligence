@@ -100,9 +100,8 @@ async def enviar_mensagem_com_anexos(
         return resposta_acao
 
     contexto_anexos = construir_contexto_anexos(anexos_processados)
-    mensagem_agente, controle_temporal = _mensagem_com_contexto_temporal(
-        f"{texto_usuario}\n\n{contexto_anexos}"
-    )
+    mensagem_base, controle_temporal = _mensagem_com_contexto_temporal(texto_usuario)
+    mensagem_agente = f"{mensagem_base}\n\n{contexto_anexos}"
 
     try:
         resposta_texto, metadados = gerar_resposta_agente(
@@ -122,6 +121,7 @@ async def enviar_mensagem_com_anexos(
         metadados.update(metadados_sintese)
         metadados["anexos"] = anexos_publicos
         metadados["controle_anexos"] = "temporarios_nao_publicados_nao_operacionais"
+        metadados["controle_selecao_fontes_anexos"] = "somente_pergunta_usuario_define_evidencias"
         metadados["controle_temporal_pergunta"] = controle_temporal
         metadados["controle_temporal_origem"] = "modulo_ia_comercial"
         metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
