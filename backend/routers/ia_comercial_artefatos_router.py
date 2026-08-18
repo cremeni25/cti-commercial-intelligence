@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from services.ia_comercial_artefatos import gerar_pdf_relatorio, gerar_svg_grafico
+from services.ia_comercial_arquivos import gerar_docx_resposta, gerar_pptx_resposta, gerar_xlsx_resposta
 
 
 router = APIRouter(prefix="/ia-comercial-cti/artefatos", tags=["IA Comercial CTI — Artefatos"])
@@ -80,4 +81,65 @@ def baixar_relatorio_pdf(
         content=conteudo,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="cti-relatorio-{mensagem_id[:8]}.pdf"'},
+    )
+
+
+def _possui_tipo(mensagem: dict, tipo: str) -> bool:
+    return any(item.get("tipo") == tipo for item in _artefatos(mensagem))
+
+
+@router.get("/{mensagem_id}/planilha.xlsx")
+def baixar_planilha_xlsx(
+    mensagem_id: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    mensagem = _mensagem_do_usuario(mensagem_id, usuario)
+    if not _possui_tipo(mensagem, "PLANILHA_XLSX"):
+        raise HTTPException(status_code=404, detail="Esta mensagem não possui planilha solicitada.")
+    metadados = dict(mensagem.get("metadados") or {})
+    if mensagem.get("fontes") and not metadados.get("fontes"):
+        metadados["fontes"] = mensagem.get("fontes")
+    conteudo = gerar_xlsx_resposta(str(mensagem.get("conteudo") or ""), metadados)
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="cti-planilha-{mensagem_id[:8]}.xlsx"'},
+    )
+
+
+@router.get("/{mensagem_id}/apresentacao.pptx")
+def baixar_apresentacao_pptx(
+    mensagem_id: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    mensagem = _mensagem_do_usuario(mensagem_id, usuario)
+    if not _possui_tipo(mensagem, "APRESENTACAO_PPTX"):
+        raise HTTPException(status_code=404, detail="Esta mensagem não possui apresentação solicitada.")
+    metadados = dict(mensagem.get("metadados") or {})
+    if mensagem.get("fontes") and not metadados.get("fontes"):
+        metadados["fontes"] = mensagem.get("fontes")
+    conteudo = gerar_pptx_resposta(str(mensagem.get("conteudo") or ""), metadados)
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={"Content-Disposition": f'attachment; filename="cti-apresentacao-{mensagem_id[:8]}.pptx"'},
+    )
+
+
+@router.get("/{mensagem_id}/documento.docx")
+def baixar_documento_docx(
+    mensagem_id: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    mensagem = _mensagem_do_usuario(mensagem_id, usuario)
+    if not _possui_tipo(mensagem, "DOCUMENTO_DOCX"):
+        raise HTTPException(status_code=404, detail="Esta mensagem não possui documento solicitado.")
+    metadados = dict(mensagem.get("metadados") or {})
+    if mensagem.get("fontes") and not metadados.get("fontes"):
+        metadados["fontes"] = mensagem.get("fontes")
+    conteudo = gerar_docx_resposta(str(mensagem.get("conteudo") or ""), metadados)
+    return Response(
+        content=conteudo,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="cti-documento-{mensagem_id[:8]}.docx"'},
     )

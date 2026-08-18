@@ -23,11 +23,11 @@ from core.supabase_client import supabase
 from core.cti_taxonomy import normalizar_implementadora
 
 
-COLUNAS_LEGADAS_CTI_ANFIR = {
+COLUNAS_CANONICAS_CTI_ANFIR = {
     "ano", "mes", "data_venda", "cliente", "cnpj", "cidade", "estado",
     "ddd", "regiao", "sub_regiao", "placa", "chassi",
     "fabricante_caminhao", "modelo_caminhao", "eixo", "tipo_veiculo",
-    "implementador", "fabricante_equipamento", "linha", "modelo",
+    "implementadora", "fabricante_equipamento", "linha", "modelo",
     "responsavel", "status", "motivo", "ocorrencia", "valor",
     "origem_dado", "arquivo_origem", "aba_origem", "versao_parser",
     "pipeline", "created_at", "id_operacional", "hash_registro", "ativo",
@@ -44,8 +44,8 @@ def _adaptar_dominio_para_persistencia(registro):
         payload["cliente"] = payload.pop("empresa")
 
     if "implementadora" in payload:
-        payload["implementador"] = normalizar_implementadora(
-            payload.pop("implementadora")
+        payload["implementadora"] = normalizar_implementadora(
+            payload.get("implementadora")
         )
 
     return payload
@@ -87,9 +87,9 @@ def _adaptar_persistencia_para_dominio(registro):
 
     payload = dict(registro)
 
-    if "implementador" in payload:
+    if "implementadora" in payload:
         payload["implementadora"] = normalizar_implementadora(
-            payload.pop("implementador")
+            payload.get("implementadora")
         )
 
     origem_base, autorizado, ano_referencia, escopo = _inferir_origem(
@@ -107,12 +107,12 @@ def _adaptar_persistencia_para_dominio(registro):
     return payload
 
 
-def _filtrar_colunas_legadas(payload):
+def _filtrar_colunas_canonicas(payload):
 
     return {
         chave: valor
         for chave, valor in payload.items()
-        if chave in COLUNAS_LEGADAS_CTI_ANFIR
+        if chave in COLUNAS_CANONICAS_CTI_ANFIR
     }
 
 
@@ -450,7 +450,7 @@ class CTIRepository:
                 payload = _adaptar_dominio_para_persistencia(
                     payload_dominio
                 )
-                payload = _filtrar_colunas_legadas(payload)
+                payload = _filtrar_colunas_canonicas(payload)
 
                 if existente:
                     legado_existente = existente[0]
@@ -458,9 +458,9 @@ class CTIRepository:
                         legado_existente,
                         payload
                     )
-                    mesclado = _filtrar_colunas_legadas(mesclado)
+                    mesclado = _filtrar_colunas_canonicas(mesclado)
 
-                    if mesclado == _filtrar_colunas_legadas(legado_existente):
+                    if mesclado == _filtrar_colunas_canonicas(legado_existente):
                         resultado["duplicados_ignorados"] += 1
                         continue
 

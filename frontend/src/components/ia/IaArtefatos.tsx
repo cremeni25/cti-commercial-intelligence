@@ -142,6 +142,9 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
   const id = mensagemId
   const graficos = artefatos.filter((item) => item.tipo === "GRAFICO")
   const relatorio = artefatos.find((item) => item.tipo === "RELATORIO_PDF")
+  const planilha = artefatos.find((item) => item.tipo === "PLANILHA_XLSX")
+  const apresentacao = artefatos.find((item) => item.tipo === "APRESENTACAO_PPTX")
+  const documento = artefatos.find((item) => item.tipo === "DOCUMENTO_DOCX")
 
   async function baixarGrafico(indice: number) {
     const chave = `grafico-${indice}`
@@ -210,6 +213,24 @@ export default function IaArtefatos({ mensagemId, artefatos }: Props) {
           </section>
         )
       })}
+
+      <div className="flex flex-wrap gap-2">
+        {planilha ? (
+          <button type="button" onClick={() => void baixarAutenticado(`/api/crm-proxy/ia-comercial-cti/artefatos/${id}/planilha.xlsx`, `cti-planilha-${id.slice(0, 8)}.xlsx`).catch((e) => setErro(e instanceof Error ? e.message : "Falha ao baixar planilha."))} className="inline-flex items-center gap-2 rounded-xl border border-emerald-700 px-4 py-2.5 text-sm font-semibold text-emerald-200">
+            <Download size={17} /> Baixar planilha XLSX
+          </button>
+        ) : null}
+        {apresentacao ? (
+          <button type="button" onClick={() => void baixarAutenticado(`/api/crm-proxy/ia-comercial-cti/artefatos/${id}/apresentacao.pptx`, `cti-apresentacao-${id.slice(0, 8)}.pptx`).catch((e) => setErro(e instanceof Error ? e.message : "Falha ao baixar apresentação."))} className="inline-flex items-center gap-2 rounded-xl border border-violet-700 px-4 py-2.5 text-sm font-semibold text-violet-200">
+            <Download size={17} /> Baixar apresentação PPTX
+          </button>
+        ) : null}
+        {documento ? (
+          <button type="button" onClick={() => void baixarAutenticado(`/api/crm-proxy/ia-comercial-cti/artefatos/${id}/documento.docx`, `cti-documento-${id.slice(0, 8)}.docx`).catch((e) => setErro(e instanceof Error ? e.message : "Falha ao baixar documento."))} className="inline-flex items-center gap-2 rounded-xl border border-slate-600 px-4 py-2.5 text-sm font-semibold text-slate-200">
+            <FileText size={17} /> Baixar documento DOCX
+          </button>
+        ) : null}
+      </div>
 
       {relatorio ? (
         <button

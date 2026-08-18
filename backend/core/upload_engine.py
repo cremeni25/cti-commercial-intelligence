@@ -170,6 +170,28 @@ class UploadEngine:
         }
 
     # ======================================================
+    # PERSISTÊNCIA IDEMPOTENTE CANÔNICA
+    # ======================================================
+
+    def persistir_idempotente(self, registros, persistidor):
+        """Orquestra validação/deduplicação e delega I/O ao repository.
+
+        O router nunca persiste diretamente. O repository continua sendo a
+        única camada que conhece a estratégia de leitura/escrita no banco.
+        """
+        recebidos = len(registros)
+        validos = self.validar_registros(registros)
+        unicos = self.remover_duplicados(validos)
+        resultado = dict(persistidor(unicos) or {})
+        resultado.setdefault("tentados", len(unicos))
+        resultado.setdefault("inseridos", 0)
+        resultado.setdefault("atualizados", 0)
+        resultado.setdefault("duplicados_ignorados", 0)
+        resultado.setdefault("erros", 0)
+        resultado["duplicados_lote"] = max(0, recebidos - len(unicos))
+        return resultado
+
+    # ======================================================
     # PROCESSAMENTO COMPLETO
     # ======================================================
 

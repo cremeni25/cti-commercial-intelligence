@@ -51,8 +51,8 @@ def test_parser_persistencia_rankings_e_filtros_usam_nome_oficial():
 
     assert [r["implementadora"] for r in registros] == ["IBIPORÃ", "PAVAN", "HIGH FLEX"]
     payload = _adaptar_dominio_para_persistencia({"implementadora": "PAVAN INDÚSTRIA DE CÂMARAS"})
-    assert payload == {"implementador": "PAVAN"}
-    dominio = _adaptar_persistencia_para_dominio({"implementador": "HIGH FLEX INDÚSTRIA"})
+    assert payload == {"implementadora": "PAVAN"}
+    dominio = _adaptar_persistencia_para_dominio({"implementadora": "HIGH FLEX INDÚSTRIA"})
     assert dominio["implementadora"] == "HIGH FLEX"
 
     dashboard = consolidar_dashboard(registros)

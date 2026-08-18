@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { caminhoCanonicoLeitura } from "@/lib/crm-canonical"
 
-const BACKEND_CTI = "https://cti-backend-5ugf.onrender.com"
+const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com").replace(/\/$/, "")
 
 type Registro = Record<string, unknown>
 
@@ -58,14 +58,11 @@ function mapearOportunidades(linhas: Registro[]) {
 
 async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
   if (caminho.startsWith("crm/agenda")) {
-    return NextResponse.json({
-      resumo: { hoje: 0, atrasadas: 0 },
-      itens: [],
-    })
+    return NextResponse.json({ disponibilidade: "INDISPONIVEL", resumo: { hoje: 0, atrasadas: 0, futuras: 0, sem_data: 0 }, itens: [] }, { status: 503 })
   }
 
   if (caminho.startsWith("crm/atividades")) {
-    return NextResponse.json([])
+    return NextResponse.json({ disponibilidade: "INDISPONIVEL", dados: [] }, { status: 503 })
   }
 
   if (caminho.startsWith("modulos/clientes")) {
@@ -73,7 +70,7 @@ async function fallbackSeguro(caminho: string): Promise<NextResponse | null> {
   }
 
   if (caminho === "crm/oportunidades") {
-    return NextResponse.json([])
+    return NextResponse.json({ disponibilidade: "INDISPONIVEL", oportunidades: [] }, { status: 503 })
   }
 
   if (!caminho.startsWith("crm/oportunidades")) {
