@@ -19,14 +19,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Aplicar refatoração canônica
-        run: python scripts/apply_cti_saneamento_p0.py
+      - name: Aplicar artefatos completos
+        run: python scripts/apply_cti_artifacts_full.py
+      - name: Instalar dependências de teste
+        run: |
+          python -m pip install -q pytest openpyxl python-pptx python-docx
       - name: Validar sintaxe Python
         run: python -m compileall -q backend scripts
-      - name: Validar testes arquiteturais
+      - name: Validar saneamento e artefatos
         run: |
-          python -m pip install -q pytest
-          pytest -q backend/tests/test_cti_saneamento_p0.py
+          pytest -q backend/tests/test_cti_saneamento_p0.py backend/tests/test_cti_ia_arquivos.py
       - name: Commitar resultado
         run: |
           git config user.name "github-actions[bot]"
@@ -36,5 +38,5 @@ jobs:
             echo "Nenhuma alteração adicional."
             exit 0
           fi
-          git commit -m "CTI: consolidar P0 e IA frigorífica canônica"
+          git commit -m "IA: habilitar XLSX PPTX e DOCX auditáveis"
           git push origin HEAD:agent/cti-saneamento-ia-frigorifica-p0
