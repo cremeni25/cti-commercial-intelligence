@@ -17,46 +17,36 @@ try:
     if not hasattr(_crm, "_ferramentas_agente_ia003"):
         _crm._ferramentas_agente_ia003 = _crm._ferramentas_universais
 except Exception:
-    # O pacote services também é usado por módulos que não carregam a IA.
-    # Falhas de importação reais continuam sendo reveladas quando a IA é importada.
     pass
 
-# A auditoria IA-006 histórica classifica a proveniência por seções formais. A
-# leitura universal pode responder em prosa contínua; carregamos uma correção que
-# preserva a API existente e evita atribuir fatos web ao CTI por coincidência de
-# entidade ou pela existência de uma única consulta interna.
 try:
     from . import ia_comercial_auditoria_proveniencia as _auditoria_proveniencia  # noqa: F401
 except Exception:
     pass
 
-# IA-010 continuidade: CTI deixa de ser fonte obrigatória em toda resposta e
-# anexos pertinentes à cadeia fria passam a compor memória semântica documental,
-# sempre separada da verdade operacional do CRM.
+# IA-010 continuidade: CTI condicional + memória semântica documental persistente.
 try:
     from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
 except Exception:
     pass
 
-# A ontologia comercial é carregada por último para envolver a leitura universal
-# já montada: fixa o significado das entidades do CTI, declara a finalidade
-# analítica das fontes e obriga a web a preservar o mesmo contexto comercial.
+# IA-010 residual: corrige transições WEB -> ANEXO -> INFERÊNCIA e registra
+# memória semântica como origem documental rastreável.
+try:
+    from . import ia_comercial_ia010_auditoria_patch as _ia010_auditoria_patch  # noqa: F401
+except Exception:
+    pass
+
 try:
     from . import ia_comercial_ontologia as _ontologia  # noqa: F401
 except Exception:
     pass
 
-# Guard final: se uma execução ainda tentar produzir ranking com fonte cadastral
-# ou derivar a web para outro setor, refaz a investigação uma vez e bloqueia a
-# resposta caso a ontologia continue inconsistente.
 try:
     from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
 except Exception:
     pass
 
-# IA-009: o patch do agente apenas detecta a intenção e congela o contexto da
-# execução. A geração efetiva dos artefatos ocorre somente após a síntese factual
-# final, garantindo texto, gráfico e PDF derivados do mesmo snapshot evidencial.
 try:
     from . import ia_comercial_artefatos_patch as _artefatos_patch  # noqa: F401
 except Exception:
