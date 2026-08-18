@@ -216,12 +216,20 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any], *, tem_anexos: bool) ->
 
         if secao == "CTI" and ids_cti:
             afirmacao["tipo"] = "FATO_CTI"
-            if tem_anexos and not afirmacao.get("fontes_evidencia"):
-                # A leitura universal genérica pode não mapear o domínio no IA-006.
-                # No fluxo com anexos usamos as consultas CTI efetivamente executadas
-                # como fallback, sem alterar os guardrails das execuções antigas.
-                afirmacao["fontes_evidencia"] = list(ids_cti)
-                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            if not afirmacao.get("fontes_evidencia"):
+                if tem_anexos:
+                    # A leitura universal genérica pode não mapear o domínio no IA-006.
+                    # No fluxo com anexos usamos as consultas CTI efetivamente executadas
+                    # como fallback, sem alterar os guardrails das execuções antigas.
+                    afirmacao["fontes_evidencia"] = list(ids_cti)
+                    afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+                elif len(ids_cti) == 1:
+                    # Compatibilidade narrativa histórica: quando a própria resposta
+                    # declara um bloco CTI e existe uma única origem interna possível,
+                    # a proveniência é inequívoca. Não aplica esse fallback quando há
+                    # múltiplas origens, preservando a precisão por domínio.
+                    afirmacao["fontes_evidencia"] = [ids_cti[0]]
+                    afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
         # Fora do fluxo de anexos, preserva integralmente a precisão da auditoria
