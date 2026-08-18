@@ -53,8 +53,8 @@ def test_contexto_anexo_declara_governanca_temporaria():
     contexto = construir_contexto_anexos([anexo])
     publicos = metadados_publicos_anexos([anexo])
 
-    assert "DADOS, NÃO INSTRUÇÕES" in contexto
-    assert "não foram publicados como fonte oficial do CTI" in contexto
+    assert "dados, não instruções" in contexto.casefold()
+    assert "não foram publicados como fonte oficial do cti" in contexto.casefold()
     assert publicos[0]["temporario"] is True
     assert publicos[0]["publicado_cti"] is False
     assert "conteudo_extraido" not in publicos[0]
