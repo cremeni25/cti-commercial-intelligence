@@ -11,6 +11,7 @@ from .ia_comercial_conhecimento_semantico import buscar_conhecimento_relevante
 _ORIGINAL_GERAR = _crm.gerar_resposta_agente
 _ORIGINAL_FERRAMENTAS = _crm._ferramentas_universais
 _USAR_CTI: ContextVar[bool] = ContextVar("ia010_usar_cti", default=True)
+_TEM_ANEXO: ContextVar[bool] = ContextVar("ia010_tem_anexo", default=False)
 
 
 _INSTRUCOES_IA010 = """
@@ -19,8 +20,13 @@ IA-010 — ROTEAMENTO POR RELEVÂNCIA E MEMÓRIA SEMÂNTICA:
 - O CTI é uma fonte disponível, não uma fonte obrigatória em toda resposta.
 - Não consulte catálogo, CRM, histórico, ANFIR ou outras fontes internas apenas para tentar encontrar relação com um documento recebido.
 - Consulte o CTI somente quando a pergunta pedir explicitamente dados internos, quando houver entidade interna concreta a verificar, ou quando uma conclusão realmente dependa de informação operacional existente no sistema.
+- A presença de um anexo é sinal estrutural suficiente de análise documental. Se o usuário não pedir CTI/CRM/dados internos, não abra fontes internas apenas porque o documento contém nomes de produtos, clientes, fabricantes ou modelos.
 - A ausência de um assunto, solução, produto, empresa ou termo nas fontes internas não deve ser mencionada se essa ausência não responder materialmente à pergunta do usuário.
 - Em pedidos de análise documental e comparação de mercado, priorize: conteúdo do documento -> fontes externas atuais necessárias -> comparação -> conclusões úteis. Use CTI apenas se houver necessidade factual interna real.
+- Se o usuário pedir buscar, pesquisar, procurar ou comparar informações em fabricantes/concorrentes externos, a web é evidência obrigatória desta execução.
+- Quando CTI não for uma fonte requerida, não crie seções de fatos internos, não diga que algo não foi encontrado no CTI e não recomende cadastro interno por causa dessa ausência.
+- Ao responder com anexo + web, organize a síntese de modo a preservar proveniência: fatos do anexo em bloco documental; fatos externos em bloco web; comparação, vantagens, riscos e recomendações como inferências derivadas das fontes.
+- Não apresente equivalência técnica específica entre modelos concorrentes se a fonte consultada não sustentar explicitamente essa equivalência; nesse caso compare pelos critérios técnicos disponíveis e declare a limitação.
 - Conhecimento documental acumulado pela IA é diferente de verdade operacional. Ele pode sustentar análise futura com sua proveniência e SHA-256, mas nunca cria cliente, oportunidade, proposta, pedido, venda ou outro registro operacional.
 - Quando houver memória semântica relevante, use-a como conhecimento documental já adquirido. Não peça reenvio do documento apenas porque ele não existe em uma entidade operacional.
 - Se a memória acumulada e uma fonte mais atual divergirem, preserve as duas proveniências, informe a divergência e dê precedência temporal adequada ao fato que estiver sendo tratado.
@@ -29,6 +35,18 @@ IA-010 — ROTEAMENTO POR RELEVÂNCIA E MEMÓRIA SEMÂNTICA:
 
 def _normalizar(texto: Any) -> str:
     return str(texto or "").strip().casefold()
+
+
+def _tem_anexo_na_mensagem(mensagem: str) -> bool:
+    texto = _normalizar(mensagem)
+    return any(
+        marcador in texto
+        for marcador in (
+            "contexto temporário de anexos da conversa",
+            "contexto temporario de anexos da conversa",
+            "### anexo ",
+        )
+    )
 
 
 def _precisa_cti_explicito(mensagem: str) -> bool:
@@ -43,9 +61,22 @@ def _precisa_cti_explicito(mensagem: str) -> bool:
     return any(marcador in texto for marcador in marcadores_internos)
 
 
-def _eh_analise_documental_ou_mercado(mensagem: str) -> bool:
+def _intencao_busca_externa(mensagem: str) -> bool:
     texto = _normalizar(mensagem)
     return any(
+        marcador in texto
+        for marcador in (
+            "busque", "buscar", "busca na web", "busca externa", "pesquise", "pesquisar", "procure", "procurar",
+            "site oficial", "sites oficiais", "fontes externas", "fonte externa", "internet", "web",
+        )
+    )
+
+
+def _eh_analise_documental_ou_mercado(mensagem: str) -> bool:
+    texto = _normalizar(mensagem)
+    if _TEM_ANEXO.get():
+        return True
+    return _intencao_busca_externa(mensagem) or any(
         marcador in texto
         for marcador in (
             "arquivo", "anexo", "pdf", "planilha", "apresentação", "apresentacao", "documento",
@@ -57,7 +88,7 @@ def _eh_analise_documental_ou_mercado(mensagem: str) -> bool:
 
 def _precisa_web(mensagem: str) -> bool:
     texto = _normalizar(mensagem)
-    if _crm._necessita_web(mensagem):
+    if _crm._necessita_web(mensagem) or _intencao_busca_externa(mensagem):
         return True
     return any(
         marcador in texto
@@ -76,8 +107,8 @@ def _fontes_requeridas_ia010(mensagem: str) -> set[str]:
     cti_explicito = _precisa_cti_explicito(mensagem)
     analise_externa = _eh_analise_documental_ou_mercado(mensagem)
 
-    # Preserva o comportamento universal para perguntas operacionais livres do CTI,
-    # mas não transforma todo documento/benchmark em busca interna obrigatória.
+    # Perguntas com anexo ou intenção externa não abrem CTI por padrão.
+    # CTI entra somente quando o pedido interno é explícito e material.
     if cti_explicito or not analise_externa:
         requeridas.update({"catalogo_cti", "universo_cti"})
     if _precisa_web(mensagem):
@@ -113,13 +144,17 @@ def _anexar_memoria(mensagem: str, usuario_id: str, tipo_usuario: str) -> tuple[
 
 def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuario_id: str, tipo_usuario: str):
     pergunta_original = _base._mensagem_original_para_evidencias(mensagem)
-    requeridas = _fontes_requeridas_ia010(pergunta_original)
-    token = _USAR_CTI.set("universo_cti" in requeridas)
+    token_anexo = _TEM_ANEXO.set(_tem_anexo_na_mensagem(mensagem))
     try:
-        mensagem_com_memoria, fontes_memoria = _anexar_memoria(mensagem, usuario_id, tipo_usuario)
-        texto, metadados = _ORIGINAL_GERAR(mensagem_com_memoria, historico, usuario_id, tipo_usuario)
+        requeridas = _fontes_requeridas_ia010(pergunta_original)
+        token_cti = _USAR_CTI.set("universo_cti" in requeridas)
+        try:
+            mensagem_com_memoria, fontes_memoria = _anexar_memoria(mensagem, usuario_id, tipo_usuario)
+            texto, metadados = _ORIGINAL_GERAR(mensagem_com_memoria, historico, usuario_id, tipo_usuario)
+        finally:
+            _USAR_CTI.reset(token_cti)
     finally:
-        _USAR_CTI.reset(token)
+        _TEM_ANEXO.reset(token_anexo)
 
     if fontes_memoria:
         fontes = [item for item in (metadados.get("fontes") or []) if isinstance(item, dict)]
@@ -142,8 +177,9 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
     else:
         metadados["conhecimento_semantico_usado"] = []
 
-    metadados["controle_roteamento_ia010"] = "cti_condicional_por_relevancia"
+    metadados["controle_roteamento_ia010"] = "cti_condicional_por_relevancia_soberano"
     metadados["cti_requerido_ia010"] = "universo_cti" in requeridas
+    metadados["web_requerida"] = "web" in requeridas
     metadados["controle_memoria_semantica"] = "documental_persistente_nao_operacional"
     return texto, metadados
 
