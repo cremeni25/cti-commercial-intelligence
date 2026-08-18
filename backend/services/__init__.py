@@ -30,6 +30,14 @@ try:
 except Exception:
     pass
 
+# IA-010 continuidade: CTI deixa de ser fonte obrigatória em toda resposta e
+# anexos pertinentes à cadeia fria passam a compor memória semântica documental,
+# sempre separada da verdade operacional do CRM.
+try:
+    from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
+except Exception:
+    pass
+
 # A ontologia comercial é carregada por último para envolver a leitura universal
 # já montada: fixa o significado das entidades do CTI, declara a finalidade
 # analítica das fontes e obriga a web a preservar o mesmo contexto comercial.
