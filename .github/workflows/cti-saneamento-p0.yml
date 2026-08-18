@@ -1,0 +1,40 @@
+name: CTI Saneamento P0
+
+on:
+  push:
+    branches:
+      - agent/cti-saneamento-ia-frigorifica-p0
+
+permissions:
+  contents: write
+
+jobs:
+  saneamento:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Aplicar refatoração canônica
+        run: python scripts/apply_cti_saneamento_p0.py
+      - name: Validar sintaxe Python
+        run: python -m compileall -q backend scripts
+      - name: Validar testes arquiteturais
+        run: |
+          python -m pip install -q pytest
+          pytest -q backend/tests/test_cti_saneamento_p0.py
+      - name: Commitar resultado
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração adicional."
+            exit 0
+          fi
+          git commit -m "CTI: consolidar P0 e IA frigorífica canônica"
+          git push origin HEAD:agent/cti-saneamento-ia-frigorifica-p0
