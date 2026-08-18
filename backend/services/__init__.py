@@ -21,8 +21,6 @@ try:
 except Exception:
     pass
 
-# Ontologia e guard permanecem ativos antes da IA-010. Assim, a continuidade
-# preserva as proteções homologadas e só substitui a antiga obrigatoriedade de CTI.
 try:
     from . import ia_comercial_ontologia as _ontologia  # noqa: F401
 except Exception:
@@ -33,8 +31,6 @@ try:
 except Exception:
     pass
 
-# IA-010 continuidade tem precedência final sobre roteamento de fontes:
-# CTI condicional por relevância + memória semântica documental persistente.
 try:
     from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
 except Exception:
@@ -45,10 +41,13 @@ try:
 except Exception:
     pass
 
-# Último refinamento da IA-010: amplia apenas os marcadores narrativos da seção
-# de anexo observados em produção, sem alterar roteamento ou regras operacionais.
 try:
     from . import ia_comercial_ia010_proveniencia_final as _ia010_proveniencia_final  # noqa: F401
+except Exception:
+    pass
+
+try:
+    from . import ia_comercial_ia010_auditoria_operacional_final as _ia010_auditoria_operacional_final  # noqa: F401
 except Exception:
     pass
 

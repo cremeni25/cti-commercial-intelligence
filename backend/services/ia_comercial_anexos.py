@@ -12,6 +12,8 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 from pptx import Presentation
 
+from services.ia_comercial_pdf_visual import extrair_pdf_visual
+
 
 MAX_ARQUIVO_BYTES = 15 * 1024 * 1024
 MAX_ANEXOS = 5
@@ -48,7 +50,7 @@ def _limitar(texto: str, limite: int = MAX_CONTEXTO_POR_ARQUIVO) -> str:
     return texto[:limite] + "\n[conteúdo truncado pelo limite seguro do anexo]"
 
 
-def _ler_pdf(conteudo: bytes) -> tuple[str, dict[str, Any]]:
+def _ler_pdf(conteudo: bytes, nome_arquivo: str) -> tuple[str, dict[str, Any]]:
     leitor = PdfReader(BytesIO(conteudo))
     partes: list[str] = []
     paginas_com_texto = 0
@@ -60,9 +62,26 @@ def _ler_pdf(conteudo: bytes) -> tuple[str, dict[str, Any]]:
         partes.append(f"--- Página {indice} ---\n{texto}")
         if sum(len(item) for item in partes) >= MAX_CONTEXTO_POR_ARQUIVO:
             break
-    return _limitar("\n\n".join(partes)), {
+
+    texto_extraido = _limitar("\n\n".join(partes))
+    modo_extracao = "texto_pdf"
+    extracao_visual = False
+
+    if not texto_extraido:
+        texto_visual = _texto_seguro(extrair_pdf_visual(conteudo, nome_arquivo))
+        if texto_visual:
+            texto_extraido = _limitar(texto_visual)
+            modo_extracao = "visual_openai"
+            extracao_visual = True
+        else:
+            modo_extracao = "sem_conteudo_extraido"
+
+    return texto_extraido, {
         "paginas": len(leitor.pages),
         "paginas_com_texto": paginas_com_texto,
+        "conteudo_extraido_disponivel": bool(texto_extraido),
+        "modo_extracao": modo_extracao,
+        "extracao_visual": extracao_visual,
     }
 
 
@@ -162,7 +181,7 @@ def preparar_anexo(nome: str, mime_type: str | None, conteudo: bytes) -> dict[st
 
     try:
         if extensao == ".pdf":
-            texto, estrutura = _ler_pdf(conteudo)
+            texto, estrutura = _ler_pdf(conteudo, nome_seguro)
         elif extensao in {".xlsx", ".xlsm"}:
             texto, estrutura = _ler_planilha(conteudo)
         elif extensao == ".csv":
@@ -184,6 +203,7 @@ def preparar_anexo(nome: str, mime_type: str | None, conteudo: bytes) -> dict[st
         "sha256": sha256(conteudo).hexdigest(),
         "estrutura": estrutura,
         "conteudo_extraido": texto,
+        "conteudo_extraido_disponivel": bool(_texto_seguro(texto)),
         "temporario": True,
         "publicado_cti": False,
     }
@@ -200,7 +220,13 @@ def construir_contexto_anexos(anexos: list[dict[str, Any]]) -> str:
             f"\n### ANEXO {indice}: {item['nome']} | tipo={item['tipo']} | sha256={item['sha256']} | estrutura={json.dumps(item['estrutura'], ensure_ascii=False, default=str)}"
         )
         conteudo = _texto_seguro(item.get("conteudo_extraido"))
-        partes.append(conteudo or "[sem texto estrutural extraível]")
+        if conteudo:
+            partes.append(conteudo)
+        else:
+            partes.append(
+                "[ANEXO SEM CONTEÚDO EXTRAÍDO: não afirme ter analisado dados internos deste arquivo; "
+                "declare a limitação de leitura e não use web como substituto silencioso do conteúdo documental.]"
+            )
     return "\n".join(partes)
 
 
@@ -213,6 +239,7 @@ def metadados_publicos_anexos(anexos: list[dict[str, Any]]) -> list[dict[str, An
             "tamanho_bytes": item["tamanho_bytes"],
             "sha256": item["sha256"],
             "estrutura": item["estrutura"],
+            "conteudo_extraido_disponivel": bool(item.get("conteudo_extraido_disponivel")),
             "temporario": True,
             "publicado_cti": False,
         }
