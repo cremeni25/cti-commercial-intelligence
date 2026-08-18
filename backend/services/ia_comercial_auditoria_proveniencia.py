@@ -179,13 +179,6 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        if secao == "CTI" and ids_cti:
-            afirmacao["tipo"] = "FATO_CTI"
-            afirmacao["fontes_evidencia"] = list(ids_cti)
-            afirmacao["derivada_de"] = []
-            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
-            continue
-
         if secao == "CONTROLE" and ids_controle:
             afirmacao["tipo"] = "FATO_CONTROLE"
             afirmacao["fontes_evidencia"] = list(ids_controle)
@@ -193,6 +186,9 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
+        # A auditoria base já conhece seções WEB explícitas. Essa informação
+        # prevalece sobre a seção narrativa anterior, mas somente quando existe
+        # uma fonte web real e auditável na execução.
         if tipo_original == "FATO_WEB":
             if ids_web:
                 compativeis = _auditoria._ids_web_por_texto(texto, origens, ids_web)
@@ -201,11 +197,17 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
                 afirmacao["derivada_de"] = []
                 afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             elif ids_controle:
-                # Sem fonte web válida, uma afirmação jamais pode permanecer FATO_WEB.
                 afirmacao["tipo"] = "FATO_CONTROLE"
                 afirmacao["fontes_evidencia"] = list(ids_controle)
                 afirmacao["derivada_de"] = []
                 afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
+
+        if secao == "CTI" and ids_cti:
+            afirmacao["tipo"] = "FATO_CTI"
+            afirmacao["fontes_evidencia"] = list(ids_cti)
+            afirmacao["derivada_de"] = []
+            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
         if tipo_original == "FATO_CTI" and ids_cti:
