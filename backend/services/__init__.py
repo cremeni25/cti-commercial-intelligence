@@ -1,8 +1,5 @@
 """Compatibilidade entre camadas históricas da IA e a leitura universal CTI."""
 
-# A arquitetura universal substituiu o roteamento por palavras-chave, mas camadas
-# IA-006/IA-007 ainda importam aliases internos antigos. Mantemos esses aliases
-# apontando para a nova política universal, sem reativar o comportamento legado.
 try:
     from . import ia_comercial_agente_crm as _crm
 
@@ -24,19 +21,8 @@ try:
 except Exception:
     pass
 
-# IA-010 continuidade: CTI condicional + memória semântica documental persistente.
-try:
-    from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
-except Exception:
-    pass
-
-# IA-010 residual: corrige transições WEB -> ANEXO -> INFERÊNCIA e registra
-# memória semântica como origem documental rastreável.
-try:
-    from . import ia_comercial_ia010_auditoria_patch as _ia010_auditoria_patch  # noqa: F401
-except Exception:
-    pass
-
+# Ontologia e guard permanecem ativos antes da IA-010. Assim, a continuidade
+# preserva as proteções homologadas e só substitui a antiga obrigatoriedade de CTI.
 try:
     from . import ia_comercial_ontologia as _ontologia  # noqa: F401
 except Exception:
@@ -44,6 +30,18 @@ except Exception:
 
 try:
     from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
+except Exception:
+    pass
+
+# IA-010 continuidade tem precedência final sobre roteamento de fontes:
+# CTI condicional por relevância + memória semântica documental persistente.
+try:
+    from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
+except Exception:
+    pass
+
+try:
+    from . import ia_comercial_ia010_auditoria_patch as _ia010_auditoria_patch  # noqa: F401
 except Exception:
     pass
 
