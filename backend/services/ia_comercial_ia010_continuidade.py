@@ -31,7 +31,7 @@ def _normalizar(texto: Any) -> str:
     return str(texto or "").strip().casefold()
 
 
-def _precisa_cti(mensagem: str) -> bool:
+def _precisa_cti_explicito(mensagem: str) -> bool:
     texto = _normalizar(mensagem)
     marcadores_internos = (
         "cti", "crm", "pipeline", "carteira", "meus clientes", "nossos clientes", "cliente no sistema",
@@ -41,6 +41,18 @@ def _precisa_cti(mensagem: str) -> bool:
         "anfir", "ddd", "território", "territorio", "região comercial", "regiao comercial",
     )
     return any(marcador in texto for marcador in marcadores_internos)
+
+
+def _eh_analise_documental_ou_mercado(mensagem: str) -> bool:
+    texto = _normalizar(mensagem)
+    return any(
+        marcador in texto
+        for marcador in (
+            "arquivo", "anexo", "pdf", "planilha", "apresentação", "apresentacao", "documento",
+            "concorrente", "concorrentes", "concorrência", "concorrencia", "benchmark",
+            "comparar com a oferta", "compare com a oferta", "o que estão ofertando", "o que estao ofertando",
+        )
+    )
 
 
 def _precisa_web(mensagem: str) -> bool:
@@ -59,9 +71,15 @@ def _precisa_web(mensagem: str) -> bool:
 def _fontes_requeridas_ia010(mensagem: str) -> set[str]:
     if _crm._somente_web_explicito(mensagem):
         return {"web"}
+
     requeridas: set[str] = set()
-    if _precisa_cti(mensagem):
-        requeridas.add("universo_cti")
+    cti_explicito = _precisa_cti_explicito(mensagem)
+    analise_externa = _eh_analise_documental_ou_mercado(mensagem)
+
+    # Preserva o comportamento universal para perguntas operacionais livres do CTI,
+    # mas não transforma todo documento/benchmark em busca interna obrigatória.
+    if cti_explicito or not analise_externa:
+        requeridas.update({"catalogo_cti", "universo_cti"})
     if _precisa_web(mensagem):
         requeridas.add("web")
     return requeridas
@@ -132,7 +150,7 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
 
 _crm._fontes_requeridas_universais = _fontes_requeridas_ia010
 _crm._ferramentas_universais = _ferramentas_ia010
-_crm._pede_cruzamento_cti_explicito = _precisa_cti
+_crm._pede_cruzamento_cti_explicito = _precisa_cti_explicito
 _crm.gerar_resposta_agente = gerar_resposta_agente
 if _INSTRUCOES_IA010 not in _crm._INSTRUCOES_UNIVERSAIS:
     _crm._INSTRUCOES_UNIVERSAIS += _INSTRUCOES_IA010
