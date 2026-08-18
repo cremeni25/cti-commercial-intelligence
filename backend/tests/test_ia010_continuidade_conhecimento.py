@@ -17,10 +17,21 @@ def test_documento_com_concorrentes_exige_web_sem_forcar_cti():
 
 
 def test_cti_so_entra_quando_pedido_interno_e_relevante():
-    assert _fontes_requeridas_ia010("Este cliente já existe no CRM do CTI?") == {"universo_cti"}
+    assert _fontes_requeridas_ia010("Este cliente já existe no CRM do CTI?") == {
+        "catalogo_cti",
+        "universo_cti",
+    }
     assert _fontes_requeridas_ia010("Compare nossas vendas registradas com o mercado atual") == {
+        "catalogo_cti",
         "universo_cti",
         "web",
+    }
+
+
+def test_consulta_operacional_livre_preserva_universo_cti():
+    assert _fontes_requeridas_ia010("quem aparece mais vezes?") == {
+        "catalogo_cti",
+        "universo_cti",
     }
 
 
