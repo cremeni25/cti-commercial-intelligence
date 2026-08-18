@@ -13,15 +13,20 @@ def _normalizar(texto: Any) -> str:
 
 
 def _secao_implicita(texto: str, atual: str | None) -> str | None:
-    """Infere somente a proveniência narrativa, nunca o domínio consultado.
-
-    Esta camada não roteia perguntas nem escolhe ferramentas. Ela apenas interpreta
-    como a resposta final separou fatos internos, fatos externos e comparação entre
-    ambos para que a trilha IA-006 não atribua uma afirmação web ao CTI por mera
-    coincidência de entidade.
-    """
+    """Infere proveniência narrativa sem interferir no roteamento de fontes."""
     normalizado = _normalizar(texto)
 
+    marcadores_anexo = (
+        "o que o arquivo contém",
+        "o que o arquivo contem",
+        "extraído do próprio pdf",
+        "extraido do proprio pdf",
+        "extraído do anexo",
+        "extraido do anexo",
+        "conteúdo do anexo",
+        "conteudo do anexo",
+        "dados do anexo",
+    )
     marcadores_web = (
         "pesquisa na web",
         "pesquisa web",
@@ -31,8 +36,20 @@ def _secao_implicita(texto: str, atual: str | None) -> str | None:
         "informacoes externas",
         "mercado externo",
         "dados externos",
+        "fatos externos verificados",
+    )
+    marcadores_sem_web = (
+        "nenhuma consulta web",
+        "não foi consultada evidência web",
+        "nao foi consultada evidencia web",
+        "não foram realizadas consultas externas",
+        "nao foram realizadas consultas externas",
+        "sem consulta web",
     )
     marcadores_cti = (
+        "fatos internos cti",
+        "evidência desta execução",
+        "evidencia desta execucao",
         "universo histórico autorizado pelo cti",
         "universo historico autorizado pelo cti",
         "dados internos cti",
@@ -46,18 +63,29 @@ def _secao_implicita(texto: str, atual: str | None) -> str | None:
         "historico anfir do cti",
         "banco do cti",
     )
-    marcadores_cruzamento = (
-        "ranking interno cti e o ranking",
+    marcadores_inferencia = (
+        "como essas informações podem ser utilizadas no cti",
+        "como essas informacoes podem ser utilizadas no cti",
+        "inferências/recomendações",
+        "inferencias/recomendacoes",
+        "utilizações recomendadas",
+        "utilizacoes recomendadas",
+        "melhor uso prático",
+        "melhor uso pratico",
+        "cruzamento entre cti e web",
         "comparando os dados internos",
         "comparação entre os dados internos",
         "comparacao entre os dados internos",
-        "cruzamento entre cti e web",
         "assim, o ranking interno",
         "portanto, o ranking interno",
     )
 
-    if any(marcador in normalizado for marcador in marcadores_cruzamento):
+    if any(marcador in normalizado for marcador in marcadores_inferencia):
         return "INFERENCIA"
+    if any(marcador in normalizado for marcador in marcadores_sem_web):
+        return "CONTROLE"
+    if any(marcador in normalizado for marcador in marcadores_anexo):
+        return "ANEXO"
     if any(marcador in normalizado for marcador in marcadores_web):
         return "WEB"
     if any(marcador in normalizado for marcador in marcadores_cti):
@@ -73,16 +101,83 @@ def _ids_por_tipo(origens: list[dict[str, Any]], tipo: str) -> list[str]:
     ]
 
 
+def _adicionar_origens_anexo_e_controle(auditoria: dict[str, Any], metadados: dict[str, Any]) -> None:
+    origens = [item for item in (auditoria.get("origens_execucao") or []) if isinstance(item, dict)]
+    ids_existentes = {str(item.get("id")) for item in origens if item.get("id")}
+
+    anexos = [item for item in (metadados.get("anexos") or []) if isinstance(item, dict)]
+    for indice, anexo in enumerate(anexos, start=1):
+        origem_id = f"ANEXO_{indice}"
+        if origem_id in ids_existentes:
+            continue
+        origens.append(
+            {
+                "id": origem_id,
+                "tipo": "ANEXO_TEMPORARIO",
+                "nome": str(anexo.get("nome") or f"anexo-{indice}"),
+                "mime_type": anexo.get("mime_type"),
+                "sha256": anexo.get("sha256"),
+                "estrutura": dict(anexo.get("estrutura") or {}),
+                "tamanho_bytes": anexo.get("tamanho_bytes"),
+                "temporario": bool(anexo.get("temporario", True)),
+                "publicado_cti": bool(anexo.get("publicado_cti", False)),
+                "execucao_atual": True,
+            }
+        )
+        ids_existentes.add(origem_id)
+
+    if "EXECUCAO_1" not in ids_existentes:
+        origens.append(
+            {
+                "id": "EXECUCAO_1",
+                "tipo": "CONTROLE_EXECUCAO",
+                "web_requerida": bool(metadados.get("web_requerida", False)),
+                "web_fontes_validas": int(metadados.get("web_fontes_validas") or 0),
+                "web_urls_auditaveis": list(metadados.get("web_urls_auditaveis") or []),
+                "somente_leitura": bool(metadados.get("somente_leitura", False)),
+                "controle_anexos": metadados.get("controle_anexos"),
+                "execucao_atual": True,
+            }
+        )
+
+    auditoria["origens_execucao"] = origens
+
+
+def _tornar_inferencia(afirmacao: dict[str, Any], fontes_base: list[str]) -> None:
+    afirmacao["tipo"] = "INFERENCIA_RECOMENDACAO"
+    afirmacao["fontes_evidencia"] = []
+    afirmacao["derivada_de"] = list(dict.fromkeys(fontes_base))
+    afirmacao["premissas_fatuais_exigidas"] = []
+    afirmacao["premissas_fatuais_nao_sustentadas"] = []
+    afirmacao["status_rastreabilidade"] = "RASTREAVEL" if fontes_base else "SEM_BASE_EXPLICITA"
+
+
 def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
     origens = [item for item in (auditoria.get("origens_execucao") or []) if isinstance(item, dict)]
     ids_web = _ids_por_tipo(origens, "WEB")
     ids_cti = _ids_por_tipo(origens, "CTI")
+    ids_anexo = _ids_por_tipo(origens, "ANEXO_TEMPORARIO")
+    ids_controle = _ids_por_tipo(origens, "CONTROLE_EXECUCAO")
     afirmacoes = [item for item in (auditoria.get("afirmacoes") or []) if isinstance(item, dict)]
 
     secao: str | None = None
+    fontes_base = list(dict.fromkeys(ids_anexo + ids_cti + ids_web))
+
     for afirmacao in afirmacoes:
         texto = str(afirmacao.get("texto") or "")
         secao = _secao_implicita(texto, secao)
+        tipo_original = str(afirmacao.get("tipo") or "")
+
+        if secao == "INFERENCIA" or tipo_original == "INFERENCIA_RECOMENDACAO":
+            _tornar_inferencia(afirmacao, fontes_base)
+            continue
+
+        if secao == "ANEXO" and ids_anexo:
+            afirmacao["tipo"] = "FATO_ANEXO"
+            afirmacao["fontes_evidencia"] = list(ids_anexo)
+            afirmacao["derivada_de"] = []
+            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
 
         if secao == "CTI" and ids_cti:
             afirmacao["tipo"] = "FATO_CTI"
@@ -91,26 +186,34 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        if secao == "WEB" and ids_web:
-            compativeis = _auditoria._ids_web_por_texto(texto, origens, ids_web)
-            # Em uma seção explicitamente externa, a lista de fontes web da
-            # execução é a proveniência coletiva quando título/URL não permitem
-            # resolver uma única fonte com segurança.
-            afirmacao["tipo"] = "FATO_WEB"
-            afirmacao["fontes_evidencia"] = list(compativeis or ids_web)
+        if secao == "CONTROLE" and ids_controle:
+            afirmacao["tipo"] = "FATO_CONTROLE"
+            afirmacao["fontes_evidencia"] = list(ids_controle)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        if secao == "INFERENCIA" and (ids_cti or ids_web):
-            afirmacao["tipo"] = "INFERENCIA_RECOMENDACAO"
-            afirmacao["fontes_evidencia"] = []
-            afirmacao["derivada_de"] = list(dict.fromkeys(ids_cti + ids_web))
-            afirmacao["premissas_fatuais_exigidas"] = []
-            afirmacao["premissas_fatuais_nao_sustentadas"] = []
+        if tipo_original == "FATO_WEB":
+            if ids_web:
+                compativeis = _auditoria._ids_web_por_texto(texto, origens, ids_web)
+                afirmacao["tipo"] = "FATO_WEB"
+                afirmacao["fontes_evidencia"] = list(compativeis or ids_web)
+                afirmacao["derivada_de"] = []
+                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            elif ids_controle:
+                # Sem fonte web válida, uma afirmação jamais pode permanecer FATO_WEB.
+                afirmacao["tipo"] = "FATO_CONTROLE"
+                afirmacao["fontes_evidencia"] = list(ids_controle)
+                afirmacao["derivada_de"] = []
+                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
+
+        if tipo_original == "FATO_CTI" and ids_cti:
+            afirmacao["fontes_evidencia"] = list(ids_cti)
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
 
     totais = auditoria.setdefault("totais", {})
+    totais["origens"] = len(origens)
     totais["afirmacoes"] = len(afirmacoes)
     totais["afirmacoes_sem_evidencia_explicita"] = sum(
         1
@@ -140,12 +243,9 @@ def construir_auditoria_evidencial(
     if not isinstance(auditoria, dict):
         return resultado
 
-    ids_web = _ids_por_tipo(auditoria.get("origens_execucao") or [], "WEB")
-    ids_cti = _ids_por_tipo(auditoria.get("origens_execucao") or [], "CTI")
-    if not (ids_web and ids_cti):
-        return resultado
-
+    _adicionar_origens_anexo_e_controle(auditoria, metadados)
     _reclassificar_afirmacoes(auditoria)
+
     totais = auditoria.get("totais") or {}
     resultado["auditoria_afirmacoes_total"] = int(totais.get("afirmacoes") or 0)
     resultado["auditoria_afirmacoes_sem_evidencia"] = int(
@@ -154,7 +254,8 @@ def construir_auditoria_evidencial(
     resultado["auditoria_inferencias_base_parcial"] = int(
         totais.get("inferencias_base_parcial") or 0
     )
-    resultado["controle_proveniencia_evidencia"] = "fonte_explicita_com_secao_narrativa_multifonte"
+    resultado["auditoria_fontes_total"] = int(totais.get("origens") or 0)
+    resultado["controle_proveniencia_evidencia"] = "ia010_anexo_cti_web_inferencia_explicitos"
     return resultado
 
 
