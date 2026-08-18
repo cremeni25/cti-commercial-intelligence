@@ -88,12 +88,12 @@ def test_insert_update_duplicado_e_adaptacao(monkeypatch):
     monkeypatch.setattr(cti_repository, "supabase", fake)
     repo = CTIRepository()
 
-    assert _adaptar_dominio_para_persistencia(registro())["implementador"] == "RANDON"
+    assert _adaptar_dominio_para_persistencia(registro())["implementadora"] == "RANDON"
 
     primeiro = repo.persistir_registros_idempotente([registro()])
     assert primeiro["inseridos"] == 1
-    assert fake.db["abc"]["implementador"] == "RANDON"
-    assert "implementadora" not in fake.db["abc"]
+    assert fake.db["abc"]["implementadora"] == "RANDON"
+    assert "implementador" not in fake.db["abc"]
     assert "modelo_carrier" not in fake.db["abc"]
 
     duplicado = repo.persistir_registros_idempotente([registro()])
@@ -127,6 +127,7 @@ def test_erros_classificados(monkeypatch):
     resultado = repo.persistir_registros_idempotente([registro(hash_registro=None)])
     assert resultado["erros_por_tipo"]["registro_sem_identificador"] == 1
 
+
 class FakePagedTable:
     def __init__(self, registros):
         self.registros = registros
@@ -157,7 +158,7 @@ class FakePagedSupabase:
 
 def test_buscar_cti_anfir_pagina_todos_os_registros(monkeypatch):
     registros = [
-        {"hash_registro": str(i), "cliente": f"Cliente {i}", "implementador": "RANDON"}
+        {"hash_registro": str(i), "cliente": f"Cliente {i}", "implementadora": "RANDON"}
         for i in range(5)
     ]
     fake = FakePagedSupabase(registros)
