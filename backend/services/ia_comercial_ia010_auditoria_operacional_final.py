@@ -36,6 +36,18 @@ for _secao, _marcadores in _patch._MARCADORES_ANEXO:
 _patch._MARCADORES_ANEXO = tuple(_novos)
 
 
+def _ids_web_por_url_literal(texto: str, origens: list[dict[str, Any]], ids_web: list[str]) -> list[str]:
+    alvo = str(texto or "")
+    compativeis: list[str] = []
+    permitidos = set(ids_web)
+    for origem in origens:
+        origem_id = str(origem.get("id") or "")
+        url = str(origem.get("url") or "")
+        if origem_id in permitidos and url and url in alvo:
+            compativeis.append(origem_id)
+    return compativeis
+
+
 def _reclassificar_com_heranca_web(resultado: dict[str, Any], resposta_texto: str, metadados: dict[str, Any]) -> None:
     _ORIGINAL_RECLASSIFICAR(resultado, resposta_texto, metadados)
 
@@ -65,10 +77,13 @@ def _reclassificar_com_heranca_web(resultado: dict[str, Any], resposta_texto: st
             continue
 
         texto = str(afirmacao.get("texto") or "")
-        compativeis = _auditoria_base._ids_web_por_texto(texto, origens, ids_web)
+        compativeis = _ids_web_por_url_literal(texto, origens, ids_web)
+        if not compativeis:
+            compativeis = _auditoria_base._ids_web_por_texto(texto, origens, ids_web)
+
         if compativeis:
-            web_ativos = list(compativeis)
-            afirmacao["fontes_evidencia"] = list(compativeis)
+            web_ativos = list(dict.fromkeys(compativeis))
+            afirmacao["fontes_evidencia"] = list(web_ativos)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
         elif web_ativos and afirmacao.get("status_rastreabilidade") != "RASTREAVEL":
