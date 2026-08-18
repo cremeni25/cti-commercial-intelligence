@@ -17,12 +17,24 @@ def _normalizar(texto: Any) -> str:
 def _secao_ia010(texto: str, atual: str | None) -> str | None:
     normalizado = _normalizar(texto)
 
+    # Cada cabeçalho/âncora muda explicitamente o estado narrativo. Isso evita
+    # herdar CONTROLE ou WEB para o bloco seguinte quando a resposta é multifonte.
     if any(marcador in normalizado for marcador in (
         "a pergunta original foi",
         "nesta execução, as evidências",
         "nesta execucao, as evidencias",
     )):
         return "CONTROLE"
+
+    if any(marcador in normalizado for marcador in (
+        "fatos externos verificados",
+        "pesquisa na web",
+        "pesquisa web",
+        "fontes web",
+        "evidência pública",
+        "evidencia publica",
+    )):
+        return "WEB"
 
     if any(marcador in normalizado for marcador in (
         "análise do arquivo",
