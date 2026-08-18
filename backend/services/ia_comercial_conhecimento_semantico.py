@@ -83,6 +83,23 @@ def _fragmentar(texto: str) -> list[str]:
     return fragmentos[:12]
 
 
+def _marcar_sem_conteudo_existente(documento_id: str, anexo: dict[str, Any], mensagem: str) -> None:
+    supabase.table("cti_ia_conhecimento_fragmentos").delete().eq("documento_id", documento_id).execute()
+    supabase.table("cti_ia_conhecimento_documentos").update({
+        "nome_arquivo": str(anexo.get("nome") or "arquivo"),
+        "estrutura": anexo.get("estrutura") or {},
+        "status": "INATIVO",
+        "metadados": {
+            "verdade_operacional": False,
+            "escrita_crm_autorizada": False,
+            "fonte_rastreavel": True,
+            "conteudo_semantico_disponivel": False,
+            "mensagem_origem": mensagem[:1000],
+        },
+        "updated_at": "now()",
+    }).eq("id", documento_id).execute()
+
+
 def persistir_anexos_como_conhecimento(
     anexos: list[dict[str, Any]],
     *,
@@ -105,6 +122,7 @@ def persistir_anexos_como_conhecimento(
             continue
 
         sha = str(anexo.get("sha256") or "")
+        fragmentos = _fragmentar(str(anexo.get("conteudo_extraido") or ""))
         existentes = _dados(
             supabase.table("cti_ia_conhecimento_documentos")
             .select("id,sha256,nome_arquivo,escopo")
@@ -112,6 +130,22 @@ def persistir_anexos_como_conhecimento(
             .limit(1)
             .execute()
         )
+
+        if not fragmentos:
+            if existentes:
+                documento_id = str(existentes[0]["id"])
+                _marcar_sem_conteudo_existente(documento_id, anexo, mensagem)
+            resultados.append({
+                "documento_id": str(existentes[0]["id"]) if existentes else None,
+                "sha256": sha,
+                "nome": str(anexo.get("nome") or "arquivo"),
+                "persistido": False,
+                "motivo": "sem_conteudo_extraido",
+                "conteudo_semantico_disponivel": False,
+                "verdade_operacional": False,
+            })
+            continue
+
         payload_doc = {
             "sha256": sha,
             "nome_arquivo": str(anexo.get("nome") or "arquivo"),
@@ -129,6 +163,8 @@ def persistir_anexos_como_conhecimento(
                 "verdade_operacional": False,
                 "escrita_crm_autorizada": False,
                 "fonte_rastreavel": True,
+                "conteudo_semantico_disponivel": True,
+                "quantidade_fragmentos": len(fragmentos),
                 "mensagem_origem": mensagem[:1000],
             },
         }
@@ -139,8 +175,10 @@ def persistir_anexos_como_conhecimento(
                 "nome_arquivo": payload_doc["nome_arquivo"],
                 "estrutura": payload_doc["estrutura"],
                 "status": "ATIVO_SEMANTICO",
+                "metadados": payload_doc["metadados"],
                 "updated_at": "now()",
             }).eq("id", documento_id).execute()
+            supabase.table("cti_ia_conhecimento_fragmentos").delete().eq("documento_id", documento_id).execute()
             criado = False
         else:
             criados = _dados(supabase.table("cti_ia_conhecimento_documentos").insert(payload_doc).execute())
@@ -149,19 +187,16 @@ def persistir_anexos_como_conhecimento(
             documento_id = str(criados[0]["id"])
             criado = True
 
-        if criado:
-            fragmentos = _fragmentar(str(anexo.get("conteudo_extraido") or ""))
-            linhas = [
-                {
-                    "documento_id": documento_id,
-                    "indice": indice,
-                    "conteudo_texto": fragmento,
-                    "metadados": {"sha256": sha, "nome_arquivo": payload_doc["nome_arquivo"]},
-                }
-                for indice, fragmento in enumerate(fragmentos, start=1)
-            ]
-            if linhas:
-                supabase.table("cti_ia_conhecimento_fragmentos").insert(linhas).execute()
+        linhas = [
+            {
+                "documento_id": documento_id,
+                "indice": indice,
+                "conteudo_texto": fragmento,
+                "metadados": {"sha256": sha, "nome_arquivo": payload_doc["nome_arquivo"]},
+            }
+            for indice, fragmento in enumerate(fragmentos, start=1)
+        ]
+        supabase.table("cti_ia_conhecimento_fragmentos").insert(linhas).execute()
 
         resultados.append({
             "documento_id": documento_id,
@@ -170,6 +205,8 @@ def persistir_anexos_como_conhecimento(
             "persistido": True,
             "novo": criado,
             "escopo": escopo,
+            "quantidade_fragmentos": len(fragmentos),
+            "conteudo_semantico_disponivel": True,
             "verdade_operacional": False,
         })
 
@@ -212,6 +249,8 @@ def buscar_conhecimento_relevante(
             .limit(12)
             .execute()
         )
+        if not fragmentos:
+            continue
         texto_busca = _normalizar(str(doc.get("nome_arquivo") or "") + " " + " ".join(str(f.get("conteudo_texto") or "")[:4000] for f in fragmentos))
         score = sum(3 if termo in _normalizar(doc.get("nome_arquivo")) else 1 for termo in termos if termo in texto_busca)
         if score > 0:
