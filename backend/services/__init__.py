@@ -45,6 +45,13 @@ try:
 except Exception:
     pass
 
+# Último refinamento da IA-010: amplia apenas os marcadores narrativos da seção
+# de anexo observados em produção, sem alterar roteamento ou regras operacionais.
+try:
+    from . import ia_comercial_ia010_proveniencia_final as _ia010_proveniencia_final  # noqa: F401
+except Exception:
+    pass
+
 try:
     from . import ia_comercial_artefatos_patch as _artefatos_patch  # noqa: F401
 except Exception:
