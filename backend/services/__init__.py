@@ -1,8 +1,5 @@
 """Compatibilidade entre camadas históricas da IA e a leitura universal CTI."""
 
-# A arquitetura universal substituiu o roteamento por palavras-chave, mas camadas
-# IA-006/IA-007 ainda importam aliases internos antigos. Mantemos esses aliases
-# apontando para a nova política universal, sem reativar o comportamento legado.
 try:
     from . import ia_comercial_agente_crm as _crm
 
@@ -17,38 +14,37 @@ try:
     if not hasattr(_crm, "_ferramentas_agente_ia003"):
         _crm._ferramentas_agente_ia003 = _crm._ferramentas_universais
 except Exception:
-    # O pacote services também é usado por módulos que não carregam a IA.
-    # Falhas de importação reais continuam sendo reveladas quando a IA é importada.
     pass
 
-# A auditoria IA-006 histórica classifica a proveniência por seções formais. A
-# leitura universal pode responder em prosa contínua; carregamos uma correção que
-# preserva a API existente e evita atribuir fatos web ao CTI por coincidência de
-# entidade ou pela existência de uma única consulta interna.
 try:
     from . import ia_comercial_auditoria_proveniencia as _auditoria_proveniencia  # noqa: F401
 except Exception:
     pass
 
-# A ontologia comercial é carregada por último para envolver a leitura universal
-# já montada: fixa o significado das entidades do CTI, declara a finalidade
-# analítica das fontes e obriga a web a preservar o mesmo contexto comercial.
+# Ontologia e guard permanecem ativos antes da IA-010. Assim, a continuidade
+# preserva as proteções homologadas e só substitui a antiga obrigatoriedade de CTI.
 try:
     from . import ia_comercial_ontologia as _ontologia  # noqa: F401
 except Exception:
     pass
 
-# Guard final: se uma execução ainda tentar produzir ranking com fonte cadastral
-# ou derivar a web para outro setor, refaz a investigação uma vez e bloqueia a
-# resposta caso a ontologia continue inconsistente.
 try:
     from . import ia_comercial_guard_semantico as _guard_semantico  # noqa: F401
 except Exception:
     pass
 
-# IA-009: o patch do agente apenas detecta a intenção e congela o contexto da
-# execução. A geração efetiva dos artefatos ocorre somente após a síntese factual
-# final, garantindo texto, gráfico e PDF derivados do mesmo snapshot evidencial.
+# IA-010 continuidade tem precedência final sobre roteamento de fontes:
+# CTI condicional por relevância + memória semântica documental persistente.
+try:
+    from . import ia_comercial_ia010_continuidade as _ia010_continuidade  # noqa: F401
+except Exception:
+    pass
+
+try:
+    from . import ia_comercial_ia010_auditoria_patch as _ia010_auditoria_patch  # noqa: F401
+except Exception:
+    pass
+
 try:
     from . import ia_comercial_artefatos_patch as _artefatos_patch  # noqa: F401
 except Exception:

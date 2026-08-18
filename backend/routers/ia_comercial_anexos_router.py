@@ -24,6 +24,7 @@ from services.ia_comercial_anexos import (
     preparar_anexo,
 )
 from services.ia_comercial_auditoria_evidencial import construir_auditoria_evidencial
+from services.ia_comercial_conhecimento_semantico import persistir_anexos_como_conhecimento
 from services.ia_comercial_cti import IAComercialOpenAIError
 from services.ia_comercial_sintese_crm import sintetizar_fatos_execucao
 
@@ -95,6 +96,30 @@ async def enviar_mensagem_com_anexos(
     historico = _historico_conversacional(conversa_id, usuario)
     _registrar_usuario_com_anexos(conversa_id, usuario, texto_usuario, anexos_publicos)
 
+    conhecimento_persistido: list[dict] = []
+    try:
+        conhecimento_persistido = persistir_anexos_como_conhecimento(
+            anexos_processados,
+            conversa_id=conversa_id,
+            usuario_id=usuario.id,
+            tipo_usuario=usuario.tipo_usuario,
+            mensagem=texto_usuario,
+        )
+    except Exception as exc:
+        conhecimento_persistido = [{
+            "persistido": False,
+            "motivo": "falha_repositorio_semantico",
+            "tipo_erro": type(exc).__name__,
+        }]
+        supabase.table("cti_ia_auditoria").insert(
+            {
+                "conversa_id": conversa_id,
+                "usuario_id": usuario.id,
+                "acao": "FALHA_PERSISTENCIA_CONHECIMENTO_ANEXO",
+                "detalhes": {"tipo": type(exc).__name__, "erro": str(exc)[:500], "anexos": anexos_publicos},
+            }
+        ).execute()
+
     resposta_acao = _tratar_acao_controlada(conversa_id, texto_usuario, usuario)
     if resposta_acao:
         return resposta_acao
@@ -120,8 +145,9 @@ async def enviar_mensagem_com_anexos(
             resposta_texto = resposta_factual
         metadados.update(metadados_sintese)
         metadados["anexos"] = anexos_publicos
-        metadados["controle_anexos"] = "temporarios_nao_publicados_nao_operacionais"
-        metadados["controle_selecao_fontes_anexos"] = "somente_pergunta_usuario_define_evidencias"
+        metadados["conhecimento_semantico_persistido"] = conhecimento_persistido
+        metadados["controle_anexos"] = "temporarios_com_conhecimento_semantico_nao_operacional"
+        metadados["controle_selecao_fontes_anexos"] = "pergunta_define_fontes_cti_condicionais"
         metadados["controle_temporal_pergunta"] = controle_temporal
         metadados["controle_temporal_origem"] = "modulo_ia_comercial"
         metadados["controle_recorte_base"] = "restricoes_explicitas_pergunta"
@@ -194,10 +220,11 @@ async def enviar_mensagem_com_anexos(
         {
             "conversa_id": conversa_id,
             "usuario_id": usuario.id,
-            "acao": "RESPOSTA_GERADA_COM_ANEXOS_TEMPORARIOS",
+            "acao": "RESPOSTA_GERADA_COM_ANEXOS_E_CONHECIMENTO_SEMANTICO",
             "detalhes": {
                 "quantidade_anexos": len(anexos_publicos),
                 "anexos": anexos_publicos,
+                "conhecimento_semantico_persistido": conhecimento_persistido,
                 "metadados_resposta": metadados,
             },
         }
