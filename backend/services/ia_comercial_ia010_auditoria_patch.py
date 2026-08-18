@@ -9,13 +9,33 @@ from . import ia_comercial_auditoria_proveniencia as _proveniencia
 _ORIGINAL_CONSTRUIR = _proveniencia.construir_auditoria_evidencial
 
 
-_MARCADORES_SECAO: tuple[tuple[str, tuple[str, ...]], ...] = (
+_MARCADORES_ANEXO: tuple[tuple[str, tuple[str, ...]], ...] = (
     (
         "CONTROLE",
         (
             "a pergunta original foi",
             "nesta execução, as evidências",
             "nesta execucao, as evidencias",
+        ),
+    ),
+    (
+        "ANEXO",
+        (
+            "o que o arquivo contém",
+            "o que o arquivo contem",
+            "análise do arquivo",
+            "analise do arquivo",
+            "evidência do anexo",
+            "evidencia do anexo",
+        ),
+    ),
+    (
+        "CTI",
+        (
+            "fatos internos cti",
+            "dados internos cti",
+            "evidência desta execução",
+            "evidencia desta execucao",
         ),
     ),
     (
@@ -30,19 +50,10 @@ _MARCADORES_SECAO: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     (
-        "ANEXO",
-        (
-            "análise do arquivo",
-            "analise do arquivo",
-            "evidência do anexo",
-            "evidencia do anexo",
-            "o que o arquivo contém",
-            "o que o arquivo contem",
-        ),
-    ),
-    (
         "INFERENCIA",
         (
+            "como essas informações podem ser utilizadas",
+            "como essas informacoes podem ser utilizadas",
             "recomendações",
             "recomendacoes",
             "pontos positivos relativos",
@@ -54,19 +65,24 @@ _MARCADORES_SECAO: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
 )
 
-
-def _normalizar(texto: Any) -> str:
-    return str(texto or "").strip().casefold()
+_MARCADORES_CONTROLE_AFIRMACAO = (
+    "nenhuma consulta web",
+    "não foi consultada evidência web",
+    "nao foi consultada evidencia web",
+    "não foram realizadas consultas externas",
+    "nao foram realizadas consultas externas",
+    "sem consulta web",
+)
 
 
 def _ids_por_tipo(origens: list[dict[str, Any]], tipo: str) -> list[str]:
     return [str(item.get("id")) for item in origens if item.get("tipo") == tipo and item.get("id")]
 
 
-def _mapa_secoes(resposta_texto: str) -> list[tuple[int, str]]:
+def _eventos_secoes(resposta_texto: str) -> list[tuple[int, str]]:
     texto = str(resposta_texto or "").casefold()
     eventos: list[tuple[int, str]] = []
-    for secao, marcadores in _MARCADORES_SECAO:
+    for secao, marcadores in _MARCADORES_ANEXO:
         for marcador in marcadores:
             inicio = 0
             while True:
@@ -117,11 +133,14 @@ def _tornar_inferencia(afirmacao: dict[str, Any], fontes_base: list[str]) -> Non
         afirmacao["status_rastreabilidade"] = "RASTREAVEL" if afirmacao["derivada_de"] else "SEM_BASE_EXPLICITA"
 
 
-def _reclassificar_por_posicao(resultado: dict[str, Any], resposta_texto: str) -> None:
+def _reclassificar_fluxo_anexo(resultado: dict[str, Any], resposta_texto: str, metadados: dict[str, Any]) -> None:
+    # Regra crítica: não toca na auditoria homologada de execuções sem anexos.
+    if not any(isinstance(item, dict) for item in (metadados.get("anexos") or [])):
+        return
+
     auditoria = resultado.get("auditoria_evidencial")
     if not isinstance(auditoria, dict):
         return
-
     origens = [item for item in (auditoria.get("origens_execucao") or []) if isinstance(item, dict)]
     afirmacoes = [item for item in (auditoria.get("afirmacoes") or []) if isinstance(item, dict)]
     if not afirmacoes:
@@ -134,24 +153,25 @@ def _reclassificar_por_posicao(resultado: dict[str, Any], resposta_texto: str) -
     ids_memoria = _ids_por_tipo(origens, "CONHECIMENTO_IA")
     fontes_base = list(dict.fromkeys(ids_anexo + ids_memoria + ids_cti + ids_web))
 
-    eventos = _mapa_secoes(resposta_texto)
+    eventos = _eventos_secoes(resposta_texto)
     posicoes = _posicoes_afirmacoes(resposta_texto, afirmacoes)
 
     for afirmacao, posicao in zip(afirmacoes, posicoes):
-        secao = _secao_na_posicao(eventos, posicao)
         texto_afirmacao = str(afirmacao.get("texto") or "")
+        normalizado = texto_afirmacao.casefold()
+        secao = _secao_na_posicao(eventos, posicao)
 
-        if secao == "CONTROLE" and ids_controle:
+        # Ausência de consulta web é um estado da execução, nunca um fato web.
+        if any(marcador in normalizado for marcador in _MARCADORES_CONTROLE_AFIRMACAO) and ids_controle:
             afirmacao["tipo"] = "FATO_CONTROLE"
             afirmacao["fontes_evidencia"] = list(ids_controle)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        if secao == "WEB" and ids_web:
-            compativeis = _auditoria_base._ids_web_por_texto(texto_afirmacao, origens, ids_web)
-            afirmacao["tipo"] = "FATO_WEB"
-            afirmacao["fontes_evidencia"] = list(compativeis or ids_web)
+        if secao == "CONTROLE" and ids_controle:
+            afirmacao["tipo"] = "FATO_CONTROLE"
+            afirmacao["fontes_evidencia"] = list(ids_controle)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
@@ -161,6 +181,24 @@ def _reclassificar_por_posicao(resultado: dict[str, Any], resposta_texto: str) -
             afirmacao["fontes_evidencia"] = list(ids_anexo)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
+
+        if secao == "CTI" and ids_cti:
+            afirmacao["tipo"] = "FATO_CTI"
+            afirmacao["fontes_evidencia"] = list(ids_cti)
+            afirmacao["derivada_de"] = []
+            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
+
+        if secao == "WEB" and ids_web:
+            compativeis = _auditoria_base._ids_web_por_texto(texto_afirmacao, origens, ids_web)
+            if compativeis:
+                afirmacao["tipo"] = "FATO_WEB"
+                afirmacao["fontes_evidencia"] = list(compativeis)
+                afirmacao["derivada_de"] = []
+                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            # Sem fonte compatível, preserva o guardrail anterior em vez de
+            # atribuir genericamente todas as URLs a uma afirmação nomeada.
             continue
 
         if secao == "INFERENCIA":
@@ -220,7 +258,7 @@ def construir_auditoria_evidencial(
 ) -> dict[str, Any]:
     resultado = _ORIGINAL_CONSTRUIR(resposta_texto, metadados, pergunta_atual)
     _adicionar_memorias(resultado, metadados)
-    _reclassificar_por_posicao(resultado, resposta_texto)
+    _reclassificar_fluxo_anexo(resultado, resposta_texto, metadados)
     return resultado
 
 
