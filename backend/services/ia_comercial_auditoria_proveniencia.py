@@ -101,7 +101,7 @@ def _ids_por_tipo(origens: list[dict[str, Any]], tipo: str) -> list[str]:
     ]
 
 
-def _adicionar_origens_anexo_e_controle(auditoria: dict[str, Any], metadados: dict[str, Any]) -> None:
+def _adicionar_origens_anexo_e_controle(auditoria: dict[str, Any], metadados: dict[str, Any]) -> bool:
     origens = [item for item in (auditoria.get("origens_execucao") or []) if isinstance(item, dict)]
     ids_existentes = {str(item.get("id")) for item in origens if item.get("id")}
 
@@ -126,7 +126,9 @@ def _adicionar_origens_anexo_e_controle(auditoria: dict[str, Any], metadados: di
         )
         ids_existentes.add(origem_id)
 
-    if "EXECUCAO_1" not in ids_existentes:
+    # Não altera a contagem de origens das execuções históricas. O controle
+    # adicional só existe quando a execução realmente contém anexo conversacional.
+    if anexos and "EXECUCAO_1" not in ids_existentes:
         origens.append(
             {
                 "id": "EXECUCAO_1",
@@ -141,18 +143,29 @@ def _adicionar_origens_anexo_e_controle(auditoria: dict[str, Any], metadados: di
         )
 
     auditoria["origens_execucao"] = origens
+    return bool(anexos)
 
 
 def _tornar_inferencia(afirmacao: dict[str, Any], fontes_base: list[str]) -> None:
     afirmacao["tipo"] = "INFERENCIA_RECOMENDACAO"
     afirmacao["fontes_evidencia"] = []
-    afirmacao["derivada_de"] = list(dict.fromkeys(fontes_base))
-    afirmacao["premissas_fatuais_exigidas"] = []
-    afirmacao["premissas_fatuais_nao_sustentadas"] = []
-    afirmacao["status_rastreabilidade"] = "RASTREAVEL" if fontes_base else "SEM_BASE_EXPLICITA"
+    afirmacao["derivada_de"] = list(
+        dict.fromkeys(list(afirmacao.get("derivada_de") or []) + fontes_base)
+    )
+    afirmacao.setdefault("premissas_fatuais_exigidas", [])
+    afirmacao.setdefault("premissas_fatuais_nao_sustentadas", [])
+
+    # Não degrada os guardrails antigos: BASE_PARCIAL continua BASE_PARCIAL.
+    status_original = afirmacao.get("status_rastreabilidade")
+    if status_original == "BASE_PARCIAL":
+        return
+    if afirmacao["derivada_de"]:
+        afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+    elif not status_original:
+        afirmacao["status_rastreabilidade"] = "SEM_BASE_EXPLICITA"
 
 
-def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
+def _reclassificar_afirmacoes(auditoria: dict[str, Any], *, tem_anexos: bool) -> None:
     origens = [item for item in (auditoria.get("origens_execucao") or []) if isinstance(item, dict)]
     ids_web = _ids_por_tipo(origens, "WEB")
     ids_cti = _ids_por_tipo(origens, "CTI")
@@ -186,33 +199,33 @@ def _reclassificar_afirmacoes(auditoria: dict[str, Any]) -> None:
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        # A auditoria base já conhece seções WEB explícitas. Essa informação
-        # prevalece sobre a seção narrativa anterior, mas somente quando existe
-        # uma fonte web real e auditável na execução.
-        if tipo_original == "FATO_WEB":
-            if ids_web:
-                compativeis = _auditoria._ids_web_por_texto(texto, origens, ids_web)
-                afirmacao["tipo"] = "FATO_WEB"
-                afirmacao["fontes_evidencia"] = list(compativeis or ids_web)
-                afirmacao["derivada_de"] = []
-                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
-            elif ids_controle:
-                afirmacao["tipo"] = "FATO_CONTROLE"
-                afirmacao["fontes_evidencia"] = list(ids_controle)
-                afirmacao["derivada_de"] = []
-                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
-            continue
-
-        if secao == "CTI" and ids_cti:
-            afirmacao["tipo"] = "FATO_CTI"
-            afirmacao["fontes_evidencia"] = list(ids_cti)
+        # Prosa natural que anuncia uma pesquisa web cria um bloco WEB mesmo que
+        # a auditoria antiga tenha classificado as linhas seguintes como CTI.
+        if secao == "WEB" and ids_web:
+            compativeis = _auditoria._ids_web_por_texto(texto, origens, ids_web)
+            afirmacao["tipo"] = "FATO_WEB"
+            afirmacao["fontes_evidencia"] = list(compativeis or ids_web)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
 
-        if tipo_original == "FATO_CTI" and ids_cti:
-            afirmacao["fontes_evidencia"] = list(ids_cti)
-            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+        # Em seções WEB formais, a auditoria base já calcula compatibilidade de
+        # entidade/fonte. Não substituímos resultado específico por todas as URLs.
+        if tipo_original == "FATO_WEB":
+            continue
+
+        if secao == "CTI" and ids_cti:
+            afirmacao["tipo"] = "FATO_CTI"
+            if tem_anexos and not afirmacao.get("fontes_evidencia"):
+                # A leitura universal genérica pode não mapear o domínio no IA-006.
+                # No fluxo com anexos usamos as consultas CTI efetivamente executadas
+                # como fallback, sem alterar os guardrails das execuções antigas.
+                afirmacao["fontes_evidencia"] = list(ids_cti)
+                afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            continue
+
+        # Fora do fluxo de anexos, preserva integralmente a precisão da auditoria
+        # histórica, inclusive fatos CTI sem evidência suficiente e BASE_PARCIAL.
 
     totais = auditoria.setdefault("totais", {})
     totais["origens"] = len(origens)
@@ -245,8 +258,8 @@ def construir_auditoria_evidencial(
     if not isinstance(auditoria, dict):
         return resultado
 
-    _adicionar_origens_anexo_e_controle(auditoria, metadados)
-    _reclassificar_afirmacoes(auditoria)
+    tem_anexos = _adicionar_origens_anexo_e_controle(auditoria, metadados)
+    _reclassificar_afirmacoes(auditoria, tem_anexos=tem_anexos)
 
     totais = auditoria.get("totais") or {}
     resultado["auditoria_afirmacoes_total"] = int(totais.get("afirmacoes") or 0)
@@ -257,7 +270,11 @@ def construir_auditoria_evidencial(
         totais.get("inferencias_base_parcial") or 0
     )
     resultado["auditoria_fontes_total"] = int(totais.get("origens") or 0)
-    resultado["controle_proveniencia_evidencia"] = "ia010_anexo_cti_web_inferencia_explicitos"
+    resultado["controle_proveniencia_evidencia"] = (
+        "ia010_anexo_cti_web_inferencia_explicitos"
+        if tem_anexos
+        else resultado.get("controle_proveniencia_evidencia", "fonte_explicita_com_secao_narrativa_multifonte")
+    )
     return resultado
 
 
