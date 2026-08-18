@@ -142,32 +142,6 @@ def gerar_inteligencia_operacional(registros):
 
 
 # ============================================================
-# ADAPTADOR DE PERSISTÊNCIA LEGADA
-# ============================================================
-
-def adaptar_payload_persistencia_legada(registros):
-
-    payload = []
-
-    for registro in registros:
-
-        item = dict(registro)
-
-        item["implementador"] = item.get(
-            "implementadora"
-        )
-
-        item.pop(
-            "implementadora",
-            None
-        )
-
-        payload.append(item)
-
-    return payload
-
-
-# ============================================================
 # UPLOAD CTI
 # ============================================================
 
@@ -215,8 +189,9 @@ async def upload_anfir_seguro(
                 if registro.get("origem_base") == origem_base
             ]
 
-            resultado_base = repository.persistir_registros_idempotente(
-                registros_base
+            resultado_base = upload_engine.persistir_idempotente(
+                registros_base,
+                repository.persistir_registros_idempotente,
             )
 
             relatorio["bases_processadas"][origem_base]["inseridos"] = (

@@ -36,6 +36,12 @@ def detectar_intencao_artefato(mensagem: str) -> set[str]:
         solicitados.add("RELATORIO")
     if "pdf" in texto or any(termo in texto for termo in ("arquivo pdf", "imprimir relatorio", "compartilhar relatorio")):
         solicitados.add("PDF")
+    if any(termo in texto for termo in ("planilha", "excel", "xlsx", "csv", "tabela em arquivo")):
+        solicitados.add("PLANILHA")
+    if any(termo in texto for termo in ("apresentacao", "apresentação", "powerpoint", "pptx", "slides")):
+        solicitados.add("APRESENTACAO")
+    if any(termo in texto for termo in ("documento", "word", "docx", "memorando", "memo")):
+        solicitados.add("DOCUMENTO")
     if "RELATORIO" in solicitados:
         solicitados.add("PDF")
     return solicitados
@@ -143,6 +149,28 @@ def construir_artefatos(
                 }
             )
 
+    if "PLANILHA" in solicitados:
+        artefatos.append({
+            "tipo": "PLANILHA_XLSX",
+            "titulo": "Planilha — IA Comercial CTI",
+            "fonte_dados": fonte_serie if serie else "resposta_atual",
+            "dados": serie,
+            "auditavel": True,
+        })
+    if "APRESENTACAO" in solicitados:
+        artefatos.append({
+            "tipo": "APRESENTACAO_PPTX",
+            "titulo": "Apresentação — IA Comercial CTI",
+            "fonte_dados": fonte_serie if serie else "resposta_atual",
+            "auditavel": True,
+        })
+    if "DOCUMENTO" in solicitados:
+        artefatos.append({
+            "tipo": "DOCUMENTO_DOCX",
+            "titulo": "Documento — IA Comercial CTI",
+            "fonte_dados": "resposta_atual",
+            "auditavel": True,
+        })
     if "PDF" in solicitados or "RELATORIO" in solicitados:
         artefatos.append(
             {

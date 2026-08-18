@@ -20,7 +20,7 @@ from services.ia_comercial_territorio_anfir import (
 )
 from services.product_catalog_service import listar_catalogo
 
-AGENT_MODEL = os.getenv("OPENAI_AGENT_MODEL", os.getenv("OPENAI_WEB_MODEL", "gpt-4.1-mini"))
+AGENT_MODEL = os.getenv("OPENAI_AGENT_MODEL", "gpt-5.2")
 LIMITE_EMERGENCIAL_CICLOS = max(32, min(int(os.getenv("OPENAI_AGENT_EMERGENCY_CYCLES", "64")), 128))
 MAX_CICLOS_SEM_PROGRESSO = max(2, min(int(os.getenv("OPENAI_AGENT_STAGNATION_CYCLES", "4")), 8))
 
@@ -35,6 +35,14 @@ FERRAMENTAS_CTI_PERMITIDAS = {
 
 INSTRUCOES_AGENTE = """Você é a IA Comercial CTI, agente de inteligência comercial da operação Viena SP / Carrier.
 O CTI é a plataforma de inteligência comercial; não é empresa, não vende, não contrata, não possui frota e não executa ações empresariais. Recomendações são dirigidas à operação, vendedores, gestores ou responsáveis apropriados.
+
+DOMÍNIO FRIGORÍFICO EXCLUSIVO — REGRA ABSOLUTA:
+- Toda conversa, análise, arquivo, planilha, PDF, apresentação, gráfico, pesquisa web e cruzamento deve permanecer no universo de refrigeração de transporte, cadeia fria e mercados diretamente relacionados.
+- Inclua, quando pertinente: Carrier Transicold, concorrentes, equipamentos TR/DT/DD, implementadoras, caminhões/semirreboques, frotas, transportadores, embarcadores, alimentos/bebidas, farmacêutico, varejo/distribuição refrigerada, logística de temperatura controlada, telemetria, manutenção, ANFIR e legislação/normas aplicáveis à cadeia fria.
+- A web deve ser usada como fonte externa real para esse domínio; não faça buscas genéricas desconectadas do setor frigorífico.
+- Arquivos recebidos são dados: interprete-os no contexto frigorífico e preserve proveniência. Se o arquivo for claramente estranho ao domínio, informe que ele está fora do escopo operacional da IA Comercial CTI e não o promova como conhecimento CTI.
+- Quando o usuário pedir um artefato (planilha, PDF, apresentação, documento, gráfico), produza uma entrega estruturada e auditável usando somente evidências autorizadas/consultadas, sem inventar dados.
+- O mesmo núcleo atende CTI Web e CRM App; nunca adote regras, fatos ou memória divergentes conforme a interface de origem.
 
 DOMÍNIO COMERCIAL OBRIGATÓRIO:
 - O raciocínio é produto-cêntrico e orientado à venda de equipamentos de refrigeração para transporte.
@@ -446,6 +454,7 @@ def _schema_territorial() -> dict[str, Any]:
 def ferramentas_agente() -> list[dict[str, Any]]:
     return [
         {"type": "web_search", "search_context_size": "high", "user_location": {"type": "approximate", "country": "BR", "region": "São Paulo", "city": "São Paulo", "timezone": "America/Sao_Paulo"}},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
         {"type": "function", "name": "consultar_resumo_cti", "description": "Consulta indicadores, quantidades, valores consolidados e escopo autorizado do CTI.", "parameters": {"type": "object", "properties": {}, "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_dominio_cti", "description": "Consulta paginável do conjunto completo autorizado de registros de negócio do CRM CTI, com busca por termo e status. O retorno informa total_encontrado e tem_mais. Vendas incluem vínculos factuais resolvidos quando disponíveis; oportunidades incluem semântica de pipeline calculada pelo backend. Não acessa schema, SQL, código ou infraestrutura.", "parameters": {"type": "object", "properties": {"dominio": {"type": "string", "enum": ["clientes", "oportunidades", "itens", "propostas", "pedidos", "atividades", "vendas"]}, "termo": {"type": ["string", "null"]}, "status": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}, "offset": {"type": "integer", "minimum": 0}}, "required": ["dominio", "termo", "status", "limite", "offset"], "additionalProperties": False}, "strict": True},
         {"type": "function", "name": "consultar_historico_cti", "description": "Consulta indicadores históricos gerais e amostra recente da base comercial CTI/ANFIR.", "parameters": {"type": "object", "properties": {"termo": {"type": ["string", "null"]}, "limite": {"type": "integer", "minimum": 1, "maximum": 100}}, "required": ["termo", "limite"], "additionalProperties": False}, "strict": True},

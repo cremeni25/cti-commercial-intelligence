@@ -7,7 +7,7 @@ from services import ia_comercial_agente as base
 from services.ia_comercial_universo import catalogar_universo_cti, consultar_universo_cti
 
 
-# Fachada de compatibilidade para IA-004/IA-006/IA-007.
+# Contratos históricos de fase mantidos apenas como nomes de API interna; a execução é universal e canônica.
 # Estes nomes permanecem estáveis para as camadas posteriores, mas a execução
 # efetiva é substituída abaixo pela arquitetura universal de leitura.
 _DOMINIOS_CRM = {"propostas", "pedidos", "atividades"}
@@ -96,7 +96,7 @@ def _fontes_requeridas_universais(mensagem: str) -> set[str]:
     return requeridas
 
 
-# Contratos semânticos legados preservados para planejamento/auditoria.
+# Contratos semânticos de fase preservados para planejamento/auditoria.
 # Eles não escolhem as ferramentas da execução universal; servem apenas como
 # API estável para as camadas antigas e seus testes de semântica operacional.
 def _fontes_requeridas_crm(mensagem: str) -> set[str]:
@@ -154,7 +154,7 @@ def _evidencias_presentes_crm(rastreio: list[dict[str, Any]], fontes_web: list[d
     return presentes
 
 
-# Aliases públicos legados preservados de forma deliberada.
+# Aliases de fase preservados somente para compatibilidade de testes e contratos internos.
 # As camadas antigas podem continuar importando estes nomes sem controlar
 # o roteamento real, que permanece universal.
 def _fontes_requeridas_ia003(mensagem: str) -> set[str]:
@@ -247,6 +247,7 @@ def _ferramentas_universais() -> list[dict[str, Any]]:
         ]
     return [
         {"type": "web_search", "search_context_size": "high", "user_location": {"type": "approximate", "country": "BR", "region": "São Paulo", "city": "São Paulo", "timezone": "America/Sao_Paulo"}},
+        {"type": "code_interpreter", "container": {"type": "auto"}},
         {
             "type": "function",
             "name": "catalogar_universo_cti",
