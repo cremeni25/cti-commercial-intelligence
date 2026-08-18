@@ -27,6 +27,8 @@ _MARCADORES_ANEXO: tuple[tuple[str, tuple[str, ...]], ...] = (
             "analise do arquivo",
             "evidência do anexo",
             "evidencia do anexo",
+            "fatos do anexo",
+            "fatos documentais",
         ),
     ),
     (
@@ -54,13 +56,20 @@ _MARCADORES_ANEXO: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "como essas informações podem ser utilizadas",
             "como essas informacoes podem ser utilizadas",
+            "comparação prática",
+            "comparacao pratica",
+            "comparação técnica",
+            "comparacao tecnica",
             "recomendações",
             "recomendacoes",
             "pontos positivos relativos",
+            "pontos positivos",
             "pontos negativos / riscos",
             "pontos negativos relativos",
+            "pontos negativos",
             "implicação objetiva",
             "implicacao objetiva",
+            "vantagens e riscos",
         ),
     ),
 )
@@ -72,6 +81,51 @@ _MARCADORES_CONTROLE_AFIRMACAO = (
     "não foram realizadas consultas externas",
     "nao foram realizadas consultas externas",
     "sem consulta web",
+)
+
+_MARCADORES_ANEXO_DIRETO = (
+    "o anexo",
+    "no anexo",
+    "do anexo",
+    "seu anexo",
+    "pdf anexo",
+    "arquivo anexo",
+    "o pdf",
+    "no pdf",
+    "do pdf",
+    "o arquivo",
+    "no arquivo",
+    "do arquivo",
+    "tabela do anexo",
+    "conforme a tabela do anexo",
+    "o próprio documento",
+    "o proprio documento",
+)
+
+_MARCADORES_INFERENCIA_DIRETA = (
+    "recomenda",
+    "recomendação",
+    "recomendacao",
+    "priorizar",
+    "usar o ",
+    "usar os ",
+    "escolher ",
+    "equivalência mais segura",
+    "equivalencia mais segura",
+    "isso permite comparar",
+    "ponto de comparação",
+    "ponto de comparacao",
+    "fortalece ",
+    "risco ",
+    "risco de ",
+    "não dá para fechar",
+    "nao da para fechar",
+    "não cravar",
+    "nao cravar",
+    "mais defensável",
+    "mais defensavel",
+    "deve ",
+    "deveria ",
 )
 
 
@@ -123,6 +177,19 @@ def _posicoes_afirmacoes(resposta_texto: str, afirmacoes: list[dict[str, Any]]) 
     return posicoes
 
 
+def _eh_estrutura(texto: str) -> bool:
+    limpo = str(texto or "").lstrip()
+    return limpo.startswith("#")
+
+
+def _parece_anexo_direto(normalizado: str) -> bool:
+    return any(marcador in normalizado for marcador in _MARCADORES_ANEXO_DIRETO)
+
+
+def _parece_inferencia(normalizado: str) -> bool:
+    return any(marcador in normalizado for marcador in _MARCADORES_INFERENCIA_DIRETA)
+
+
 def _tornar_inferencia(afirmacao: dict[str, Any], fontes_base: list[str]) -> None:
     afirmacao["tipo"] = "INFERENCIA_RECOMENDACAO"
     afirmacao["fontes_evidencia"] = []
@@ -131,6 +198,13 @@ def _tornar_inferencia(afirmacao: dict[str, Any], fontes_base: list[str]) -> Non
     afirmacao.setdefault("premissas_fatuais_nao_sustentadas", [])
     if afirmacao.get("status_rastreabilidade") != "BASE_PARCIAL":
         afirmacao["status_rastreabilidade"] = "RASTREAVEL" if afirmacao["derivada_de"] else "SEM_BASE_EXPLICITA"
+
+
+def _tornar_controle(afirmacao: dict[str, Any], ids_controle: list[str]) -> None:
+    afirmacao["tipo"] = "FATO_CONTROLE"
+    afirmacao["fontes_evidencia"] = list(ids_controle)
+    afirmacao["derivada_de"] = []
+    afirmacao["status_rastreabilidade"] = "RASTREAVEL"
 
 
 def _reclassificar_fluxo_anexo(resultado: dict[str, Any], resposta_texto: str, metadados: dict[str, Any]) -> None:
@@ -161,17 +235,30 @@ def _reclassificar_fluxo_anexo(resultado: dict[str, Any], resposta_texto: str, m
         normalizado = texto_afirmacao.casefold()
         secao = _secao_na_posicao(eventos, posicao)
 
+        # Títulos/estrutura pertencem ao controle da resposta, não ao conjunto de fatos.
+        if _eh_estrutura(texto_afirmacao) and ids_controle:
+            _tornar_controle(afirmacao, ids_controle)
+            continue
+
         # Ausência de consulta web é um estado da execução, nunca um fato web.
         if any(marcador in normalizado for marcador in _MARCADORES_CONTROLE_AFIRMACAO) and ids_controle:
-            afirmacao["tipo"] = "FATO_CONTROLE"
-            afirmacao["fontes_evidencia"] = list(ids_controle)
-            afirmacao["derivada_de"] = []
-            afirmacao["status_rastreabilidade"] = "RASTREAVEL"
+            _tornar_controle(afirmacao, ids_controle)
             continue
 
         if secao == "CONTROLE" and ids_controle:
-            afirmacao["tipo"] = "FATO_CONTROLE"
-            afirmacao["fontes_evidencia"] = list(ids_controle)
+            _tornar_controle(afirmacao, ids_controle)
+            continue
+
+        # Comparações, vantagens, riscos, escolhas e recomendações são síntese derivada,
+        # mesmo quando repetem partes do documento ou de uma fonte externa.
+        if secao == "INFERENCIA" or _parece_inferencia(normalizado):
+            _tornar_inferencia(afirmacao, fontes_base)
+            continue
+
+        # Referência textual inequívoca ao documento tem precedência sobre a seção herdada.
+        if _parece_anexo_direto(normalizado) and ids_anexo:
+            afirmacao["tipo"] = "FATO_ANEXO"
+            afirmacao["fontes_evidencia"] = list(ids_anexo)
             afirmacao["derivada_de"] = []
             afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             continue
@@ -199,10 +286,6 @@ def _reclassificar_fluxo_anexo(resultado: dict[str, Any], resposta_texto: str, m
                 afirmacao["status_rastreabilidade"] = "RASTREAVEL"
             # Sem fonte compatível, preserva o guardrail anterior em vez de
             # atribuir genericamente todas as URLs a uma afirmação nomeada.
-            continue
-
-        if secao == "INFERENCIA":
-            _tornar_inferencia(afirmacao, fontes_base)
             continue
 
     totais = auditoria.setdefault("totais", {})
