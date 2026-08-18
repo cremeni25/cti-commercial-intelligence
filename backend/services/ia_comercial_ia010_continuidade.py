@@ -43,13 +43,26 @@ def _precisa_cti(mensagem: str) -> bool:
     return any(marcador in texto for marcador in marcadores_internos)
 
 
+def _precisa_web(mensagem: str) -> bool:
+    texto = _normalizar(mensagem)
+    if _crm._necessita_web(mensagem):
+        return True
+    return any(
+        marcador in texto
+        for marcador in (
+            "concorrente", "concorrentes", "concorrência", "concorrencia", "comparar com a oferta",
+            "compare com a oferta", "o que estão ofertando", "o que estao ofertando", "benchmark",
+        )
+    )
+
+
 def _fontes_requeridas_ia010(mensagem: str) -> set[str]:
     if _crm._somente_web_explicito(mensagem):
         return {"web"}
     requeridas: set[str] = set()
     if _precisa_cti(mensagem):
         requeridas.add("universo_cti")
-    if _crm._necessita_web(mensagem):
+    if _precisa_web(mensagem):
         requeridas.add("web")
     return requeridas
 
@@ -117,10 +130,9 @@ def gerar_resposta_agente(mensagem: str, historico: list[dict[str, str]], usuari
     return texto, metadados
 
 
-# As funções são substituídas no módulo já importado; consumidores posteriores
-# recebem a continuidade IA-010 sem reativar caminhos legados.
 _crm._fontes_requeridas_universais = _fontes_requeridas_ia010
 _crm._ferramentas_universais = _ferramentas_ia010
 _crm._pede_cruzamento_cti_explicito = _precisa_cti
 _crm.gerar_resposta_agente = gerar_resposta_agente
-_base.INSTRUCOES_AGENTE = _base.INSTRUCOES_AGENTE + _INSTRUCOES_IA010
+if _INSTRUCOES_IA010 not in _crm._INSTRUCOES_UNIVERSAIS:
+    _crm._INSTRUCOES_UNIVERSAIS += _INSTRUCOES_IA010
