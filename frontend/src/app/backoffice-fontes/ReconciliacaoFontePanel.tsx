@@ -39,6 +39,14 @@ type Props = {
   onAtualizar: () => Promise<void> | void
 }
 
+type DivergenciaVisual = {
+  campo?: string
+  valor_existente?: unknown
+  valor_recebido?: unknown
+  tipo?: string
+  mensagem?: string
+}
+
 async function tokenAtual(): Promise<string> {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.auth.getSession()
@@ -76,6 +84,57 @@ function entidadeSuportada(dominio: string, entidade: string) {
   return chave === "CTI_ANFIR::ANFIR" || chave === "CRM_COMERCIAL::CLIENTE"
 }
 
+function textoValor(valor: unknown) {
+  if (valor === null) return "null"
+  if (valor === undefined) return "—"
+  if (typeof valor === "string") return valor || "(vazio)"
+  try { return JSON.stringify(valor) } catch { return String(valor) }
+}
+
+function divergenciasDoItem(item: ItemReconciliacao): DivergenciaVisual[] {
+  if (!Array.isArray(item.conflitos)) return []
+  const saida: DivergenciaVisual[] = []
+
+  for (const bruto of item.conflitos) {
+    if (!bruto || typeof bruto !== "object" || Array.isArray(bruto)) continue
+    const conflito = bruto as Record<string, unknown>
+    const campo = typeof conflito.campo === "string" ? conflito.campo : undefined
+    const mensagem = typeof conflito.mensagem === "string" ? conflito.mensagem : undefined
+    const tipo = typeof conflito.tipo === "string" ? conflito.tipo : undefined
+
+    if (campo) {
+      saida.push({
+        campo,
+        valor_existente: conflito.valor_existente,
+        valor_recebido: conflito.valor_recebido,
+        tipo,
+        mensagem,
+      })
+      continue
+    }
+
+    if (mensagem) {
+      const padrao = /\{'campo':\s*'([^']+)',\s*'valor_existente':\s*(?:'([^']*)'|([^,}]+)),\s*'valor_recebido':\s*(?:'([^']*)'|([^,}]+))\}/g
+      let encontrou = false
+      for (const match of mensagem.matchAll(padrao)) {
+        encontrou = true
+        saida.push({
+          campo: match[1],
+          valor_existente: (match[2] ?? match[3] ?? "").trim(),
+          valor_recebido: (match[4] ?? match[5] ?? "").trim(),
+          tipo,
+          mensagem,
+        })
+      }
+      if (!encontrou) saida.push({ tipo, mensagem })
+    } else if (tipo) {
+      saida.push({ tipo })
+    }
+  }
+
+  return saida
+}
+
 export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose, onAtualizar }: Props) {
   const [reconciliacao, setReconciliacao] = useState<Reconciliacao | null>(null)
   const [itens, setItens] = useState<ItemReconciliacao[]>([])
@@ -105,6 +164,8 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
     if (!reconciliacao || !itens.length) return false
     return itens.every((item) => entidadeSuportada(reconciliacao.dominio_alvo, item.entidade_sugerida))
   }, [itens, reconciliacao])
+
+  const divergenciasEdicao = useMemo(() => itemEmEdicao ? divergenciasDoItem(itemEmEdicao) : [], [itemEmEdicao])
 
   async function executar(caminho: string, textoSucesso: string) {
     setExecutando(true)
@@ -220,6 +281,28 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
                 <button onClick={cancelarResolucao} disabled={executando} className="self-start rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 disabled:opacity-40">Cancelar</button>
               </div>
               <p className="mt-3 text-xs leading-5 text-slate-400">Edite somente os dados que precisam ser corrigidos. O backend reclassifica entidade, natureza e camada antes de liberar o item; esta ação não grava diretamente em CRM ou ANFIR.</p>
+
+              {divergenciasEdicao.length > 0 && (
+                <div className="mt-3 rounded-xl border border-red-900/70 bg-[#100b14] p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-red-300">Detalhes do conflito</p>
+                  <div className="mt-2 space-y-2">
+                    {divergenciasEdicao.map((divergencia, indice) => (
+                      <div key={`${divergencia.campo || divergencia.tipo || "conflito"}-${indice}`} className="rounded-lg border border-[#3b1d2b] bg-[#0b1324] p-3">
+                        {divergencia.campo ? (
+                          <div className="grid gap-2 sm:grid-cols-3">
+                            <div><p className="text-[10px] uppercase tracking-wider text-slate-500">Campo em conflito</p><p className="mt-1 font-medium text-red-200">{divergencia.campo}</p></div>
+                            <div><p className="text-[10px] uppercase tracking-wider text-slate-500">Valor atual</p><p className="mt-1 break-words text-slate-200">{textoValor(divergencia.valor_existente)}</p></div>
+                            <div><p className="text-[10px] uppercase tracking-wider text-slate-500">Valor recebido</p><p className="mt-1 break-words text-amber-200">{textoValor(divergencia.valor_recebido)}</p></div>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-red-200">{divergencia.mensagem || divergencia.tipo || "Conflito sem detalhe adicional."}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <label className="mt-3 block text-xs font-medium text-slate-300">Dados corrigidos (JSON)</label>
               <textarea value={dadosEdicao} onChange={(e) => setDadosEdicao(e.target.value)} rows={9} spellCheck={false} className="mt-1 w-full rounded-xl border border-[#253453] bg-[#061126] p-3 font-mono text-xs text-slate-200 outline-none focus:border-cyan-700" />
               <label className="mt-3 block text-xs font-medium text-slate-300">Motivo da correção</label>
