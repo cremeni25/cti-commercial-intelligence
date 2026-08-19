@@ -33,6 +33,7 @@ from routers.crm_app_oportunidades_teste_router import router as crm_app_oportun
 from routers.crm_app_itens_router import router as crm_app_itens_router
 from routers.backoffice_fontes_router import router as backoffice_fontes_router
 from routers.backoffice_fontes_semantica_router import router as backoffice_fontes_semantica_router
+from routers.backoffice_fontes_reconciliacao_router import router as backoffice_fontes_reconciliacao_router
 from services import ia_comercial_fontes_dinamicas as _ia_fontes_dinamicas  # noqa: F401
 
 router = APIRouter()
@@ -69,6 +70,7 @@ router.include_router(crm_app_oportunidades_teste_router)
 router.include_router(crm_app_itens_router)
 router.include_router(backoffice_fontes_router)
 router.include_router(backoffice_fontes_semantica_router)
+router.include_router(backoffice_fontes_reconciliacao_router)
 
 
 @router.post("/upload")
