@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.ingestion_promotion import promover_item, validar_lote
@@ -41,7 +41,11 @@ def _evento(fonte_id: str, evento: str, usuario_id: str, detalhes: dict[str, Any
 
 
 @router.post("/{fonte_id}/reconciliacao/promover")
-def promover_reconciliacao(fonte_id: str, usuario: UsuarioAutenticado = Depends(_admin_master)):
+def promover_reconciliacao(
+    fonte_id: str,
+    natureza: str | None = Query(default=None, max_length=80),
+    usuario: UsuarioAutenticado = Depends(_admin_master),
+):
     fontes = _dados(supabase.table("cti_fontes_universais").select("id,nome_arquivo").eq("id", fonte_id).limit(1).execute())
     if not fontes:
         raise HTTPException(status_code=404, detail="Fonte não encontrada.")
@@ -60,50 +64,86 @@ def promover_reconciliacao(fonte_id: str, usuario: UsuarioAutenticado = Depends(
         .execute()
     )
     try:
-        validacao = validar_lote(rec, itens)
+        validacao = validar_lote(rec, itens, natureza_alvo=natureza)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not validacao["aprovado"]:
-        raise HTTPException(status_code=409, detail={"mensagem": "Lote bloqueado para promoção.", "bloqueios": validacao["bloqueios"]})
+        raise HTTPException(status_code=409, detail={
+            "mensagem": "Lote bloqueado para promoção.",
+            "bloqueios": validacao["bloqueios"],
+            "naturezas_disponiveis": validacao.get("naturezas_disponiveis", []),
+        })
+
+    itens_promocao = list(validacao.get("itens") or [])
+    natureza_alvo = str(validacao.get("natureza_alvo") or "")
 
     tentativa = _dados(supabase.table("cti_fontes_promocoes").insert({
         "fonte_id": fonte_id,
         "reconciliacao_id": rec["id"],
         "dominio_alvo": rec["dominio_alvo"],
         "status": "EM_EXECUCAO",
-        "total_itens": len(itens),
+        "total_itens": len(itens_promocao),
         "executado_por": usuario.id,
+        "resultado": {"natureza_alvo": natureza_alvo},
     }).execute())[0]
 
     resultados: list[dict[str, Any]] = []
     agora = _agora()
     try:
-        for item in itens:
+        for item in itens_promocao:
             resultado = promover_item(str(rec["dominio_alvo"]), item, fonte_nome=str(fonte.get("nome_arquivo") or ""))
-            resultados.append({"item_id": item["id"], "indice_semantico": item["indice_semantico"], "resultado": resultado})
+            resultados.append({
+                "item_id": item["id"],
+                "indice_semantico": item["indice_semantico"],
+                "natureza_canonica": item.get("natureza_canonica"),
+                "resultado": resultado,
+            })
             supabase.table("cti_fontes_reconciliacao_itens").update({"status_item": "PROMOVIDO", "updated_at": agora}).eq("id", item["id"]).execute()
 
+        restantes = _dados(
+            supabase.table("cti_fontes_reconciliacao_itens")
+            .select("id,status_item,natureza_canonica")
+            .eq("reconciliacao_id", rec["id"])
+            .eq("status_item", "PRONTO_PROMOCAO")
+            .execute()
+        )
+        status_rec = "PROMOCAO_PARCIAL" if restantes else "PROMOVIDA"
         supabase.table("cti_fontes_reconciliacoes").update({
-            "status": "PROMOVIDA",
+            "status": status_rec,
             "updated_at": agora,
-            "detalhes": {**(rec.get("detalhes") or {}), "promocao_id": tentativa["id"], "regra_promocao": "CTI_PROMOCAO_CONTROLADA_V1"},
+            "detalhes": {
+                **(rec.get("detalhes") or {}),
+                "promocao_id": tentativa["id"],
+                "regra_promocao": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA",
+                "ultima_natureza_promovida": natureza_alvo,
+                "itens_restantes": len(restantes),
+            },
         }).eq("id", rec["id"]).execute()
         supabase.table("cti_fontes_promocoes").update({
             "status": "CONCLUIDA",
             "total_promovidos": len(resultados),
-            "resultado": {"itens": resultados},
+            "resultado": {
+                "natureza_alvo": natureza_alvo,
+                "itens": resultados,
+                "itens_restantes": len(restantes),
+            },
             "concluido_em": agora,
         }).eq("id", tentativa["id"]).execute()
         _evento(fonte_id, "PROMOCAO_OPERACIONAL_CONCLUIDA", usuario.id, {
             "promocao_id": tentativa["id"],
             "dominio_alvo": rec["dominio_alvo"],
+            "natureza_alvo": natureza_alvo,
             "total_promovidos": len(resultados),
+            "itens_restantes": len(restantes),
         })
         return {
             "promocao_id": tentativa["id"],
             "status": "CONCLUIDA",
+            "status_reconciliacao": status_rec,
             "dominio_alvo": rec["dominio_alvo"],
+            "natureza_alvo": natureza_alvo,
             "total_promovidos": len(resultados),
+            "itens_restantes": len(restantes),
             "resultados": resultados,
         }
     except Exception as exc:
@@ -111,8 +151,12 @@ def promover_reconciliacao(fonte_id: str, usuario: UsuarioAutenticado = Depends(
         supabase.table("cti_fontes_promocoes").update({
             "status": "ERRO",
             "total_promovidos": len(resultados),
-            "resultado": {"itens_concluidos": resultados, "erro": str(exc)[:1000]},
+            "resultado": {"natureza_alvo": natureza_alvo, "itens_concluidos": resultados, "erro": str(exc)[:1000]},
             "concluido_em": _agora(),
         }).eq("id", tentativa["id"]).execute()
-        _evento(fonte_id, "PROMOCAO_OPERACIONAL_ERRO", usuario.id, {"promocao_id": tentativa["id"], "erro": str(exc)[:500]})
+        _evento(fonte_id, "PROMOCAO_OPERACIONAL_ERRO", usuario.id, {
+            "promocao_id": tentativa["id"],
+            "natureza_alvo": natureza_alvo,
+            "erro": str(exc)[:500],
+        })
         raise HTTPException(status_code=500, detail="Promoção interrompida e registrada para auditoria. Itens já promovidos permanecem rastreados e idempotentes.") from exc
