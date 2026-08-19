@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.ingestion_destination import decidir_destino
 from core.supabase_client import supabase
 from services.universal_semantic_source import gerar_semantica
 
@@ -73,27 +74,38 @@ def interpretar_semanticamente(
             conteudo,
             fonte.get("interpretacao_resumo") if isinstance(fonte.get("interpretacao_resumo"), dict) else {},
         )
+        destino = decidir_destino(
+            semantica["classificacao_sugerida"],
+            semantica["confianca_classificacao"],
+            entrada="BACKOFFICE_FONTES",
+            possui_registros_semanticos=bool(semantica["registros"]),
+        )
 
         supabase.table("cti_fontes_semanticas").delete().eq("fonte_id", fonte_id).execute()
         payload = []
         for item in semantica["registros"]:
+            metadados = dict(item.get("metadados") or {})
+            metadados["destino_canonico"] = destino["destino"]
             payload.append({
                 "fonte_id": fonte_id,
                 "indice": item["indice"],
                 "tipo_registro": item["tipo_registro"],
                 "conteudo_texto": item.get("conteudo_texto"),
                 "dados": item.get("dados") or {},
-                "metadados": item.get("metadados") or {},
+                "metadados": metadados,
             })
         if payload:
             for inicio in range(0, len(payload), 500):
                 supabase.table("cti_fontes_semanticas").insert(payload[inicio:inicio + 500]).execute()
 
+        metadados_fonte = dict(fonte.get("metadados") or {})
+        metadados_fonte["decisao_destino_canonico"] = destino
         alteracoes = {
             "classificacao_sugerida": semantica["classificacao_sugerida"],
             "confianca_classificacao": semantica["confianca_classificacao"],
             "descricao_semantica": semantica["descricao_semantica"],
             "campos_semanticos": semantica["campos_semanticos"],
+            "metadados": metadados_fonte,
             "interpretado_semanticamente_em": _agora(),
             "updated_at": _agora(),
         }
@@ -111,12 +123,14 @@ def interpretar_semanticamente(
                 "classificacao_sugerida": semantica["classificacao_sugerida"],
                 "confianca": semantica["confianca_classificacao"],
                 "total_registros": semantica["total_registros"],
+                "decisao_destino_canonico": destino,
             },
         )
         return {
             "fonte": atualizado[0] if atualizado else {**fonte, **alteracoes},
             "total_registros_semanticos": semantica["total_registros"],
             "preview": semantica["registros"][:20],
+            "decisao_destino_canonico": destino,
         }
     except HTTPException:
         raise
@@ -144,11 +158,13 @@ def preview_semantico(
         .eq("fonte_id", fonte_id)
         .execute()
     )
+    decisao = ((fonte.get("metadados") or {}).get("decisao_destino_canonico") if isinstance(fonte.get("metadados"), dict) else None)
     return {
         "fonte": fonte,
         "total_registros_semanticos": len(total),
         "preview": registros,
         "publicavel": str(fonte.get("status_governanca") or "") == "HOMOLOGADO" and bool(registros),
+        "decisao_destino_canonico": decisao,
     }
 
 
