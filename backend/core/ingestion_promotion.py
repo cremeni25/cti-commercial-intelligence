@@ -6,7 +6,7 @@ from typing import Any
 
 from core.supabase_client import supabase
 from repositories.cti_repository import repository
-from services.schema_compat import insert_schema_compatible, update_schema_compatible
+from backend.services.schema_compat import insert_schema_compatible, update_schema_compatible
 
 
 SUPORTE = {
