@@ -31,6 +31,7 @@ from collections import Counter
 
 from parsers.viena_parser import processar_planilha_viena_com_relatorio
 
+from core.ingestion_contract import contrato_upload_operacional
 from core.score_engine import (
     consolidar_scores
 )
@@ -161,6 +162,10 @@ async def upload_anfir_seguro(
         )
 
         relatorio["contexto_operacional"] = contexto_operacional
+        relatorio["ingestao_canonica"] = contrato_upload_operacional(
+            file.filename or "arquivo",
+            contexto_operacional,
+        )
 
         if not registros_processados:
             relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
@@ -221,12 +226,6 @@ async def upload_anfir_seguro(
             for chave in resultado_persistencia:
                 resultado_persistencia[chave] += resultado_base[chave]
 
-        total_gravado = (
-            resultado_persistencia["inseridos"]
-            + resultado_persistencia["atualizados"]
-            + resultado_persistencia["duplicados_ignorados"]
-        )
-
         if resultado_persistencia["erros"] and (
             resultado_persistencia["inseridos"]
             or resultado_persistencia["atualizados"]
@@ -243,7 +242,7 @@ async def upload_anfir_seguro(
 
         return relatorio
 
-    except Exception as e:
+    except Exception:
 
         erro = traceback.format_exc()
 
