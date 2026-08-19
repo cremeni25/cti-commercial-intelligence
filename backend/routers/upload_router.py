@@ -19,6 +19,12 @@ router = APIRouter()
 upload_engine = UploadEngine()
 
 
+def processar_planilha_viena_com_relatorio(contents, filename):
+    """Proxy lazy preservado para testes/injeções e para reduzir bootstrap."""
+    from parsers.viena_parser import processar_planilha_viena_com_relatorio as _processar
+    return _processar(contents, filename)
+
+
 def gerar_inteligencia_operacional(registros):
     total_registros = len(registros)
     total_valor = sum(r.get("valor", 0) for r in registros)
@@ -60,9 +66,6 @@ def gerar_inteligencia_operacional(registros):
 @router.post("/upload/anfir/seguro")
 async def upload_anfir_seguro(file: UploadFile = File(...), contexto_operacional: str = Form("brasil")):
     try:
-        # Parser pesado somente quando há upload real.
-        from parsers.viena_parser import processar_planilha_viena_com_relatorio
-
         contents = await file.read()
         registros_processados, relatorio = processar_planilha_viena_com_relatorio(contents, file.filename)
 
