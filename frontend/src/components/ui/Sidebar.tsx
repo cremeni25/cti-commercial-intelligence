@@ -8,8 +8,7 @@ import { usePathname } from "next/navigation"
 import trailerIcon from "@/assets/equipamentos/trailer.png"
 import dieselTruckIcon from "@/assets/equipamentos/diesel-truck.png"
 import directDriveIcon from "@/assets/equipamentos/direct-drive.png"
-
-const perfilAtual = "ADMIN_MASTER"
+import { useAuth } from "@/core/auth/AuthContext"
 
 const permissoesMenu = {
   ADMIN_MASTER: [
@@ -83,7 +82,12 @@ const menuGroups: MenuGroup[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
-  const menusPermitidos = permissoesMenu[perfilAtual as keyof typeof permissoesMenu] || []
+  const { usuario } = useAuth()
+  const perfilMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
+
+  // Preserva a navegação existente nesta execução. A única mudança de
+  // visibilidade é Fontes & IA, que pertence exclusivamente ao ADMIN_MASTER.
+  const menusPermitidos = permissoesMenu.ADMIN_MASTER
 
   return (
     <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
@@ -97,6 +101,7 @@ export default function Sidebar() {
             {grupo.titulo && <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{grupo.titulo}</p>}
             {grupo.itens
               .filter((item) => menusPermitidos.includes(item.href))
+              .filter((item) => item.href !== "/backoffice-fontes" || perfilMaster)
               .map((item) => {
                 const active = pathname === item.href
                 return (
