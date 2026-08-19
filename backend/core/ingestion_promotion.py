@@ -30,29 +30,91 @@ def _digitos(valor: Any) -> str:
 def suporte_promocao(dominio: str, entidade: str) -> dict[str, Any]:
     chave = (str(dominio or "").upper(), str(entidade or "").upper())
     if chave in SUPORTE:
-        return {"suportado": True, "dominio": chave[0], "entidade": chave[1], "regra": "CTI_PROMOCAO_CONTROLADA_V1"}
+        return {"suportado": True, "dominio": chave[0], "entidade": chave[1], "regra": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA"}
     motivo = {
         "CTI_TERRITORIAL": "Domínio territorial ainda não possui estrutura canônica suficiente para promoção de CEP/cidade/região.",
         "CTI_FINANCEIRO": "Domínio financeiro ainda não possui tabela canônica operacional própria.",
         "CRM_COMERCIAL": "Entidade comercial exige relacionamentos operacionais próprios antes da promoção.",
     }.get(chave[0], "Domínio/entidade sem adaptador canônico de promoção.")
-    return {"suportado": False, "dominio": chave[0], "entidade": chave[1], "motivo": motivo, "regra": "CTI_PROMOCAO_CONTROLADA_V1"}
+    return {"suportado": False, "dominio": chave[0], "entidade": chave[1], "motivo": motivo, "regra": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA"}
 
 
-def validar_lote(reconciliacao: dict[str, Any], itens: list[dict[str, Any]]) -> dict[str, Any]:
-    if str(reconciliacao.get("status") or "") != "PRONTO_PROMOCAO":
-        raise ValueError("Reconciliação não está PRONTO_PROMOCAO.")
+def selecionar_itens_promocao(itens: list[dict[str, Any]], natureza_alvo: str | None = None) -> list[dict[str, Any]]:
+    natureza = str(natureza_alvo or "").upper().strip()
+    if not natureza:
+        return list(itens)
+    return [
+        item for item in itens
+        if str(item.get("natureza_canonica") or "").upper() == natureza
+    ]
+
+
+def naturezas_prontas(itens: list[dict[str, Any]]) -> list[str]:
+    return sorted({
+        str(item.get("natureza_canonica") or "").upper()
+        for item in itens
+        if str(item.get("status_item") or "") == "PRONTO_PROMOCAO"
+        and str(item.get("natureza_canonica") or "").strip()
+    })
+
+
+def validar_lote(
+    reconciliacao: dict[str, Any],
+    itens: list[dict[str, Any]],
+    natureza_alvo: str | None = None,
+) -> dict[str, Any]:
+    if str(reconciliacao.get("status") or "") not in {"PRONTO_PROMOCAO", "PROMOCAO_PARCIAL"}:
+        raise ValueError("Reconciliação não está pronta para promoção.")
     if not itens:
         raise ValueError("Reconciliação sem itens para promover.")
+
+    prontas = naturezas_prontas(itens)
+    alvo = str(natureza_alvo or "").upper().strip() or None
+    if len(prontas) > 1 and not alvo:
+        return {
+            "aprovado": False,
+            "bloqueios": [{
+                "motivo": "LOTE_MISTO_REQUER_NATUREZA_ALVO",
+                "naturezas_disponiveis": prontas,
+            }],
+            "total": len(itens),
+            "natureza_alvo": None,
+            "regra": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA",
+        }
+
+    if not alvo and len(prontas) == 1:
+        alvo = prontas[0]
+
+    selecionados = selecionar_itens_promocao(itens, alvo)
+    selecionados = [item for item in selecionados if str(item.get("status_item") or "") == "PRONTO_PROMOCAO"]
+    if not selecionados:
+        return {
+            "aprovado": False,
+            "bloqueios": [{"motivo": "NATUREZA_SEM_ITENS", "natureza_alvo": alvo}],
+            "total": 0,
+            "natureza_alvo": alvo,
+            "regra": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA",
+        }
+
     bloqueios = []
-    for item in itens:
-        if str(item.get("status_item") or "") != "PRONTO_PROMOCAO":
-            bloqueios.append({"item_id": item.get("id"), "motivo": "ITEM_NAO_PRONTO"})
-            continue
+    for item in selecionados:
         suporte = suporte_promocao(str(reconciliacao.get("dominio_alvo") or ""), str(item.get("entidade_sugerida") or ""))
         if not suporte["suportado"]:
-            bloqueios.append({"item_id": item.get("id"), "entidade": item.get("entidade_sugerida"), "motivo": suporte.get("motivo")})
-    return {"aprovado": not bloqueios, "bloqueios": bloqueios, "total": len(itens), "regra": "CTI_PROMOCAO_CONTROLADA_V1"}
+            bloqueios.append({
+                "item_id": item.get("id"),
+                "entidade": item.get("entidade_sugerida"),
+                "natureza": item.get("natureza_canonica"),
+                "motivo": suporte.get("motivo"),
+            })
+    return {
+        "aprovado": not bloqueios,
+        "bloqueios": bloqueios,
+        "total": len(selecionados),
+        "natureza_alvo": alvo,
+        "itens": selecionados,
+        "naturezas_disponiveis": prontas,
+        "regra": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA",
+    }
 
 
 def _payload_cliente(dados: dict[str, Any]) -> dict[str, Any]:
@@ -106,7 +168,7 @@ def promover_anfir(dados: dict[str, Any], *, chave_canonica: str, fonte_nome: st
     registro["hash_registro"] = _texto(registro.get("hash_registro")) or chave_canonica
     registro["origem_dado"] = _texto(registro.get("origem_dado")) or "BACKOFFICE_FONTES"
     registro["arquivo_origem"] = _texto(registro.get("arquivo_origem")) or _texto(fonte_nome) or None
-    registro["pipeline"] = _texto(registro.get("pipeline")) or "CTI_PROMOCAO_CONTROLADA_V1"
+    registro["pipeline"] = _texto(registro.get("pipeline")) or "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA"
     registro["ativo"] = True if registro.get("ativo") is None else bool(registro.get("ativo"))
     resultado = repository.persistir_registros_idempotente([registro])
     if resultado.get("erros"):
