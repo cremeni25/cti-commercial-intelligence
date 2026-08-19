@@ -2,7 +2,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { AlertTriangle, CheckCircle2, DatabaseZap, Loader2, ShieldCheck, X } from "lucide-react"
+import { AlertTriangle, CheckCircle2, DatabaseZap, Loader2, Pencil, Save, ShieldCheck, X } from "lucide-react"
 
 import { getSupabaseClient } from "@/core/database/supabase"
 
@@ -83,6 +83,9 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
   const [executando, setExecutando] = useState(false)
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
+  const [itemEmEdicao, setItemEmEdicao] = useState<ItemReconciliacao | null>(null)
+  const [dadosEdicao, setDadosEdicao] = useState("")
+  const [motivoEdicao, setMotivoEdicao] = useState("")
 
   async function carregar() {
     const resposta = await requisitar(`/${fonteId}/reconciliacao`)
@@ -114,6 +117,57 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
       await onAtualizar()
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Falha na operação de reconciliação.")
+    } finally {
+      setExecutando(false)
+    }
+  }
+
+  function abrirResolucao(item: ItemReconciliacao) {
+    setItemEmEdicao(item)
+    setDadosEdicao(JSON.stringify(item.dados_normalizados || {}, null, 2))
+    setMotivoEdicao("")
+    setErro("")
+    setMensagem("")
+  }
+
+  function cancelarResolucao() {
+    setItemEmEdicao(null)
+    setDadosEdicao("")
+    setMotivoEdicao("")
+  }
+
+  async function resolverConflito() {
+    if (!itemEmEdicao) return
+    if (motivoEdicao.trim().length < 3) {
+      setErro("Informe o motivo da correção com pelo menos 3 caracteres.")
+      return
+    }
+
+    let dadosNormalizados: Record<string, unknown>
+    try {
+      const parsed = JSON.parse(dadosEdicao)
+      if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") throw new Error()
+      dadosNormalizados = parsed as Record<string, unknown>
+    } catch {
+      setErro("Os dados corrigidos precisam ser um objeto JSON válido.")
+      return
+    }
+
+    setExecutando(true)
+    setErro("")
+    setMensagem("")
+    try {
+      await requisitar(`/${fonteId}/reconciliacao/itens/${itemEmEdicao.id}/resolver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dados_normalizados: dadosNormalizados, motivo: motivoEdicao.trim() }),
+      })
+      cancelarResolucao()
+      setMensagem("Conflito revalidado e resolvido. Uma nova aprovação será obrigatória antes da promoção.")
+      await carregar()
+      await onAtualizar()
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Falha ao resolver conflito.")
     } finally {
       setExecutando(false)
     }
@@ -152,10 +206,25 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
 
           {itens.length > 0 && (
             <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-[#253453]">
-              <table className="w-full min-w-[1050px] text-left text-xs">
-                <thead className="bg-[#091a33] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Entidade</th><th className="px-3 py-2">Natureza</th><th className="px-3 py-2">Camada Dashboard</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Chave canônica</th><th className="px-3 py-2">Promoção</th></tr></thead>
-                <tbody>{itens.slice(0, 100).map((item) => <tr key={item.id} className="border-t border-[#13203f]"><td className="px-3 py-2 text-slate-500">{item.indice_semantico}</td><td className="px-3 py-2 text-slate-200">{item.entidade_sugerida}</td><td className="px-3 py-2 text-cyan-300">{item.natureza_canonica || "—"}</td><td className="px-3 py-2 text-violet-300">{item.camada_dashboard || "—"}</td><td className="px-3 py-2 text-slate-300">{item.status_item}</td><td className="max-w-[260px] break-all px-3 py-2 text-slate-500">{item.chave_canonica || "—"}</td><td className="px-3 py-2">{reconciliacao && entidadeSuportada(reconciliacao.dominio_alvo, item.entidade_sugerida) ? <span className="text-emerald-300">Adaptador canônico</span> : <span className="text-amber-300">Bloqueada</span>}</td></tr>)}</tbody>
+              <table className="w-full min-w-[1160px] text-left text-xs">
+                <thead className="bg-[#091a33] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Entidade</th><th className="px-3 py-2">Natureza</th><th className="px-3 py-2">Camada Dashboard</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Chave canônica</th><th className="px-3 py-2">Promoção</th><th className="px-3 py-2">Ação</th></tr></thead>
+                <tbody>{itens.slice(0, 100).map((item) => <tr key={item.id} className="border-t border-[#13203f]"><td className="px-3 py-2 text-slate-500">{item.indice_semantico}</td><td className="px-3 py-2 text-slate-200">{item.entidade_sugerida}</td><td className="px-3 py-2 text-cyan-300">{item.natureza_canonica || "—"}</td><td className="px-3 py-2 text-violet-300">{item.camada_dashboard || "—"}</td><td className="px-3 py-2 text-slate-300">{item.status_item}</td><td className="max-w-[260px] break-all px-3 py-2 text-slate-500">{item.chave_canonica || "—"}</td><td className="px-3 py-2">{reconciliacao && entidadeSuportada(reconciliacao.dominio_alvo, item.entidade_sugerida) ? <span className="text-emerald-300">Adaptador canônico</span> : <span className="text-amber-300">Bloqueada</span>}</td><td className="px-3 py-2">{item.status_item === "CONFLITO" ? <button disabled={executando} onClick={() => abrirResolucao(item)} className="flex items-center gap-1 rounded-lg border border-red-800 px-2 py-1 text-red-200 disabled:opacity-40"><Pencil size={13} /> Resolver conflito</button> : <span className="text-slate-600">—</span>}</td></tr>)}</tbody>
               </table>
+            </div>
+          )}
+
+          {itemEmEdicao && (
+            <div className="mt-4 rounded-xl border border-red-900/80 bg-red-950/10 p-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div><p className="text-xs font-semibold uppercase tracking-wider text-red-300">Resolver conflito</p><p className="mt-1 text-sm text-slate-300">Item #{itemEmEdicao.indice_semantico} · {itemEmEdicao.entidade_sugerida}</p></div>
+                <button onClick={cancelarResolucao} disabled={executando} className="self-start rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-400 disabled:opacity-40">Cancelar</button>
+              </div>
+              <p className="mt-3 text-xs leading-5 text-slate-400">Edite somente os dados que precisam ser corrigidos. O backend reclassifica entidade, natureza e camada antes de liberar o item; esta ação não grava diretamente em CRM ou ANFIR.</p>
+              <label className="mt-3 block text-xs font-medium text-slate-300">Dados corrigidos (JSON)</label>
+              <textarea value={dadosEdicao} onChange={(e) => setDadosEdicao(e.target.value)} rows={9} spellCheck={false} className="mt-1 w-full rounded-xl border border-[#253453] bg-[#061126] p-3 font-mono text-xs text-slate-200 outline-none focus:border-cyan-700" />
+              <label className="mt-3 block text-xs font-medium text-slate-300">Motivo da correção</label>
+              <input value={motivoEdicao} onChange={(e) => setMotivoEdicao(e.target.value)} maxLength={500} placeholder="Ex.: CNPJ confirmado no cadastro oficial do cliente" className="mt-1 w-full rounded-xl border border-[#253453] bg-[#061126] px-3 py-2 text-sm text-slate-200 outline-none focus:border-cyan-700" />
+              <button onClick={() => void resolverConflito()} disabled={executando} className="mt-3 flex items-center gap-2 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 disabled:opacity-40">{executando ? <Loader2 className="animate-spin" size={16} /> : <Save size={16} />} Revalidar e resolver</button>
             </div>
           )}
 
