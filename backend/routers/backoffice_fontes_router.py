@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.ingestion_contract import contrato_backoffice_fontes
 from core.supabase_client import supabase
 from services.universal_source_interpreter import interpretar_fonte
 
@@ -144,6 +145,7 @@ async def receber_fonte(
     usuario: UsuarioAutenticado = Depends(_admin_master),
 ):
     nome_original = _nome_seguro(arquivo.filename or "arquivo")
+    contrato_ingestao = contrato_backoffice_fontes(nome_original, "cti_web")
     conteudo = await arquivo.read(MAX_BYTES + 1)
     if not conteudo:
         raise HTTPException(status_code=400, detail="Arquivo vazio.")
@@ -159,7 +161,12 @@ async def receber_fonte(
         .execute()
     )
     if existente:
-        return {"fonte": existente[0], "duplicado": True, "mensagem": "Fonte já registrada; nenhum arquivo duplicado foi criado."}
+        return {
+            "fonte": existente[0],
+            "duplicado": True,
+            "mensagem": "Fonte já registrada; nenhum arquivo duplicado foi criado.",
+            "ingestao_canonica": contrato_ingestao,
+        }
 
     tipo, extensao = _tipo_detectado(nome_original, arquivo.content_type)
     fonte_id = str(uuid4())
@@ -191,7 +198,11 @@ async def receber_fonte(
             "tipo_arquivo": tipo,
             "mensagem": "Original preservado. Conteúdo ainda não foi homologado nem publicado para a IA.",
         },
-        "metadados": {"mime_declarado": arquivo.content_type, "nome_original": arquivo.filename},
+        "metadados": {
+            "mime_declarado": arquivo.content_type,
+            "nome_original": arquivo.filename,
+            "ingestao_canonica": contrato_ingestao,
+        },
         "publicado_ia": False,
         "criado_por": usuario.id,
     }
@@ -204,7 +215,12 @@ async def receber_fonte(
             "FONTE_RECEBIDA",
             usuario.id,
             novo="RECEBIDO",
-            detalhes={"sha256": digest, "tipo_detectado": tipo, "tamanho_bytes": len(conteudo)},
+            detalhes={
+                "sha256": digest,
+                "tipo_detectado": tipo,
+                "tamanho_bytes": len(conteudo),
+                "ingestao_canonica": contrato_ingestao,
+            },
         )
     except Exception as exc:
         try:
@@ -213,7 +229,7 @@ async def receber_fonte(
             pass
         raise HTTPException(status_code=500, detail="Falha ao registrar a governança da fonte.") from exc
 
-    return {"fonte": criado[0], "duplicado": False}
+    return {"fonte": criado[0], "duplicado": False, "ingestao_canonica": contrato_ingestao}
 
 
 @router.post("/{fonte_id}/interpretar")
