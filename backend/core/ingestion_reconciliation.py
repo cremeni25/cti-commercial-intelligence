@@ -23,6 +23,11 @@ CHAVES_ENTIDADE = {
     "FINANCEIRO": ("valor", "receita", "margem", "custo", "pagamento", "faturamento"),
 }
 
+# Dentro de um mesmo registro comercial podem coexistir referências ao ciclo
+# anterior (ex.: uma venda mantém numero_pedido e id_oportunidade). A natureza
+# canônica deve refletir o estágio mais avançado explicitamente presente.
+PRECEDENCIA_CICLO_COMERCIAL = ("VENDA", "PEDIDO", "OPORTUNIDADE", "CLIENTE")
+
 NATUREZA_POR_ENTIDADE = {
     "ANFIR": "MERCADO_REALIZADO",
     "CLIENTE": "CRM_CADASTRAL",
@@ -60,8 +65,11 @@ def normalizar_dados(dados: dict[str, Any] | None) -> dict[str, Any]:
     return saida
 
 
+def _possui_sinal(entidade: str, dados: dict[str, Any]) -> bool:
+    return any(dados.get(chave) not in (None, "") for chave in CHAVES_ENTIDADE[entidade])
+
+
 def inferir_entidade(classificacao: str, dados: dict[str, Any]) -> str:
-    chaves = set(dados)
     classe = str(classificacao or "").upper()
 
     if classe == "MERCADO_ANFIR":
@@ -71,8 +79,11 @@ def inferir_entidade(classificacao: str, dados: dict[str, Any]) -> str:
     if classe == "FINANCEIRO":
         return "FINANCEIRO"
 
-    for entidade in ("PEDIDO", "VENDA", "OPORTUNIDADE", "CLIENTE"):
-        if any(chave in chaves for chave in CHAVES_ENTIDADE[entidade]):
+    # COMERCIAL é uma família de registros, não uma natureza única. Cada linha
+    # deve ser classificada individualmente para não transformar cliente em
+    # oportunidade nem oportunidade em venda.
+    for entidade in PRECEDENCIA_CICLO_COMERCIAL:
+        if _possui_sinal(entidade, dados):
             return entidade
     return "REGISTRO_COMERCIAL"
 
@@ -104,6 +115,12 @@ def avaliar_item(classificacao: str, item: dict[str, Any]) -> dict[str, Any]:
 
     if not dados:
         conflitos.append({"tipo": "SEM_DADOS_ESTRUTURADOS", "mensagem": "Registro sem campos estruturados para promoção operacional."})
+
+    if entidade == "REGISTRO_COMERCIAL":
+        conflitos.append({
+            "tipo": "NATUREZA_COMERCIAL_NAO_IDENTIFICADA",
+            "mensagem": "Registro comercial sem sinal suficiente para distinguir cliente, oportunidade, pedido ou venda.",
+        })
 
     if entidade == "CLIENTE" and not any(dados.get(campo) for campo in ("cnpj", "cpf_cnpj", "cliente", "empresa", "razao_social", "nome")):
         conflitos.append({"tipo": "IDENTIFICADOR_AUSENTE", "mensagem": "Cliente sem identificador mínimo."})
@@ -144,10 +161,12 @@ def preparar_plano(classificacao: str, registros: list[dict[str, Any]]) -> dict[
         "total_conflitos": conflitos,
         "naturezas": naturezas,
         "camadas_dashboard": camadas,
+        "lote_misto_naturezas": len(naturezas) > 1,
+        "roteamento_por_registro": True,
         "pronto_promocao": False,
         "promocao_operacional_automatica": False,
         "itens": itens,
-        "regra": "CTI_RECONCILIACAO_CONTROLADA_V2_NATUREZA_CANONICA",
+        "regra": "CTI_RECONCILIACAO_CONTROLADA_V3_NATUREZA_POR_REGISTRO",
     }
 
 
