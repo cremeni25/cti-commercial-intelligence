@@ -40,6 +40,18 @@ def _evento(fonte_id: str, evento: str, usuario_id: str, detalhes: dict[str, Any
     }).execute()
 
 
+def detalhe_conflito_promocao(item: dict[str, Any], erro: Exception) -> dict[str, Any]:
+    return {
+        "tipo": "DIVERGENCIA_PROMOCAO",
+        "item_id": item.get("id"),
+        "indice_semantico": item.get("indice_semantico"),
+        "entidade": item.get("entidade_sugerida"),
+        "natureza_canonica": item.get("natureza_canonica"),
+        "mensagem": str(erro)[:1000],
+        "regra": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V1",
+    }
+
+
 @router.post("/{fonte_id}/reconciliacao/promover")
 def promover_reconciliacao(
     fonte_id: str,
@@ -91,7 +103,49 @@ def promover_reconciliacao(
     agora = _agora()
     try:
         for item in itens_promocao:
-            resultado = promover_item(str(rec["dominio_alvo"]), item, fonte_nome=str(fonte.get("nome_arquivo") or ""))
+            try:
+                resultado = promover_item(str(rec["dominio_alvo"]), item, fonte_nome=str(fonte.get("nome_arquivo") or ""))
+            except ValueError as exc:
+                conflito = detalhe_conflito_promocao(item, exc)
+                supabase.table("cti_fontes_reconciliacao_itens").update({
+                    "status_item": "CONFLITO",
+                    "conflitos": [conflito],
+                    "updated_at": _agora(),
+                }).eq("id", item["id"]).execute()
+                supabase.table("cti_fontes_reconciliacoes").update({
+                    "status": "EM_REVISAO",
+                    "total_conflitos": int(rec.get("total_conflitos") or 0) + 1,
+                    "updated_at": _agora(),
+                    "detalhes": {
+                        **(rec.get("detalhes") or {}),
+                        "ultimo_conflito_promocao": conflito,
+                        "regra_promocao": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V1",
+                    },
+                }).eq("id", rec["id"]).execute()
+                supabase.table("cti_fontes_promocoes").update({
+                    "status": "ERRO",
+                    "total_promovidos": len(resultados),
+                    "resultado": {
+                        "natureza_alvo": natureza_alvo,
+                        "tipo": "CONFLITO_RECONCILIACAO",
+                        "conflito": conflito,
+                        "itens_concluidos": resultados,
+                    },
+                    "concluido_em": _agora(),
+                }).eq("id", tentativa["id"]).execute()
+                _evento(fonte_id, "PROMOCAO_BLOQUEADA_CONFLITO", usuario.id, {
+                    "promocao_id": tentativa["id"],
+                    "natureza_alvo": natureza_alvo,
+                    "conflito": conflito,
+                    "total_promovidos_antes_bloqueio": len(resultados),
+                })
+                raise HTTPException(status_code=409, detail={
+                    "mensagem": "Promoção bloqueada por divergência. O item retornou para reconciliação e nenhum dado divergente foi sobrescrito.",
+                    "promocao_id": tentativa["id"],
+                    "conflito": conflito,
+                    "total_promovidos_antes_bloqueio": len(resultados),
+                }) from exc
+
             resultados.append({
                 "item_id": item["id"],
                 "indice_semantico": item["indice_semantico"],
@@ -114,7 +168,7 @@ def promover_reconciliacao(
             "detalhes": {
                 **(rec.get("detalhes") or {}),
                 "promocao_id": tentativa["id"],
-                "regra_promocao": "CTI_PROMOCAO_CONTROLADA_V2_NATUREZA",
+                "regra_promocao": "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO",
                 "ultima_natureza_promovida": natureza_alvo,
                 "itens_restantes": len(restantes),
             },
@@ -146,6 +200,8 @@ def promover_reconciliacao(
             "itens_restantes": len(restantes),
             "resultados": resultados,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         supabase.table("cti_fontes_reconciliacoes").update({"status": "ERRO", "updated_at": _agora()}).eq("id", rec["id"]).execute()
         supabase.table("cti_fontes_promocoes").update({
