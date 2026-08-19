@@ -4,12 +4,18 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
-from core.ingestion_reconciliation import pode_aprovar, preparar_plano
+from core.ingestion_reconciliation import avaliar_item, pode_aprovar, preparar_plano
 from core.supabase_client import supabase
 
 router = APIRouter(prefix="/backoffice-fontes", tags=["Back Office Reconciliação"])
+
+
+class ResolucaoConflitoRequest(BaseModel):
+    dados_normalizados: dict[str, Any]
+    motivo: str = Field(min_length=3, max_length=500)
 
 
 def _agora() -> str:
@@ -45,6 +51,21 @@ def _evento(fonte_id: str, evento: str, usuario_id: str, detalhes: dict[str, Any
         "detalhes": detalhes,
         "usuario_id": usuario_id,
     }).execute()
+
+
+def avaliar_resolucao_conflito(classificacao: str, item: dict[str, Any], dados_normalizados: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(dados_normalizados, dict) or not dados_normalizados:
+        raise ValueError("Resolução exige dados corrigidos estruturados.")
+    reavaliado = avaliar_item(
+        classificacao,
+        {
+            "indice": item.get("indice_semantico"),
+            "dados": dados_normalizados,
+        },
+    )
+    if reavaliado.get("status_item") != "VALIDO" or reavaliado.get("conflitos"):
+        raise ValueError("Dados corrigidos ainda possuem conflito semântico e não podem retornar para promoção.")
+    return reavaliado
 
 
 @router.post("/{fonte_id}/reconciliacao/preparar")
@@ -117,6 +138,98 @@ def consultar_reconciliacao(fonte_id: str, usuario: UsuarioAutenticado = Depends
         .execute()
     )
     return {"reconciliacao": rec, "itens": itens}
+
+
+@router.post("/{fonte_id}/reconciliacao/itens/{item_id}/resolver")
+def resolver_conflito_reconciliacao(
+    fonte_id: str,
+    item_id: str,
+    payload: ResolucaoConflitoRequest,
+    usuario: UsuarioAutenticado = Depends(_admin_master),
+):
+    _fonte(fonte_id)
+    recs = _dados(supabase.table("cti_fontes_reconciliacoes").select("*").eq("fonte_id", fonte_id).limit(1).execute())
+    if not recs:
+        raise HTTPException(status_code=404, detail="Reconciliação não preparada.")
+    rec = recs[0]
+    itens = _dados(
+        supabase.table("cti_fontes_reconciliacao_itens")
+        .select("*")
+        .eq("id", item_id)
+        .eq("reconciliacao_id", rec["id"])
+        .limit(1)
+        .execute()
+    )
+    if not itens:
+        raise HTTPException(status_code=404, detail="Item de reconciliação não encontrado.")
+    item = itens[0]
+    if str(item.get("status_item") or "") != "CONFLITO":
+        raise HTTPException(status_code=409, detail="Somente item em CONFLITO pode ser resolvido por esta ação.")
+
+    try:
+        reavaliado = avaliar_resolucao_conflito(rec["classificacao"], item, payload.dados_normalizados)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    agora = _agora()
+    atualizado = _dados(
+        supabase.table("cti_fontes_reconciliacao_itens").update({
+            "entidade_sugerida": reavaliado["entidade_sugerida"],
+            "natureza_canonica": reavaliado["natureza_canonica"],
+            "camada_dashboard": reavaliado["camada_dashboard"],
+            "acao_sugerida": reavaliado["acao_sugerida"],
+            "chave_canonica": reavaliado["chave_canonica"],
+            "dados_normalizados": reavaliado["dados_normalizados"],
+            "conflitos": [],
+            "status_item": "VALIDO",
+            "updated_at": agora,
+        }).eq("id", item_id).execute()
+    )[0]
+
+    conflitos_restantes = _dados(
+        supabase.table("cti_fontes_reconciliacao_itens")
+        .select("id")
+        .eq("reconciliacao_id", rec["id"])
+        .eq("status_item", "CONFLITO")
+        .execute()
+    )
+    total_conflitos = len(conflitos_restantes)
+    total_itens = int(rec.get("total_itens") or 0)
+    status_rec = "PREPARADA" if total_conflitos == 0 else "EM_REVISAO"
+    detalhes = dict(rec.get("detalhes") or {})
+    detalhes["ultima_resolucao_conflito"] = {
+        "item_id": item_id,
+        "motivo": payload.motivo,
+        "resolvido_por": usuario.id,
+        "resolvido_em": agora,
+        "regra": "CTI_RECONCILIACAO_RESOLUCAO_CONFLITO_V1",
+    }
+    rec_atualizada = _dados(
+        supabase.table("cti_fontes_reconciliacoes").update({
+            "status": status_rec,
+            "total_conflitos": total_conflitos,
+            "total_validos": max(total_itens - total_conflitos, 0),
+            "aprovado_por": None,
+            "aprovado_em": None,
+            "detalhes": detalhes,
+            "updated_at": agora,
+        }).eq("id", rec["id"]).execute()
+    )[0]
+
+    _evento(fonte_id, "RECONCILIACAO_CONFLITO_RESOLVIDO", usuario.id, {
+        "reconciliacao_id": rec["id"],
+        "item_id": item_id,
+        "motivo": payload.motivo,
+        "conflitos_restantes": total_conflitos,
+        "requer_nova_aprovacao": True,
+    })
+    return {
+        "reconciliacao": rec_atualizada,
+        "item": atualizado,
+        "conflitos_restantes": total_conflitos,
+        "requer_nova_aprovacao": True,
+        "pronto_para_aprovacao": total_conflitos == 0,
+    }
 
 
 @router.post("/{fonte_id}/reconciliacao/aprovar")
