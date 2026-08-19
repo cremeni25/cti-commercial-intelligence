@@ -12,6 +12,8 @@ type ItemReconciliacao = {
   id: string
   indice_semantico: number
   entidade_sugerida: string
+  natureza_canonica?: string | null
+  camada_dashboard?: string | null
   status_item: string
   chave_canonica?: string | null
   conflitos?: unknown
@@ -150,9 +152,9 @@ export default function ReconciliacaoFontePanel({ fonteId, nomeArquivo, onClose,
 
           {itens.length > 0 && (
             <div className="mt-4 max-h-72 overflow-auto rounded-xl border border-[#253453]">
-              <table className="w-full min-w-[760px] text-left text-xs">
-                <thead className="bg-[#091a33] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Entidade</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Chave canônica</th><th className="px-3 py-2">Promoção</th></tr></thead>
-                <tbody>{itens.slice(0, 100).map((item) => <tr key={item.id} className="border-t border-[#13203f]"><td className="px-3 py-2 text-slate-500">{item.indice_semantico}</td><td className="px-3 py-2 text-slate-200">{item.entidade_sugerida}</td><td className="px-3 py-2 text-slate-300">{item.status_item}</td><td className="max-w-[280px] break-all px-3 py-2 text-slate-500">{item.chave_canonica || "—"}</td><td className="px-3 py-2">{reconciliacao && entidadeSuportada(reconciliacao.dominio_alvo, item.entidade_sugerida) ? <span className="text-emerald-300">Adaptador canônico</span> : <span className="text-amber-300">Bloqueada</span>}</td></tr>)}</tbody>
+              <table className="w-full min-w-[1050px] text-left text-xs">
+                <thead className="bg-[#091a33] uppercase tracking-wider text-slate-500"><tr><th className="px-3 py-2">#</th><th className="px-3 py-2">Entidade</th><th className="px-3 py-2">Natureza</th><th className="px-3 py-2">Camada Dashboard</th><th className="px-3 py-2">Status</th><th className="px-3 py-2">Chave canônica</th><th className="px-3 py-2">Promoção</th></tr></thead>
+                <tbody>{itens.slice(0, 100).map((item) => <tr key={item.id} className="border-t border-[#13203f]"><td className="px-3 py-2 text-slate-500">{item.indice_semantico}</td><td className="px-3 py-2 text-slate-200">{item.entidade_sugerida}</td><td className="px-3 py-2 text-cyan-300">{item.natureza_canonica || "—"}</td><td className="px-3 py-2 text-violet-300">{item.camada_dashboard || "—"}</td><td className="px-3 py-2 text-slate-300">{item.status_item}</td><td className="max-w-[260px] break-all px-3 py-2 text-slate-500">{item.chave_canonica || "—"}</td><td className="px-3 py-2">{reconciliacao && entidadeSuportada(reconciliacao.dominio_alvo, item.entidade_sugerida) ? <span className="text-emerald-300">Adaptador canônico</span> : <span className="text-amber-300">Bloqueada</span>}</td></tr>)}</tbody>
               </table>
             </div>
           )}

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import hashlib
 import json
 from typing import Any
@@ -20,6 +21,28 @@ CHAVES_ENTIDADE = {
     "ANFIR": ("chassi", "placa", "implementadora", "fabricante_equipamento", "modelo"),
     "TERRITORIO": ("cep", "cidade", "municipio", "estado", "uf", "regiao", "ddd"),
     "FINANCEIRO": ("valor", "receita", "margem", "custo", "pagamento", "faturamento"),
+}
+
+NATUREZA_POR_ENTIDADE = {
+    "ANFIR": "MERCADO_REALIZADO",
+    "CLIENTE": "CRM_CADASTRAL",
+    "OPORTUNIDADE": "FUNIL_COMERCIAL",
+    "PEDIDO": "CRM_EXECUCAO_POS_OPORTUNIDADE",
+    "VENDA": "COMERCIAL_REALIZADO",
+    "TERRITORIO": "INTELIGENCIA_TERRITORIAL",
+    "FINANCEIRO": "INTELIGENCIA_FINANCEIRA",
+    "REGISTRO_COMERCIAL": "CRM_COMERCIAL_NAO_CLASSIFICADO",
+}
+
+CAMADA_DASHBOARD_POR_NATUREZA = {
+    "MERCADO_REALIZADO": "REALIZADO_MERCADO",
+    "CRM_CADASTRAL": "CADASTRO_CRM",
+    "FUNIL_COMERCIAL": "EM_CURSO_FUNIL",
+    "CRM_EXECUCAO_POS_OPORTUNIDADE": "EXECUCAO_COMERCIAL",
+    "COMERCIAL_REALIZADO": "REALIZADO_COMERCIAL",
+    "INTELIGENCIA_TERRITORIAL": "DIMENSAO_TERRITORIAL",
+    "INTELIGENCIA_FINANCEIRA": "DIMENSAO_FINANCEIRA",
+    "CRM_COMERCIAL_NAO_CLASSIFICADO": "STAGING_COMERCIAL",
 }
 
 
@@ -54,6 +77,14 @@ def inferir_entidade(classificacao: str, dados: dict[str, Any]) -> str:
     return "REGISTRO_COMERCIAL"
 
 
+def natureza_canonica(entidade: str) -> str:
+    return NATUREZA_POR_ENTIDADE.get(str(entidade or "").upper(), "NAO_CLASSIFICADA")
+
+
+def camada_dashboard(natureza: str) -> str:
+    return CAMADA_DASHBOARD_POR_NATUREZA.get(str(natureza or "").upper(), "STAGING_GOVERNADO")
+
+
 def chave_canonica(entidade: str, dados: dict[str, Any], indice: int) -> str:
     candidatos = CHAVES_ENTIDADE.get(entidade, tuple())
     partes = [f"{chave}={dados.get(chave)}" for chave in candidatos if dados.get(chave) not in (None, "")]
@@ -67,6 +98,8 @@ def avaliar_item(classificacao: str, item: dict[str, Any]) -> dict[str, Any]:
     indice = int(item.get("indice") or 0)
     dados = normalizar_dados(item.get("dados") if isinstance(item.get("dados"), dict) else {})
     entidade = inferir_entidade(classificacao, dados)
+    natureza = natureza_canonica(entidade)
+    camada = camada_dashboard(natureza)
     conflitos: list[dict[str, Any]] = []
 
     if not dados:
@@ -81,6 +114,8 @@ def avaliar_item(classificacao: str, item: dict[str, Any]) -> dict[str, Any]:
     return {
         "indice_semantico": indice,
         "entidade_sugerida": entidade,
+        "natureza_canonica": natureza,
+        "camada_dashboard": camada,
         "acao_sugerida": acao,
         "chave_canonica": chave_canonica(entidade, dados, indice),
         "dados_origem": item.get("dados") if isinstance(item.get("dados"), dict) else {},
@@ -98,6 +133,8 @@ def preparar_plano(classificacao: str, registros: list[dict[str, Any]]) -> dict[
     itens = [avaliar_item(classe, item) for item in registros]
     conflitos = sum(1 for item in itens if item["status_item"] == "CONFLITO")
     validos = len(itens) - conflitos
+    naturezas = dict(Counter(str(item["natureza_canonica"]) for item in itens))
+    camadas = dict(Counter(str(item["camada_dashboard"]) for item in itens))
     return {
         "classificacao": classe,
         "dominio_alvo": DOMINIOS_ALVO[classe],
@@ -105,10 +142,12 @@ def preparar_plano(classificacao: str, registros: list[dict[str, Any]]) -> dict[
         "total_itens": len(itens),
         "total_validos": validos,
         "total_conflitos": conflitos,
+        "naturezas": naturezas,
+        "camadas_dashboard": camadas,
         "pronto_promocao": False,
         "promocao_operacional_automatica": False,
         "itens": itens,
-        "regra": "CTI_RECONCILIACAO_CONTROLADA_V1",
+        "regra": "CTI_RECONCILIACAO_CONTROLADA_V2_NATUREZA_CANONICA",
     }
 
 
