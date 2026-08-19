@@ -4,259 +4,114 @@
 # Versão.......: 1.0.0
 # Status.......: ESTÁVEL
 # Data.........: 24/06/2026
-#
-# Responsabilidade:
-# - Receber arquivos enviados pelo frontend
-# - Acionar o parser correspondente
-# - Gerar inteligência operacional
-# - Calcular score
-# - Delegar persistência ao UploadEngine
-#
-# OBS:
-# Este arquivo NÃO realiza mais gravação direta no Supabase.
-# Toda persistência é responsabilidade do UploadEngine.
 # ============================================================
 
-from fastapi import (
-    APIRouter,
-    UploadFile,
-    File,
-    HTTPException,
-    Form
-)
-
+from fastapi import APIRouter, UploadFile, File, HTTPException, Form
 import traceback
-
 from collections import Counter
 
-from parsers.viena_parser import processar_planilha_viena_com_relatorio
-
 from core.ingestion_contract import contrato_upload_operacional
-from core.score_engine import (
-    consolidar_scores
-)
-
-from core.upload_engine import (
-    UploadEngine
-)
-
+from core.score_engine import consolidar_scores
+from core.upload_engine import UploadEngine
 from repositories.cti_repository import repository
 
 router = APIRouter()
-
 upload_engine = UploadEngine()
 
 
-# ============================================================
-# INTELIGÊNCIA OPERACIONAL
-# ============================================================
+def processar_planilha_viena_com_relatorio(contents, filename):
+    """Proxy lazy preservado para testes/injeções e para reduzir bootstrap."""
+    from parsers.viena_parser import processar_planilha_viena_com_relatorio as _processar
+    return _processar(contents, filename)
+
 
 def gerar_inteligencia_operacional(registros):
-
     total_registros = len(registros)
-
-    total_valor = sum(
-        r.get("valor", 0)
-        for r in registros
-    )
-
-    estados = Counter(
-        r.get("estado", "")
-        for r in registros
-        if r.get("estado")
-    )
-
-    produtos = Counter(
-        r.get("linha", "")
-        for r in registros
-        if r.get("linha")
-    )
-
-    implementadoras = Counter(
-        r.get("implementadora", "")
-        for r in registros
-        if r.get("implementadora")
-    )
+    total_valor = sum(r.get("valor", 0) for r in registros)
+    estados = Counter(r.get("estado", "") for r in registros if r.get("estado"))
+    produtos = Counter(r.get("linha", "") for r in registros if r.get("linha"))
+    implementadoras = Counter(r.get("implementadora", "") for r in registros if r.get("implementadora"))
 
     ranking_estados = estados.most_common(10)
     ranking_produtos = produtos.most_common(10)
     ranking_implementadoras = implementadoras.most_common(10)
-
     insights = []
 
     if ranking_estados:
-
         estado_top = ranking_estados[0]
-
-        insights.append(
-            f"O estado com maior volume operacional é {estado_top[0]} com {estado_top[1]} registros."
-        )
-
+        insights.append(f"O estado com maior volume operacional é {estado_top[0]} com {estado_top[1]} registros.")
     if ranking_produtos:
-
         produto_top = ranking_produtos[0]
-
-        insights.append(
-            f"O produto dominante da operação é {produto_top[0]} com {produto_top[1]} ocorrências."
-        )
-
+        insights.append(f"O produto dominante da operação é {produto_top[0]} com {produto_top[1]} ocorrências.")
     if ranking_implementadoras:
-
         impl_top = ranking_implementadoras[0]
-
-        insights.append(
-            f"A implementadora com maior presença operacional é {impl_top[0]} com {impl_top[1]} registros."
-        )
-
+        insights.append(f"A implementadora com maior presença operacional é {impl_top[0]} com {impl_top[1]} registros.")
     if total_valor > 5000000:
-
-        insights.append(
-            "A operação apresenta alto volume financeiro consolidado."
-        )
-
+        insights.append("A operação apresenta alto volume financeiro consolidado.")
     elif total_valor > 1000000:
-
-        insights.append(
-            "A operação apresenta volume financeiro relevante."
-        )
-
+        insights.append("A operação apresenta volume financeiro relevante.")
     else:
-
-        insights.append(
-            "A operação ainda possui baixo volume consolidado."
-        )
+        insights.append("A operação ainda possui baixo volume consolidado.")
 
     return {
-
         "total_registros": total_registros,
-
         "total_valor": total_valor,
-
         "ranking_estados": ranking_estados,
-
         "ranking_produtos": ranking_produtos,
-
         "ranking_implementadoras": ranking_implementadoras,
-
-        "insights": insights
+        "insights": insights,
     }
 
 
-# ============================================================
-# UPLOAD CTI
-# ============================================================
-
 @router.post("/upload/anfir/seguro")
-async def upload_anfir_seguro(
-    file: UploadFile = File(...),
-    contexto_operacional: str = Form("brasil")
-):
-
+async def upload_anfir_seguro(file: UploadFile = File(...), contexto_operacional: str = Form("brasil")):
     try:
-
         contents = await file.read()
-
-        registros_processados, relatorio = processar_planilha_viena_com_relatorio(
-            contents,
-            file.filename
-        )
+        registros_processados, relatorio = processar_planilha_viena_com_relatorio(contents, file.filename)
 
         relatorio["contexto_operacional"] = contexto_operacional
-        relatorio["ingestao_canonica"] = contrato_upload_operacional(
-            file.filename or "arquivo",
-            contexto_operacional,
-        )
+        relatorio["ingestao_canonica"] = contrato_upload_operacional(file.filename or "arquivo", contexto_operacional)
 
         if not registros_processados:
             relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
             return relatorio
 
-        inteligencia = gerar_inteligencia_operacional(
-            registros_processados
-        )
-
-        score = consolidar_scores(
-            registros_processados
-        )
-
-        resultado_persistencia = {
-            "tentados": 0,
-            "inseridos": 0,
-            "atualizados": 0,
-            "duplicados_ignorados": 0,
-            "erros": 0,
-        }
+        inteligencia = gerar_inteligencia_operacional(registros_processados)
+        score = consolidar_scores(registros_processados)
+        resultado_persistencia = {"tentados": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0}
 
         for origem_base in relatorio["bases_processadas"]:
-            registros_base = [
-                registro
-                for registro in registros_processados
-                if registro.get("origem_base") == origem_base
-            ]
+            registros_base = [registro for registro in registros_processados if registro.get("origem_base") == origem_base]
+            resultado_base = upload_engine.persistir_idempotente(registros_base, repository.persistir_registros_idempotente)
 
-            resultado_base = upload_engine.persistir_idempotente(
-                registros_base,
-                repository.persistir_registros_idempotente,
-            )
-
-            relatorio["bases_processadas"][origem_base]["inseridos"] = (
-                resultado_base["inseridos"]
-            )
-            relatorio["bases_processadas"][origem_base]["atualizados"] = (
-                resultado_base["atualizados"]
-            )
-            relatorio["bases_processadas"][origem_base]["duplicados_ignorados"] += (
-                resultado_base["duplicados_ignorados"]
-            )
-            relatorio["bases_processadas"][origem_base]["erros"] += (
-                resultado_base["erros"]
-            )
+            relatorio["bases_processadas"][origem_base]["inseridos"] = resultado_base["inseridos"]
+            relatorio["bases_processadas"][origem_base]["atualizados"] = resultado_base["atualizados"]
+            relatorio["bases_processadas"][origem_base]["duplicados_ignorados"] += resultado_base["duplicados_ignorados"]
+            relatorio["bases_processadas"][origem_base]["erros"] += resultado_base["erros"]
             for tipo, quantidade in resultado_base.get("erros_por_tipo", {}).items():
-                relatorio["bases_processadas"][origem_base]["erros_por_tipo"][tipo] = (
-                    relatorio["bases_processadas"][origem_base]["erros_por_tipo"].get(tipo, 0)
-                    + quantidade
-                )
-            relatorio["bases_processadas"][origem_base]["amostra_erros"].extend(
-                resultado_base.get("amostra_erros", [])
-            )
-            relatorio["bases_processadas"][origem_base]["amostra_erros"] = (
-                relatorio["bases_processadas"][origem_base]["amostra_erros"][:100]
-            )
-
+                relatorio["bases_processadas"][origem_base]["erros_por_tipo"][tipo] = relatorio["bases_processadas"][origem_base]["erros_por_tipo"].get(tipo, 0) + quantidade
+            relatorio["bases_processadas"][origem_base]["amostra_erros"].extend(resultado_base.get("amostra_erros", []))
+            relatorio["bases_processadas"][origem_base]["amostra_erros"] = relatorio["bases_processadas"][origem_base]["amostra_erros"][:100]
             for chave in resultado_persistencia:
                 resultado_persistencia[chave] += resultado_base[chave]
 
-        if resultado_persistencia["erros"] and (
-            resultado_persistencia["inseridos"]
-            or resultado_persistencia["atualizados"]
-            or resultado_persistencia["duplicados_ignorados"]
-        ):
+        if resultado_persistencia["erros"] and (resultado_persistencia["inseridos"] or resultado_persistencia["atualizados"] or resultado_persistencia["duplicados_ignorados"]):
             relatorio["status"] = "SUCESSO_PARCIAL"
         elif resultado_persistencia["erros"]:
             relatorio["status"] = "ERRO_PERSISTENCIA"
         else:
             relatorio["status"] = "SUCESSO"
+
         relatorio["persistencia"] = resultado_persistencia
         relatorio["inteligencia"] = inteligencia
         relatorio["score"] = score
-
         return relatorio
 
     except Exception:
-
         erro = traceback.format_exc()
-
-        print("\n")
-        print("=" * 80)
+        print("\n" + "=" * 80)
         print("ERRO COMPLETO DO UPLOAD")
         print("=" * 80)
         print(erro)
         print("=" * 80)
-
-        raise HTTPException(
-            status_code=500,
-            detail={
-                "status": "ERRO_PROCESSAMENTO",
-                "mensagem": "Falha ao processar upload. Consulte logs do backend.",
-            }
-        )
+        raise HTTPException(status_code=500, detail={"status": "ERRO_PROCESSAMENTO", "mensagem": "Falha ao processar upload. Consulte logs do backend."})
