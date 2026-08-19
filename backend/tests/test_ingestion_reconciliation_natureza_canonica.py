@@ -49,4 +49,6 @@ def test_plano_misto_preserva_camadas_sem_fundir_registros():
         "EM_CURSO_FUNIL": 1,
         "REALIZADO_COMERCIAL": 1,
     }
-    assert plano["regra"] == "CTI_RECONCILIACAO_CONTROLADA_V2_NATUREZA_CANONICA"
+    assert plano["lote_misto_naturezas"] is True
+    assert plano["roteamento_por_registro"] is True
+    assert plano["regra"] == "CTI_RECONCILIACAO_CONTROLADA_V3_NATUREZA_POR_REGISTRO"
