@@ -8,6 +8,10 @@ from pathlib import Path
 from typing import Any
 
 
+# Ganchos de teste mantidos sem importar dependências pesadas no startup.
+PdfReader = None
+extrair_pdf_visual = None
+
 MAX_ARQUIVO_BYTES = 15 * 1024 * 1024
 MAX_ANEXOS = 5
 MAX_TOTAL_BYTES = 30 * 1024 * 1024
@@ -43,10 +47,22 @@ def _limitar(texto: str, limite: int = MAX_CONTEXTO_POR_ARQUIVO) -> str:
     return texto[:limite] + "\n[conteúdo truncado pelo limite seguro do anexo]"
 
 
-def _ler_pdf(conteudo: bytes, nome_arquivo: str) -> tuple[str, dict[str, Any]]:
-    from pypdf import PdfReader
+def _resolver_pdf_reader():
+    if PdfReader is not None:
+        return PdfReader
+    from pypdf import PdfReader as _PdfReader
+    return _PdfReader
 
-    leitor = PdfReader(BytesIO(conteudo))
+
+def _resolver_extracao_visual():
+    if extrair_pdf_visual is not None:
+        return extrair_pdf_visual
+    from services.ia_comercial_pdf_visual import extrair_pdf_visual as _extrair_pdf_visual
+    return _extrair_pdf_visual
+
+
+def _ler_pdf(conteudo: bytes, nome_arquivo: str) -> tuple[str, dict[str, Any]]:
+    leitor = _resolver_pdf_reader()(BytesIO(conteudo))
     partes: list[str] = []
     paginas_com_texto = 0
     caracteres = 0
@@ -68,11 +84,7 @@ def _ler_pdf(conteudo: bytes, nome_arquivo: str) -> tuple[str, dict[str, Any]]:
     extracao_visual = False
 
     if not texto_extraido:
-        # Import tardio: OpenAI e o caminho visual só são carregados quando
-        # o PDF realmente não possui camada textual útil.
-        from services.ia_comercial_pdf_visual import extrair_pdf_visual
-
-        texto_visual = _texto_seguro(extrair_pdf_visual(conteudo, nome_arquivo))
+        texto_visual = _texto_seguro(_resolver_extracao_visual()(conteudo, nome_arquivo))
         if texto_visual:
             texto_extraido = _limitar(texto_visual)
             modo_extracao = "visual_openai"
@@ -93,6 +105,7 @@ def _ler_planilha(conteudo: bytes) -> tuple[str, dict[str, Any]]:
     from openpyxl import load_workbook
 
     wb = load_workbook(BytesIO(conteudo), read_only=True, data_only=True)
+    quantidade_abas = len(wb.sheetnames)
     partes: list[str] = []
     abas: list[dict[str, Any]] = []
     caracteres = 0
@@ -114,7 +127,7 @@ def _ler_planilha(conteudo: bytes) -> tuple[str, dict[str, Any]]:
                 break
     finally:
         wb.close()
-    return _limitar("\n".join(partes)), {"abas": abas, "quantidade_abas": len(wb.sheetnames)}
+    return _limitar("\n".join(partes)), {"abas": abas, "quantidade_abas": quantidade_abas}
 
 
 def _decodificar(conteudo: bytes) -> str:
