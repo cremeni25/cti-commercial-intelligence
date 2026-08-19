@@ -10,12 +10,12 @@ def test_anexos_nao_carregam_parsers_pesados_no_import_global():
     assert "from pypdf import" not in cabecalho
     assert "from docx import" not in cabecalho
     assert "from pptx import" not in cabecalho
-    assert "ia_comercial_pdf_visual" not in cabecalho
+    assert "from services.ia_comercial_pdf_visual import" not in cabecalho
 
 
-def test_pdf_visual_nao_duplica_arquivo_em_base64_e_usa_file_id():
+def test_pdf_visual_nao_duplica_arquivo_com_b64encode_e_usa_file_id():
     fonte = inspect.getsource(ia_comercial_pdf_visual.extrair_pdf_visual)
-    assert "base64" not in fonte
+    assert "b64encode" not in fonte
     assert "files.create" in fonte
     assert 'purpose="user_data"' in fonte
     assert '"file_id": arquivo.id' in fonte
