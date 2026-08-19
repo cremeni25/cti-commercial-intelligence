@@ -27,3 +27,13 @@ def test_painel_so_libera_adaptadores_canonicos_atuais():
     assert 'CTI_ANFIR::ANFIR' in fonte
     assert 'CRM_COMERCIAL::CLIENTE' in fonte
     assert "Promoção bloqueada: ainda não existe adaptador canônico seguro" in fonte
+
+
+def test_painel_permite_resolver_conflito_sem_promocao_direta():
+    fonte = _frontend("ReconciliacaoFontePanel.tsx")
+    assert "Resolver conflito" in fonte
+    assert "/reconciliacao/itens/${itemEmEdicao.id}/resolver" in fonte
+    assert "dados_normalizados" in fonte
+    assert "motivo: motivoEdicao.trim()" in fonte
+    assert "O backend reclassifica entidade, natureza e camada" in fonte
+    assert "Uma nova aprovação será obrigatória antes da promoção" in fonte
