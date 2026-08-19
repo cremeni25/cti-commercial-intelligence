@@ -37,3 +37,14 @@ def test_painel_permite_resolver_conflito_sem_promocao_direta():
     assert "motivo: motivoEdicao.trim()" in fonte
     assert "O backend reclassifica entidade, natureza e camada" in fonte
     assert "Uma nova aprovação será obrigatória antes da promoção" in fonte
+
+
+def test_painel_evidencia_campo_valor_atual_e_valor_recebido_do_conflito():
+    fonte = _frontend("ReconciliacaoFontePanel.tsx")
+    assert "divergenciasDoItem" in fonte
+    assert "Detalhes do conflito" in fonte
+    assert "Campo em conflito" in fonte
+    assert "Valor atual" in fonte
+    assert "Valor recebido" in fonte
+    assert "valor_existente" in fonte
+    assert "valor_recebido" in fonte
