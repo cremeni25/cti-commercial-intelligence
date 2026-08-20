@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Archive, ArchiveRestore, Building2, CalendarDays, Layers3, Plus, Target } from "lucide-react"
+import { Archive, ArchiveRestore, Building2, CalendarDays, Layers3, PiggyBank, Plus, Target } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { useAuth } from "@/core/auth"
@@ -50,7 +50,10 @@ export function CrmAppShellNav() {
 
   return (
     <>
-      {adminMaster && pathname === "/crm-app" && <div className="fixed right-3 bottom-[82px] z-40"><Link href="/crm-app/testes-arquivados" className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-700 bg-[#07162b]/98 px-4 text-xs font-semibold text-amber-200 shadow-xl backdrop-blur"><ArchiveRestore size={16}/>Testes arquivados</Link></div>}
+      {adminMaster && pathname === "/crm-app" && <div className="fixed right-3 bottom-[82px] z-40 flex flex-col items-end gap-2">
+        <Link href="/crm-app/controle-financeiro" className="flex min-h-11 items-center gap-2 rounded-xl border border-emerald-700 bg-[#07162b]/98 px-4 text-xs font-semibold text-emerald-200 shadow-xl backdrop-blur"><PiggyBank size={16}/>Controle financeiro</Link>
+        <Link href="/crm-app/testes-arquivados" className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-700 bg-[#07162b]/98 px-4 text-xs font-semibold text-amber-200 shadow-xl backdrop-blur"><ArchiveRestore size={16}/>Testes arquivados</Link>
+      </div>}
       {oportunidadeId && <div className="fixed inset-x-3 bottom-[82px] z-40 mx-auto max-w-3xl rounded-2xl border border-[#24466f] bg-[#07162b]/98 p-3 shadow-2xl backdrop-blur">
         {erro && <p className="mb-2 rounded-xl border border-red-900 bg-red-950/40 px-3 py-2 text-xs text-red-200">{erro}</p>}
         <div className={`grid gap-2 ${adminMaster ? "grid-cols-2" : "grid-cols-1"}`}>
