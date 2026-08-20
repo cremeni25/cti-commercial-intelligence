@@ -40,16 +40,29 @@ def _evento(fonte_id: str, evento: str, usuario_id: str, detalhes: dict[str, Any
     }).execute()
 
 
-def detalhe_conflito_promocao(item: dict[str, Any], erro: Exception) -> dict[str, Any]:
-    return {
+def detalhes_conflito_promocao(item: dict[str, Any], erro: Exception) -> list[dict[str, Any]]:
+    base = {
         "tipo": "DIVERGENCIA_PROMOCAO",
         "item_id": item.get("id"),
         "indice_semantico": item.get("indice_semantico"),
         "entidade": item.get("entidade_sugerida"),
         "natureza_canonica": item.get("natureza_canonica"),
         "mensagem": str(erro)[:1000],
-        "regra": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V1",
+        "regra": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V2_ESTRUTURADO",
     }
+    conflitos = getattr(erro, "conflitos", None)
+    if isinstance(conflitos, list):
+        estruturados = []
+        for conflito in conflitos:
+            if isinstance(conflito, dict):
+                estruturados.append({**base, **conflito})
+        if estruturados:
+            return estruturados
+    return [base]
+
+
+def detalhe_conflito_promocao(item: dict[str, Any], erro: Exception) -> dict[str, Any]:
+    return detalhes_conflito_promocao(item, erro)[0]
 
 
 @router.post("/{fonte_id}/reconciliacao/promover")
@@ -106,10 +119,11 @@ def promover_reconciliacao(
             try:
                 resultado = promover_item(str(rec["dominio_alvo"]), item, fonte_nome=str(fonte.get("nome_arquivo") or ""))
             except ValueError as exc:
-                conflito = detalhe_conflito_promocao(item, exc)
+                conflitos = detalhes_conflito_promocao(item, exc)
+                conflito = conflitos[0]
                 supabase.table("cti_fontes_reconciliacao_itens").update({
                     "status_item": "CONFLITO",
-                    "conflitos": [conflito],
+                    "conflitos": conflitos,
                     "updated_at": _agora(),
                 }).eq("id", item["id"]).execute()
                 supabase.table("cti_fontes_reconciliacoes").update({
@@ -119,7 +133,7 @@ def promover_reconciliacao(
                     "detalhes": {
                         **(rec.get("detalhes") or {}),
                         "ultimo_conflito_promocao": conflito,
-                        "regra_promocao": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V1",
+                        "regra_promocao": "CTI_PROMOCAO_CONFLITO_RASTREAVEL_V2_ESTRUTURADO",
                     },
                 }).eq("id", rec["id"]).execute()
                 supabase.table("cti_fontes_promocoes").update({
@@ -129,6 +143,7 @@ def promover_reconciliacao(
                         "natureza_alvo": natureza_alvo,
                         "tipo": "CONFLITO_RECONCILIACAO",
                         "conflito": conflito,
+                        "conflitos": conflitos,
                         "itens_concluidos": resultados,
                     },
                     "concluido_em": _agora(),
@@ -137,12 +152,14 @@ def promover_reconciliacao(
                     "promocao_id": tentativa["id"],
                     "natureza_alvo": natureza_alvo,
                     "conflito": conflito,
+                    "conflitos": conflitos,
                     "total_promovidos_antes_bloqueio": len(resultados),
                 })
                 raise HTTPException(status_code=409, detail={
                     "mensagem": "Promoção bloqueada por divergência. O item retornou para reconciliação e nenhum dado divergente foi sobrescrito.",
                     "promocao_id": tentativa["id"],
                     "conflito": conflito,
+                    "conflitos": conflitos,
                     "total_promovidos_antes_bloqueio": len(resultados),
                 }) from exc
 
