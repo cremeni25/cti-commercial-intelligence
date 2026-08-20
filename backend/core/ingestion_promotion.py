@@ -13,6 +13,7 @@ SUPORTE = {
     ("CTI_ANFIR", "ANFIR"),
     ("CRM_COMERCIAL", "CLIENTE"),
     ("CRM_COMERCIAL", "OPORTUNIDADE"),
+    ("CRM_COMERCIAL", "PEDIDO"),
 }
 
 CAMPOS_TECNICOS_MERGE = {
@@ -64,6 +65,16 @@ def _normalizar_probabilidade(valor: Any) -> float:
     return probabilidade
 
 
+def _normalizar_valor(valor: Any, *, campo: str) -> float:
+    try:
+        resultado = float(valor or 0)
+    except (TypeError, ValueError):
+        raise ValueError(f"{campo} inválido.")
+    if resultado < 0:
+        raise ValueError(f"{campo} não pode ser negativo.")
+    return resultado
+
+
 def planejar_merge_sem_sobrescrita(
     existente: dict[str, Any],
     novo: dict[str, Any],
@@ -105,7 +116,12 @@ def planejar_merge_sem_sobrescrita(
 def suporte_promocao(dominio: str, entidade: str) -> dict[str, Any]:
     chave = (str(dominio or "").upper(), str(entidade or "").upper())
     if chave in SUPORTE:
-        regra = "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL" if chave == ("CRM_COMERCIAL", "OPORTUNIDADE") else "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO"
+        if chave == ("CRM_COMERCIAL", "PEDIDO"):
+            regra = "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL"
+        elif chave == ("CRM_COMERCIAL", "OPORTUNIDADE"):
+            regra = "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL"
+        else:
+            regra = "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO"
         return {"suportado": True, "dominio": chave[0], "entidade": chave[1], "regra": regra}
     motivo = {
         "CTI_TERRITORIAL": "Domínio territorial ainda não possui estrutura canônica suficiente para promoção de CEP/cidade/região.",
@@ -176,6 +192,13 @@ def validar_lote(
                 "natureza": item.get("natureza_canonica"),
                 "motivo": suporte.get("motivo"),
             })
+    entidades = {str(item.get("entidade_sugerida") or "").upper() for item in selecionados}
+    if "PEDIDO" in entidades:
+        regra = "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL"
+    elif "OPORTUNIDADE" in entidades:
+        regra = "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL"
+    else:
+        regra = "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO"
     return {
         "aprovado": not bloqueios,
         "bloqueios": bloqueios,
@@ -183,7 +206,7 @@ def validar_lote(
         "natureza_alvo": alvo,
         "itens": selecionados,
         "naturezas_disponiveis": prontas,
-        "regra": "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL" if any(str(item.get("entidade_sugerida") or "").upper() == "OPORTUNIDADE" for item in selecionados) else "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO",
+        "regra": regra,
     }
 
 
@@ -269,7 +292,7 @@ def _payload_oportunidade(dados: dict[str, Any]) -> dict[str, Any]:
         "descricao": _texto(dados.get("descricao")) or None,
         "origem": _texto(dados.get("origem") or "BACKOFFICE_FONTES") or None,
         "status": status,
-        "valor_estimado": float(dados.get("valor_estimado") or dados.get("valor") or 0),
+        "valor_estimado": _normalizar_valor(dados.get("valor_estimado") or dados.get("valor"), campo="Valor estimado da oportunidade"),
         "probabilidade": _normalizar_probabilidade(dados.get("probabilidade")),
         "data_fechamento_prevista": _texto(dados.get("data_fechamento_prevista") or dados.get("previsao_fechamento")) or None,
         "contato_id": _texto(dados.get("contato_id")) or None,
@@ -345,6 +368,112 @@ def promover_oportunidade(dados: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _payload_pedido(dados: dict[str, Any]) -> dict[str, Any]:
+    numero = _texto(dados.get("numero") or dados.get("numero_pedido") or dados.get("pedido"))
+    cliente_id = _texto(dados.get("cliente_id"))
+    oportunidade_id = _texto(dados.get("oportunidade_id"))
+    proposta_id = _texto(dados.get("proposta_id"))
+    responsavel_id = _texto(dados.get("responsavel_id"))
+    faltantes = [
+        nome for nome, valor in (
+            ("numero", numero),
+            ("cliente_id", cliente_id),
+            ("oportunidade_id", oportunidade_id),
+            ("proposta_id", proposta_id),
+            ("responsavel_id", responsavel_id),
+        ) if not valor
+    ]
+    if faltantes:
+        raise ValueError(
+            "Pedido exige vínculos canônicos explícitos: " + ", ".join(faltantes) + ". Relacionamentos não serão inferidos por nome."
+        )
+    return {
+        "numero": numero,
+        "cliente_id": cliente_id,
+        "proposta_id": proposta_id,
+        "oportunidade_id": oportunidade_id,
+        "responsavel_id": responsavel_id,
+        "valor": _normalizar_valor(dados.get("valor") or dados.get("valor_pedido"), campo="Valor do pedido"),
+        "status": _texto(dados.get("status") or "ABERTO").upper(),
+        "data_pedido": _texto(dados.get("data_pedido") or dados.get("data")) or None,
+        "origem_comercial": _texto(dados.get("origem_comercial") or dados.get("origem") or "BACKOFFICE_FONTES").upper(),
+        "updated_at": _agora(),
+    }
+
+
+def promover_pedido(dados: dict[str, Any]) -> dict[str, Any]:
+    payload = _payload_pedido(dados)
+
+    clientes = supabase.table("clientes").select("id,nome,cnpj").eq("id", payload["cliente_id"]).limit(2).execute().data or []
+    if len(clientes) != 1:
+        raise ValueError("Cliente do pedido não foi encontrado de forma inequívoca; promoção bloqueada.")
+
+    oportunidades = supabase.table("cti_oportunidades").select("*").eq("id", payload["oportunidade_id"]).limit(2).execute().data or []
+    if len(oportunidades) != 1:
+        raise ValueError("Oportunidade do pedido não foi encontrada de forma inequívoca; promoção bloqueada.")
+    oportunidade = oportunidades[0]
+    if str(oportunidade.get("cliente_id") or "") != payload["cliente_id"]:
+        raise ValueError("Oportunidade não pertence ao cliente informado no pedido; promoção bloqueada.")
+
+    propostas = supabase.table("cti_propostas").select("*").eq("id", payload["proposta_id"]).limit(2).execute().data or []
+    if len(propostas) != 1:
+        raise ValueError("Proposta do pedido não foi encontrada de forma inequívoca; promoção bloqueada.")
+    proposta = propostas[0]
+    if str(proposta.get("cliente_id") or "") != payload["cliente_id"]:
+        raise ValueError("Proposta não pertence ao cliente informado no pedido; promoção bloqueada.")
+    if str(proposta.get("oportunidade_id") or "") != payload["oportunidade_id"]:
+        raise ValueError("Proposta não pertence à oportunidade informada no pedido; promoção bloqueada.")
+
+    responsaveis = supabase.table("cti_users").select("id,nome,email").eq("id", payload["responsavel_id"]).limit(2).execute().data or []
+    if len(responsaveis) != 1:
+        raise ValueError("Responsável do pedido não foi encontrado de forma inequívoca; promoção bloqueada.")
+
+    existentes = supabase.table("cti_pedidos").select("*").eq("numero", payload["numero"]).limit(2).execute().data or []
+    if len(existentes) > 1:
+        raise ValueError("Número do pedido corresponde a mais de um registro; promoção bloqueada para reconciliação manual.")
+    if existentes:
+        existente = existentes[0]
+        plano = planejar_merge_sem_sobrescrita(
+            existente,
+            payload,
+            ignorar_conflito={"numero", "cliente_id", "oportunidade_id", "proposta_id", "responsavel_id"},
+        )
+        if not plano["seguro"]:
+            raise DivergenciaPromocao("Pedido existente possui divergências; promoção não sobrescreveu dados.", plano["conflitos"])
+        if not plano["campos_preenchidos"]:
+            return {
+                "acao": "SEM_ALTERACAO",
+                "registro": existente,
+                "tabela": "cti_pedidos",
+                "regra": "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL",
+            }
+        dados_atualizados, compat = update_schema_compatible(supabase, "cti_pedidos", str(existente["id"]), plano["mesclado"])
+        return {
+            "acao": "ENRIQUECIDO_SEM_SOBRESCRITA",
+            "registro": (dados_atualizados or [plano["mesclado"]])[0],
+            "compatibilidade": compat,
+            "tabela": "cti_pedidos",
+            "campos_preenchidos": plano["campos_preenchidos"],
+            "regra": "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL",
+        }
+
+    criado, compat = insert_schema_compatible(
+        supabase,
+        "cti_pedidos",
+        payload,
+        protected_fields={"numero", "cliente_id", "oportunidade_id", "proposta_id", "responsavel_id"},
+    )
+    if not criado:
+        raise RuntimeError("Falha ao criar pedido canônico.")
+    return {
+        "acao": "INSERIDO",
+        "registro": criado[0],
+        "compatibilidade": compat,
+        "tabela": "cti_pedidos",
+        "regra": "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL",
+    }
+
+
 def promover_anfir(dados: dict[str, Any], *, chave_canonica: str, fonte_nome: str | None = None) -> dict[str, Any]:
     registro = dict(dados)
     registro["hash_registro"] = _texto(registro.get("hash_registro")) or chave_canonica
@@ -390,6 +519,8 @@ def promover_item(dominio: str, item: dict[str, Any], *, fonte_nome: str | None 
         return promover_cliente(dados)
     if dominio == "CRM_COMERCIAL" and entidade == "OPORTUNIDADE":
         return promover_oportunidade(dados)
+    if dominio == "CRM_COMERCIAL" and entidade == "PEDIDO":
+        return promover_pedido(dados)
     if dominio == "CTI_ANFIR" and entidade == "ANFIR":
         return promover_anfir(dados, chave_canonica=str(item.get("chave_canonica") or ""), fonte_nome=fonte_nome)
     raise ValueError("Adaptador de promoção não resolvido.")
