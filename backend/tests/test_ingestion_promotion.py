@@ -7,6 +7,7 @@ def test_adaptadores_operacionais_seguros_atuais():
     assert suporte_promocao("CTI_ANFIR", "ANFIR")["suportado"] is True
     assert suporte_promocao("CRM_COMERCIAL", "CLIENTE")["suportado"] is True
     assert suporte_promocao("CRM_COMERCIAL", "OPORTUNIDADE")["suportado"] is True
+    assert suporte_promocao("CRM_COMERCIAL", "PEDIDO")["suportado"] is True
     assert suporte_promocao("CRM_COMERCIAL", "VENDA")["suportado"] is False
     assert suporte_promocao("CTI_TERRITORIAL", "TERRITORIO")["suportado"] is False
     assert suporte_promocao("CTI_FINANCEIRO", "FINANCEIRO")["suportado"] is False
@@ -33,6 +34,16 @@ def test_lote_oportunidade_relacional_e_liberado_para_validacao_do_adaptador():
     )
     assert resultado["aprovado"] is True
     assert resultado["bloqueios"] == []
+
+
+def test_lote_pedido_relacional_e_liberado_para_validacao_do_adaptador():
+    resultado = validar_lote(
+        {"status": "PRONTO_PROMOCAO", "dominio_alvo": "CRM_COMERCIAL"},
+        [{"id": "1", "status_item": "PRONTO_PROMOCAO", "entidade_sugerida": "PEDIDO"}],
+    )
+    assert resultado["aprovado"] is True
+    assert resultado["bloqueios"] == []
+    assert resultado["regra"] == "CTI_PROMOCAO_CONTROLADA_V5_PEDIDO_RELACIONAL"
 
 
 def test_lote_com_entidade_ainda_sem_adaptador_e_bloqueado_antes_da_escrita():
