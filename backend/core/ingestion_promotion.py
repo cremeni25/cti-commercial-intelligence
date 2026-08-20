@@ -25,6 +25,14 @@ CAMPOS_TECNICOS_MERGE = {
 }
 
 
+class DivergenciaPromocao(ValueError):
+    """Bloqueio controlado com divergências estruturadas do merge seguro."""
+
+    def __init__(self, mensagem: str, conflitos: list[dict[str, Any]]):
+        super().__init__(mensagem)
+        self.conflitos = [dict(item) for item in conflitos if isinstance(item, dict)]
+
+
 def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -210,7 +218,10 @@ def promover_cliente(dados: dict[str, Any]) -> dict[str, Any]:
             existente = existentes[0]
             plano = planejar_merge_sem_sobrescrita(existente, payload, ignorar_conflito={"cnpj"})
             if not plano["seguro"]:
-                raise ValueError(f"Cliente existente possui divergências; promoção não sobrescreveu dados: {plano['conflitos']}")
+                raise DivergenciaPromocao(
+                    "Cliente existente possui divergências; promoção não sobrescreveu dados.",
+                    plano["conflitos"],
+                )
             if not plano["campos_preenchidos"]:
                 return {
                     "acao": "SEM_ALTERACAO",
@@ -256,7 +267,10 @@ def promover_anfir(dados: dict[str, Any], *, chave_canonica: str, fonte_nome: st
     if existente:
         plano = planejar_merge_sem_sobrescrita(existente, registro, ignorar_conflito={"hash_registro"})
         if not plano["seguro"]:
-            raise ValueError(f"Registro ANFIR existente possui divergências; promoção não sobrescreveu dados: {plano['conflitos']}")
+            raise DivergenciaPromocao(
+                "Registro ANFIR existente possui divergências; promoção não sobrescreveu dados.",
+                plano["conflitos"],
+            )
         if not plano["campos_preenchidos"]:
             return {
                 "acao": "SEM_ALTERACAO",
