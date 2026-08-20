@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { AlertTriangle, ArrowLeft, Gauge, PiggyBank, Plus, Save, Trash2, TrendingUp, WalletCards } from "lucide-react"
+import { AlertTriangle, ArrowLeft, Download, Gauge, PiggyBank, Plus, Save, Trash2, TrendingUp, WalletCards } from "lucide-react"
 import { useAuth } from "@/core/auth"
 import { getSupabaseClient } from "@/core/database/supabase"
 import {
@@ -14,6 +14,7 @@ import {
   proximaCompetencia,
   type StatusFinanceiro,
 } from "@/lib/financeiro-pessoal"
+import { exportarRelatorioFinanceiroPdf } from "@/lib/pdf-financeiro"
 
 type ConfigFinanceira = {
   id: string
@@ -232,6 +233,37 @@ export default function ControleFinanceiroPage() {
     }
   }
 
+  function exportarPdf() {
+    if (!parametrosCoerentes) {
+      setErro("Salve receita e limite válidos antes de gerar o relatório PDF.")
+      return
+    }
+    setErro("")
+    exportarRelatorioFinanceiroPdf({
+      competencia,
+      receitaMensal: receitaPlanejada,
+      limiteGastos: limitePlanejado,
+      alertaPercentual: numero(alertaPercentual) || 80,
+      totalGasto: resumo.totalGasto,
+      saldoAteLimite: resumo.saldoAteLimite,
+      metaPreservacao: Math.max(metaPreservacao, 0),
+      receitaAposGastos: resumo.receitaPreservada,
+      projecaoMes: resumo.projecaoFechamento,
+      mediaDiaria: resumo.mediaDiaria,
+      gastoEsperadoAteHoje: resumo.gastoEsperadoAteHoje,
+      percentualLimite: resumo.percentualConsumido,
+      percentualReceita: percentualReceitaComprometida,
+      status: rotuloStatus(resumo.status),
+      lancamentos: lancamentos.map((item) => ({
+        data: item.data,
+        categoria: item.categoria,
+        descricao: item.descricao,
+        forma_pagamento: item.forma_pagamento,
+        valor: item.valor,
+      })),
+    })
+  }
+
   if (authLoading || carregando) {
     return <main className="min-h-[100dvh] bg-[#020817] p-6 text-slate-300">Carregando Controle Financeiro...</main>
   }
@@ -253,12 +285,15 @@ export default function ControleFinanceiroPage() {
   return (
     <main className="min-h-[100dvh] bg-[#020817] pb-24 text-white">
       <header className="sticky top-0 z-20 border-b border-cyan-950/80 bg-[#061126]/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="mx-auto flex w-full max-w-[94vw] items-center justify-between gap-4">
+        <div className="mx-auto flex w-full max-w-[94vw] flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <Link href="/crm-app" aria-label="Voltar ao CRM" className="rounded-xl border border-[#16325c] p-2 text-cyan-300"><ArrowLeft size={20}/></Link>
             <div><p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400">Privado · ADMIN_MASTER</p><h1 className="mt-1 text-lg font-bold sm:text-2xl">Controle Financeiro</h1></div>
           </div>
-          <input aria-label="Competência" type="month" value={competencia} onChange={(event) => setCompetencia(event.target.value)} className="rounded-xl border border-[#16325c] bg-[#07162b] px-3 py-2 text-sm"/>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={exportarPdf} className="flex items-center gap-2 rounded-xl border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm font-semibold text-emerald-200"><Download size={17}/>Exportar PDF</button>
+            <input aria-label="Competência" type="month" value={competencia} onChange={(event) => setCompetencia(event.target.value)} className="rounded-xl border border-[#16325c] bg-[#07162b] px-3 py-2 text-sm"/>
+          </div>
         </div>
       </header>
 
@@ -329,7 +364,7 @@ export default function ControleFinanceiroPage() {
         </section>
 
         <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-          <div className="flex items-center justify-between gap-4"><div><h2 className="text-lg font-semibold">Lançamentos do mês</h2><p className="text-xs text-slate-400">{lancamentos.length} registro{lancamentos.length === 1 ? "" : "s"}</p></div><strong className="text-cyan-300">{moeda(resumo.totalGasto)}</strong></div>
+          <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">Lançamentos do mês</h2><p className="text-xs text-slate-400">{lancamentos.length} registro{lancamentos.length === 1 ? "" : "s"}</p></div><div className="flex items-center gap-3"><strong className="text-cyan-300">{moeda(resumo.totalGasto)}</strong><button type="button" onClick={exportarPdf} className="flex items-center gap-2 rounded-xl border border-emerald-800 bg-emerald-950/30 px-3 py-2 text-sm font-semibold text-emerald-200"><Download size={16}/>PDF</button></div></div>
           <div className="mt-4 divide-y divide-[#16325c]">
             {lancamentos.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Nenhum gasto registrado nesta competência.</p>}
             {lancamentos.map((item) => <div key={item.id} className="flex items-center gap-3 py-4"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-2"><strong>{item.categoria}</strong><span className="text-xs text-slate-500">{item.data.split("-").reverse().join("/")}</span></div><p className="mt-1 truncate text-sm text-slate-400">{item.descricao || item.forma_pagamento || "Sem descrição"}{item.descricao && item.forma_pagamento ? ` · ${item.forma_pagamento}` : ""}</p></div><strong className="whitespace-nowrap text-cyan-300">{moeda(item.valor)}</strong><button type="button" disabled={salvando} onClick={() => void excluirLancamento(item.id)} aria-label="Excluir lançamento" className="rounded-xl border border-red-950 bg-red-950/20 p-2 text-red-300 disabled:opacity-50"><Trash2 size={17}/></button></div>)}
