@@ -78,8 +78,12 @@ export function calcularResumoFinanceiro({
   const mediaDiaria = totalGasto / diaReferencia
   const gastoEsperadoAteHoje = limiteGastos > 0 ? (limiteGastos * diaReferencia) / diasMes : 0
   const projecaoFechamento = mediaDiaria * diasMes
-  const diasAteLimite = limiteGastos > totalGasto && mediaDiaria > 0
+  const diasRestantesMes = Math.max(diasMes - diaReferencia, 0)
+  const diasCalculadosAteLimite = limiteGastos > totalGasto && mediaDiaria > 0
     ? Math.ceil((limiteGastos - totalGasto) / mediaDiaria)
+    : null
+  const diasAteLimite = diasCalculadosAteLimite !== null && diasCalculadosAteLimite <= diasRestantesMes
+    ? diasCalculadosAteLimite
     : null
 
   let status: StatusFinanceiro = "NORMAL"
