@@ -12,6 +12,7 @@ from backend.services.schema_compat import insert_schema_compatible, update_sche
 SUPORTE = {
     ("CTI_ANFIR", "ANFIR"),
     ("CRM_COMERCIAL", "CLIENTE"),
+    ("CRM_COMERCIAL", "OPORTUNIDADE"),
 }
 
 CAMPOS_TECNICOS_MERGE = {
@@ -47,6 +48,20 @@ def _digitos(valor: Any) -> str:
 
 def _preenchido(valor: Any) -> bool:
     return valor not in (None, "", "nan")
+
+
+def _normalizar_probabilidade(valor: Any) -> float:
+    try:
+        probabilidade = float(valor or 0)
+    except (TypeError, ValueError):
+        raise ValueError("Probabilidade da oportunidade inválida.")
+    if probabilidade < 0:
+        raise ValueError("Probabilidade da oportunidade não pode ser negativa.")
+    if probabilidade > 1:
+        probabilidade = probabilidade / 100
+    if probabilidade > 1:
+        raise ValueError("Probabilidade da oportunidade deve estar entre 0 e 100%.")
+    return probabilidade
 
 
 def planejar_merge_sem_sobrescrita(
@@ -90,7 +105,8 @@ def planejar_merge_sem_sobrescrita(
 def suporte_promocao(dominio: str, entidade: str) -> dict[str, Any]:
     chave = (str(dominio or "").upper(), str(entidade or "").upper())
     if chave in SUPORTE:
-        return {"suportado": True, "dominio": chave[0], "entidade": chave[1], "regra": "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO"}
+        regra = "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL" if chave == ("CRM_COMERCIAL", "OPORTUNIDADE") else "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO"
+        return {"suportado": True, "dominio": chave[0], "entidade": chave[1], "regra": regra}
     motivo = {
         "CTI_TERRITORIAL": "Domínio territorial ainda não possui estrutura canônica suficiente para promoção de CEP/cidade/região.",
         "CTI_FINANCEIRO": "Domínio financeiro ainda não possui tabela canônica operacional própria.",
@@ -103,10 +119,7 @@ def selecionar_itens_promocao(itens: list[dict[str, Any]], natureza_alvo: str | 
     natureza = str(natureza_alvo or "").upper().strip()
     if not natureza:
         return list(itens)
-    return [
-        item for item in itens
-        if str(item.get("natureza_canonica") or "").upper() == natureza
-    ]
+    return [item for item in itens if str(item.get("natureza_canonica") or "").upper() == natureza]
 
 
 def naturezas_prontas(itens: list[dict[str, Any]]) -> list[str]:
@@ -133,10 +146,7 @@ def validar_lote(
     if len(prontas) > 1 and not alvo:
         return {
             "aprovado": False,
-            "bloqueios": [{
-                "motivo": "LOTE_MISTO_REQUER_NATUREZA_ALVO",
-                "naturezas_disponiveis": prontas,
-            }],
+            "bloqueios": [{"motivo": "LOTE_MISTO_REQUER_NATUREZA_ALVO", "naturezas_disponiveis": prontas}],
             "total": len(itens),
             "natureza_alvo": None,
             "regra": "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO",
@@ -173,7 +183,7 @@ def validar_lote(
         "natureza_alvo": alvo,
         "itens": selecionados,
         "naturezas_disponiveis": prontas,
-        "regra": "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO",
+        "regra": "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL" if any(str(item.get("entidade_sugerida") or "").upper() == "OPORTUNIDADE" for item in selecionados) else "CTI_PROMOCAO_CONTROLADA_V3_MERGE_SEGURO",
     }
 
 
@@ -209,7 +219,6 @@ def _payload_cliente(dados: dict[str, Any]) -> dict[str, Any]:
 def promover_cliente(dados: dict[str, Any]) -> dict[str, Any]:
     payload = _payload_cliente(dados)
     cnpj = payload.get("cnpj")
-
     if cnpj:
         existentes = supabase.table("clientes").select("*").eq("cnpj", cnpj).limit(2).execute().data or []
         if len(existentes) > 1:
@@ -218,24 +227,11 @@ def promover_cliente(dados: dict[str, Any]) -> dict[str, Any]:
             existente = existentes[0]
             plano = planejar_merge_sem_sobrescrita(existente, payload, ignorar_conflito={"cnpj"})
             if not plano["seguro"]:
-                raise DivergenciaPromocao(
-                    "Cliente existente possui divergências; promoção não sobrescreveu dados.",
-                    plano["conflitos"],
-                )
+                raise DivergenciaPromocao("Cliente existente possui divergências; promoção não sobrescreveu dados.", plano["conflitos"])
             if not plano["campos_preenchidos"]:
-                return {
-                    "acao": "SEM_ALTERACAO",
-                    "registro": existente,
-                    "tabela": "clientes",
-                    "regra_merge": plano["regra"],
-                }
+                return {"acao": "SEM_ALTERACAO", "registro": existente, "tabela": "clientes", "regra_merge": plano["regra"]}
             registro_id = str(existente["id"])
-            dados_atualizados, compat = update_schema_compatible(
-                supabase,
-                "clientes",
-                registro_id,
-                plano["mesclado"],
-            )
+            dados_atualizados, compat = update_schema_compatible(supabase, "clientes", registro_id, plano["mesclado"])
             return {
                 "acao": "ENRIQUECIDO_SEM_SOBRESCRITA",
                 "registro": (dados_atualizados or [plano["mesclado"]])[0],
@@ -255,6 +251,100 @@ def promover_cliente(dados: dict[str, Any]) -> dict[str, Any]:
     return {"acao": "INSERIDO", "registro": criado[0], "compatibilidade": compat, "tabela": "clientes"}
 
 
+def _payload_oportunidade(dados: dict[str, Any]) -> dict[str, Any]:
+    cliente_id = _texto(dados.get("cliente_id"))
+    responsavel_id = _texto(dados.get("responsavel_id"))
+    titulo = _texto(dados.get("titulo") or dados.get("oportunidade") or dados.get("descricao_oportunidade"))
+    if not cliente_id:
+        raise ValueError("Oportunidade exige cliente_id canônico explícito; relacionamento não será inferido por nome.")
+    if not responsavel_id:
+        raise ValueError("Oportunidade exige responsavel_id canônico explícito; relacionamento não será inferido por nome.")
+    if len(titulo) < 3:
+        raise ValueError("Oportunidade sem título válido.")
+    status = _texto(dados.get("status") or "OPORTUNIDADE").upper()
+    return {
+        "cliente_id": cliente_id,
+        "responsavel_id": responsavel_id,
+        "titulo": titulo,
+        "descricao": _texto(dados.get("descricao")) or None,
+        "origem": _texto(dados.get("origem") or "BACKOFFICE_FONTES") or None,
+        "status": status,
+        "valor_estimado": float(dados.get("valor_estimado") or dados.get("valor") or 0),
+        "probabilidade": _normalizar_probabilidade(dados.get("probabilidade")),
+        "data_fechamento_prevista": _texto(dados.get("data_fechamento_prevista") or dados.get("previsao_fechamento")) or None,
+        "contato_id": _texto(dados.get("contato_id")) or None,
+        "linha_equipamentos": _texto(dados.get("linha_equipamentos") or dados.get("linha")) or None,
+        "equipamento": _texto(dados.get("equipamento") or dados.get("produto")) or None,
+        "implementadora": _texto(dados.get("implementadora")) or None,
+        "locadora": _texto(dados.get("locadora")) or None,
+        "estado": _texto(dados.get("estado") or dados.get("uf")).upper() or None,
+        "ddd": _digitos(dados.get("ddd")) or None,
+        "sub_regiao": _texto(dados.get("sub_regiao")) or None,
+        "municipio": _texto(dados.get("municipio") or dados.get("cidade")) or None,
+        "bairro": _texto(dados.get("bairro")) or None,
+        "observacoes": _texto(dados.get("observacoes")) or None,
+        "updated_at": _agora(),
+    }
+
+
+def promover_oportunidade(dados: dict[str, Any]) -> dict[str, Any]:
+    payload = _payload_oportunidade(dados)
+    cliente = supabase.table("clientes").select("id,nome,cnpj").eq("id", payload["cliente_id"]).limit(2).execute().data or []
+    if len(cliente) != 1:
+        raise ValueError("Cliente relacionado não foi encontrado de forma inequívoca; promoção da oportunidade bloqueada.")
+    responsavel = supabase.table("cti_users").select("id,nome,email").eq("id", payload["responsavel_id"]).limit(2).execute().data or []
+    if len(responsavel) != 1:
+        raise ValueError("Responsável relacionado não foi encontrado de forma inequívoca; promoção da oportunidade bloqueada.")
+
+    existentes = (
+        supabase.table("cti_oportunidades")
+        .select("*")
+        .eq("cliente_id", payload["cliente_id"])
+        .eq("titulo", payload["titulo"])
+        .limit(2)
+        .execute().data or []
+    )
+    if len(existentes) > 1:
+        raise ValueError("Cliente possui mais de uma oportunidade com o mesmo título; promoção bloqueada para reconciliação manual.")
+    if existentes:
+        existente = existentes[0]
+        plano = planejar_merge_sem_sobrescrita(existente, payload, ignorar_conflito={"cliente_id", "responsavel_id"})
+        if not plano["seguro"]:
+            raise DivergenciaPromocao("Oportunidade existente possui divergências; promoção não sobrescreveu dados.", plano["conflitos"])
+        if not plano["campos_preenchidos"]:
+            return {
+                "acao": "SEM_ALTERACAO",
+                "registro": existente,
+                "tabela": "cti_oportunidades",
+                "regra": "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL",
+            }
+        dados_atualizados, compat = update_schema_compatible(supabase, "cti_oportunidades", str(existente["id"]), plano["mesclado"])
+        return {
+            "acao": "ENRIQUECIDO_SEM_SOBRESCRITA",
+            "registro": (dados_atualizados or [plano["mesclado"]])[0],
+            "compatibilidade": compat,
+            "tabela": "cti_oportunidades",
+            "campos_preenchidos": plano["campos_preenchidos"],
+            "regra": "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL",
+        }
+
+    criado, compat = insert_schema_compatible(
+        supabase,
+        "cti_oportunidades",
+        payload,
+        protected_fields={"cliente_id", "responsavel_id", "titulo"},
+    )
+    if not criado:
+        raise RuntimeError("Falha ao criar oportunidade canônica.")
+    return {
+        "acao": "INSERIDO",
+        "registro": criado[0],
+        "compatibilidade": compat,
+        "tabela": "cti_oportunidades",
+        "regra": "CTI_PROMOCAO_CONTROLADA_V4_RELACIONAL",
+    }
+
+
 def promover_anfir(dados: dict[str, Any], *, chave_canonica: str, fonte_nome: str | None = None) -> dict[str, Any]:
     registro = dict(dados)
     registro["hash_registro"] = _texto(registro.get("hash_registro")) or chave_canonica
@@ -267,10 +357,7 @@ def promover_anfir(dados: dict[str, Any], *, chave_canonica: str, fonte_nome: st
     if existente:
         plano = planejar_merge_sem_sobrescrita(existente, registro, ignorar_conflito={"hash_registro"})
         if not plano["seguro"]:
-            raise DivergenciaPromocao(
-                "Registro ANFIR existente possui divergências; promoção não sobrescreveu dados.",
-                plano["conflitos"],
-            )
+            raise DivergenciaPromocao("Registro ANFIR existente possui divergências; promoção não sobrescreveu dados.", plano["conflitos"])
         if not plano["campos_preenchidos"]:
             return {
                 "acao": "SEM_ALTERACAO",
@@ -301,6 +388,8 @@ def promover_item(dominio: str, item: dict[str, Any], *, fonte_nome: str | None 
     dados = item.get("dados_normalizados") if isinstance(item.get("dados_normalizados"), dict) else {}
     if dominio == "CRM_COMERCIAL" and entidade == "CLIENTE":
         return promover_cliente(dados)
+    if dominio == "CRM_COMERCIAL" and entidade == "OPORTUNIDADE":
+        return promover_oportunidade(dados)
     if dominio == "CTI_ANFIR" and entidade == "ANFIR":
         return promover_anfir(dados, chave_canonica=str(item.get("chave_canonica") or ""), fonte_nome=fonte_nome)
     raise ValueError("Adaptador de promoção não resolvido.")
