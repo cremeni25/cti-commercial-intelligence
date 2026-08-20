@@ -35,19 +35,7 @@ type Lancamento = {
   created_at: string
 }
 
-const CATEGORIAS = [
-  "Alimentação",
-  "Combustível",
-  "Mercado",
-  "Casa",
-  "Transporte",
-  "Lazer",
-  "Saúde",
-  "Educação",
-  "Assinaturas",
-  "Outros",
-]
-
+const CATEGORIAS = ["Alimentação", "Combustível", "Mercado", "Casa", "Transporte", "Lazer", "Saúde", "Educação", "Assinaturas", "Outros"]
 const FORMAS_PAGAMENTO = ["", "Pix", "Débito", "Crédito", "Dinheiro", "Transferência", "Boleto"]
 
 function numero(valor: string | number | null | undefined) {
@@ -103,20 +91,8 @@ export default function ControleFinanceiroPage() {
       const inicio = inicioCompetencia(competencia)
       const fim = proximaCompetencia(competencia)
       const [{ data: configuracao, error: erroConfig }, { data: gastos, error: erroGastos }] = await Promise.all([
-        supabase
-          .from("cti_financeiro_pessoal_config")
-          .select("id,auth_id,competencia,receita_mensal,limite_gastos,alerta_percentual")
-          .eq("auth_id", usuarioAuthId)
-          .eq("competencia", inicio)
-          .maybeSingle(),
-        supabase
-          .from("cti_financeiro_pessoal_lancamentos")
-          .select("id,auth_id,data,categoria,descricao,valor,forma_pagamento,created_at")
-          .eq("auth_id", usuarioAuthId)
-          .gte("data", inicio)
-          .lt("data", fim)
-          .order("data", { ascending: false })
-          .order("created_at", { ascending: false }),
+        supabase.from("cti_financeiro_pessoal_config").select("id,auth_id,competencia,receita_mensal,limite_gastos,alerta_percentual").eq("auth_id", usuarioAuthId).eq("competencia", inicio).maybeSingle(),
+        supabase.from("cti_financeiro_pessoal_lancamentos").select("id,auth_id,data,categoria,descricao,valor,forma_pagamento,created_at").eq("auth_id", usuarioAuthId).gte("data", inicio).lt("data", fim).order("data", { ascending: false }).order("created_at", { ascending: false }),
       ])
 
       if (erroConfig) throw erroConfig
@@ -130,6 +106,7 @@ export default function ControleFinanceiroPage() {
             alerta_percentual: numero(configuracao.alerta_percentual),
           } as ConfigFinanceira)
         : null
+
       setConfig(cfg)
       setReceitaMensal(cfg ? String(cfg.receita_mensal) : "")
       setLimiteGastos(cfg ? String(cfg.limite_gastos) : "")
@@ -158,15 +135,26 @@ export default function ControleFinanceiroPage() {
     [alertaPercentual, competencia, lancamentos, limiteGastos, receitaMensal],
   )
 
+  const receitaPlanejada = numero(receitaMensal)
+  const limitePlanejado = numero(limiteGastos)
+  const metaPreservacao = receitaPlanejada - limitePlanejado
+  const percentualReceitaComprometida = receitaPlanejada > 0 ? (resumo.totalGasto / receitaPlanejada) * 100 : 0
+  const parametrosCoerentes = receitaPlanejada > 0 && limitePlanejado > 0 && limitePlanejado <= receitaPlanejada
+
   async function salvarConfiguracao() {
     if (!authId) return
     const receita = numero(receitaMensal)
     const limite = numero(limiteGastos)
     const alerta = numero(alertaPercentual)
-    if (receita < 0 || limite <= 0 || alerta <= 0 || alerta > 100) {
-      setErro("Informe receita válida, limite maior que zero e alerta entre 1% e 100%.")
+    if (receita <= 0 || limite <= 0 || alerta <= 0 || alerta > 100) {
+      setErro("Informe receita maior que zero, limite maior que zero e alerta entre 1% e 100%.")
       return
     }
+    if (limite > receita) {
+      setErro("O limite máximo de gastos não pode ser maior que a receita mensal. Ajuste o limite para preservar parte da receita.")
+      return
+    }
+
     setSalvando(true)
     setErro("")
     setAviso("")
@@ -184,7 +172,7 @@ export default function ControleFinanceiroPage() {
         { onConflict: "auth_id,competencia" },
       )
       if (error) throw error
-      setAviso("Configuração mensal salva.")
+      setAviso("Parâmetros atualizados. Meta de preservação e limites recalculados.")
       await carregar()
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Falha ao salvar a configuração.")
@@ -233,13 +221,9 @@ export default function ControleFinanceiroPage() {
     setErro("")
     try {
       const supabase = getSupabaseClient()
-      const { error } = await supabase
-        .from("cti_financeiro_pessoal_lancamentos")
-        .delete()
-        .eq("id", id)
-        .eq("auth_id", authId)
+      const { error } = await supabase.from("cti_financeiro_pessoal_lancamentos").delete().eq("id", id).eq("auth_id", authId)
       if (error) throw error
-      setAviso("Lançamento removido.")
+      setAviso("Lançamento removido e indicadores recalculados.")
       await carregar()
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Falha ao excluir o lançamento.")
@@ -257,7 +241,7 @@ export default function ControleFinanceiroPage() {
       <main className="min-h-[100dvh] bg-[#020817] p-6 text-white">
         <div className="mx-auto max-w-xl rounded-3xl border border-red-900/70 bg-red-950/20 p-6">
           <h1 className="text-xl font-bold">Acesso restrito</h1>
-          <p className="mt-2 text-sm text-red-100/80">Este módulo está liberado exclusivamente para o perfil ADMIN_MASTER durante a homologação.</p>
+          <p className="mt-2 text-sm text-red-100/80">Este módulo é exclusivo do perfil ADMIN_MASTER.</p>
           <Link href="/crm-app" className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-cyan-300"><ArrowLeft size={16}/>Voltar ao CRM</Link>
         </div>
       </main>
@@ -284,28 +268,42 @@ export default function ControleFinanceiroPage() {
 
         <section className={`rounded-3xl border p-5 shadow-xl sm:p-7 ${classeStatus(resumo.status)}`}>
           <div className="flex flex-wrap items-start justify-between gap-4">
-            <div><p className="text-sm opacity-80">Status do mês</p><h2 className="mt-1 text-2xl font-bold">{rotuloStatus(resumo.status)}</h2></div>
+            <div>
+              <p className="text-sm opacity-80">Status do mês</p>
+              <h2 className="mt-1 text-2xl font-bold">{rotuloStatus(resumo.status)}</h2>
+              {parametrosCoerentes && <p className="mt-2 text-sm opacity-80">Planejamento: gastar até {moeda(limitePlanejado)} de {moeda(receitaPlanejada)} e preservar pelo menos {moeda(metaPreservacao)}.</p>}
+            </div>
             <div className="rounded-2xl border border-current/20 bg-black/10 px-4 py-2 text-right"><strong className="text-2xl">{resumo.percentualConsumido.toFixed(1)}%</strong><span className="block text-xs opacity-75">do limite utilizado</span></div>
           </div>
           <div className="mt-5 h-3 overflow-hidden rounded-full bg-black/25"><div className="h-full rounded-full bg-current transition-all" style={{ width: `${progresso}%` }}/></div>
-          {resumo.status === "LIMITE" && <p className="mt-4 flex items-start gap-2 text-sm font-semibold"><AlertTriangle size={18} className="mt-0.5 shrink-0"/>Seu limite mensal foi atingido. Novos gastos já ultrapassam a faixa que você decidiu preservar da receita.</p>}
+          {resumo.status === "LIMITE" && <p className="mt-4 flex items-start gap-2 text-sm font-semibold"><AlertTriangle size={18} className="mt-0.5 shrink-0"/>Seu limite mensal foi atingido. Novos gastos já comprometem a faixa de receita que você decidiu preservar.</p>}
           {resumo.ritmoAcimaDoPlanejado && resumo.status !== "LIMITE" && <p className="mt-4 flex items-start gap-2 text-sm"><TrendingUp size={18} className="mt-0.5 shrink-0"/>O ritmo de gastos está acima do proporcional esperado para este ponto do mês.</p>}
         </section>
 
-        <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           <Indicador icon={WalletCards} label="Gasto acumulado" valor={moeda(resumo.totalGasto)}/>
-          <Indicador icon={PiggyBank} label="Saldo até o limite" valor={moeda(resumo.saldoAteLimite)}/>
-          <Indicador icon={TrendingUp} label="Projeção do mês" valor={moeda(resumo.projecaoFechamento)}/>
+          <Indicador icon={PiggyBank} label="Ainda pode gastar" valor={moeda(resumo.saldoAteLimite)}/>
+          <Indicador icon={Gauge} label="Meta a preservar" valor={moeda(Math.max(metaPreservacao, 0))}/>
           <Indicador icon={Gauge} label="Receita após gastos" valor={moeda(resumo.receitaPreservada)}/>
+          <Indicador icon={TrendingUp} label="Projeção do mês" valor={moeda(resumo.projecaoFechamento)}/>
         </section>
 
         <div className="grid gap-5 xl:grid-cols-[minmax(0,.8fr)_minmax(0,1.2fr)]">
           <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-            <div className="flex items-center gap-3"><Save className="text-cyan-300" size={22}/><div><h2 className="text-lg font-semibold">Parâmetros do mês</h2><p className="text-xs text-slate-400">Variáveis alteráveis a qualquer momento</p></div></div>
+            <div className="flex items-center gap-3"><Save className="text-cyan-300" size={22}/><div><h2 className="text-lg font-semibold">Parâmetros do mês</h2><p className="text-xs text-slate-400">Defina a entrada prevista e quanto dela você aceita gastar.</p></div></div>
             <div className="mt-5 space-y-4">
-              <CampoNumerico label="Receita mensal" value={receitaMensal} onChange={setReceitaMensal}/>
-              <CampoNumerico label="Limite máximo de gastos" value={limiteGastos} onChange={setLimiteGastos}/>
-              <label className="block text-sm text-slate-300">Primeiro alerta (%)<input type="number" min="1" max="100" step="1" value={alertaPercentual} onChange={(event) => setAlertaPercentual(event.target.value)} className="mt-2 w-full rounded-xl border border-[#16325c] bg-[#061126] px-3 py-3 text-white"/></label>
+              <CampoNumerico label="Receita mensal" detalhe="Entrada líquida que você espera ter disponível no mês." value={receitaMensal} onChange={setReceitaMensal}/>
+              <CampoNumerico label="Limite máximo de gastos" detalhe="Máximo da receita mensal que você aceita consumir com despesas." value={limiteGastos} onChange={setLimiteGastos}/>
+              <label className="block text-sm text-slate-300">Primeiro alerta (%)<input type="number" min="1" max="100" step="1" value={alertaPercentual} onChange={(event) => setAlertaPercentual(event.target.value)} className="mt-2 w-full rounded-xl border border-[#16325c] bg-[#061126] px-3 py-3 text-white"/><span className="mt-1 block text-xs text-slate-500">O sistema entra em atenção quando esse percentual do limite for utilizado.</span></label>
+
+              {receitaPlanejada > 0 && limitePlanejado > 0 && (
+                <div className={`rounded-2xl border p-4 text-sm ${limitePlanejado <= receitaPlanejada ? "border-emerald-900/70 bg-emerald-950/20 text-emerald-100" : "border-red-900/70 bg-red-950/20 text-red-100"}`}>
+                  {limitePlanejado <= receitaPlanejada
+                    ? <>Com estes parâmetros, você aceita gastar até <strong>{moeda(limitePlanejado)}</strong> e pretende preservar pelo menos <strong>{moeda(metaPreservacao)}</strong> da receita.</>
+                    : <>O limite informado supera a receita mensal. Reduza o limite para manter uma faixa de preservação.</>}
+                </div>
+              )}
+
               <button type="button" onClick={() => void salvarConfiguracao()} disabled={salvando} className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-[#02111d] disabled:opacity-50"><Save size={18}/>{config ? "Atualizar parâmetros" : "Salvar parâmetros"}</button>
             </div>
           </section>
@@ -323,9 +321,10 @@ export default function ControleFinanceiroPage() {
           </section>
         </div>
 
-        <section className="grid gap-3 md:grid-cols-3">
+        <section className="grid gap-3 md:grid-cols-4">
           <Leitura label="Média diária" valor={moeda(resumo.mediaDiaria)} detalhe="ritmo médio observado"/>
           <Leitura label="Esperado até agora" valor={moeda(resumo.gastoEsperadoAteHoje)} detalhe="proporcional ao limite mensal"/>
+          <Leitura label="Receita comprometida" valor={`${percentualReceitaComprometida.toFixed(1)}%`} detalhe="percentual da receita já gasto"/>
           <Leitura label="Estimativa até o limite" valor={resumo.diasAteLimite === null ? "—" : `${resumo.diasAteLimite} dia${resumo.diasAteLimite === 1 ? "" : "s"}`} detalhe="mantido o ritmo atual"/>
         </section>
 
@@ -349,6 +348,6 @@ function Leitura({ label, valor, detalhe }: { label: string; valor: string; deta
   return <div className="rounded-2xl border border-[#16325c] bg-[#061126] p-4"><span className="text-xs text-slate-500">{label}</span><strong className="mt-1 block text-lg">{valor}</strong><span className="mt-1 block text-xs text-slate-500">{detalhe}</span></div>
 }
 
-function CampoNumerico({ label, value, onChange }: { label: string; value: string; onChange: (valor: string) => void }) {
-  return <label className="block text-sm text-slate-300">{label}<input type="number" min="0" step="0.01" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#16325c] bg-[#061126] px-3 py-3 text-white"/></label>
+function CampoNumerico({ label, detalhe, value, onChange }: { label: string; detalhe?: string; value: string; onChange: (valor: string) => void }) {
+  return <label className="block text-sm text-slate-300">{label}<input type="number" min="0" step="0.01" inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#16325c] bg-[#061126] px-3 py-3 text-white"/>{detalhe && <span className="mt-1 block text-xs text-slate-500">{detalhe}</span>}</label>
 }
