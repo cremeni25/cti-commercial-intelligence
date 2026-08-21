@@ -7,7 +7,7 @@ export type OperationalContextValue = "brasil" | "viena-sp" | `uf-${string}` | `
 
 export type ResultadoImportacao = {
   destino: "ANFIR" | "GOVERNANCA"
-  resultado: Record<string, any>
+  resultado: Record<string, unknown>
 }
 
 async function authHeaders(extra?: HeadersInit) {
@@ -36,7 +36,7 @@ async function request(endpoint: string) {
   return payload
 }
 
-async function registrarFonteGovernada(file: File) {
+async function registrarFonteGovernada(file: File): Promise<Record<string, unknown>> {
   const formData = new FormData()
   formData.append("arquivo", file)
   const response = await fetch(`${BACKOFFICE_URL}/upload`, {
@@ -44,14 +44,14 @@ async function registrarFonteGovernada(file: File) {
     body: formData,
     headers: await authHeaders(),
   })
-  const payload = await response.json().catch(() => null)
+  const payload: unknown = await response.json().catch(() => null)
   if (!response.ok) {
     const detalhe = payload && typeof payload === "object" && "detail" in payload
-      ? String(payload.detail)
+      ? String((payload as { detail?: unknown }).detail)
       : "Não foi possível registrar a fonte para governança."
     throw new Error(detalhe)
   }
-  return payload as Record<string, any>
+  return payload && typeof payload === "object" ? payload as Record<string, unknown> : {}
 }
 
 export async function getDashboardExecutivo() { return request("/analytics/dashboard") }
@@ -83,9 +83,10 @@ export async function importarDados(file: File, contexto: OperationalContextValu
   const planilhaExcel = extensao === "xlsx" || extensao === "xls"
 
   if (planilhaExcel) {
-    const anf = await uploadArquivo(file, contexto)
-    if (anf?.status !== "SEM_REGISTROS_PROCESSADOS") {
-      return { destino: "ANFIR", resultado: anf }
+    const anf: unknown = await uploadArquivo(file, contexto)
+    const resultadoAnfir = anf && typeof anf === "object" ? anf as Record<string, unknown> : {}
+    if (resultadoAnfir.status !== "SEM_REGISTROS_PROCESSADOS") {
+      return { destino: "ANFIR", resultado: resultadoAnfir }
     }
   }
 
