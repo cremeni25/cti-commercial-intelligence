@@ -20,5 +20,7 @@ def test_historico_explicita_que_e_somente_consulta():
     fonte = HISTORICO.read_text(encoding="utf-8")
 
     assert "SOMENTE CONSULTA · NÃO ALTERA O CRM" in fonte
-    assert "Base histórica homologada para consulta e auditoria." in fonte
+    assert "Base histórica consolidada para consulta e auditoria." in fonte
+    assert "HIST-006" not in fonte
+    assert "HIST-007" not in fonte
     assert "READ-ONLY · NÃO PROMOVIDO" not in fonte

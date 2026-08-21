@@ -41,11 +41,11 @@ export default function HistoricoComercialPage() {
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           <header>
             <div className="flex flex-wrap items-center gap-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">HIST-006 · Homologação comercial</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Consulta histórica</p>
               <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">SOMENTE CONSULTA · NÃO ALTERA O CRM</span>
             </div>
             <h1 className="mt-3 text-3xl font-bold">Histórico Comercial 2023–2026</h1>
-            <p className="mt-2 max-w-5xl text-sm text-slate-400">Base histórica homologada para consulta e auditoria. Estes dados não alteram Pipeline, Forecast, Pedidos, Vendas, Clientes nem a IA oficial.</p>
+            <p className="mt-2 max-w-5xl text-sm text-slate-400">Base histórica consolidada para consulta e auditoria. Estes dados não alteram Pipeline, Forecast, Pedidos, Vendas, Clientes nem a IA Comercial.</p>
           </header>
 
           <section className="grid gap-3 sm:grid-cols-2 min-[1800px]:grid-cols-4">
@@ -90,20 +90,20 @@ export default function HistoricoComercialPage() {
 
           <section className="grid gap-5 xl:grid-cols-2">
             <Panel title="Motivos de perda / evidências"><Rows items={losses} total={221} /></Panel>
-            <Panel title="Barreiras de homologação">
+            <Panel title="Regras de uso do histórico">
               <Checklist label="Arquivo original preservado" />
-              <Checklist label="Proveniência arquivo → aba → linha preservada" />
-              <Checklist label="DIRETA e INDIRETA_OEM separados" />
+              <Checklist label="Origem arquivo → aba → linha preservada" />
+              <Checklist label="DIRETA e INDIRETA_OEM permanecem separados" />
               <Checklist label="CARLA → MÔNICA sem apagar autoria histórica" />
-              <Checklist label="Modelos históricos fora do catálogo não são descartados" />
-              <Checklist label="Nenhuma promoção para CRM operacional" />
-              <Checklist label="IA oficial não consome este histórico" />
+              <Checklist label="Modelos históricos fora do catálogo são preservados" />
+              <Checklist label="Este histórico não altera dados do CRM operacional" />
+              <Checklist label="Este histórico não é incorporado automaticamente à IA Comercial" />
             </Panel>
           </section>
 
-          <section className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-5">
-            <h2 className="font-semibold text-amber-100">Ponto de decisão da homologação comercial</h2>
-            <p className="mt-2 text-sm text-amber-200/80">A HIST-006 serve para conferir visualmente coerência de volume, período, responsáveis, equipamentos, status, perdas, canal e implementadoras. Nenhum dado desta tela deve ser tratado como Pipeline ativo ou receita até a autorização formal da HIST-007.</p>
+          <section className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 p-5">
+            <h2 className="font-semibold text-cyan-100">Como usar este histórico</h2>
+            <p className="mt-2 text-sm text-cyan-100/80">Use esta tela para consultar volume, período, responsáveis, equipamentos, status, perdas, canais e implementadoras do histórico comercial. As informações desta tela são referenciais e não alteram automaticamente o Pipeline, o Forecast ou os registros operacionais do CRM.</p>
           </section>
         </div>
       </section>
