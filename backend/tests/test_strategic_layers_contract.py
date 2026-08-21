@@ -20,6 +20,15 @@ def test_router_preserva_tres_camadas_sem_fusao():
     assert 'repository.buscar_cti_anfir()' in fonte
 
 
+def test_classificacao_reconhece_codigos_canonicos_tr_dt_dd():
+    fonte = ROUTER.read_text(encoding="utf-8")
+    assert '"TR": "trailer"' in fonte
+    assert '"DT": "diesel-truck"' in fonte
+    assert '"DD": "direct-drive"' in fonte
+    assert '_codigo_familia(registro.get("linha"))' in fonte
+    assert '_codigo_familia(registro.get("linha_equipamentos"))' in fonte
+
+
 def test_router_estrategico_esta_registrado_no_backend():
     fonte = MAIN.read_text(encoding="utf-8")
     assert "strategic_layers_router" in fonte
