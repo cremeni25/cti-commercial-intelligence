@@ -44,7 +44,7 @@ const menuGroups: MenuGroup[] = [
     itens: [
       { label: "Oportunidades", href: "/oportunidades", icon: "📈", type: "emoji" },
       { label: "Pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
-      { label: "Upload Operacional", href: "/upload", icon: "📤", type: "emoji" },
+      { label: "Importar Dados", href: "/upload", icon: "📤", type: "emoji" },
       { label: "Propostas", href: "/propostas", icon: "📄", type: "emoji" },
       { label: "Pedidos", href: "/pedidos", icon: "📦", type: "emoji" },
       { label: "Vendas", href: "/vendas", icon: "💰", type: "emoji" },
@@ -72,7 +72,7 @@ const menuGroups: MenuGroup[] = [
   {
     titulo: "Administração",
     itens: [
-      { label: "Fontes & IA", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
+      { label: "Governança de Fontes", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
       { label: "Usuários", href: "/usuarios", icon: "👥", type: "emoji" },
       { label: "Configurações", href: "/configuracoes", icon: "⚙️", type: "emoji" },
       { label: "Modelos oficiais", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
@@ -84,9 +84,6 @@ export default function Sidebar() {
   const pathname = usePathname()
   const { usuario } = useAuth()
   const perfilMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-
-  // Preserva a navegação existente nesta execução. A única mudança de
-  // visibilidade é Fontes & IA, que pertence exclusivamente ao ADMIN_MASTER.
   const menusPermitidos = permissoesMenu.ADMIN_MASTER
 
   return (
