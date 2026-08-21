@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -58,58 +58,105 @@ const LINHAS = [
   { codigo: "DT" as const, nome: "Diesel Truck" },
   { codigo: "DD" as const, nome: "Direct Drive" },
 ]
+const RETRY_MS = 5_000
+const REFRESH_MS = 60_000
 
 export default function DashboardHub() {
   const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [historico, setHistorico] = useState<DashboardContextual | null>(null)
-  const [nucleo, setNucleo] = useState<NucleoComercial[]>([])
-  const [oportunidadesCrm, setOportunidadesCrm] = useState<OportunidadeCRM[]>([])
-  const [linhasProduto, setLinhasProduto] = useState<LinhaProduto[]>([])
+  const [nucleo, setNucleo] = useState<NucleoComercial[] | null>(null)
+  const [oportunidadesCrm, setOportunidadesCrm] = useState<OportunidadeCRM[] | null>(null)
+  const [linhasProduto, setLinhasProduto] = useState<LinhaProduto[] | null>(null)
   const [metadataLinhas, setMetadataLinhas] = useState<ProductLinesMetadata>({})
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [avisos, setAvisos] = useState<string[]>([])
+  const [loadingHistorico, setLoadingHistorico] = useState(true)
+  const [loadingOperacional, setLoadingOperacional] = useState(true)
+  const [falhaHistorico, setFalhaHistorico] = useState(false)
+  const [falhaLinhas, setFalhaLinhas] = useState(false)
+  const [falhaNucleo, setFalhaNucleo] = useState(false)
+  const [falhaOportunidades, setFalhaOportunidades] = useState(false)
 
-  useEffect(() => {
-    let ativo = true
-    queueMicrotask(async () => {
-      const [dadosNucleo, dadosOportunidades] = await Promise.all([
-        tentar<NucleoComercial[]>(() => buscarJson(`${API_URL}/crm/nucleo-comercial`)),
-        tentar<OportunidadeCRM[]>(() => buscarJson(`${API_URL}/crm/oportunidades`)),
-      ])
-      if (!ativo) return
-      setNucleo(dadosNucleo ?? [])
-      setOportunidadesCrm(dadosOportunidades ?? [])
-    })
-    return () => { ativo = false }
+  const carregarOperacional = useCallback(async () => {
+    const [dadosNucleo, dadosOportunidades] = await Promise.all([
+      tentar<NucleoComercial[]>(() => buscarJson(`${API_URL}/crm/nucleo-comercial`), 2),
+      tentar<OportunidadeCRM[]>(() => buscarJson(`${API_URL}/crm/oportunidades`), 2),
+    ])
+    const nucleoOk = dadosNucleo !== null
+    const oportunidadesOk = dadosOportunidades !== null
+    if (nucleoOk) setNucleo(dadosNucleo)
+    if (oportunidadesOk) setOportunidadesCrm(dadosOportunidades)
+    setFalhaNucleo(!nucleoOk)
+    setFalhaOportunidades(!oportunidadesOk)
+    setLoadingOperacional(false)
+    if (nucleoOk || oportunidadesOk) setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
+    return nucleoOk && oportunidadesOk
   }, [])
 
+  const carregarHistorico = useCallback(async () => {
+    const [dadosHistoricos, dadosLinhas] = await Promise.all([
+      tentar<DashboardContextual>(() => getDashboardExecutivoContextual(queryString), 2),
+      tentar<ProductLinesResponse>(() => buscarJson(`${API_URL}/analytics/product-lines?${queryString}`), 2),
+    ])
+    const historicoOk = dadosHistoricos !== null
+    const linhasOk = Boolean(dadosLinhas?.linhas?.length === 3)
+    if (historicoOk) setHistorico(dadosHistoricos)
+    if (linhasOk && dadosLinhas) {
+      setLinhasProduto((dadosLinhas.linhas ?? []).map((linha) => ({ ...linha, disponivel: true })))
+      setMetadataLinhas(dadosLinhas.metadata ?? {})
+    }
+    setFalhaHistorico(!historicoOk)
+    setFalhaLinhas(!linhasOk)
+    setLoadingHistorico(false)
+    if (historicoOk || linhasOk) setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
+    return historicoOk && linhasOk
+  }, [queryString])
+
   useEffect(() => {
     let ativo = true
-    queueMicrotask(async () => {
-      setLoading(true)
-      setAvisos([])
-      const [dadosHistoricos, dadosLinhas] = await Promise.all([
-        tentar<DashboardContextual>(() => getDashboardExecutivoContextual(queryString), 2),
-        tentar<ProductLinesResponse>(() => buscarJson(`${API_URL}/analytics/product-lines?${queryString}`), 2),
-      ])
+    let timer: number | undefined
+    const executar = async () => {
+      const ok = await carregarOperacional()
       if (!ativo) return
-      const novosAvisos: string[] = []
-      if (dadosHistoricos) setHistorico(dadosHistoricos)
-      else novosAvisos.push("Base histórica indisponível.")
-      if (dadosLinhas?.linhas?.length === 3) {
-        setLinhasProduto(dadosLinhas.linhas.map((linha) => ({ ...linha, disponivel: true })))
-        setMetadataLinhas(dadosLinhas.metadata ?? {})
-      } else {
-        setLinhasProduto([])
-        novosAvisos.push("Indicadores históricos por linha indisponíveis.")
-      }
-      setAvisos(novosAvisos)
-      setUltimaAtualizacao(new Date().toLocaleString("pt-BR"))
-      setLoading(false)
+      timer = window.setTimeout(() => void executar(), ok ? REFRESH_MS : RETRY_MS)
+    }
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoadingOperacional(true)
+      void executar()
     })
-    return () => { ativo = false }
-  }, [queryString])
+    const aoReconectar = () => void carregarOperacional()
+    window.addEventListener("online", aoReconectar)
+    return () => {
+      ativo = false
+      if (timer) window.clearTimeout(timer)
+      window.removeEventListener("online", aoReconectar)
+    }
+  }, [carregarOperacional])
+
+  useEffect(() => {
+    let ativo = true
+    let timer: number | undefined
+    const executar = async () => {
+      const ok = await carregarHistorico()
+      if (!ativo) return
+      timer = window.setTimeout(() => void executar(), ok ? REFRESH_MS : RETRY_MS)
+    }
+    queueMicrotask(() => {
+      if (!ativo) return
+      setHistorico(null)
+      setLinhasProduto(null)
+      setMetadataLinhas({})
+      setLoadingHistorico(true)
+      void executar()
+    })
+    const aoReconectar = () => void carregarHistorico()
+    window.addEventListener("online", aoReconectar)
+    return () => {
+      ativo = false
+      if (timer) window.clearTimeout(timer)
+      window.removeEventListener("online", aoReconectar)
+    }
+  }, [carregarHistorico])
 
   const periodoExibido = periodo === "TODO_HISTORICO"
     ? "Todo o histórico disponível"
@@ -117,15 +164,20 @@ export default function DashboardHub() {
       ? dataInicio && dataFim ? `${dataInicio} até ${dataFim}` : "Período personalizado"
       : periodo.replaceAll("_", " ").toLowerCase()
 
-  const abertos = nucleo.filter((item) => !item.encerrada)
+  const historicoDisponivel = historico !== null
+  const linhasDisponiveis = linhasProduto !== null
+  const nucleoDisponivel = nucleo !== null
+  const oportunidadesDisponiveis = oportunidadesCrm !== null
+  const operacionalDisponivel = nucleoDisponivel && oportunidadesDisponiveis
+  const abertos = (nucleo ?? []).filter((item) => !item.encerrada)
   const pipelineAberto = abertos.reduce((total, item) => total + Number(item.valor || 0), 0)
   const propostasAbertas = abertos.filter((item) => Boolean(item.proposta_id)).length
   const pedidosAbertos = abertos.filter((item) => Boolean(item.pedido_id)).length
   const totalPeriodo = metadataLinhas.total_registros_periodo ?? 0
-  const totalClassificado = metadataLinhas.registros_classificados_periodo ?? linhasProduto.reduce((soma, linha) => soma + linha.atual, 0)
+  const totalClassificado = metadataLinhas.registros_classificados_periodo ?? (linhasProduto ?? []).reduce((soma, linha) => soma + linha.atual, 0)
   const cobertura = totalPeriodo > 0 ? (totalClassificado / totalPeriodo) * 100 : 0
 
-  const oportunidadePorId = new Map(oportunidadesCrm.map((item) => [String(item.id), item]))
+  const oportunidadePorId = new Map((oportunidadesCrm ?? []).map((item) => [String(item.id), item]))
   const linhasEmCurso: LinhaEmCurso[] = LINHAS.map((linha) => {
     const itens = abertos.filter((item) => classificarLinha(oportunidadePorId.get(String(item.oportunidade_id))) === linha.codigo)
     return {
@@ -139,10 +191,11 @@ export default function DashboardHub() {
   const semLinhaEmCurso = Math.max(abertos.length - classificadosEmCurso, 0)
 
   const graficoHistorico = LINHAS.map((definicao) => {
-    const linha = linhasProduto.find((item) => item.codigo === definicao.codigo)
+    const linha = (linhasProduto ?? []).find((item) => item.codigo === definicao.codigo)
     return { linha: definicao.codigo, nome: definicao.nome, atual: linha?.atual ?? 0, anterior: linha?.anterior ?? 0 }
   })
   const graficoPipeline = linhasEmCurso.map((linha) => ({ linha: linha.codigo, nome: linha.nome, valor: linha.valor, negociacoes: linha.negociacoes }))
+  const falhaTemporaria = falhaHistorico || falhaLinhas || falhaNucleo || falhaOportunidades
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
@@ -160,34 +213,34 @@ export default function DashboardHub() {
           <section className="grid gap-3 md:grid-cols-3">
             <Info titulo="Período histórico" valor={periodoExibido} />
             <Info titulo="Última atualização" valor={ultimaAtualizacao || "Carregando dados"} />
-            <Info titulo="Registros históricos filtrados" valor={loading ? "..." : String(historico?.metadata?.total_registros_filtrados ?? 0)} />
+            <Info titulo="Registros históricos filtrados" valor={loadingHistorico ? "..." : historicoDisponivel ? String(historico.metadata?.total_registros_filtrados ?? 0) : "—"} />
           </section>
 
-          {avisos.length > 0 && <div className="rounded-2xl border border-amber-700 bg-amber-950/20 p-4 text-sm text-amber-200">{avisos.join(" ")}</div>}
+          {falhaTemporaria && <div className="rounded-2xl border border-amber-700 bg-amber-950/20 p-4 text-sm text-amber-200">Conexão temporariamente indisponível. Reconexão automática em andamento; nenhum indicador indisponível será mostrado como zero.</div>}
 
           <section className="grid gap-5 xl:grid-cols-2">
             <PainelTempo titulo="REALIZADO" subtitulo="O que já aconteceu." destaque="Histórico confirmado">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Kpi titulo="Clientes históricos" valor={loading ? "..." : historico?.total_clientes ?? 0} />
-                <Kpi titulo="Ticket histórico" valor={loading ? "..." : moeda(historico?.ticket_medio)} />
-                <Kpi titulo="Estados atendidos" valor={loading ? "..." : historico?.total_estados ?? 0} />
-                <Kpi titulo="Municípios" valor={loading ? "..." : historico?.total_municipios ?? 0} />
+                <Kpi titulo="Clientes históricos" valor={loadingHistorico ? "..." : historicoDisponivel ? historico.total_clientes ?? 0 : "—"} />
+                <Kpi titulo="Ticket histórico" valor={loadingHistorico ? "..." : historicoDisponivel ? moeda(historico.ticket_medio) : "—"} />
+                <Kpi titulo="Estados atendidos" valor={loadingHistorico ? "..." : historicoDisponivel ? historico.total_estados ?? 0 : "—"} />
+                <Kpi titulo="Municípios" valor={loadingHistorico ? "..." : historicoDisponivel ? historico.total_municipios ?? 0 : "—"} />
               </div>
             </PainelTempo>
 
             <PainelTempo titulo="EM CURSO" subtitulo="O que está acontecendo agora." destaque="Negócios vivos">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Kpi titulo="Pipeline aberto" valor={moeda(pipelineAberto)} />
-                <Kpi titulo="Negociações ativas" valor={abertos.length} />
-                <Kpi titulo="Propostas vigentes" valor={propostasAbertas} />
-                <Kpi titulo="Pedidos em curso" valor={pedidosAbertos} />
+                <Kpi titulo="Pipeline aberto" valor={loadingOperacional ? "..." : nucleoDisponivel ? moeda(pipelineAberto) : "—"} />
+                <Kpi titulo="Negociações ativas" valor={loadingOperacional ? "..." : nucleoDisponivel ? abertos.length : "—"} />
+                <Kpi titulo="Propostas vigentes" valor={loadingOperacional ? "..." : nucleoDisponivel ? propostasAbertas : "—"} />
+                <Kpi titulo="Pedidos em curso" valor={loadingOperacional ? "..." : nucleoDisponivel ? pedidosAbertos : "—"} />
               </div>
             </PainelTempo>
           </section>
 
           <section className="grid gap-5 2xl:grid-cols-2">
             <GraficoPainel titulo="REALIZADO" subtitulo="Volume por linha — período atual × anterior">
-              <ResponsiveContainer width="100%" height="100%">
+              {linhasDisponiveis ? <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={graficoHistorico} margin={{ top: 30, right: 16, left: 0, bottom: 0 }}>
                   <CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false} />
                   <XAxis dataKey="linha" stroke="#8294ad" />
@@ -201,31 +254,33 @@ export default function DashboardHub() {
                     <LabelList dataKey="atual" position="top" fill="#67e8f9" fontSize={12} />
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer> : <GraficoIndisponivel />}
             </GraficoPainel>
 
             <GraficoPainel titulo="EM CURSO" subtitulo="Pipeline atual por linha de equipamento">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={graficoPipeline} margin={{ top: 34, right: 16, left: 8, bottom: 0 }}>
-                  <CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false} />
-                  <XAxis dataKey="linha" stroke="#8294ad" />
-                  <YAxis stroke="#8294ad" tickFormatter={(valor) => abreviarMoeda(Number(valor))} />
-                  <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => nomeLinha(String(label))} formatter={(valor, nome) => nome === "Pipeline" ? [moeda(Number(valor)), nome] : [valor, nome]} />
-                  <Legend />
-                  <Bar dataKey="valor" name="Pipeline" fill="#34d399" radius={[7, 7, 0, 0]}>
-                    <LabelList dataKey="valor" position="top" fill="#6ee7b7" fontSize={12} formatter={(valor) => abreviarMoeda(Number(valor))} />
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="mt-3 grid grid-cols-3 gap-2">
-                {linhasEmCurso.map((linha) => <Mini key={linha.codigo} titulo={linha.codigo} valor={`${linha.negociacoes} negócio(s) · ${abreviarMoeda(linha.valor)}`} />)}
-              </div>
+              {operacionalDisponivel ? <>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={graficoPipeline} margin={{ top: 34, right: 16, left: 8, bottom: 0 }}>
+                    <CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false} />
+                    <XAxis dataKey="linha" stroke="#8294ad" />
+                    <YAxis stroke="#8294ad" tickFormatter={(valor) => abreviarMoeda(Number(valor))} />
+                    <Tooltip contentStyle={tooltipStyle} labelFormatter={(label) => nomeLinha(String(label))} formatter={(valor, nome) => nome === "Pipeline" ? [moeda(Number(valor)), nome] : [valor, nome]} />
+                    <Legend />
+                    <Bar dataKey="valor" name="Pipeline" fill="#34d399" radius={[7, 7, 0, 0]}>
+                      <LabelList dataKey="valor" position="top" fill="#6ee7b7" fontSize={12} formatter={(valor) => abreviarMoeda(Number(valor))} />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {linhasEmCurso.map((linha) => <Mini key={linha.codigo} titulo={linha.codigo} valor={`${linha.negociacoes} negócio(s) · ${abreviarMoeda(linha.valor)}`} />)}
+                </div>
+              </> : <GraficoIndisponivel />}
             </GraficoPainel>
           </section>
 
           <section className="flex flex-col gap-2 rounded-2xl border border-[#13203f] bg-[#071226] px-5 py-4 text-xs text-slate-500 md:flex-row md:items-center md:justify-between">
-            <span>Cobertura da classificação histórica: {loading ? "..." : `${cobertura.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}.</span>
-            {semLinhaEmCurso > 0 ? <span className="text-amber-300">{semLinhaEmCurso} negócio(s) em curso sem classificação recuperável.</span> : <span className="text-emerald-300">Todos os negócios em curso estão classificados por linha.</span>}
+            <span>Cobertura da classificação histórica: {loadingHistorico ? "..." : linhasDisponiveis ? `${cobertura.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%` : "—"}.</span>
+            {operacionalDisponivel ? (semLinhaEmCurso > 0 ? <span className="text-amber-300">{semLinhaEmCurso} negócio(s) em curso sem classificação recuperável.</span> : <span className="text-emerald-300">Todos os negócios em curso estão classificados por linha.</span>) : <span className="text-amber-300">Dados em curso reconectando.</span>}
           </section>
         </div>
       </section>
@@ -266,4 +321,5 @@ function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string
 function Info({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p><p className="mt-1 text-sm font-semibold text-cyan-200">{valor}</p></div> }
 function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div> }
 function GraficoPainel({ titulo, subtitulo, children }: { titulo: string; subtitulo: string; children: React.ReactNode }) { return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">{titulo}</p><h2 className="mt-1 text-xl font-bold">{subtitulo}</h2><div className="mt-5 h-[300px]">{children}</div></section> }
+function GraficoIndisponivel() { return <div className="grid h-full place-items-center rounded-2xl border border-dashed border-amber-700/60 bg-amber-950/10 px-6 text-center text-sm text-amber-200">Dados temporariamente indisponíveis. Reconexão automática em andamento.</div> }
 function Mini({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-xl border border-[#16325c] bg-[#091a33] p-3"><p className="text-xs font-bold text-cyan-300">{titulo}</p><p className="mt-1 text-xs text-slate-400">{valor}</p></div> }
