@@ -20,9 +20,23 @@ EQUIPAMENTOS = {
     "direct-drive": {"nome": "DD • Direct Drive", "termos": ("DIRECT", "CITIMAX", "XARIOS", "D6", "D7")},
 }
 
+CODIGOS_FAMILIA = {
+    "TR": "trailer",
+    "DT": "diesel-truck",
+    "DD": "direct-drive",
+}
+
 
 def _texto(*valores: Any) -> str:
     return " ".join(str(valor or "") for valor in valores).upper()
+
+
+def _codigo_familia(valor: Any) -> str | None:
+    texto = str(valor or "").strip().upper().replace("•", "-")
+    if not texto:
+        return None
+    prefixo = texto.split("-", 1)[0].strip().split(" ", 1)[0].strip()
+    return CODIGOS_FAMILIA.get(prefixo)
 
 
 def _combina(texto: str, termos: tuple[str, ...]) -> bool:
@@ -72,6 +86,9 @@ def _anfir(contexto: str, periodo: str, uf: str | None, ddd: str | None, inicio:
 
 
 def _familia_registro_anfir(registro: dict[str, Any]) -> str | None:
+    por_codigo = _codigo_familia(registro.get("linha"))
+    if por_codigo:
+        return por_codigo
     texto = _texto(
         registro.get("linha"), registro.get("modelo"), registro.get("tipo_veiculo"),
         registro.get("fabricante_equipamento"), registro.get("produto"),
@@ -91,6 +108,9 @@ def _familia_historico(registro: dict[str, Any]) -> str | None:
 
 
 def _familia_crm(registro: dict[str, Any]) -> str | None:
+    por_codigo = _codigo_familia(registro.get("linha_equipamentos"))
+    if por_codigo:
+        return por_codigo
     texto = _texto(
         registro.get("linha_equipamentos"), registro.get("equipamento"), registro.get("titulo"), registro.get("descricao")
     )
