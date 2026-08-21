@@ -42,10 +42,10 @@ export default function HistoricoComercialPage() {
           <header>
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">HIST-006 · Homologação comercial</p>
-              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">READ-ONLY · NÃO PROMOVIDO</span>
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-200">SOMENTE CONSULTA · NÃO ALTERA O CRM</span>
             </div>
             <h1 className="mt-3 text-3xl font-bold">Histórico Comercial 2023–2026</h1>
-            <p className="mt-2 max-w-5xl text-sm text-slate-400">Superfície de homologação do arquivo histórico. Estes dados não alteram Pipeline, Forecast, Pedidos, Vendas, Clientes nem a IA oficial.</p>
+            <p className="mt-2 max-w-5xl text-sm text-slate-400">Base histórica homologada para consulta e auditoria. Estes dados não alteram Pipeline, Forecast, Pedidos, Vendas, Clientes nem a IA oficial.</p>
           </header>
 
           <section className="grid gap-3 sm:grid-cols-2 min-[1800px]:grid-cols-4">
