@@ -19,6 +19,7 @@ from routers.cti_api_router import router as cti_api_router
 from routers.engine_router import router as engine_router
 from routers.modulos_router import router as modulos_router
 from routers.negociacoes_router import router as negociacoes_router
+from routers.strategic_layers_router import router as strategic_layers_router
 from routers.upload_router import router as upload_router
 from routers.vendas_router import router as vendas_router
 
@@ -44,6 +45,7 @@ app.include_router(cti_api_router)
 app.include_router(brasil_router)
 app.include_router(autorizados_router)
 app.include_router(modulos_router)
+app.include_router(strategic_layers_router)
 
 
 @app.get("/")
