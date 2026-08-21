@@ -4,12 +4,27 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { ArchiveRestore, ArrowLeft, Loader2 } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { getSupabaseClient } from "@/core/database/supabase"
 
 type Registro = Record<string, unknown>
 
 function texto(valor: unknown): string { return String(valor ?? "").trim() }
 function moeda(valor: unknown): string { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 function data(valor: unknown): string { const d = new Date(texto(valor)); return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("pt-BR") }
+
+async function authHeaders(extra?: HeadersInit) {
+  const headers = new Headers(extra)
+  const supabase = getSupabaseClient()
+  const { data } = await supabase.auth.getSession()
+  if (!data.session?.access_token) throw new Error("Sessão expirada. Entre novamente no CRM App.")
+  headers.set("Authorization", `Bearer ${data.session.access_token}`)
+  if (!headers.has("Accept")) headers.set("Accept", "application/json")
+  return headers
+}
+
+async function fetchProtegido(input: RequestInfo | URL, init: RequestInit = {}) {
+  return fetch(input, { ...init, headers: await authHeaders(init.headers) })
+}
 
 export default function TestesArquivadosPage() {
   const { usuario } = useAuth()
@@ -24,7 +39,7 @@ export default function TestesArquivadosPage() {
     if (!admin) { setCarregando(false); return }
     setCarregando(true); setErro("")
     try {
-      const resposta = await fetch("/api/crm-proxy/crm-app/oportunidades/testes-arquivados", { cache: "no-store" })
+      const resposta = await fetchProtegido("/api/crm-proxy/crm-app/oportunidades/testes-arquivados", { cache: "no-store" })
       const payload = await resposta.json().catch(() => [])
       if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
       setRegistros(Array.isArray(payload) ? payload : [])
@@ -38,7 +53,7 @@ export default function TestesArquivadosPage() {
     if (!window.confirm("Restaurar esta oportunidade para a operação normal?")) return
     setProcessando(id); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-app/oportunidades/${encodeURIComponent(id)}/restaurar-teste`, { method: "POST" })
+      const resposta = await fetchProtegido(`/api/crm-proxy/crm-app/oportunidades/${encodeURIComponent(id)}/restaurar-teste`, { method: "POST" })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
       setMensagem("Registro restaurado e devolvido às leituras operacionais.")
