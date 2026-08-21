@@ -1,8 +1,14 @@
 import { getSupabaseClient } from "@/core/database/supabase"
 
 const API_URL = "/api/cti"
+const BACKOFFICE_URL = "/api/crm-proxy/backoffice-fontes"
 
 export type OperationalContextValue = "brasil" | "viena-sp" | `uf-${string}` | `ddd-${string}`
+
+export type ResultadoImportacao = {
+  destino: "ANFIR" | "GOVERNANCA"
+  resultado: Record<string, any>
+}
 
 async function authHeaders(extra?: HeadersInit) {
   const headers = new Headers(extra)
@@ -30,6 +36,24 @@ async function request(endpoint: string) {
   return payload
 }
 
+async function registrarFonteGovernada(file: File) {
+  const formData = new FormData()
+  formData.append("arquivo", file)
+  const response = await fetch(`${BACKOFFICE_URL}/upload`, {
+    method: "POST",
+    body: formData,
+    headers: await authHeaders(),
+  })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String(payload.detail)
+      : "Não foi possível registrar a fonte para governança."
+    throw new Error(detalhe)
+  }
+  return payload as Record<string, any>
+}
+
 export async function getDashboardExecutivo() { return request("/analytics/dashboard") }
 export async function getDashboardExecutivoContextual(query: string | OperationalContextValue) {
   const qs = query.includes("=") ? query : `contexto=${encodeURIComponent(query)}`
@@ -50,8 +74,23 @@ export async function getPipelineStatus() { return request("/pipeline/status") }
 export async function uploadArquivo(file: File, contexto: OperationalContextValue = "brasil") {
   const formData = new FormData(); formData.append("file", file); formData.append("contexto_operacional", contexto)
   const response = await fetch(`${API_URL}/upload/anfir/seguro`, { method: "POST", body: formData, headers: await authHeaders() })
-  if (!response.ok) throw new Error("Erro ao realizar upload")
+  if (!response.ok) throw new Error("Erro ao realizar upload ANFIR")
   return response.json()
+}
+
+export async function importarDados(file: File, contexto: OperationalContextValue = "brasil"): Promise<ResultadoImportacao> {
+  const extensao = file.name.split(".").pop()?.toLowerCase() || ""
+  const planilhaExcel = extensao === "xlsx" || extensao === "xls"
+
+  if (planilhaExcel) {
+    const anf = await uploadArquivo(file, contexto)
+    if (anf?.status !== "SEM_REGISTROS_PROCESSADOS") {
+      return { destino: "ANFIR", resultado: anf }
+    }
+  }
+
+  const governada = await registrarFonteGovernada(file)
+  return { destino: "GOVERNANCA", resultado: governada }
 }
 
 export async function processarPipeline() { return request("/pipeline/status") }
