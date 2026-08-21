@@ -4,11 +4,11 @@ import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
-import { getEquipamento, type EquipamentoResumo, type RankingItem } from "@/services/modulos-api"
+import { getEquipamento, type EquipamentoEstrategico, type RankingItem } from "@/services/modulos-api"
 
 export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string; fallbackTitulo: string }) {
   const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
-  const [dados, setDados] = useState<EquipamentoResumo | null>(null)
+  const [dados, setDados] = useState<EquipamentoEstrategico | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
 
@@ -20,7 +20,7 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
       setErro("")
       getEquipamento(slug, queryString)
         .then((resultado) => { if (ativo) setDados(resultado) })
-        .catch(() => { if (ativo) setErro("Erro ao carregar dados reais do equipamento.") })
+        .catch(() => { if (ativo) setErro("Não foi possível carregar as camadas estratégicas deste equipamento.") })
         .finally(() => { if (ativo) setLoading(false) })
     })
     return () => { ativo = false }
@@ -29,40 +29,91 @@ export default function EquipamentoPage({ slug, fallbackTitulo }: { slug: string
   const periodoExibido = periodo === "TODO_HISTORICO" ? "Todo o histórico" : periodo === "PERSONALIZADO" ? `${dataInicio || "?"} a ${dataFim || "?"}` : periodo.replaceAll("_", " ")
 
   return (
-    <main className="flex min-h-screen bg-[#020817]">
+    <main className="flex min-h-screen bg-[#020817] text-white">
       <Sidebar />
-      <section className="flex-1 min-w-0">
+      <section className="min-w-0 flex-1">
         <Topbar />
-        <div className="p-8 space-y-8">
-          <div>
-            <h1 className="text-4xl font-bold text-white">{dados?.nome ?? fallbackTitulo}</h1>
-            <p className="text-gray-400 mt-2">Visão operacional baseada nos registros reais persistidos no CTI.</p>
-            <p className="text-cyan-300 text-sm mt-2">Contexto: {contextoAtual.label} • Período: {periodoExibido}</p>
-          </div>
+        <div className="space-y-7 p-4 sm:p-6 lg:p-8">
+          <header>
+            <h1 className="text-3xl font-bold sm:text-4xl">{dados?.nome ?? fallbackTitulo}</h1>
+            <p className="mt-2 text-sm text-slate-400">Leitura cruzada das três camadas comerciais do CTI, sem fundir registros nem transformar histórico em operação ativa.</p>
+            <p className="mt-2 text-sm text-cyan-300">Contexto: {contextoAtual.label} • Período: {periodoExibido}</p>
+          </header>
 
-          {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
+          {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Kpi titulo="Registros" valor={loading ? "..." : String(dados?.total_registros ?? 0)} />
-            <Kpi titulo="Valor total" valor={loading ? "..." : `R$ ${(dados?.valor_total ?? 0).toLocaleString("pt-BR")}`} />
-            <Kpi titulo="Linhas" valor={loading ? "..." : String(dados?.linhas.length ?? 0)} />
-          </div>
+          {loading ? <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando realizado, histórico comercial e CRM em curso...</div> : dados && <>
+            <section className="grid gap-4 xl:grid-cols-3">
+              <Camada
+                titulo="REALIZADO · ANFIR"
+                descricao="O que já aconteceu no mercado confirmado."
+                tom="cyan"
+                kpis={[
+                  ["Registros", numero(dados.realizado.total_registros)],
+                  ["Valor realizado", moeda(dados.realizado.valor_total)],
+                  ["Estados", numero(dados.realizado.estados.length)],
+                ]}
+              />
+              <Camada
+                titulo="HISTÓRICO COMERCIAL"
+                descricao="Funil histórico 2023–2026 para consulta e comparação."
+                tom="amber"
+                kpis={[
+                  ["Registros", numero(dados.historico_comercial.total_registros)],
+                  ["Unidades", numero(dados.historico_comercial.total_unidades)],
+                  ["Valor nominal", moeda(dados.historico_comercial.valor_nominal)],
+                ]}
+              />
+              <Camada
+                titulo="EM CURSO · CRM"
+                descricao="Negociações operacionais abertas neste momento."
+                tom="emerald"
+                kpis={[
+                  ["Oportunidades", numero(dados.em_curso.total_registros)],
+                  ["Pipeline", moeda(dados.em_curso.valor_pipeline)],
+                  ["Estados", numero(dados.em_curso.estados.length)],
+                ]}
+              />
+            </section>
 
-          {loading ? <p className="text-gray-400">Carregando dados reais...</p> : !dados || dados.total_registros === 0 ? (
-            <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6 text-gray-300">Nenhum registro encontrado para este equipamento no território e período selecionados.</div>
-          ) : (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              <Ranking titulo="Linhas de produto" itens={dados.linhas} />
-              <Ranking titulo="Implementadoras" itens={dados.implementadoras} />
-              <Ranking titulo="Estados" itens={dados.estados} />
-              <Ranking titulo="Empresas" itens={dados.empresas} />
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm text-cyan-100/80">
+              As três camadas são correlacionadas visualmente, mas seus totais não são somados entre si. ANFIR continua sendo realizado; Histórico Comercial continua consulta histórica; CRM continua operação em curso.
             </div>
-          )}
+
+            <section className="grid gap-5 xl:grid-cols-3">
+              <div className="space-y-5">
+                <Ranking titulo="ANFIR · Estados" itens={dados.realizado.estados} vazio="Sem estado classificado no realizado." />
+                <Ranking titulo="ANFIR · Implementadoras" itens={dados.realizado.implementadoras} vazio="Sem implementadora classificada no realizado." />
+                <Ranking titulo="ANFIR · Empresas" itens={dados.realizado.empresas} vazio="Sem empresa classificada no realizado." />
+              </div>
+              <div className="space-y-5">
+                <Ranking titulo="Histórico · Equipamentos" itens={dados.historico_comercial.equipamentos} vazio="Sem registro histórico desta família." />
+                <Ranking titulo="Histórico · Status" itens={dados.historico_comercial.status} vazio="Sem status histórico desta família." />
+                <Ranking titulo="Histórico · Implementadoras" itens={dados.historico_comercial.implementadoras} vazio="Sem implementadora histórica desta família." />
+              </div>
+              <div className="space-y-5">
+                <Ranking titulo="CRM · Equipamentos" itens={dados.em_curso.equipamentos} vazio="Nenhuma negociação ativa desta família." />
+                <Ranking titulo="CRM · Status" itens={dados.em_curso.status} vazio="Nenhuma negociação ativa desta família." />
+                <Ranking titulo="CRM · Território" itens={dados.em_curso.estados.length ? dados.em_curso.estados : dados.em_curso.ddds} vazio="Nenhum território ativo desta família." />
+              </div>
+            </section>
+
+            {dados.historico_comercial.nota_territorial && <p className="text-xs leading-5 text-slate-500">{dados.historico_comercial.nota_territorial}</p>}
+          </>}
         </div>
       </section>
     </main>
   )
 }
 
-function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6"><p className="text-gray-400 text-sm">{titulo}</p><p className="text-3xl text-cyan-400 font-bold mt-2">{valor}</p></div> }
-function Ranking({ titulo, itens }: { titulo: string; itens: RankingItem[] }) { return <section className="rounded-2xl bg-[#091a33] border border-[#13203f] p-6"><h2 className="text-white text-xl font-semibold">{titulo}</h2><div className="mt-4 space-y-3">{itens.map((item) => <div key={item.nome} className="flex justify-between gap-4 rounded-xl bg-[#071028] p-4 text-gray-200"><span>{item.nome}</span><strong className="text-cyan-400">{item.quantidade_registros}</strong></div>)}</div></section> }
+function Camada({ titulo, descricao, kpis, tom }: { titulo: string; descricao: string; kpis: [string, string][]; tom: "cyan" | "amber" | "emerald" }) {
+  const cor = tom === "amber" ? "text-amber-300" : tom === "emerald" ? "text-emerald-300" : "text-cyan-300"
+  return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><p className={`text-xs font-semibold uppercase tracking-[.16em] ${cor}`}>{titulo}</p><p className="mt-2 text-sm text-slate-400">{descricao}</p><div className="mt-5 grid grid-cols-3 gap-2">{kpis.map(([rotulo, valor]) => <div key={rotulo} className="min-w-0 rounded-xl bg-[#08162d] p-3"><p className="text-[11px] text-slate-500">{rotulo}</p><strong className="mt-1 block break-words text-lg text-white">{valor}</strong></div>)}</div></section>
+}
+
+function Ranking({ titulo, itens, vazio }: { titulo: string; itens: RankingItem[]; vazio: string }) {
+  return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.slice(0, 10).map((item) => <div key={item.nome} className="flex items-center justify-between gap-4 rounded-xl bg-[#08162d] px-3 py-2.5 text-sm"><span className="min-w-0 truncate text-slate-300">{item.nome}</span><strong className="shrink-0 text-cyan-300">{item.quantidade_registros.toLocaleString("pt-BR")}</strong></div>)}</div>}</section>
+}
+
+function numero(valor: number) { return Number(valor || 0).toLocaleString("pt-BR") }
+function moeda(valor: number) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) }
