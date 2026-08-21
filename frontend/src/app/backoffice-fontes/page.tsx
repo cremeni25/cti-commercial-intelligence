@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react"
-import { BrainCircuit, CheckCircle2, Database, Eye, FileSearch, FileUp, GitMerge, Loader2, Send, ShieldCheck, XCircle } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { BrainCircuit, CheckCircle2, Database, Eye, FileSearch, GitMerge, Loader2, Send, ShieldCheck, XCircle } from "lucide-react"
 
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -12,8 +12,6 @@ import ReconciliacaoFontePanel from "./ReconciliacaoFontePanel"
 type Fonte = {
   id: string
   nome_arquivo: string
-  mime_type?: string | null
-  extensao?: string | null
   tamanho_bytes: number
   sha256: string
   tipo_detectado: string
@@ -91,8 +89,6 @@ function candidatoOperacional(fonte: Fonte) {
 
 export default function BackofficeFontesPage() {
   const [dados, setDados] = useState<RespostaLista>({ fontes: [], total: 0, por_status: {} })
-  const [arquivo, setArquivo] = useState<File | null>(null)
-  const [enviando, setEnviando] = useState(false)
   const [acaoId, setAcaoId] = useState("")
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState("")
@@ -114,29 +110,8 @@ export default function BackofficeFontesPage() {
   const publicados = useMemo(() => dados.fontes.filter((item) => item.publicado_ia).length, [dados.fontes])
   const candidatosOperacionais = useMemo(() => dados.fontes.filter(candidatoOperacional).length, [dados.fontes])
 
-  async function enviar() {
-    if (!arquivo || enviando) return
-    setErro("")
-    setMensagem("")
-    setEnviando(true)
-    try {
-      const form = new FormData()
-      form.append("arquivo", arquivo)
-      const resposta = await requisitar("/upload", { method: "POST", body: form })
-      setMensagem(resposta.duplicado ? "Esta fonte já estava registrada. Nenhuma duplicação foi criada." : "Fonte recebida e original preservado. Agora pode seguir para interpretação controlada.")
-      setArquivo(null)
-      await carregar()
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao receber a fonte.")
-    } finally {
-      setEnviando(false)
-    }
-  }
-
   async function governanca(fonte: Fonte, status: "VALIDADO" | "HOMOLOGADO" | "REJEITADO") {
-    setErro("")
-    setMensagem("")
-    setAcaoId(fonte.id)
+    setErro(""); setMensagem(""); setAcaoId(fonte.id)
     try {
       await requisitar(`/${fonte.id}/governanca`, {
         method: "PATCH",
@@ -146,9 +121,8 @@ export default function BackofficeFontesPage() {
       setMensagem(`Governança atualizada para ${status}.`)
       await carregar()
       if (preview?.fonte.id === fonte.id) setPreview(await requisitar(`/${fonte.id}/preview`))
-    } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao atualizar governança.")
-    } finally { setAcaoId("") }
+    } catch (e) { setErro(e instanceof Error ? e.message : "Falha ao atualizar governança.") }
+    finally { setAcaoId("") }
   }
 
   async function interpretar(fonte: Fonte) {
@@ -199,11 +173,16 @@ export default function BackofficeFontesPage() {
           <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">ADMIN_MASTER · GOVERNANÇA</p>
-              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Back Office Universal de Fontes</h1>
-              <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Upload → interpretação → semântica → classificação → governança → reconciliação → promoção controlada ou publicação de conhecimento. ANFIR, CRM/Funil e conhecimento permanecem em naturezas distintas.</p>
+              <h1 className="mt-2 text-2xl font-bold sm:text-3xl">Governança de Fontes</h1>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">As novas fontes entram exclusivamente por Importar Dados. Aqui o ADMIN_MASTER interpreta, classifica, reconcilia, homologa e controla a promoção sem criar uma segunda porta de entrada.</p>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-emerald-900/70 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300"><ShieldCheck size={16} /> Escrita operacional automática bloqueada</div>
           </header>
+
+          <section className="mt-5 flex flex-col gap-3 rounded-2xl border border-cyan-900/60 bg-cyan-950/10 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div><p className="font-semibold text-cyan-200">Entrada de dados centralizada</p><p className="mt-1 text-sm text-slate-400">Para adicionar qualquer arquivo novo ao CTI, use Importar Dados.</p></div>
+            <button onClick={() => { window.location.href = "/upload" }} className="rounded-xl bg-cyan-500 px-4 py-2 font-semibold text-slate-950">Importar Dados</button>
+          </section>
 
           <section className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             {[["Fontes registradas", dados.total], ["Aguardando interpretação", dados.por_status.RECEBIDO || 0], ["Candidatas operacionais", candidatosOperacionais], ["Homologadas", dados.por_status.HOMOLOGADO || 0], ["Publicadas para IA", publicados]].map(([label, valor]) => (
@@ -211,15 +190,8 @@ export default function BackofficeFontesPage() {
             ))}
           </section>
 
-          <section className="mt-5 rounded-2xl border border-[#17345e] bg-[#071427] p-4 sm:p-5">
-            <div className="flex items-center gap-3"><FileUp className="text-cyan-300" /><div><h2 className="font-semibold">Receber nova fonte</h2><p className="text-xs text-slate-500">PDF, Word, PowerPoint, planilhas, texto, dados estruturados e imagens · até 50 MB</p></div></div>
-            <div className="mt-4 flex flex-col gap-3 lg:flex-row">
-              <label className="flex min-h-12 flex-1 cursor-pointer items-center rounded-xl border border-dashed border-slate-600 bg-slate-950/40 px-4 text-sm text-slate-300 hover:border-cyan-600"><input className="hidden" type="file" onChange={(e: ChangeEvent<HTMLInputElement>) => setArquivo(e.target.files?.[0] || null)} />{arquivo ? `${arquivo.name} · ${tamanho(arquivo.size)}` : "Selecionar arquivo"}</label>
-              <button onClick={() => void enviar()} disabled={!arquivo || enviando} className="flex min-h-12 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 font-semibold text-slate-950 disabled:opacity-40">{enviando ? <Loader2 className="animate-spin" size={18} /> : <FileUp size={18} />} Registrar fonte</button>
-            </div>
-            {mensagem && <p className="mt-3 rounded-xl border border-emerald-900 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-300">{mensagem}</p>}
-            {erro && <p className="mt-3 rounded-xl border border-red-900 bg-red-950/30 px-3 py-2 text-sm text-red-200">{erro}</p>}
-          </section>
+          {mensagem && <p className="mt-4 rounded-xl border border-emerald-900 bg-emerald-950/20 px-3 py-2 text-sm text-emerald-300">{mensagem}</p>}
+          {erro && <p className="mt-4 rounded-xl border border-red-900 bg-red-950/30 px-3 py-2 text-sm text-red-200">{erro}</p>}
 
           {fonteReconciliacao && <ReconciliacaoFontePanel fonteId={fonteReconciliacao.id} nomeArquivo={fonteReconciliacao.nome_arquivo} onClose={() => setFonteReconciliacao(null)} onAtualizar={carregar} />}
 
