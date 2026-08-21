@@ -52,9 +52,69 @@ export type ClienteDetalheComercial = {
 export type RankingItem = { nome: string; quantidade_registros: number }
 export type EquipamentoResumo = { slug: string; nome: string; total_registros: number; valor_total: number; estados: RankingItem[]; implementadoras: RankingItem[]; linhas: RankingItem[]; empresas: RankingItem[]; metadata?: Record<string, string | null> }
 
+export type CamadaRealizado = {
+  origem: string
+  semantica: "REALIZADO"
+  total_registros: number
+  valor_total: number
+  estados: RankingItem[]
+  municipios: RankingItem[]
+  ddds: RankingItem[]
+  implementadoras: RankingItem[]
+  empresas: RankingItem[]
+  equipamentos: RankingItem[]
+  familias?: RankingItem[]
+}
+
+export type CamadaHistorico = {
+  origem: string
+  semantica: "CONSULTA_HISTORICA"
+  total_registros: number
+  total_unidades: number
+  valor_nominal: number
+  equipamentos: RankingItem[]
+  implementadoras: RankingItem[]
+  empresas: RankingItem[]
+  status: RankingItem[]
+  familias?: RankingItem[]
+  nota_territorial?: string
+}
+
+export type CamadaEmCurso = {
+  origem: string
+  semantica: "EM_CURSO"
+  total_registros: number
+  valor_pipeline: number
+  estados: RankingItem[]
+  municipios: RankingItem[]
+  ddds: RankingItem[]
+  equipamentos: RankingItem[]
+  status: RankingItem[]
+  familias?: RankingItem[]
+}
+
+export type EquipamentoEstrategico = {
+  slug: string
+  nome: string
+  regra: "CAMADAS_SEPARADAS_SEM_FUSAO"
+  metadata?: Record<string, string | null>
+  realizado: CamadaRealizado
+  historico_comercial: CamadaHistorico
+  em_curso: CamadaEmCurso
+}
+
+export type MapaEstrategicoResumo = {
+  regra: "CORRELACAO_SEM_FUSAO"
+  metadata?: Record<string, string | null>
+  realizado: CamadaRealizado
+  historico_comercial: CamadaHistorico
+  em_curso: CamadaEmCurso
+}
+
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
 export function getEmpresas(query: string) { return apiGet(`/modulos/empresas?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClientes(query: string) { return apiGet(`/modulos/clientes?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClienteDetalhe(nome: string, query: string) { return apiGet(`/modulos/clientes/${encodeURIComponent(nome)}?${normalizarQuery(query)}`) as Promise<ClienteDetalheComercial> }
 export function getTransportadoras(query: string) { return getEmpresas(query) }
-export function getEquipamento(slug: string, query: string) { return apiGet(`/modulos/equipamentos/${slug}?${normalizarQuery(query)}`) as Promise<EquipamentoResumo> }
+export function getEquipamento(slug: string, query: string) { return apiGet(`/estrategia/equipamentos/${slug}?${normalizarQuery(query)}`) as Promise<EquipamentoEstrategico> }
+export function getMapaEstrategico(query: string) { return apiGet(`/estrategia/mapa?${normalizarQuery(query)}`) as Promise<MapaEstrategicoResumo> }
