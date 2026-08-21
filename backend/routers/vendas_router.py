@@ -133,7 +133,14 @@ def _enriquecer_venda(venda: dict) -> dict:
 @router.get("/vendas")
 def listar_vendas():
     try:
-        response = supabase.table("vendas").select("*").order("data_venda", desc=True).execute()
+        response = (
+            supabase.table("vendas")
+            .select("*")
+            .or_("registro_teste.is.null,registro_teste.eq.false")
+            .is_("arquivado_em", "null")
+            .order("data_venda", desc=True)
+            .execute()
+        )
         return [_enriquecer_venda(venda) for venda in (response.data or [])]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
