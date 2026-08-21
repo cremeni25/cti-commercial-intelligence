@@ -114,13 +114,16 @@ export default function DashboardHub() {
   useEffect(() => {
     let ativo = true
     let timer: number | undefined
-    setLoadingOperacional(true)
     const executar = async () => {
       const ok = await carregarOperacional()
       if (!ativo) return
       timer = window.setTimeout(() => void executar(), ok ? REFRESH_MS : RETRY_MS)
     }
-    void executar()
+    queueMicrotask(() => {
+      if (!ativo) return
+      setLoadingOperacional(true)
+      void executar()
+    })
     const aoReconectar = () => void carregarOperacional()
     window.addEventListener("online", aoReconectar)
     return () => {
@@ -133,16 +136,19 @@ export default function DashboardHub() {
   useEffect(() => {
     let ativo = true
     let timer: number | undefined
-    setHistorico(null)
-    setLinhasProduto(null)
-    setMetadataLinhas({})
-    setLoadingHistorico(true)
     const executar = async () => {
       const ok = await carregarHistorico()
       if (!ativo) return
       timer = window.setTimeout(() => void executar(), ok ? REFRESH_MS : RETRY_MS)
     }
-    void executar()
+    queueMicrotask(() => {
+      if (!ativo) return
+      setHistorico(null)
+      setLinhasProduto(null)
+      setMetadataLinhas({})
+      setLoadingHistorico(true)
+      void executar()
+    })
     const aoReconectar = () => void carregarHistorico()
     window.addEventListener("online", aoReconectar)
     return () => {
