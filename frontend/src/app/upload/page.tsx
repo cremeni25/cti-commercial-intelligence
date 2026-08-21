@@ -196,7 +196,7 @@ export default function UploadPage() {
           </div>
 
           <div className="mt-6 grid grid-cols-2 xl:grid-cols-4 gap-6">
-            <Info label="Arquivo" value={resultadoUpload?.arquivo ?? nomeArquivo || "-"} />
+            <Info label="Arquivo" value={resultadoUpload?.arquivo || nomeArquivo || "-"} />
             <Info label="Status" value={resultadoUpload?.status ?? statusUpload} />
             <Info label="Contexto" value={resultadoUpload?.contexto_operacional ?? contextoAtual.label} />
             <Info label="Inseridos totais" value={resultadoUpload?.persistencia?.inseridos ?? 0} />
