@@ -56,8 +56,9 @@ export default function UploadPage() {
     }
   }
 
-  async function enviarArquivo() {
-    if (!file) {
+  async function enviarArquivo(arquivoSelecionado?: File) {
+    const arquivoAtual = arquivoSelecionado ?? file
+    if (!arquivoAtual) {
       setStatusUpload("Selecione um arquivo para iniciar a importação.")
       return
     }
@@ -68,7 +69,7 @@ export default function UploadPage() {
       setResultadoGovernanca(null)
       setStatusUpload("Identificando a natureza do arquivo e o destino correto...")
 
-      const resposta = await importarDados(file, contexto)
+      const resposta = await importarDados(arquivoAtual, contexto)
 
       if (resposta.destino === "ANFIR") {
         const resultado = resposta.resultado as ResultadoAnfir
@@ -135,7 +136,12 @@ export default function UploadPage() {
               setNomeArquivo(arquivo?.name ?? "")
               setResultadoAnfir(null)
               setResultadoGovernanca(null)
-              setStatusUpload(arquivo ? "Arquivo selecionado. Pronto para importar." : "Selecione um arquivo para importar.")
+              if (arquivo) {
+                setStatusUpload("Arquivo selecionado. Iniciando importação...")
+                void enviarArquivo(arquivo)
+              } else {
+                setStatusUpload("Selecione um arquivo para importar.")
+              }
             }}
             className="hidden"
           />
@@ -151,7 +157,7 @@ export default function UploadPage() {
             disabled={loading}
             className="mt-5 w-full rounded-xl bg-cyan-500 py-3 font-bold text-black disabled:opacity-50"
           >
-            {!file ? "Selecionar arquivo" : loading ? "Importando..." : "Importar dados"}
+            {!file ? "Selecionar arquivo" : loading ? "Importando..." : "Importar novamente"}
           </button>
 
           {nomeArquivo && (
