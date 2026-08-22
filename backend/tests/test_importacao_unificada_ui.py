@@ -21,3 +21,12 @@ def test_importacao_unificada_e_unico_ponto_visivel():
     assert "/upload/anfir/seguro" in service
     assert "Receber nova fonte" not in backoffice
     assert "As novas fontes entram exclusivamente por Importar Dados" in backoffice
+
+
+def test_selecao_de_arquivo_inicia_importacao_sem_segundo_toque():
+    page = (_root() / "frontend/src/app/upload/page.tsx").read_text(encoding="utf-8")
+
+    assert "void enviarArquivo(arquivo)" in page
+    assert "Arquivo selecionado. Iniciando importação..." in page
+    assert "Importar novamente" in page
+    assert "Arquivo selecionado. Pronto para importar." not in page
