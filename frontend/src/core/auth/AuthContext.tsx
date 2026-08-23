@@ -13,7 +13,7 @@ interface AuthContextType {
 }
 
 const AuthContext = createContext<AuthContextType>({ usuario: null, loading: true, sair: async () => undefined })
-const ROTAS_PUBLICAS = new Set(["/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
+const ROTAS_PUBLICAS = new Set(["/", "/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
 
 type UsuarioComCanais = UsuarioCTI & { acesso_portal?: boolean; acesso_crm?: boolean; status_acesso?: string }
 
