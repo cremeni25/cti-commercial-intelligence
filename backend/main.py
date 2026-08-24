@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import os
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -24,11 +25,19 @@ from routers.upload_router import router as upload_router
 from routers.vendas_router import router as vendas_router
 
 
+def _cors_origins() -> list[str]:
+    configurado = os.getenv("CTI_CORS_ALLOWED_ORIGINS", "").strip()
+    if not configurado:
+        return ["*"]
+    origens = [origem.strip() for origem in configurado.split(",") if origem.strip()]
+    return origens or ["*"]
+
+
 app = FastAPI(title="CTI Comercial Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
