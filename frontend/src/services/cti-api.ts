@@ -95,4 +95,6 @@ export async function importarDados(file: File, contexto: OperationalContextValu
 }
 
 export async function processarPipeline() { return request("/pipeline/status") }
-export async function getDebugAmostra() { return request("/debug/amostra") }
+
+// Mantém o contrato interno da tela de upload sem expor dados operacionais por rota pública.
+export async function getDebugAmostra(): Promise<Record<string, unknown>[]> { return [] }

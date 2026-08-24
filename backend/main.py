@@ -127,19 +127,6 @@ def insights():
     }
 
 
-@app.get("/debug/amostra")
-def debug_amostra():
-    dados = (
-        supabase.table("cti_anfir")
-        .select("cliente,implementador,linha,modelo,estado,valor,score_operacional")
-        .eq("ativo", True)
-        .order("created_at", desc=True)
-        .limit(20)
-        .execute()
-    )
-    return dados.data or []
-
-
 @app.get("/pipeline/status")
 def pipeline_status():
     resposta = (

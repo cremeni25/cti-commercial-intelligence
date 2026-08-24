@@ -15,7 +15,7 @@ def test_main_nao_expoe_escritas_legadas():
 def test_rotas_operacionais_e_leituras_mantidas():
     paths = _paths(app)
     assert "/dashboard/insights" in paths
-    assert "/debug/amostra" in paths
+    assert "/debug/amostra" not in paths
     assert "/pipeline/status" in paths
     assert "/status" in paths
     assert "/upload/anfir/seguro" in _paths(upload_router)
