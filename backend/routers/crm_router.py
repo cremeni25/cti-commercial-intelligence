@@ -1,8 +1,10 @@
 from collections import defaultdict
 from datetime import datetime, timezone
 import os
+import time
 from typing import Any, Optional
 
+import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from supabase import create_client
@@ -213,6 +215,26 @@ def _now() -> str:
 def _date_hour() -> tuple[str, str]:
     agora = datetime.now(timezone.utc)
     return agora.date().isoformat(), agora.time().replace(microsecond=0).isoformat()
+
+
+def _leitura_resiliente(query_factory, tentativas: int = 3):
+    excecoes_transitorias = (
+        httpx.ReadError,
+        httpx.ConnectError,
+        httpx.RemoteProtocolError,
+        httpx.TimeoutException,
+    )
+    for tentativa in range(tentativas):
+        try:
+            return query_factory().execute().data
+        except excecoes_transitorias as erro:
+            if tentativa + 1 >= tentativas:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Fonte de dados temporariamente indisponível. Tente novamente em instantes.",
+                ) from erro
+            time.sleep(0.12 * (tentativa + 1))
+    return []
 
 
 def _first(table: str, record_id: str, detail: str) -> dict[str, Any]:
@@ -509,7 +531,9 @@ def atualizar_pedido(pedido_id: str, pedido: PedidoUpdate):
 
 @router.get("/atividades")
 def listar_atividades():
-    return supabase.table("cti_atividades").select("*").order("created_at", desc=True).execute().data
+    return _leitura_resiliente(
+        lambda: supabase.table("cti_atividades").select("*").order("created_at", desc=True)
+    )
 
 
 @router.get("/atividades/{atividade_id}")
