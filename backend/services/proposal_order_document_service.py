@@ -6,7 +6,11 @@ import hmac
 from dataclasses import dataclass
 from typing import Any, Mapping
 
-from services.proposal_document_repository import FINAL_BUCKET
+from services.proposal_document_repository import (
+    FINAL_BUCKET,
+    ProposalDocumentRepositoryError,
+    finalize_official_proposal,
+)
 
 
 class ProposalOrderDocumentError(RuntimeError):
@@ -44,10 +48,22 @@ class OfficialDocumentAttachment:
         }
 
 
-def _metadata(proposal: Mapping[str, Any]) -> Mapping[str, Any]:
-    value = proposal.get("arquivo_documento") or {}
-    if not isinstance(value, Mapping):
-        raise ProposalOrderDocumentError("A proposta não possui metadados válidos do documento oficial.")
+def _metadata_value(proposal: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    direct = proposal.get("arquivo_documento")
+    if isinstance(direct, Mapping) and direct:
+        return direct
+
+    snapshot = proposal.get("snapshot_dados") or {}
+    if isinstance(snapshot, Mapping):
+        nested = snapshot.get("arquivo_documento")
+        if isinstance(nested, Mapping) and nested:
+            return nested
+    return None
+
+
+def _validate_metadata(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
+    if value is None:
+        raise ProposalOrderDocumentError("A proposta ainda não possui documento oficial finalizado.")
     required = ("path", "filename", "sha256")
     missing = [field for field in required if not str(value.get(field) or "").strip()]
     if missing:
@@ -59,11 +75,62 @@ def _metadata(proposal: Mapping[str, Any]) -> Mapping[str, Any]:
     return value
 
 
+def _first(supabase: Any, table: str, record_id: str) -> dict[str, Any] | None:
+    if not record_id:
+        return None
+    try:
+        rows = supabase.table(table).select("*").eq("id", record_id).limit(1).execute().data or []
+    except Exception:
+        return None
+    return rows[0] if rows else None
+
+
+def _finalize_if_missing(supabase: Any, proposal: Mapping[str, Any]) -> Mapping[str, Any]:
+    existing = _metadata_value(proposal)
+    if existing is not None:
+        return existing
+
+    item_id = str(proposal.get("item_oportunidade_id") or "").strip()
+    opportunity_id = str(proposal.get("oportunidade_id") or "").strip()
+    client_id = str(proposal.get("cliente_id") or "").strip()
+    if not item_id or not opportunity_id or not client_id:
+        raise ProposalOrderDocumentError(
+            "A proposta não possui vínculos suficientes para finalizar o documento oficial."
+        )
+
+    item = _first(supabase, "cti_oportunidade_itens", item_id)
+    opportunity = _first(supabase, "cti_oportunidades", opportunity_id)
+    client = _first(supabase, "cti_clientes", client_id) or _first(supabase, "clientes", client_id)
+    if not item or not opportunity or not client:
+        raise ProposalOrderDocumentError(
+            "Não foi possível recuperar os dados vinculados para finalizar o documento oficial."
+        )
+
+    snapshot = proposal.get("snapshot_dados") or {}
+    application = snapshot.get("aplicacao") if isinstance(snapshot, Mapping) else {}
+    try:
+        finalized = finalize_official_proposal(
+            supabase,
+            proposta=proposal,
+            item=item,
+            oportunidade=opportunity,
+            cliente=client,
+            application=application if isinstance(application, Mapping) else {},
+        )
+    except ProposalDocumentRepositoryError as exc:
+        raise ProposalOrderDocumentError(str(exc)) from exc
+
+    document = finalized.get("document") if isinstance(finalized, Mapping) else None
+    if not isinstance(document, Mapping):
+        raise ProposalOrderDocumentError("A finalização do documento oficial não retornou metadados válidos.")
+    return document
+
+
 def load_official_document_attachment(
     supabase: Any,
     proposal: Mapping[str, Any],
 ) -> OfficialDocumentAttachment:
-    metadata = _metadata(proposal)
+    metadata = _validate_metadata(_finalize_if_missing(supabase, proposal))
     bucket = str(metadata.get("bucket") or FINAL_BUCKET)
     path = str(metadata["path"])
     try:
