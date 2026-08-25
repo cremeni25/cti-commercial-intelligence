@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -37,7 +38,7 @@ export default function Page() {
           <header>
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">CTI operacional</p>
             <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Mapa Estratégico</h1>
-            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Leitura territorial e comercial do mercado refrigerado, cruzando realizado ANFIR, histórico comercial e negociações em curso sem fundir as fontes.</p>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Leitura territorial e comercial do mercado refrigerado. Clique em qualquer total individualizável para abrir os registros que o compõem.</p>
             <p className="mt-2 text-sm text-cyan-300">Contexto: {contextoAtual.label} • Período: {periodoExibido}</p>
           </header>
 
@@ -46,41 +47,36 @@ export default function Page() {
 
           {!loading && dados && <>
             <section className="grid gap-4 md:grid-cols-3">
-              <Kpi titulo="ANFIR · realizado" valor={numero(dados.realizado.total_registros)} apoio={moeda(dados.realizado.valor_total)} tom="cyan" />
-              <Kpi titulo="Histórico comercial" valor={numero(dados.historico_comercial.total_registros)} apoio={`${numero(dados.historico_comercial.total_unidades)} unidades nominais`} tom="amber" />
-              <Kpi titulo="CRM · em curso" valor={numero(dados.em_curso.total_registros)} apoio={moeda(dados.em_curso.valor_pipeline)} tom="emerald" />
+              <Kpi titulo="ANFIR · realizado" valor={numero(dados.realizado.total_registros)} apoio={moeda(dados.realizado.valor_total)} tom="cyan" href={hrefDrill("anfir", undefined, undefined, "ANFIR · realizado", queryString)} />
+              <Kpi titulo="Histórico comercial" valor={numero(dados.historico_comercial.total_registros)} apoio={`${numero(dados.historico_comercial.total_unidades)} unidades nominais`} tom="amber" href={hrefDrill("historico", undefined, undefined, "Histórico comercial", queryString)} />
+              <Kpi titulo="CRM · em curso" valor={numero(dados.em_curso.total_registros)} apoio={moeda(dados.em_curso.valor_pipeline)} tom="emerald" href={hrefDrill("crm", undefined, undefined, "CRM · negociações em curso", queryString)} />
             </section>
 
             <section className="grid gap-5 xl:grid-cols-3">
-              <Ranking titulo="Cobertura por estado · ANFIR" itens={dados.realizado.estados} vazio="Nenhum estado classificado no contexto selecionado." />
-              <Ranking titulo="Cobertura por município · ANFIR" itens={dados.realizado.municipios} vazio="Nenhum município classificado no contexto selecionado." />
-              <Ranking titulo="Cobertura por DDD · ANFIR" itens={dados.realizado.ddds} vazio="Nenhum DDD classificado no contexto selecionado." />
+              <Ranking titulo="Cobertura por estado · ANFIR" itens={dados.realizado.estados} vazio="Nenhum estado classificado no contexto selecionado." camada="anfir" campo="estado" queryString={queryString} />
+              <Ranking titulo="Cobertura por município · ANFIR" itens={dados.realizado.municipios} vazio="Nenhum município classificado no contexto selecionado." camada="anfir" campo="municipio" queryString={queryString} />
+              <Ranking titulo="Cobertura por DDD · ANFIR" itens={dados.realizado.ddds} vazio="Nenhum DDD classificado no contexto selecionado." camada="anfir" campo="ddd" queryString={queryString} />
             </section>
 
             <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-                <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Cruzamento por família</p><h2 className="mt-1 text-lg font-semibold">TR · DT · DD nas três camadas</h2></div>
-                <p className="text-xs text-slate-500">Comparação visual; totais não são somados.</p>
-              </div>
+              <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Cruzamento por família</p><h2 className="mt-1 text-lg font-semibold">TR · DT · DD nas três camadas</h2></div><p className="text-xs text-slate-500">Comparação visual; totais não são somados.</p></div>
               <div className="grid gap-3 md:grid-cols-3">
-                {familias(dados).map((item) => <div key={item.nome} className="rounded-xl border border-[#13203f] bg-[#08162d] p-4"><h3 className="font-semibold">{item.nome}</h3><div className="mt-3 space-y-2 text-sm"><Linha rotulo="ANFIR realizado" valor={item.realizado} cor="text-cyan-300"/><Linha rotulo="Histórico comercial" valor={item.historico} cor="text-amber-300"/><Linha rotulo="CRM em curso" valor={item.emCurso} cor="text-emerald-300"/></div></div>)}
+                {familias(dados).map((item) => <div key={item.nome} className="rounded-xl border border-[#13203f] bg-[#08162d] p-4"><h3 className="font-semibold">{item.nome}</h3><div className="mt-3 space-y-2 text-sm"><Linha rotulo="ANFIR realizado" valor={item.realizado} cor="text-cyan-300" href={hrefDrill("anfir", "familia", item.slug, `${item.nome} · ANFIR realizado`, queryString)} /><Linha rotulo="Histórico comercial" valor={item.historico} cor="text-amber-300" href={hrefDrill("historico", "familia", item.slug, `${item.nome} · Histórico comercial`, queryString)} /><Linha rotulo="CRM em curso" valor={item.emCurso} cor="text-emerald-300" href={hrefDrill("crm", "familia", item.slug, `${item.nome} · CRM em curso`, queryString)} /></div></div>)}
               </div>
             </section>
 
             <section className="grid gap-5 xl:grid-cols-3">
-              <Ranking titulo="Empresas · realizado ANFIR" itens={dados.realizado.empresas} vazio="Nenhuma empresa classificada no realizado." />
-              <Ranking titulo="Equipamentos · histórico comercial" itens={dados.historico_comercial.equipamentos} vazio="Nenhum equipamento no histórico para este período." />
-              <Ranking titulo="Equipamentos · CRM em curso" itens={dados.em_curso.equipamentos} vazio="Nenhuma negociação ativa classificada por equipamento." />
+              <Ranking titulo="Empresas · realizado ANFIR" itens={dados.realizado.empresas} vazio="Nenhuma empresa classificada no realizado." camada="anfir" campo="empresa" queryString={queryString} />
+              <Ranking titulo="Equipamentos · histórico comercial" itens={dados.historico_comercial.equipamentos} vazio="Nenhum equipamento no histórico para este período." camada="historico" campo="equipamento" queryString={queryString} />
+              <Ranking titulo="Equipamentos · CRM em curso" itens={dados.em_curso.equipamentos} vazio="Nenhuma negociação ativa classificada por equipamento." camada="crm" campo="equipamento" queryString={queryString} />
             </section>
 
             <section className="grid gap-5 xl:grid-cols-2">
-              <Ranking titulo="Implementadoras · realizado ANFIR" itens={dados.realizado.implementadoras} vazio="Nenhuma implementadora classificada." />
-              <Ranking titulo="Implementadoras · histórico comercial" itens={dados.historico_comercial.implementadoras} vazio="Nenhuma implementadora identificada no histórico." />
+              <Ranking titulo="Implementadoras · realizado ANFIR" itens={dados.realizado.implementadoras} vazio="Nenhuma implementadora classificada." camada="anfir" campo="implementadora" queryString={queryString} />
+              <Ranking titulo="Implementadoras · histórico comercial" itens={dados.historico_comercial.implementadoras} vazio="Nenhuma implementadora identificada no histórico." camada="historico" campo="implementadora" queryString={queryString} />
             </section>
 
-            <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80">
-              O território é apresentado apenas quando a própria fonte possui geografia. O Histórico Comercial preserva cliente, equipamento e implementadora, mas não recebe estado/DDD artificialmente. A correlação é estratégica, não uma fusão de registros.
-            </div>
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80">O detalhamento preserva a origem de cada camada. ANFIR, Histórico Comercial e CRM continuam separados; o drill-down apenas individualiza os registros por trás do total selecionado.</div>
           </>}
         </div>
       </section>
@@ -88,26 +84,31 @@ export default function Page() {
   )
 }
 
-function Kpi({ titulo, valor, apoio, tom }: { titulo: string; valor: string; apoio: string; tom: "cyan" | "amber" | "emerald" }) {
+function hrefDrill(camada: "anfir" | "historico" | "crm", campo: string | undefined, valor: string | undefined, titulo: string, base: string) {
+  const query = new URLSearchParams(base || "")
+  query.set("camada", camada)
+  query.set("titulo", titulo)
+  query.set("subtitulo", "Registros individualizados que compõem o indicador selecionado")
+  if (campo) query.set("campo", campo)
+  if (valor) query.set("valor", valor)
+  return `/detalhamento?${query.toString()}`
+}
+
+function Kpi({ titulo, valor, apoio, tom, href }: { titulo: string; valor: string; apoio: string; tom: "cyan" | "amber" | "emerald"; href: string }) {
   const cor = tom === "amber" ? "text-amber-300" : tom === "emerald" ? "text-emerald-300" : "text-cyan-300"
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><p className={`text-xs font-semibold uppercase tracking-[.14em] ${cor}`}>{titulo}</p><strong className="mt-2 block text-3xl">{valor}</strong><p className="mt-1 text-sm text-slate-400">{apoio}</p></div>
+  return <Link href={href} className="rounded-2xl border border-[#17304d] bg-[#071226] p-5 transition hover:border-cyan-500/70 hover:bg-[#0a1a31]"><p className={`text-xs font-semibold uppercase tracking-[.14em] ${cor}`}>{titulo}</p><strong className="mt-2 block text-3xl">{valor}</strong><p className="mt-1 text-sm text-slate-400">{apoio}</p><p className="mt-3 text-[11px] text-slate-500">Clique para detalhar</p></Link>
 }
 
-function Ranking({ titulo, itens, vazio }: { titulo: string; itens: RankingItem[]; vazio: string }) {
-  return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.slice(0, 12).map((item) => <div key={item.nome} className="flex items-center justify-between gap-4 rounded-xl bg-[#08162d] px-3 py-2.5 text-sm"><span className="min-w-0 truncate text-slate-300">{item.nome}</span><strong className="shrink-0 text-cyan-300">{numero(item.quantidade_registros)}</strong></div>)}</div>}</section>
+function Ranking({ titulo, itens, vazio, camada, campo, queryString }: { titulo: string; itens: RankingItem[]; vazio: string; camada: "anfir" | "historico" | "crm"; campo: string; queryString: string }) {
+  return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.slice(0, 12).map((item) => <Link href={hrefDrill(camada, campo, item.nome, `${titulo} · ${item.nome}`, queryString)} key={item.nome} className="flex items-center justify-between gap-4 rounded-xl bg-[#08162d] px-3 py-2.5 text-sm transition hover:bg-[#0b1d38] hover:ring-1 hover:ring-cyan-500/50"><span className="min-w-0 truncate text-slate-300">{item.nome}</span><strong className="shrink-0 text-cyan-300">{numero(item.quantidade_registros)}</strong></Link>)}</div>}</section>
 }
 
-function Linha({ rotulo, valor, cor }: { rotulo: string; valor: number; cor: string }) { return <div className="flex items-center justify-between gap-3"><span className="text-slate-400">{rotulo}</span><strong className={cor}>{numero(valor)}</strong></div> }
+function Linha({ rotulo, valor, cor, href }: { rotulo: string; valor: number; cor: string; href: string }) { return <Link href={href} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 transition hover:bg-[#0b1d38]"><span className="text-slate-400">{rotulo}</span><strong className={cor}>{numero(valor)}</strong></Link> }
 
 function familias(dados: MapaEstrategicoResumo) {
-  const nomes = ["TR • Trailer", "DT • Diesel Truck", "DD • Direct Drive"]
-  const procurar = (itens: RankingItem[] | undefined, nome: string) => itens?.find((item) => item.nome === nome)?.quantidade_registros ?? 0
-  return nomes.map((nome) => ({
-    nome,
-    realizado: procurar(dados.realizado.familias, nome),
-    historico: procurar(dados.historico_comercial.familias, nome),
-    emCurso: procurar(dados.em_curso.familias, nome),
-  }))
+  const itens = [{ nome: "TR • Trailer", slug: "trailer" }, { nome: "DT • Diesel Truck", slug: "diesel-truck" }, { nome: "DD • Direct Drive", slug: "direct-drive" }]
+  const procurar = (lista: RankingItem[] | undefined, nome: string) => lista?.find((item) => item.nome === nome)?.quantidade_registros ?? 0
+  return itens.map((item) => ({ ...item, realizado: procurar(dados.realizado.familias, item.nome), historico: procurar(dados.historico_comercial.familias, item.nome), emCurso: procurar(dados.em_curso.familias, item.nome) }))
 }
 
 function numero(valor: number) { return Number(valor || 0).toLocaleString("pt-BR") }
