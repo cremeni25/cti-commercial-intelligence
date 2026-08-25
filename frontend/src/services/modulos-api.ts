@@ -111,6 +111,19 @@ export type MapaEstrategicoResumo = {
   em_curso: CamadaEmCurso
 }
 
+export type DrilldownResultado = {
+  camada: "anfir" | "historico" | "crm"
+  campo?: string | null
+  valor?: string | null
+  familia?: string | null
+  total_registros: number
+  pagina: number
+  limite: number
+  total_paginas: number
+  metadata?: Record<string, string | null>
+  registros: Record<string, unknown>[]
+}
+
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
 export function getEmpresas(query: string) { return apiGet(`/modulos/empresas?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClientes(query: string) { return apiGet(`/modulos/clientes?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
@@ -118,3 +131,4 @@ export function getClienteDetalhe(nome: string, query: string) { return apiGet(`
 export function getTransportadoras(query: string) { return getEmpresas(query) }
 export function getEquipamento(slug: string, query: string) { return apiGet(`/estrategia/equipamentos/${slug}?${normalizarQuery(query)}`) as Promise<EquipamentoEstrategico> }
 export function getMapaEstrategico(query: string) { return apiGet(`/estrategia/mapa?${normalizarQuery(query)}`) as Promise<MapaEstrategicoResumo> }
+export function getDrilldown(query: string) { return apiGet(`/estrategia/detalhamento?${query}`) as Promise<DrilldownResultado> }
