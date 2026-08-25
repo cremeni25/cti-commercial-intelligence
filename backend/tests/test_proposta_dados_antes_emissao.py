@@ -1,5 +1,7 @@
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
+import routers.propostas_primeira_pagina_router as primeira_pagina_router
 from routers.propostas_primeira_pagina_router import (
     campos_pendentes_documento,
     validar_documento_para_emissao,
@@ -74,12 +76,13 @@ def test_regras_condicionais_de_entrada_e_autorizada():
     assert "nome e endereço da autorizada Carrier" in pendentes
 
 
-def test_router_documental_intercepta_emitir_antes_do_legado():
-    rotas = [
-        rota
-        for rota in cti_router.routes
-        if getattr(rota, "path", "") == "/crm-documentos/propostas/{proposta_id}/emitir"
-        and "POST" in getattr(rota, "methods", set())
-    ]
-    assert len(rotas) >= 2
-    assert rotas[0].endpoint.__name__ == "emitir_documento_validado"
+def test_rota_emitir_bloqueia_documento_incompleto(monkeypatch):
+    monkeypatch.setattr(primeira_pagina_router, "_contexto", lambda _proposta_id: (_proposta(), _item()))
+    app = FastAPI()
+    app.include_router(cti_router)
+    cliente = TestClient(app, raise_server_exceptions=False)
+
+    resposta = cliente.post("/crm-documentos/propostas/proposta-teste/emitir")
+
+    assert resposta.status_code == 409
+    assert "Complete os dados do documento oficial" in resposta.json()["detail"]
