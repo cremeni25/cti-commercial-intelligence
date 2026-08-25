@@ -59,7 +59,7 @@ BASE_MODEL = {
 @patch("services.proposal_document_repository.build_proposal_document_payload", return_value={})
 @patch("services.proposal_document_repository.verify_media_preserved", return_value=True)
 @patch("services.proposal_document_repository.render_official_docx")
-def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render, _verify, _payload):
+def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render, _verify, payload):
     render.return_value = GeneratedOfficialDocument(
         filename="PROP-1-SUPRA_750-v1.docx",
         content=b"final",
@@ -83,6 +83,9 @@ def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render
     assert result["document"]["immutable"] is True
     assert result["document"]["preserves_images"] is True
     assert result["document"]["preserves_carrier_branding"] is True
+    assert payload.call_args.kwargs["validate_required"] is False
+    assert render.call_args.kwargs["validate_required"] is False
+    assert render.call_args.kwargs["require_all_requested_anchors"] is False
 
 
 def test_non_homologated_model_is_rejected():
