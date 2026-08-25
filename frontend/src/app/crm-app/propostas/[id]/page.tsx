@@ -81,13 +81,50 @@ export default function PropostaCrmAppPage() {
     const nome = window.prompt("Nome completo do cliente/signatário:")?.trim()
     if (!nome) return
     const email = window.prompt("E-mail do cliente, quando disponível:")?.trim() || null
-    const payload = await executar("/aceites", { metodo, nome_signatario: nome, email_signatario: email })
-    const token = payload && typeof payload === "object" ? String((payload as Registro).link_token || "") : ""
-    if (token) {
-      const link = `${window.location.origin}/aceite/${token}`
-      await navigator.clipboard?.writeText(link)
-      setMensagem(`Link de aceite copiado: ${link}`)
+
+    if (metodo === "PRESENCIAL_TELA") {
+      const confirmado = window.confirm(`Confirmar que ${nome} aceitou presencialmente os termos desta proposta?`)
+      if (!confirmado) return
     }
+
+    setProcessando(true); setErro(""); setMensagem("")
+    try {
+      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}/aceites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ metodo, nome_signatario: nome, email_signatario: email }),
+      })
+      const payload = await resposta.json().catch(() => ({})) as Registro
+      if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível registrar o aceite (${resposta.status}).`))
+
+      const aceiteCriado = payload.aceite && typeof payload.aceite === "object" ? payload.aceite as Registro : null
+      const aceiteId = texto(aceiteCriado?.id, "")
+
+      if (metodo === "PRESENCIAL_TELA") {
+        if (!aceiteId) throw new Error("A solicitação de aceite foi criada sem identificação válida.")
+        const confirmacao = await fetch(`/api/crm-proxy/crm-documentos/aceites/${encodeURIComponent(aceiteId)}/confirmar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            aceite_termos: true,
+            user_agent: navigator.userAgent,
+            evidencias: { origem: "CRM_APP", modalidade: "PRESENCIAL_TELA" },
+          }),
+        })
+        const confirmacaoPayload = await confirmacao.json().catch(() => ({})) as Registro
+        if (!confirmacao.ok) throw new Error(String(confirmacaoPayload.detail || `Não foi possível confirmar o aceite (${confirmacao.status}).`))
+        setMensagem("Aceite presencial confirmado. A proposta está liberada para conversão em pedido.")
+      } else {
+        const token = String(payload.link_token || "")
+        if (!token) throw new Error("O link de aceite foi criado sem token válido.")
+        const link = `${window.location.origin}/aceite/${token}`
+        await navigator.clipboard?.writeText(link)
+        setMensagem(`Link de aceite copiado: ${link}`)
+      }
+
+      await carregar()
+    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao registrar o aceite.") }
+    finally { setProcessando(false) }
   }
 
   async function converterPedido() {
