@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ChevronLeft, ChevronRight, Search } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
@@ -45,6 +45,28 @@ const ROTULOS: Record<string, string> = {
 }
 
 export default function DetalhamentoPage() {
+  return (
+    <Suspense fallback={<TelaCarregando />}>
+      <DetalhamentoContent />
+    </Suspense>
+  )
+}
+
+function TelaCarregando() {
+  return (
+    <main className="flex min-h-screen bg-[#020817] text-white">
+      <Sidebar />
+      <section className="min-w-0 flex-1 overflow-x-hidden">
+        <Topbar />
+        <div className="p-4 sm:p-6 lg:p-8">
+          <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando detalhamento do indicador...</div>
+        </div>
+      </section>
+    </main>
+  )
+}
+
+function DetalhamentoContent() {
   const router = useRouter()
   const params = useSearchParams()
   const [dados, setDados] = useState<DrilldownResultado | null>(null)
