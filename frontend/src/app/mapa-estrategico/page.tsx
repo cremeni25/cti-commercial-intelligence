@@ -76,7 +76,7 @@ export default function Page() {
               <Ranking titulo="Implementadoras · histórico comercial" itens={dados.historico_comercial.implementadoras} vazio="Nenhuma implementadora identificada no histórico." camada="historico" campo="implementadora" queryString={queryString} />
             </section>
 
-            <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80">O detalhamento preserva a origem de cada camada. ANFIR, Histórico Comercial e CRM continuam separados; o drill-down apenas individualiza os registros por trás do total selecionado.</div>
+            <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80">O detalhamento preserva a origem de cada camada. ANFIR, Histórico Comercial e CRM continuam separados; o drill-down apenas individualiza os registros por trás do total selecionado. A correlação é estratégica, não uma fusão de registros.</div>
           </>}
         </div>
       </section>
