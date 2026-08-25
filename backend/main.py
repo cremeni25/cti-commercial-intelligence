@@ -17,6 +17,7 @@ from routers.brasil_router import router as brasil_router
 from routers.clientes_router import router as clientes_router
 from routers.crm_router import router as crm_router
 from routers.cti_api_router import router as cti_api_router
+from routers.drilldown_router import router as drilldown_router
 from routers.engine_router import router as engine_router
 from routers.modulos_router import router as modulos_router
 from routers.negociacoes_router import router as negociacoes_router
@@ -55,6 +56,7 @@ app.include_router(brasil_router)
 app.include_router(autorizados_router)
 app.include_router(modulos_router)
 app.include_router(strategic_layers_router)
+app.include_router(drilldown_router)
 
 
 @app.get("/")
