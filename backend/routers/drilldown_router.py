@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 import unicodedata
+from collections import Counter
 from datetime import date
 from typing import Any
 
@@ -95,6 +96,50 @@ def _projetar(registro: dict[str, Any], camada: str) -> dict[str, Any]:
     if not projetado:
         projetado = {chave: valor for chave, valor in registro.items() if valor not in (None, "", [], {})}
     return projetado
+
+
+def _ranking_historico(registros: list[dict[str, Any]], chave: str, limite: int | None = None) -> list[dict[str, Any]]:
+    contagem: Counter[str] = Counter()
+    rotulos: dict[str, str] = {}
+    for item in registros:
+        valor = item.get(chave)
+        if valor in (None, ""):
+            continue
+        normalizado = _fold(valor)
+        if not normalizado:
+            continue
+        contagem[normalizado] += 1
+        if normalizado not in rotulos:
+            rotulos[normalizado] = str(valor).strip().upper()
+    pares = sorted(contagem.items(), key=lambda par: (-par[1], rotulos[par[0]]))
+    if limite is not None:
+        pares = pares[:limite]
+    return [{"nome": rotulos[chave_normalizada], "quantidade_registros": quantidade} for chave_normalizada, quantidade in pares]
+
+
+def _numero(valor: Any) -> float:
+    try:
+        return float(valor or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@router.get("/detalhamento/resumo-historico")
+def resumo_historico():
+    registros = list(carregar_historico_comercial())
+    return {
+        "total_registros": len(registros),
+        "total_unidades": int(sum(_numero(item.get("quantidade")) for item in registros)),
+        "valor_nominal": round(sum(_numero(item.get("valor_total")) for item in registros), 2),
+        "abas": _ranking_historico(registros, "aba_origem"),
+        "anos": _ranking_historico(registros, "ano"),
+        "canais": _ranking_historico(registros, "canal_venda"),
+        "representantes": _ranking_historico(registros, "representante_atual"),
+        "status": _ranking_historico(registros, "status"),
+        "equipamentos": _ranking_historico(registros, "equipamento", 20),
+        "implementadoras": _ranking_historico(registros, "implementadora", 20),
+        "motivos_perda": _ranking_historico(registros, "motivo_perda", 20),
+    }
 
 
 @router.get("/detalhamento")
