@@ -7,5 +7,9 @@ import PrimeiraPaginaProposta from "@/components/propostas/PrimeiraPaginaPropost
 export default function PropostaCrmLayout({ children }: { children: ReactNode }) {
   const params = useParams<{ id: string }>()
   const id = String(params?.id || "")
-  return <>{children}{id && <div className="bg-[#020817] px-4 pb-24 text-white sm:px-6"><div className="mx-auto max-w-4xl"><PrimeiraPaginaProposta propostaId={id} compacto /></div></div>}</>
+
+  return <>
+    {id && <div className="bg-[#020817] px-4 pt-5 text-white sm:px-6"><div className="mx-auto max-w-4xl"><PrimeiraPaginaProposta propostaId={id} compacto /></div></div>}
+    {children}
+  </>
 }
