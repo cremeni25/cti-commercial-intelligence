@@ -34,19 +34,21 @@ class _Supabase:
         self.storage = _Storage(content)
 
 
-def _proposal(content: bytes) -> dict:
+def _metadata(content: bytes) -> dict:
     return {
-        "arquivo_documento": {
-            "bucket": "documentos-comerciais-cti",
-            "path": "propostas/p1/v1/proposta.docx",
-            "filename": "proposta.docx",
-            "sha256": hashlib.sha256(content).hexdigest(),
-            "template_code": "SUPRA_750",
-            "template_version": 1,
-            "source_sha256": "source-hash",
-            "immutable": True,
-        }
+        "bucket": "documentos-comerciais-cti",
+        "path": "propostas/p1/v1/proposta.docx",
+        "filename": "proposta.docx",
+        "sha256": hashlib.sha256(content).hexdigest(),
+        "template_code": "SUPRA_750",
+        "template_version": 1,
+        "source_sha256": "source-hash",
+        "immutable": True,
     }
+
+
+def _proposal(content: bytes) -> dict:
+    return {"arquivo_documento": _metadata(content)}
 
 
 def test_loads_exact_official_document_and_builds_resend_attachment():
@@ -58,6 +60,16 @@ def test_loads_exact_official_document_and_builds_resend_attachment():
     assert attachment.sha256 == hashlib.sha256(content).hexdigest()
     assert attachment.resend_payload()["filename"] == "proposta.docx"
     assert attachment.resend_payload()["content"]
+
+
+def test_loads_document_metadata_from_snapshot_for_current_schema():
+    content = b"official-docx"
+    proposal = {"snapshot_dados": {"arquivo_documento": _metadata(content)}}
+
+    attachment = load_official_document_attachment(_Supabase(content), proposal)
+
+    assert attachment.filename == "proposta.docx"
+    assert attachment.sha256 == hashlib.sha256(content).hexdigest()
 
 
 def test_rejects_hash_divergence():
