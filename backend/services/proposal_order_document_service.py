@@ -117,7 +117,7 @@ def _finalize_if_missing(supabase: Any, proposal: Mapping[str, Any]) -> Mapping[
             cliente=client,
             application=application if isinstance(application, Mapping) else {},
         )
-    except ProposalDocumentRepositoryError as exc:
+    except (ProposalDocumentRepositoryError, ValueError) as exc:
         raise ProposalOrderDocumentError(str(exc)) from exc
 
     document = finalized.get("document") if isinstance(finalized, Mapping) else None
