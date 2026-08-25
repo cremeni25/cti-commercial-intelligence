@@ -34,6 +34,25 @@ def test_paginacao_preserva_total(monkeypatch):
     assert len(resposta["registros"]) == 15
 
 
+def test_resumo_e_drilldown_usam_a_mesma_fonte(monkeypatch):
+    rows = (
+        {"ano": 2024, "status": "PERDIDO", "cliente": "A", "equipamento": "X4 7500", "quantidade": 2, "valor_total": 100.0, "data": "2024-01-10"},
+        {"ano": 2024, "status": "perdido", "cliente": "B", "equipamento": "x4 7500", "quantidade": 1, "valor_total": 200.0, "data": "2024-02-10"},
+        {"ano": 2025, "status": "GANHO", "cliente": "C", "equipamento": "SUPRA 850", "quantidade": 3, "valor_total": 300.0, "data": "2025-01-10"},
+    )
+    monkeypatch.setattr(mod, "carregar_historico_comercial", lambda: rows)
+    resumo = mod.resumo_historico()
+    perdido = next(item for item in resumo["status"] if item["nome"] == "PERDIDO")
+    detalhe = mod.detalhamento_indicador(camada="historico", campo="status", valor="PERDIDO", periodo="TODO_HISTORICO")
+    assert resumo["total_registros"] == 3
+    assert resumo["total_unidades"] == 6
+    assert resumo["valor_nominal"] == 600.0
+    assert perdido["quantidade_registros"] == detalhe["total_registros"] == 2
+    x4 = next(item for item in resumo["equipamentos"] if item["nome"] == "X4 7500")
+    detalhe_x4 = mod.detalhamento_indicador(camada="historico", campo="equipamento", valor="X4 7500", periodo="TODO_HISTORICO")
+    assert x4["quantidade_registros"] == detalhe_x4["total_registros"] == 2
+
+
 def test_campos_invalidos_sao_rejeitados():
     try:
         mod.detalhamento_indicador(camada="historico", campo="campo_inexistente", valor="X")
