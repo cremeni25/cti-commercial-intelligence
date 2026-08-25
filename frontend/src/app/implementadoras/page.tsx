@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -43,6 +44,15 @@ function normalizar(valor: string) {
 
 function moeda(valor: number) {
   return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+}
+
+function drill(contexto: string, titulo: string, implementadora?: string) {
+  const query = new URLSearchParams({ camada: "anfir", contexto, titulo, subtitulo: "Registros individualizados do realizado ANFIR que formam este total" })
+  if (implementadora) {
+    query.set("campo", "implementadora")
+    query.set("valor", implementadora)
+  }
+  return `/detalhamento?${query.toString()}`
 }
 
 async function buscarJson<T>(endpoint: string): Promise<T> {
@@ -113,6 +123,7 @@ export default function ImplementadorasPage() {
   const valorHistorico = implementadoras.reduce((total, item) => total + Number(item.valor_total || 0), 0)
   const registrosHistoricos = implementadoras.reduce((total, item) => total + Number(item.quantidade_registros || 0), 0)
   const implementadorasComCiclo = new Set(ciclosEmCurso.map((item) => item.implementadora_nome).filter(Boolean)).size
+  const realizadoHref = drill(contexto, "Implementadoras · realizado histórico")
 
   const lista = useMemo(() => implementadoras.filter((item) =>
     normalizar([item.nome, ...(item.aliases ?? []), ...(item.estados ?? []), ...(item.linhas_produto ?? [])].join(" ")).includes(normalizar(busca))
@@ -137,9 +148,9 @@ export default function ImplementadorasPage() {
             <PainelTempo titulo="REALIZADO" subtitulo="O que as implementadoras já representaram." destaque="Histórico confirmado">
               <div className="grid gap-3 sm:grid-cols-2">
                 <Kpi titulo="Implementadoras históricas" valor={loading ? "..." : implementadoras.length.toLocaleString("pt-BR")} />
-                <Kpi titulo="Registros históricos" valor={loading ? "..." : registrosHistoricos.toLocaleString("pt-BR")} />
+                <Kpi titulo="Registros históricos" valor={loading ? "..." : registrosHistoricos.toLocaleString("pt-BR")} href={!loading ? realizadoHref : undefined} />
                 <Kpi titulo="Clientes relacionados" valor={loading ? "..." : implementadoras.reduce((s, i) => s + Number(i.clientes || 0), 0).toLocaleString("pt-BR")} />
-                <Kpi titulo="Valor registrado na base" valor={loading ? "..." : moeda(valorHistorico)} />
+                <Kpi titulo="Valor registrado na base" valor={loading ? "..." : moeda(valorHistorico)} href={!loading ? realizadoHref : undefined} />
               </div>
             </PainelTempo>
 
@@ -162,7 +173,7 @@ export default function ImplementadorasPage() {
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div>
                 <h2 className="text-xl font-bold">Implementadoras — histórico e situação atual</h2>
-                <p className="mt-1 text-sm text-slate-400">Cada linha confronta presença histórica com vínculos operacionais realmente existentes hoje.</p>
+                <p className="mt-1 text-sm text-slate-400">Cada linha confronta presença histórica com vínculos operacionais realmente existentes hoje. O realizado pode ser aberto até os registros ANFIR que formam o total.</p>
               </div>
               <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar implementadora, estado ou linha" className="rounded-xl border border-[#13203f] bg-[#071028] px-4 py-3 text-white" />
             </div>
@@ -173,9 +184,10 @@ export default function ImplementadorasPage() {
                   <thead><tr className="border-b border-[#13203f] text-slate-400"><th className="p-3">Implementadora</th><th className="p-3">REALIZADO</th><th className="p-3">EM CURSO</th><th className="p-3">Linhas</th></tr></thead>
                   <tbody>{lista.map((item) => {
                     const atual = emCursoPorImplementadora.get(normalizar(item.nome))
+                    const itemHref = drill(contexto, `Implementadora · ${item.nome} · realizado`, item.nome)
                     return <tr key={item.nome} className="border-b border-[#13203f] align-top text-slate-200 hover:bg-cyan-500/5">
                       <td className="p-3"><p className="font-semibold text-white">{item.nome}</p><p className="text-xs text-slate-500">{item.aliases?.slice(0, 3).join(", ") || "Sem aliases operacionais"}</p></td>
-                      <td className="p-3"><p>{item.quantidade_registros ?? 0} registros</p><p className="text-xs text-slate-500">{moeda(Number(item.valor_total || 0))} na base • {item.estados?.join(", ") || "-"}</p></td>
+                      <td className="p-3"><Link href={itemHref} className="block rounded-lg p-2 transition hover:bg-cyan-500/10"><p className="font-semibold text-cyan-200">{item.quantidade_registros ?? 0} registros</p><p className="text-xs text-slate-500">{moeda(Number(item.valor_total || 0))} na base • {item.estados?.join(", ") || "-"}</p><p className="mt-1 text-[11px] text-cyan-400">Clique para detalhar</p></Link></td>
                       <td className="p-3">{atual ? <><p>{atual.quantidade} ciclo(s)</p><p className="text-xs text-emerald-300">{moeda(atual.valor)} • {atual.equipamentos.join(", ") || "Equipamento não identificado"}</p></> : <><p>0 ciclos vinculados</p><p className="text-xs text-slate-500">Sem vínculo operacional atual</p></>}</td>
                       <td className="p-3">{item.linhas_produto?.join(", ") || "-"}</td>
                     </tr>
@@ -194,6 +206,7 @@ function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string
   return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">{titulo}</p><h3 className="mt-1 text-xl font-bold text-white">{subtitulo}</h3></div><span className="rounded-full border border-[#24466f] px-3 py-1 text-xs text-slate-300">{destaque}</span></div>{children}</section>
 }
 
-function Kpi({ titulo, valor }: { titulo: string; valor: string }) {
-  return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-xl font-bold text-cyan-300">{valor}</p></div>
+function Kpi({ titulo, valor, href }: { titulo: string; valor: string; href?: string }) {
+  const body = <><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-xl font-bold text-cyan-300">{valor}</p>{href && <p className="mt-2 text-[11px] text-cyan-400">Clique para detalhar</p>}</>
+  return href ? <Link href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4 transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</Link> : <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">{body}</div>
 }
