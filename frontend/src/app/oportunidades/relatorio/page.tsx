@@ -19,6 +19,8 @@ type Oportunidade = {
   responsavel_id?: string
 }
 
+type Recorte = "TODAS" | "ABERTAS" | "GANHAS" | "PERDIDAS"
+
 function moeda(valor: number) { return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 function percentual(valor?: number) { const numero = Number(valor || 0); return Math.round(numero <= 1 ? numero * 100 : numero) }
 function dataBr(valor?: string) { return valor ? new Date(`${valor.slice(0, 10)}T12:00:00`).toLocaleDateString("pt-BR") : "—" }
@@ -31,6 +33,7 @@ export default function RelatorioOportunidadesPage() {
   const [busca, setBusca] = useState("")
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
+  const [recorte, setRecorte] = useState<Recorte>("TODAS")
 
   useEffect(() => {
     const parametros = new URLSearchParams(window.location.search)
@@ -59,6 +62,12 @@ export default function RelatorioOportunidadesPage() {
   const valorTotal = abertas.reduce((total, item) => total + Number(item.valor_estimado || 0), 0)
   const valorPonderado = abertas.reduce((total, item) => total + Number(item.valor_estimado || 0) * percentual(item.probabilidade) / 100, 0)
   const porEtapa = filtrados.reduce<Record<string, number>>((acc, item) => { const etapa = item.status || "SEM ETAPA"; acc[etapa] = (acc[etapa] || 0) + 1; return acc }, {})
+  const detalhados = recorte === "ABERTAS" ? abertas : recorte === "GANHAS" ? ganhas : recorte === "PERDIDAS" ? perdidas : filtrados
+
+  function abrirRecorte(novoRecorte: Recorte) {
+    setRecorte(novoRecorte)
+    requestAnimationFrame(() => document.getElementById("composicao-relatorio-oportunidades")?.scrollIntoView({ behavior: "smooth", block: "start" }))
+  }
 
   function exportarCsv() {
     const cabecalho = ["Empresa", "Oportunidade", "Produto", "Valor", "Probabilidade", "Etapa", "Responsável", "Previsão"]
@@ -89,13 +98,13 @@ export default function RelatorioOportunidadesPage() {
 
       {!loading && !erro && <>
         <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <Kpi titulo="Total" valor={String(filtrados.length)} /><Kpi titulo="Abertas" valor={String(abertas.length)} /><Kpi titulo="Ganhas" valor={String(ganhas.length)} /><Kpi titulo="Perdidas" valor={String(perdidas.length)} /><Kpi titulo="Pipeline" valor={moeda(valorTotal)} /><Kpi titulo="Ponderado" valor={moeda(valorPonderado)} />
+          <Kpi titulo="Total" valor={String(filtrados.length)} onClick={() => abrirRecorte("TODAS")} /><Kpi titulo="Abertas" valor={String(abertas.length)} onClick={() => abrirRecorte("ABERTAS")} /><Kpi titulo="Ganhas" valor={String(ganhas.length)} onClick={() => abrirRecorte("GANHAS")} /><Kpi titulo="Perdidas" valor={String(perdidas.length)} onClick={() => abrirRecorte("PERDIDAS")} /><Kpi titulo="Pipeline" valor={moeda(valorTotal)} onClick={() => abrirRecorte("ABERTAS")} /><Kpi titulo="Ponderado" valor={moeda(valorPonderado)} onClick={() => abrirRecorte("ABERTAS")} />
         </section>
         <section className="rounded-2xl bg-white p-6 shadow-sm print:shadow-none"><h2 className="text-lg font-bold">Distribuição por etapa</h2><div className="mt-4 flex flex-wrap gap-3">{Object.entries(porEtapa).map(([etapa, quantidade]) => <div key={etapa} className="rounded-xl border border-slate-200 px-4 py-3"><span className="text-xs uppercase text-slate-500">{etapa}</span><strong className="ml-3 text-lg">{quantidade}</strong></div>)}</div></section>
-        <section className="overflow-x-auto rounded-2xl bg-white shadow-sm print:shadow-none"><table className="min-w-[1050px] w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="p-4">Empresa</th><th className="p-4">Oportunidade</th><th className="p-4">Produto</th><th className="p-4">Valor</th><th className="p-4">Chance</th><th className="p-4">Etapa</th><th className="p-4">Responsável</th><th className="p-4">Previsão</th></tr></thead><tbody className="divide-y divide-slate-200">{filtrados.map((item) => { const contexto = lerContextoOportunidade(item); return <tr key={item.id}><td className="p-4 font-semibold">{item.cliente_nome}</td><td className="p-4">{item.titulo}</td><td className="p-4">{contexto.equipamentos.join(", ") || item.equipamento || item.linha_equipamentos || "A definir"}</td><td className="p-4">{moeda(Number(item.valor_estimado || 0))}</td><td className="p-4">{percentual(item.probabilidade)}%</td><td className="p-4">{item.status}</td><td className="p-4">{item.responsavel_id || "—"}</td><td className="p-4">{dataBr(item.data_fechamento_prevista)}</td></tr> })}</tbody></table></section>
+        <section id="composicao-relatorio-oportunidades" className="scroll-mt-6 overflow-x-auto rounded-2xl bg-white shadow-sm print:shadow-none"><div className="border-b border-slate-200 p-4"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-700">Composição do indicador</p><p className="mt-1 text-sm text-slate-600">Recorte atual: {recorte} • {detalhados.length} registro(s). Pipeline e Ponderado usam o mesmo conjunto de oportunidades abertas.</p></div><table className="min-w-[1050px] w-full text-left text-sm"><thead className="bg-slate-100 text-xs uppercase text-slate-500"><tr><th className="p-4">Empresa</th><th className="p-4">Oportunidade</th><th className="p-4">Produto</th><th className="p-4">Valor</th><th className="p-4">Chance</th><th className="p-4">Etapa</th><th className="p-4">Responsável</th><th className="p-4">Previsão</th></tr></thead><tbody className="divide-y divide-slate-200">{detalhados.map((item) => { const contexto = lerContextoOportunidade(item); return <tr key={item.id}><td className="p-4 font-semibold">{item.cliente_nome}</td><td className="p-4">{item.titulo}</td><td className="p-4">{contexto.equipamentos.join(", ") || item.equipamento || item.linha_equipamentos || "A definir"}</td><td className="p-4">{moeda(Number(item.valor_estimado || 0))}</td><td className="p-4">{percentual(item.probabilidade)}%</td><td className="p-4">{item.status}</td><td className="p-4">{item.responsavel_id || "—"}</td><td className="p-4">{dataBr(item.data_fechamento_prevista)}</td></tr> })}</tbody></table></section>
       </>}
     </div>
   </main>
 }
 
-function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl bg-white p-5 shadow-sm print:border print:border-slate-200 print:shadow-none"><p className="text-xs font-semibold uppercase text-slate-500">{titulo}</p><p className="mt-2 text-2xl font-bold">{valor}</p></div> }
+function Kpi({ titulo, valor, onClick }: { titulo: string; valor: string; onClick: () => void }) { return <button type="button" onClick={onClick} className="rounded-2xl bg-white p-5 text-left shadow-sm transition hover:ring-2 hover:ring-cyan-600/30 print:border print:border-slate-200 print:shadow-none"><p className="text-xs font-semibold uppercase text-slate-500">{titulo}</p><p className="mt-2 text-2xl font-bold">{valor}</p><p className="mt-2 text-[11px] text-cyan-700 print:hidden">Clique para detalhar</p></button> }
