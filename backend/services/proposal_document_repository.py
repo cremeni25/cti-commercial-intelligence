@@ -32,17 +32,7 @@ def finalize_official_proposal(
 ) -> dict[str, Any]:
     equipment = str(item.get("equipamento") or "").strip()
     template = template_for_equipment(equipment)
-    rows = (
-        supabase.table("cti_modelos_proposta")
-        .select("*")
-        .eq("equipamento", template.equipment)
-        .eq("versao", template.version)
-        .eq("ativo", True)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
+    rows = supabase.table("cti_modelos_proposta").select("*").eq("equipamento", template.equipment).eq("versao", template.version).eq("ativo", True).limit(1).execute().data or []
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
     model = rows[0]
@@ -53,28 +43,23 @@ def finalize_official_proposal(
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
     if not source_path or not expected_hash:
         raise ProposalDocumentRepositoryError("Modelo oficial sem arquivo mestre ou SHA-256 registrado.")
-
     source = supabase.storage.from_(MASTER_BUCKET).download(source_path)
     if not source:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
 
-    # A finalização deve reproduzir o mesmo contrato documental usado no preview/envio.
-    # Campos comerciais que foram permitidos em branco na proposta emitida não podem
-    # passar a bloquear o pedido depois do aceite do cliente.
+    snapshot_atual = proposta.get("snapshot_dados") or {}
+    if not isinstance(snapshot_atual, Mapping):
+        snapshot_atual = {}
+    snapshot_atual = dict(snapshot_atual)
+    revisao_documental = int(snapshot_atual.get("revisao_documental") or 1)
+    numero_base = str(proposta.get("numero") or proposta.get("id") or "PROPOSTA")
+    numero_saida = numero_base if revisao_documental <= 1 else f"{numero_base}-R{revisao_documental}"
+
     payload = build_proposal_document_payload(
-        proposal=dict(proposta),
-        item=dict(item),
-        opportunity=dict(oportunidade),
-        client=dict(cliente),
-        validate_required=False,
+        proposal=dict(proposta), item=dict(item), opportunity=dict(oportunidade), client=dict(cliente), validate_required=False,
     )
     generated = render_official_docx(
-        bytes(source),
-        equipment,
-        payload,
-        output_number=str(proposta.get("numero") or proposta.get("id") or "PROPOSTA"),
-        validate_required=False,
-        require_all_requested_anchors=False,
+        bytes(source), equipment, payload, output_number=numero_saida, validate_required=False, require_all_requested_anchors=False,
     )
     if not hmac.compare_digest(generated.source_sha256.lower(), expected_hash):
         raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo oficial registrado.")
@@ -86,53 +71,30 @@ def finalize_official_proposal(
         raise ProposalDocumentRepositoryError("Proposta sem identificador persistente.")
     version = int(proposta.get("versao") or 1)
     source_revision = generated.source_sha256[:12]
-    path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{generated.filename}"
-    uploaded = supabase.storage.from_(FINAL_BUCKET).upload(
-        path,
-        generated.content,
-        {
-            "content-type": DOCX_MIME,
-            "upsert": "false",
-        },
-    )
+    if revisao_documental <= 1:
+        path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{generated.filename}"
+    else:
+        path = f"propostas/{proposal_id}/v{version}/revisao-{revisao_documental}/fonte-{source_revision}/{generated.filename}"
+    uploaded = supabase.storage.from_(FINAL_BUCKET).upload(path, generated.content, {"content-type": DOCX_MIME, "upsert": "false"})
     if not uploaded:
         raise ProposalDocumentRepositoryError("O storage não confirmou o Word final imutável.")
 
     metadata = {
-        "bucket": FINAL_BUCKET,
-        "path": path,
-        "filename": generated.filename,
-        "mime_type": DOCX_MIME,
-        "sha256": generated.sha256,
-        "source_bucket": MASTER_BUCKET,
-        "source_path": source_path,
-        "source_sha256": generated.source_sha256,
-        "template_code": generated.template_code,
-        "template_version": generated.template_version,
-        "finalized_at": _now(),
-        "preserves_images": True,
-        "preserves_carrier_branding": True,
-        "immutable": True,
-        "document_format": "DOCX",
+        "bucket": FINAL_BUCKET, "path": path, "filename": generated.filename, "mime_type": DOCX_MIME,
+        "sha256": generated.sha256, "source_bucket": MASTER_BUCKET, "source_path": source_path,
+        "source_sha256": generated.source_sha256, "template_code": generated.template_code,
+        "template_version": generated.template_version, "document_revision": revisao_documental,
+        "finalized_at": _now(), "preserves_images": True, "preserves_carrier_branding": True,
+        "immutable": True, "document_format": "DOCX",
     }
+    snapshot_persistido = {**snapshot_atual, "arquivo_documento": metadata}
+    snapshot_persistido.pop("revisao_aberta_em", None)
 
-    snapshot_atual = proposta.get("snapshot_dados") or {}
-    if not isinstance(snapshot_atual, Mapping):
-        snapshot_atual = {}
-    snapshot_persistido = {**dict(snapshot_atual), "arquivo_documento": metadata}
-
-    updated = (
-        supabase.table("cti_propostas")
-        .update({
-            "snapshot_dados": snapshot_persistido,
-            "hash_documento": generated.sha256,
-            "modelo_proposta_id": model.get("id"),
-        })
-        .eq("id", proposal_id)
-        .execute()
-        .data
-        or []
-    )
+    updated = supabase.table("cti_propostas").update({
+        "snapshot_dados": snapshot_persistido,
+        "hash_documento": generated.sha256,
+        "modelo_proposta_id": model.get("id"),
+    }).eq("id", proposal_id).execute().data or []
     if not updated:
         raise ProposalDocumentRepositoryError("O vínculo do Word final com a proposta não foi confirmado.")
     return {"document": metadata, "proposal": updated[0]}
