@@ -57,6 +57,46 @@ def test_builds_official_template_payload_with_crm_data():
     assert result.fields["total_price"] == "R$ 199.500,00"
 
 
+def test_snapshot_documento_final_overrides_optional_document_fields():
+    proposal, item, opportunity, client = complete_payload()
+    proposal["snapshot_dados"] = {
+        "documento_final": {
+            "voltagem": "24V",
+            "tipo_equipamento": "ACOPLADO E ELÉTRICO",
+            "impostos": "04% ICMS/PIS/COFINS",
+            "acessorios": "Kit instalação, Lynx Fleet",
+            "condicao_pagamento": "20% entrada + saldo em 4 parcelas",
+            "possui_entrada": True,
+            "valor_entrada": 39900,
+            "local_entrega": "AUTORIZADA CARRIER",
+            "autorizada_nome_endereco": "Carrier ABC - Rua Teste, 100",
+            "frete": "FOB",
+            "prazo_entrega": "30 dias",
+            "validade": "2026-09-30",
+            "lynx_meses": 24,
+        }
+    }
+
+    result = build_proposal_document_payload(
+        proposal=proposal,
+        item=item,
+        opportunity=opportunity,
+        client=client,
+    )
+
+    assert result.fields["voltage"] == "24V"
+    assert result.fields["configuration"] == "ACOPLADO E ELÉTRICO"
+    assert result.fields["payment_terms"] == "20% entrada + saldo em 4 parcelas"
+    assert result.fields["has_down_payment"] == "SIM"
+    assert result.fields["down_payment_value"] == "R$ 39.900,00"
+    assert result.fields["delivery_type"] == "AUTORIZADA CARRIER"
+    assert result.fields["authorized_service_name_address"] == "Carrier ABC - Rua Teste, 100"
+    assert result.fields["freight"] == "FOB"
+    assert result.fields["delivery_deadline"] == "30 dias"
+    assert result.fields["validity"] == "30/09/2026"
+    assert result.fields["lynx_months"] == 24
+
+
 def test_rejects_generation_when_required_document_data_is_missing():
     proposal, item, opportunity, client = complete_payload()
     client["cnpj"] = None
