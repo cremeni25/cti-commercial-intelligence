@@ -33,8 +33,17 @@ TEMPLATES: tuple[ProposalTemplateDefinition, ...] = (
     ProposalTemplateDefinition("XARIOS_350", "XARIOS 350", "XARIOS 350.docx"),
 )
 
+# Variantes comerciais oficiais que possuem registro próprio no catálogo CTI e
+# arquivo próprio no storage, embora compartilhem a família documental do modelo base.
+VARIANT_TEMPLATES: tuple[ProposalTemplateDefinition, ...] = (
+    ProposalTemplateDefinition("CITIMAX_400AE", "CITIMAX 400AE", "CITIMAX 400  Rev 19.05.docx"),
+    ProposalTemplateDefinition("CITIMAX_500AE", "CITIMAX 500AE", "CITIMAX 500 rev 19.05.doc"),
+    ProposalTemplateDefinition("CITIMAX_D6AE", "CITIMAX D6AE", "CITIMAX D7 Rev 19.05.docx"),
+    ProposalTemplateDefinition("CITIMAX_D7AE", "CITIMAX D7AE", "CITIMAX D7 Rev 19.05.docx"),
+)
 
-_BY_EQUIPMENT = {item.equipment: item for item in TEMPLATES}
+
+_BY_EQUIPMENT = {item.equipment: item for item in (*TEMPLATES, *VARIANT_TEMPLATES)}
 
 
 def normalize_equipment(value: str) -> str:
@@ -45,6 +54,10 @@ def normalize_equipment(value: str) -> str:
         "VECTOR HE 19": "VECTOR HE19",
         "X4 7500": "X4 7500",
         "X4 7700": "X4 7700",
+        "CITIMAX 400 AE": "CITIMAX 400AE",
+        "CITIMAX 500 AE": "CITIMAX 500AE",
+        "CITIMAX D6 AE": "CITIMAX D6AE",
+        "CITIMAX D7 AE": "CITIMAX D7AE",
     }
     return aliases.get(normalized, normalized)
 
@@ -53,6 +66,6 @@ def template_for_equipment(equipment: str) -> ProposalTemplateDefinition:
     normalized = normalize_equipment(equipment)
     template = _BY_EQUIPMENT.get(normalized)
     if not template:
-        supported = ", ".join(item.equipment for item in TEMPLATES)
+        supported = ", ".join(item.equipment for item in (*TEMPLATES, *VARIANT_TEMPLATES))
         raise ValueError(f"Equipamento sem modelo oficial de proposta: {equipment}. Modelos suportados: {supported}")
     return template
