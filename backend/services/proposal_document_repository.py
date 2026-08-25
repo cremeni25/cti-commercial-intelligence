@@ -109,13 +109,18 @@ def finalize_official_proposal(
         "immutable": True,
         "document_format": "DOCX",
     }
+
+    snapshot_atual = proposta.get("snapshot_dados") or {}
+    if not isinstance(snapshot_atual, Mapping):
+        snapshot_atual = {}
+    snapshot_persistido = {**dict(snapshot_atual), "arquivo_documento": metadata}
+
     updated = (
         supabase.table("cti_propostas")
         .update({
-            "arquivo_documento": metadata,
+            "snapshot_dados": snapshot_persistido,
             "hash_documento": generated.sha256,
             "modelo_proposta_id": model.get("id"),
-            "updated_at": metadata["finalized_at"],
         })
         .eq("id", proposal_id)
         .execute()
