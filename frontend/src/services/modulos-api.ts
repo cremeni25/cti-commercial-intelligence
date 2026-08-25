@@ -124,6 +124,20 @@ export type DrilldownResultado = {
   registros: Record<string, unknown>[]
 }
 
+export type HistoricoResumo = {
+  total_registros: number
+  total_unidades: number
+  valor_nominal: number
+  abas: RankingItem[]
+  anos: RankingItem[]
+  canais: RankingItem[]
+  representantes: RankingItem[]
+  status: RankingItem[]
+  equipamentos: RankingItem[]
+  implementadoras: RankingItem[]
+  motivos_perda: RankingItem[]
+}
+
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
 export function getEmpresas(query: string) { return apiGet(`/modulos/empresas?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClientes(query: string) { return apiGet(`/modulos/clientes?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
@@ -132,3 +146,4 @@ export function getTransportadoras(query: string) { return getEmpresas(query) }
 export function getEquipamento(slug: string, query: string) { return apiGet(`/estrategia/equipamentos/${slug}?${normalizarQuery(query)}`) as Promise<EquipamentoEstrategico> }
 export function getMapaEstrategico(query: string) { return apiGet(`/estrategia/mapa?${normalizarQuery(query)}`) as Promise<MapaEstrategicoResumo> }
 export function getDrilldown(query: string) { return apiGet(`/estrategia/detalhamento?${query}`) as Promise<DrilldownResultado> }
+export function getHistoricoResumo() { return apiGet(`/estrategia/detalhamento/resumo-historico`) as Promise<HistoricoResumo> }
