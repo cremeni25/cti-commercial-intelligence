@@ -174,7 +174,7 @@ def consultar_primeira_pagina(proposta_id: str):
     }
 
 
-@router.post("/propostas/{proposta_id}/emitir-documento")
+@router.post("/propostas/{proposta_id}/emitir")
 def emitir_documento_validado(proposta_id: str):
     proposta, item = _contexto(proposta_id)
     validar_documento_para_emissao(proposta, item)
