@@ -84,11 +84,77 @@ def _editavel(proposta: dict[str, Any]) -> bool:
     return _arquivo_atual(proposta) is None
 
 
+def campos_documentais(proposta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    final = _documento_final(proposta)
+    return {
+        "voltagem": _valor(final, item, "voltagem"),
+        "tipo_equipamento": _valor(final, item, "tipo_equipamento", "configuracao", "tipo_equipamento"),
+        "impostos": _valor(final, item, "impostos") or "04% ICMS/PIS/COFINS",
+        "acessorios": _valor(final, item, "acessorios", "acessorios") or (
+            ", ".join(str(v) for v in (item.get("opcionais") or [])) if isinstance(item.get("opcionais"), list) else item.get("opcionais")
+        ),
+        "condicao_pagamento": _valor(final, item, "condicao_pagamento", "condicao_pagamento"),
+        "possui_entrada": final.get("possui_entrada"),
+        "valor_entrada": final.get("valor_entrada"),
+        "local_entrega": _valor(final, item, "local_entrega", "local_entrega", "tipo_entrega"),
+        "autorizada_nome_endereco": final.get("autorizada_nome_endereco"),
+        "frete": _valor(final, item, "frete", "frete"),
+        "prazo_entrega": _valor(final, item, "prazo_entrega", "prazo_entrega"),
+        "validade": _valor(final, item, "validade", "validade_condicao"),
+        "lynx_meses": final.get("lynx_meses"),
+    }
+
+
+def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -> list[str]:
+    campos = campos_documentais(proposta, item)
+    pendentes: list[str] = []
+    obrigatorios = {
+        "voltagem": "voltagem",
+        "tipo_equipamento": "tipo/configuração do equipamento",
+        "impostos": "impostos",
+        "condicao_pagamento": "condição de pagamento",
+        "local_entrega": "local de entrega",
+        "frete": "frete",
+        "prazo_entrega": "prazo de entrega",
+        "validade": "validade da proposta",
+    }
+    for chave, rotulo in obrigatorios.items():
+        valor = campos.get(chave)
+        if valor is None or not str(valor).strip():
+            pendentes.append(rotulo)
+
+    if campos.get("possui_entrada") is None:
+        pendentes.append("definição de entrada")
+    elif campos.get("possui_entrada") is True:
+        try:
+            valor_entrada = float(campos.get("valor_entrada") or 0)
+        except (TypeError, ValueError):
+            valor_entrada = 0
+        if valor_entrada <= 0:
+            pendentes.append("valor da entrada")
+
+    local_entrega = str(campos.get("local_entrega") or "").strip().upper()
+    if "AUTORIZADA" in local_entrega and not str(campos.get("autorizada_nome_endereco") or "").strip():
+        pendentes.append("nome e endereço da autorizada Carrier")
+    return pendentes
+
+
+def validar_documento_para_emissao(proposta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
+    pendentes = campos_pendentes_documento(proposta, item)
+    if pendentes:
+        raise HTTPException(
+            status_code=409,
+            detail="Complete os dados do documento oficial antes de emitir a proposta: " + ", ".join(pendentes) + ".",
+        )
+    return campos_documentais(proposta, item)
+
+
 @router.get("/propostas/{proposta_id}/primeira-pagina")
 def consultar_primeira_pagina(proposta_id: str):
     proposta, item = _contexto(proposta_id)
-    final = _documento_final(proposta)
     snapshot = _snapshot(proposta)
+    campos = campos_documentais(proposta, item)
+    pendentes = campos_pendentes_documento(proposta, item)
     return {
         "proposta_id": proposta_id,
         "item_id": item.get("id"),
@@ -96,23 +162,9 @@ def consultar_primeira_pagina(proposta_id: str):
         "editavel": _editavel(proposta),
         "revisao_documental": int(snapshot.get("revisao_documental") or 1),
         "pode_abrir_revisao": _arquivo_atual(proposta) is not None,
-        "campos": {
-            "voltagem": _valor(final, item, "voltagem"),
-            "tipo_equipamento": _valor(final, item, "tipo_equipamento", "configuracao", "tipo_equipamento"),
-            "impostos": _valor(final, item, "impostos") or "04% ICMS/PIS/COFINS",
-            "acessorios": _valor(final, item, "acessorios", "acessorios") or (
-                ", ".join(str(v) for v in (item.get("opcionais") or [])) if isinstance(item.get("opcionais"), list) else item.get("opcionais")
-            ),
-            "condicao_pagamento": _valor(final, item, "condicao_pagamento", "condicao_pagamento"),
-            "possui_entrada": final.get("possui_entrada"),
-            "valor_entrada": final.get("valor_entrada"),
-            "local_entrega": _valor(final, item, "local_entrega", "local_entrega", "tipo_entrega"),
-            "autorizada_nome_endereco": final.get("autorizada_nome_endereco"),
-            "frete": _valor(final, item, "frete", "frete"),
-            "prazo_entrega": _valor(final, item, "prazo_entrega", "prazo_entrega"),
-            "validade": _valor(final, item, "validade", "validade_condicao"),
-            "lynx_meses": final.get("lynx_meses"),
-        },
+        "campos": campos,
+        "campos_pendentes": pendentes,
+        "pronto_para_emitir": not pendentes,
         "valores_negociados": {
             "quantidade": item.get("quantidade") or 1,
             "preco_unitario": item.get("preco_unitario"),
@@ -120,6 +172,15 @@ def consultar_primeira_pagina(proposta_id: str):
             "valor_proposta": proposta.get("valor"),
         },
     }
+
+
+@router.post("/propostas/{proposta_id}/emitir")
+def emitir_documento_validado(proposta_id: str):
+    proposta, item = _contexto(proposta_id)
+    validar_documento_para_emissao(proposta, item)
+    from routers.propostas_pedidos_router import emitir_proposta
+
+    return emitir_proposta(proposta_id)
 
 
 @router.post("/propostas/{proposta_id}/abrir-revisao-documental")
@@ -167,4 +228,14 @@ def atualizar_primeira_pagina(proposta_id: str, dados: PrimeiraPaginaUpdate):
     updated = supabase.table("cti_propostas").update({"snapshot_dados": snapshot}).eq("id", proposta_id).execute().data or []
     if not updated:
         raise HTTPException(status_code=409, detail="O banco não confirmou a atualização dos dados finais do documento.")
-    return {"ok": True, "proposta_id": proposta_id, "editavel": True, "campos": final, "revisao_documental": final["revisao_documental"]}
+    campos = campos_documentais(updated[0], _item)
+    pendentes = campos_pendentes_documento(updated[0], _item)
+    return {
+        "ok": True,
+        "proposta_id": proposta_id,
+        "editavel": True,
+        "campos": campos,
+        "campos_pendentes": pendentes,
+        "pronto_para_emitir": not pendentes,
+        "revisao_documental": final["revisao_documental"],
+    }

@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
 from routers.propostas_pedidos_router import emitir_proposta
+from routers.propostas_primeira_pagina_router import validar_documento_para_emissao
 from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
 from services.email_transport_service import TransporteEmailNaoConfigurado, enviar_email
 from services.proposal_document_preview import build_preview_official_proposal
@@ -65,6 +66,15 @@ def _emails_validos(valores: list[str]) -> list[str]:
 @router.post("/{proposta_id}/enviar-email")
 def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
+    item_id = str(proposta.get("item_oportunidade_id") or "")
+    oportunidade_id = str(proposta.get("oportunidade_id") or "")
+    cliente_id = str(proposta.get("cliente_id") or "")
+    if not item_id or not oportunidade_id or not cliente_id:
+        raise HTTPException(status_code=422, detail="A proposta não possui os vínculos comerciais necessários para gerar o documento.")
+
+    item = _primeiro("cti_oportunidade_itens", item_id, "Item comercial da proposta não encontrado.")
+    validar_documento_para_emissao(proposta, item)
+
     status = str(proposta.get("status_documento") or "RASCUNHO").upper()
     if status in STATUS_PRE_EMISSAO:
         emitir_proposta(proposta_id)
@@ -73,13 +83,6 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     if status not in STATUS_ENVIAVEL:
         raise HTTPException(status_code=409, detail="A proposta não está em condição de envio.")
 
-    item_id = str(proposta.get("item_oportunidade_id") or "")
-    oportunidade_id = str(proposta.get("oportunidade_id") or "")
-    cliente_id = str(proposta.get("cliente_id") or "")
-    if not item_id or not oportunidade_id or not cliente_id:
-        raise HTTPException(status_code=422, detail="A proposta não possui os vínculos comerciais necessários para gerar o documento.")
-
-    item = _primeiro("cti_oportunidade_itens", item_id, "Item comercial da proposta não encontrado.")
     oportunidade = _primeiro("cti_oportunidades", oportunidade_id, "Oportunidade da proposta não encontrada.")
     cliente = _cliente(cliente_id)
     if not cliente:
