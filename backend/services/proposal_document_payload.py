@@ -61,6 +61,37 @@ def _money_br(value: Any) -> str:
     return "R$ " + formatted.replace(",", "_").replace(".", ",").replace("_", ".")
 
 
+def _snapshot_final(proposal: dict[str, Any]) -> dict[str, Any]:
+    snapshot = proposal.get("snapshot_dados")
+    if not isinstance(snapshot, dict):
+        return {}
+    final = snapshot.get("documento_final")
+    return dict(final) if isinstance(final, dict) else {}
+
+
+def _prefer(final: dict[str, Any], final_key: str, source: dict[str, Any] | None, *source_keys: str, default: Any = None) -> Any:
+    if final_key in final:
+        value = final.get(final_key)
+        if value is not None and str(value).strip() != "":
+            return value
+        if value is False:
+            return value
+    return _first(source, *source_keys, default=default)
+
+
+def _sim_nao(value: Any) -> Any:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return "SIM" if value else "NÃO"
+    text = str(value).strip().upper()
+    if text in {"TRUE", "1", "SIM", "S"}:
+        return "SIM"
+    if text in {"FALSE", "0", "NAO", "NÃO", "N"}:
+        return "NÃO"
+    return value
+
+
 def build_proposal_document_payload(
     *,
     proposal: dict[str, Any],
@@ -70,6 +101,7 @@ def build_proposal_document_payload(
     validate_required: bool = True,
 ) -> ProposalDocumentPayload:
     template = template_for_equipment(str(_first(item, "equipamento", "modelo_equipamento", "produto", default="")))
+    final = _snapshot_final(proposal)
 
     quantity = int(_first(item, "quantidade", default=1) or 1)
     unit_price = float(_first(item, "preco_unitario", default=0) or 0)
@@ -83,6 +115,7 @@ def build_proposal_document_payload(
     client_phone = _first(client, "telefone", "celular", "whatsapp", "telefone_principal", "fone") or _first(opportunity, "telefone", "celular", "whatsapp")
     client_email = _first(client, "email", "email_principal", "email_comercial") or _first(opportunity, "email", "email_principal")
 
+    entrada = _prefer(final, "valor_entrada", proposal, "valor_entrada")
     fields: dict[str, Any] = {
         "proposal_number": _first(proposal, "numero"),
         "proposal_revision": _first(proposal, "versao", default=1),
@@ -96,23 +129,23 @@ def build_proposal_document_payload(
         "client_phone": client_phone,
         "client_email": client_email,
         "equipment": template.equipment,
-        "configuration": _first(item, "configuracao", "tipo_equipamento"),
-        "voltage": _first(proposal, "voltagem"),
+        "configuration": _prefer(final, "tipo_equipamento", item, "configuracao", "tipo_equipamento"),
+        "voltage": _prefer(final, "voltagem", proposal, "voltagem"),
         "quantity_intro": quantity,
         "quantity": quantity,
         "unit_price": _money_br(unit_price),
         "discount_percent": discount,
         "total_price": _money_br(total),
-        "taxes": _first(item, "impostos", default="04% ICMS/PIS/COFINS"),
-        "accessories": _first(item, "opcionais", "acessorios", default=[]),
-        "payment_terms": _first(item, "condicao_pagamento"),
-        "has_down_payment": _first(proposal, "possui_entrada") or _first(item, "possui_entrada", "entrada_sim_nao"),
-        "down_payment_value": _money_br(_first(proposal, "valor_entrada")) if _first(proposal, "valor_entrada") is not None else None,
-        "delivery_type": _first(item, "tipo_entrega", "local_entrega"),
-        "authorized_service_name_address": _first(proposal, "autorizada_nome_endereco"),
-        "freight": _first(item, "frete"),
-        "delivery_deadline": _first(item, "prazo_entrega"),
-        "validity": _date_br(_first(item, "validade_condicao") or _first(proposal, "validade")),
+        "taxes": _prefer(final, "impostos", item, "impostos", default="04% ICMS/PIS/COFINS"),
+        "accessories": _prefer(final, "acessorios", item, "acessorios", "opcionais", default=[]),
+        "payment_terms": _prefer(final, "condicao_pagamento", item, "condicao_pagamento"),
+        "has_down_payment": _sim_nao(_prefer(final, "possui_entrada", item, "possui_entrada", "entrada_sim_nao")),
+        "down_payment_value": _money_br(entrada) if entrada is not None and str(entrada).strip() != "" else None,
+        "delivery_type": _prefer(final, "local_entrega", item, "tipo_entrega", "local_entrega"),
+        "authorized_service_name_address": _prefer(final, "autorizada_nome_endereco", proposal, "autorizada_nome_endereco"),
+        "freight": _prefer(final, "frete", item, "frete"),
+        "delivery_deadline": _prefer(final, "prazo_entrega", item, "prazo_entrega"),
+        "validity": _date_br(_prefer(final, "validade", item, "validade_condicao") or _first(proposal, "validade")),
         "commercial_notes": _first(item, "observacoes_comerciais") or _first(proposal, "observacoes"),
         "technical_notes": _first(item, "observacoes_tecnicas"),
         "body_width_m": _first(opportunity, "bau_largura_m", "largura_bau_m"),
@@ -131,7 +164,7 @@ def build_proposal_document_payload(
         "door_open_duration_min": _first(opportunity, "duracao_abertura_min"),
         "delivery_period_h": _first(opportunity, "periodo_entrega_h", "periodo_entrega_horas"),
         "lynx_included": _first(item, "lynx_incluido", "lynx_fleet"),
-        "lynx_months": _first(proposal, "lynx_meses"),
+        "lynx_months": _prefer(final, "lynx_meses", proposal, "lynx_meses"),
         "responsible_id": _first(opportunity, "responsavel_id") or _first(proposal, "responsavel_id"),
     }
 
