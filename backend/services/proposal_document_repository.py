@@ -71,7 +71,10 @@ def finalize_official_proposal(
         raise ProposalDocumentRepositoryError("Proposta sem identificador persistente.")
     version = int(proposta.get("versao") or 1)
     source_revision = generated.source_sha256[:12]
-    path = f"propostas/{proposal_id}/v{version}/revisao-{revisao_documental}/fonte-{source_revision}/{generated.filename}"
+    if revisao_documental <= 1:
+        path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{generated.filename}"
+    else:
+        path = f"propostas/{proposal_id}/v{version}/revisao-{revisao_documental}/fonte-{source_revision}/{generated.filename}"
     uploaded = supabase.storage.from_(FINAL_BUCKET).upload(path, generated.content, {"content-type": DOCX_MIME, "upsert": "false"})
     if not uploaded:
         raise ProposalDocumentRepositoryError("O storage não confirmou o Word final imutável.")
