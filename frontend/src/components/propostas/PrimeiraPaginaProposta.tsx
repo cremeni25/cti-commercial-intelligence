@@ -24,34 +24,14 @@ type Resposta = {
   item_id: string
   equipamento: string
   editavel: boolean
+  pode_abrir_revisao?: boolean
+  revisao_documental?: number
   campos: Campos
-  valores_negociados?: {
-    quantidade?: number
-    preco_unitario?: number | string
-    desconto_percentual?: number | string
-    valor_proposta?: number | string
-  }
+  valores_negociados?: { quantidade?: number; preco_unitario?: number | string; desconto_percentual?: number | string; valor_proposta?: number | string }
 }
 
-const camposVazios: Campos = {
-  voltagem: null,
-  tipo_equipamento: null,
-  impostos: "04% ICMS/PIS/COFINS",
-  acessorios: null,
-  condicao_pagamento: null,
-  possui_entrada: null,
-  valor_entrada: null,
-  local_entrega: null,
-  autorizada_nome_endereco: null,
-  frete: null,
-  prazo_entrega: null,
-  validade: null,
-  lynx_meses: null,
-}
-
-function moeda(valor: unknown) {
-  return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
+const camposVazios: Campos = { voltagem:null, tipo_equipamento:null, impostos:"04% ICMS/PIS/COFINS", acessorios:null, condicao_pagamento:null, possui_entrada:null, valor_entrada:null, local_entrega:null, autorizada_nome_endereco:null, frete:null, prazo_entrega:null, validade:null, lynx_meses:null }
+function moeda(valor: unknown) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 
 export default function PrimeiraPaginaProposta({ propostaId, compacto = false }: { propostaId: string; compacto?: boolean }) {
   const [dados, setDados] = useState<Resposta | null>(null)
@@ -59,6 +39,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
   const [salvando, setSalvando] = useState(false)
+  const [revisando, setRevisando] = useState(false)
 
   async function carregar() {
     setErro("")
@@ -71,14 +52,23 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
 
   useEffect(() => { void carregar().catch((falha) => setErro(falha instanceof Error ? falha.message : "Falha ao carregar os campos.")) }, [propostaId])
 
+  async function abrirRevisao() {
+    if (!window.confirm("O documento já emitido continuará preservado. Deseja abrir uma nova revisão documental para corrigir os campos?")) return
+    setRevisando(true); setErro(""); setMensagem("")
+    try {
+      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/abrir-revisao-documental`, { method: "POST" })
+      const payload = await resposta.json().catch(() => ({}))
+      if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível abrir a revisão documental."))
+      setMensagem(`Revisão documental R${Number(payload.revisao_documental || 2)} aberta. O documento anterior foi preservado.`)
+      await carregar()
+    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao abrir a revisão documental.") }
+    finally { setRevisando(false) }
+  }
+
   async function salvar() {
     setSalvando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/primeira-pagina`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(campos),
-      })
+      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/primeira-pagina`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível salvar os dados finais."))
       setMensagem("Dados finais salvos. A proposta e o pedido usarão este mesmo conteúdo.")
@@ -90,7 +80,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
   if (!dados && !erro) return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4 text-sm text-slate-400">Carregando dados finais do documento...</div>
 
   return <section className={`rounded-3xl border border-[#16325c] bg-[#07162b] ${compacto ? "p-4" : "p-6"}`}>
-    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados finais da proposta / pedido</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • mesmo conteúdo documental para proposta e pedido</p>}</div>
+    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados finais da proposta / pedido</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • mesmo conteúdo documental para proposta e pedido</p>}</div>
     {erro && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{erro}</div>}
     {mensagem && <div className="mt-4 rounded-xl border border-emerald-900 bg-emerald-950/30 p-3 text-sm text-emerald-200">{mensagem}</div>}
     {dados?.valores_negociados && <div className="mt-4 grid gap-2 rounded-2xl border border-[#16325c] bg-[#020817] p-4 text-sm sm:grid-cols-4"><Resumo label="Quantidade" valor={String(dados.valores_negociados.quantidade ?? 1)}/><Resumo label="Valor unitário" valor={moeda(dados.valores_negociados.preco_unitario)}/><Resumo label="Desconto" valor={`${Number(dados.valores_negociados.desconto_percentual || 0).toLocaleString("pt-BR")}%`}/><Resumo label="Valor proposta" valor={moeda(dados.valores_negociados.valor_proposta)}/></div>}
@@ -113,7 +103,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
         <Campo label="Período Lynx Fleet (meses)"><input disabled={!dados.editavel} type="number" min="0" step="1" value={campos.lynx_meses ?? ""} onChange={(e) => setCampos({ ...campos, lynx_meses: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" /></Campo>
       </div></div>
     </div>}
-    {dados?.editavel ? <button disabled={salvando} onClick={() => void salvar()} className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">{salvando ? "Salvando..." : "Salvar dados finais do documento"}</button> : <p className="mt-5 text-sm text-amber-300">Documento final já gerado: dados bloqueados para preservar sua imutabilidade.</p>}
+    {dados?.editavel ? <button disabled={salvando} onClick={() => void salvar()} className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">{salvando ? "Salvando..." : "Salvar dados finais do documento"}</button> : <div className="mt-5 rounded-xl border border-amber-800 bg-amber-950/20 p-4"><p className="text-sm text-amber-200">O documento atual é imutável e permanece preservado no histórico.</p>{dados?.pode_abrir_revisao && <button disabled={revisando} onClick={() => void abrirRevisao()} className="mt-3 w-full rounded-xl border border-amber-600 px-4 py-3 font-semibold text-amber-100 disabled:opacity-50">{revisando ? "Abrindo revisão..." : "Abrir revisão corretiva"}</button>}</div>}
     <style jsx>{`.entrada{width:100%;border:1px solid #24466f;border-radius:12px;background:#020817;padding:12px;color:white}.entrada:disabled{opacity:.6}`}</style>
   </section>
 }
