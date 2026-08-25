@@ -69,16 +69,19 @@ export default function DetalhamentoPage() {
 
   useEffect(() => {
     let ativo = true
-    const query = new URLSearchParams(queryBase)
-    query.set("pagina", String(pagina))
-    query.set("limite", "50")
-    if (buscaAplicada.trim()) query.set("busca", buscaAplicada.trim())
-    setLoading(true)
-    setErro("")
-    getDrilldown(query.toString())
-      .then((resultado) => { if (ativo) setDados(resultado) })
-      .catch((error) => { if (ativo) setErro(error instanceof Error ? error.message : "Não foi possível carregar os registros deste indicador.") })
-      .finally(() => { if (ativo) setLoading(false) })
+    queueMicrotask(() => {
+      if (!ativo) return
+      const query = new URLSearchParams(queryBase)
+      query.set("pagina", String(pagina))
+      query.set("limite", "50")
+      if (buscaAplicada.trim()) query.set("busca", buscaAplicada.trim())
+      setLoading(true)
+      setErro("")
+      getDrilldown(query.toString())
+        .then((resultado) => { if (ativo) setDados(resultado) })
+        .catch((error) => { if (ativo) setErro(error instanceof Error ? error.message : "Não foi possível carregar os registros deste indicador.") })
+        .finally(() => { if (ativo) setLoading(false) })
+    })
     return () => { ativo = false }
   }, [queryBase, pagina, buscaAplicada])
 
