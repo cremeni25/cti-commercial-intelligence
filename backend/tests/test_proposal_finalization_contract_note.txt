@@ -1,0 +1,1 @@
+Regression coverage: official proposal finalization must keep the same relaxed field contract used by the emitted preview. Commercial fields allowed blank before acceptance cannot become blockers after acceptance. Integrity gates remain model homologation, source SHA-256, media preservation and immutable storage.

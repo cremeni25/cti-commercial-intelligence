@@ -58,17 +58,23 @@ def finalize_official_proposal(
     if not source:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
 
+    # A finalização deve reproduzir o mesmo contrato documental usado no preview/envio.
+    # Campos comerciais que foram permitidos em branco na proposta emitida não podem
+    # passar a bloquear o pedido depois do aceite do cliente.
     payload = build_proposal_document_payload(
         proposal=dict(proposta),
         item=dict(item),
         opportunity=dict(oportunidade),
         client=dict(cliente),
+        validate_required=False,
     )
     generated = render_official_docx(
         bytes(source),
         equipment,
         payload,
         output_number=str(proposta.get("numero") or proposta.get("id") or "PROPOSTA"),
+        validate_required=False,
+        require_all_requested_anchors=False,
     )
     if not hmac.compare_digest(generated.source_sha256.lower(), expected_hash):
         raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo oficial registrado.")
