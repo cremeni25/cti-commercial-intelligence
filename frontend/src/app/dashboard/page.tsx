@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import Sidebar from "@/components/ui/Sidebar"
@@ -196,6 +197,8 @@ export default function DashboardHub() {
   })
   const graficoPipeline = linhasEmCurso.map((linha) => ({ linha: linha.codigo, nome: linha.nome, valor: linha.valor, negociacoes: linha.negociacoes }))
   const falhaTemporaria = falhaHistorico || falhaLinhas || falhaNucleo || falhaOportunidades
+  const registrosHistoricosHref = drilldown("anfir", "Dashboard Executivo · Registros históricos filtrados", queryString)
+  const negociosEmCursoHref = drilldown("crm", "Dashboard Executivo · Negócios em curso")
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
@@ -213,7 +216,7 @@ export default function DashboardHub() {
           <section className="grid gap-3 md:grid-cols-3">
             <Info titulo="Período histórico" valor={periodoExibido} />
             <Info titulo="Última atualização" valor={ultimaAtualizacao || "Carregando dados"} />
-            <Info titulo="Registros históricos filtrados" valor={loadingHistorico ? "..." : historicoDisponivel ? String(historico.metadata?.total_registros_filtrados ?? 0) : "—"} />
+            <Info titulo="Registros históricos filtrados" valor={loadingHistorico ? "..." : historicoDisponivel ? String(historico.metadata?.total_registros_filtrados ?? 0) : "—"} href={historicoDisponivel ? registrosHistoricosHref : undefined} />
           </section>
 
           {falhaTemporaria && <div className="rounded-2xl border border-amber-700 bg-amber-950/20 p-4 text-sm text-amber-200">Conexão temporariamente indisponível. Reconexão automática em andamento; nenhum indicador indisponível será mostrado como zero.</div>}
@@ -230,8 +233,8 @@ export default function DashboardHub() {
 
             <PainelTempo titulo="EM CURSO" subtitulo="O que está acontecendo agora." destaque="Negócios vivos">
               <div className="grid gap-3 sm:grid-cols-2">
-                <Kpi titulo="Pipeline aberto" valor={loadingOperacional ? "..." : nucleoDisponivel ? moeda(pipelineAberto) : "—"} />
-                <Kpi titulo="Negociações ativas" valor={loadingOperacional ? "..." : nucleoDisponivel ? abertos.length : "—"} />
+                <Kpi titulo="Pipeline aberto" valor={loadingOperacional ? "..." : nucleoDisponivel ? moeda(pipelineAberto) : "—"} href={nucleoDisponivel ? negociosEmCursoHref : undefined} />
+                <Kpi titulo="Negociações ativas" valor={loadingOperacional ? "..." : nucleoDisponivel ? abertos.length : "—"} href={nucleoDisponivel ? negociosEmCursoHref : undefined} />
                 <Kpi titulo="Propostas vigentes" valor={loadingOperacional ? "..." : nucleoDisponivel ? propostasAbertas : "—"} />
                 <Kpi titulo="Pedidos em curso" valor={loadingOperacional ? "..." : nucleoDisponivel ? pedidosAbertos : "—"} />
               </div>
@@ -314,12 +317,19 @@ function classificarLinha(item?: OportunidadeCRM) {
   if (/\b(CM 280|CM280|CM 400|CM400|CM 500|CM500|CM 600|CM600|D6|D7|S8|S9|XARIOS 350|XARIOS 600)\b/.test(equipamento)) return "DD"
   return null
 }
+function drilldown(camada: "anfir" | "crm", titulo: string, queryString = "") {
+  const query = new URLSearchParams(queryString)
+  query.set("camada", camada)
+  query.set("titulo", titulo)
+  query.set("subtitulo", camada === "anfir" ? "Registros individualizados do realizado no contexto selecionado" : "Oportunidades abertas que formam o indicador operacional")
+  return `/detalhamento?${query.toString()}`
+}
 function nomeLinha(codigo: string) { return LINHAS.find((linha) => linha.codigo === codigo)?.nome ?? codigo }
 function moeda(valor?: number) { return `R$ ${(valor ?? 0).toLocaleString("pt-BR")}` }
 function abreviarMoeda(valor: number) { if (Math.abs(valor) >= 1000000) return `R$ ${(valor / 1000000).toFixed(1)}M`; if (Math.abs(valor) >= 1000) return `R$ ${(valor / 1000).toFixed(0)}k`; return `R$ ${valor}` }
 function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string; subtitulo: string; destaque: string; children: React.ReactNode }) { return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">{titulo}</p><h2 className="mt-1 text-xl font-bold">{subtitulo}</h2></div><span className="shrink-0 rounded-full border border-[#24466f] px-3 py-1 text-xs text-slate-300">{destaque}</span></div>{children}</section> }
-function Info({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-4"><p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p><p className="mt-1 text-sm font-semibold text-cyan-200">{valor}</p></div> }
-function Kpi({ titulo, valor }: { titulo: string; valor: string | number }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div> }
+function Info({ titulo, valor, href }: { titulo: string; valor: string; href?: string }) { const body = <><p className="text-xs uppercase tracking-wide text-slate-500">{titulo}</p><p className="mt-1 text-sm font-semibold text-cyan-200">{valor}</p>{href && <p className="mt-2 text-[11px] text-cyan-400">Clique para detalhar</p>}</>; return href ? <Link href={href} className="rounded-2xl border border-[#13203f] bg-[#071226] p-4 transition hover:border-cyan-500/70 hover:bg-[#0a1a31]">{body}</Link> : <div className="rounded-2xl border border-[#13203f] bg-[#071226] p-4">{body}</div> }
+function Kpi({ titulo, valor, href }: { titulo: string; valor: string | number; href?: string }) { const body = <><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p>{href && <p className="mt-2 text-[11px] text-cyan-400">Clique para detalhar</p>}</>; return href ? <Link href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4 transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</Link> : <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">{body}</div> }
 function GraficoPainel({ titulo, subtitulo, children }: { titulo: string; subtitulo: string; children: React.ReactNode }) { return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">{titulo}</p><h2 className="mt-1 text-xl font-bold">{subtitulo}</h2><div className="mt-5 h-[300px]">{children}</div></section> }
 function GraficoIndisponivel() { return <div className="grid h-full place-items-center rounded-2xl border border-dashed border-amber-700/60 bg-amber-950/10 px-6 text-center text-sm text-amber-200">Dados temporariamente indisponíveis. Reconexão automática em andamento.</div> }
 function Mini({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-xl border border-[#16325c] bg-[#091a33] p-3"><p className="text-xs font-bold text-cyan-300">{titulo}</p><p className="mt-1 text-xs text-slate-400">{valor}</p></div> }
