@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from datetime import datetime, timezone
+from hashlib import sha256
 from html import escape
 from typing import Any
 
@@ -24,6 +25,8 @@ STATUS_ENVIAVEL = {"EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO", "ACEITA
 class EnviarPropostasOportunidadeRequest(BaseModel):
     proposta_ids: list[str] = Field(min_length=1)
     destinatarios: list[str] = Field(min_length=1)
+    cc: list[str] = Field(default_factory=list)
+    cco: list[str] = Field(default_factory=list)
     assunto: str | None = None
     mensagem: str | None = None
 
@@ -50,17 +53,26 @@ def _cliente(cliente_id: str) -> dict[str, Any]:
     return {}
 
 
-def _emails_validos(valores: list[str]) -> list[str]:
+def _emails_validos(valores: list[str], *, obrigatorio: bool = True, campo: str = "destinatário") -> list[str]:
     resultado: list[str] = []
     for bruto in valores:
         email = str(bruto or "").strip().lower()
-        if not email or "@" not in email or email.startswith("@") or email.endswith("@"):
-            raise HTTPException(status_code=422, detail=f"E-mail inválido: {bruto}")
+        if not email:
+            continue
+        if "@" not in email or email.startswith("@") or email.endswith("@") or "." not in email.split("@")[-1]:
+            raise HTTPException(status_code=422, detail=f"E-mail inválido em {campo}: {bruto}")
         if email not in resultado:
             resultado.append(email)
-    if not resultado:
-        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário válido.")
+    if obrigatorio and not resultado:
+        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário principal válido.")
     return resultado
+
+
+def _snapshot_com_envio(proposta: dict[str, Any], envio: dict[str, Any]) -> dict[str, Any]:
+    snapshot_atual = proposta.get("snapshot_dados")
+    snapshot = dict(snapshot_atual) if isinstance(snapshot_atual, dict) else {}
+    snapshot["envio_email"] = envio
+    return snapshot
 
 
 @router.post("/{oportunidade_id}/enviar-propostas-email")
@@ -73,7 +85,7 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente da oportunidade não encontrado.")
 
-    proposta_ids = []
+    proposta_ids: list[str] = []
     for bruto in dados.proposta_ids:
         proposta_id = str(bruto or "").strip()
         if proposta_id and proposta_id not in proposta_ids:
@@ -125,10 +137,13 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
             "arquivo": pdf.filename,
             "sha256": pdf.sha256,
             "paginas": pdf.page_count,
+            "snapshot_dados": proposta.get("snapshot_dados"),
         })
         valor_total += float(proposta.get("valor") or 0)
 
-    destinatarios = _emails_validos(dados.destinatarios)
+    destinatarios = _emails_validos(dados.destinatarios, campo="Para")
+    cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
+    cco = _emails_validos(dados.cco, obrigatorio=False, campo="CCO")
     cliente_nome = str(cliente.get("nome") or cliente.get("razao_social") or cliente.get("nome_fantasia") or "Cliente").strip()
     titulo_oportunidade = str(oportunidade.get("titulo") or "Negociação comercial").strip()
     mensagem = str(dados.mensagem or "Seguem as propostas comerciais dos equipamentos negociados para sua análise.").strip()
@@ -152,14 +167,26 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
         "\n".join(f"- {item['numero']} | {item['equipamento']} | {item['quantidade']} un." for item in propostas_preparadas) +
         "\n\nCada proposta oficial segue anexada separadamente em PDF."
     )
+    chave_material = "|".join([
+        oportunidade_id,
+        assunto,
+        *sorted(proposta_ids),
+        *sorted(destinatarios),
+        *sorted(cc),
+        *sorted(cco),
+    ])
+    idempotency_key = f"cti-propostas-{sha256(chave_material.encode('utf-8')).hexdigest()}"
 
     try:
         enviado = enviar_email(
             destinatarios=destinatarios,
+            cc=cc,
+            cco=cco,
             assunto=assunto,
             html=html,
             texto=texto,
             attachments=anexos,
+            idempotency_key=idempotency_key,
         )
     except TransporteEmailNaoConfigurado as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -168,35 +195,43 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
 
     agora = _agora()
     for proposta in propostas_preparadas:
-        supabase.table("cti_propostas").update({
+        envio_registro = {
+            "provider": enviado.provider,
+            "message_id": enviado.message_id,
+            "para": destinatarios,
+            "cc": cc,
+            "cco": cco,
+            "assunto": assunto,
+            "arquivo": proposta["arquivo"],
+            "sha256": proposta["sha256"],
+            "paginas": proposta["paginas"],
+            "enviado_em": agora,
+            "envio_conjunto": True,
+            "proposta_ids": proposta_ids,
+        }
+        proposta_atual = {
+            "snapshot_dados": proposta.get("snapshot_dados")
+        }
+        snapshot = _snapshot_com_envio(proposta_atual, envio_registro)
+        atualizado = supabase.table("cti_propostas").update({
             "status_documento": "ENVIADA",
             "status": "ENVIADA",
-            "updated_at": agora,
-        }).eq("id", proposta["id"]).execute()
-
-    try:
-        supabase.table("cti_oportunidade_historico").insert({
-            "oportunidade_id": oportunidade_id,
-            "tipo": "PROPOSTAS_ENVIO_CONJUNTO",
-            "descricao": f"{len(propostas_preparadas)} proposta(s) enviadas em um único processo pelo CRM App.",
-            "payload": {
-                "proposta_ids": [item["id"] for item in propostas_preparadas],
-                "destinatarios": destinatarios,
-                "provider": enviado.provider,
-                "message_id": enviado.message_id,
-                "arquivos": [{"arquivo": item["arquivo"], "sha256": item["sha256"], "paginas": item["paginas"]} for item in propostas_preparadas],
-                "valor_total": round(valor_total, 2),
-            },
-            "created_at": agora,
-        }).execute()
-    except Exception:
-        pass
+            "enviada_em": agora,
+            "snapshot_dados": snapshot,
+        }).eq("id", proposta["id"]).execute().data or []
+        if not atualizado:
+            raise HTTPException(
+                status_code=500,
+                detail=f"O e-mail foi aceito pelo provedor, mas o CTI não conseguiu registrar o protocolo. Protocolo externo: {enviado.message_id}",
+            )
 
     return {
         "success": True,
         "oportunidade_id": oportunidade_id,
-        "propostas": propostas_preparadas,
+        "propostas": [{chave: valor for chave, valor in proposta.items() if chave != "snapshot_dados"} for proposta in propostas_preparadas],
         "destinatarios": destinatarios,
+        "cc": cc,
+        "cco": cco,
         "provider": enviado.provider,
         "message_id": enviado.message_id,
         "valor_total": round(valor_total, 2),

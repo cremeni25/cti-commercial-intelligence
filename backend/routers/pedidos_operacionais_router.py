@@ -20,6 +20,8 @@ router = APIRouter(prefix="/crm-documentos", tags=["CRM Pedidos Operacionais"])
 
 class ConverterPedidoOperacionalRequest(BaseModel):
     destinatarios: list[str] = Field(min_length=1)
+    cc: list[str] = Field(default_factory=list)
+    cco: list[str] = Field(default_factory=list)
     observacoes_envio: str | None = None
     responsavel_id: str | None = None
     data_pedido: str | None = None
@@ -27,6 +29,8 @@ class ConverterPedidoOperacionalRequest(BaseModel):
 
 class AtualizarDestinatariosPedidoRequest(BaseModel):
     destinatarios: list[str] = Field(min_length=1)
+    cc: list[str] = Field(default_factory=list)
+    cco: list[str] = Field(default_factory=list)
     observacoes_envio: str | None = None
 
 
@@ -90,16 +94,20 @@ def _equipamento_pedido(pacote: dict[str, Any]) -> str:
     return "A definir"
 
 
-def _emails_validos(valores: list[str]) -> list[str]:
+def _emails_validos(
+    valores: list[str], *, obrigatorio: bool = True, campo: str = "Para"
+) -> list[str]:
     emails: list[str] = []
     for valor in valores:
-        email = valor.strip().lower()
-        if not email or "@" not in email or "." not in email.split("@")[-1]:
-            raise HTTPException(status_code=422, detail=f"Destinatário inválido: {valor}")
+        email = str(valor or "").strip().lower()
+        if not email:
+            continue
+        if "@" not in email or "." not in email.split("@")[-1]:
+            raise HTTPException(status_code=422, detail=f"E-mail inválido em {campo}: {valor}")
         if email not in emails:
             emails.append(email)
-    if not emails:
-        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário do pedido.")
+    if obrigatorio and not emails:
+        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário principal do pedido.")
     return emails
 
 
@@ -121,7 +129,11 @@ def _ultimo_registro(pedido: dict[str, Any], tipo: str) -> dict[str, Any] | None
 
 
 def _registrar_destinatarios(
-    pedido: dict[str, Any], destinatarios: list[str], observacoes: str | None
+    pedido: dict[str, Any],
+    destinatarios: list[str],
+    cc: list[str],
+    cco: list[str],
+    observacoes: str | None,
 ) -> dict[str, Any]:
     dossie = [
         registro
@@ -132,6 +144,8 @@ def _registrar_destinatarios(
         {
             "tipo": "DESTINATARIOS_PEDIDO",
             "destinatarios": destinatarios,
+            "cc": cc,
+            "cco": cco,
             "observacoes_envio": observacoes,
             "status_envio": "PENDENTE",
             "registrado_em": _agora(),
@@ -297,7 +311,9 @@ def _html_pedido(pacote: dict[str, Any]) -> tuple[str, str, str]:
 
 @router.post("/propostas/{proposta_id}/converter-pedido-operacional")
 def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperacionalRequest):
-    destinatarios = _emails_validos(dados.destinatarios)
+    destinatarios = _emails_validos(dados.destinatarios, campo="Para")
+    cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
+    cco = _emails_validos(dados.cco, obrigatorio=False, campo="CCO")
     pedidos = converter_em_pedido(
         proposta_id,
         ConverterPedidoRequest(
@@ -309,7 +325,7 @@ def converter_pedido_operacional(proposta_id: str, dados: ConverterPedidoOperaci
     pedido = pedidos[0] if isinstance(pedidos, list) and pedidos else pedidos
     if not isinstance(pedido, dict) or not pedido.get("id"):
         raise HTTPException(status_code=500, detail="Pedido criado sem identificação válida.")
-    return _registrar_destinatarios(pedido, destinatarios, dados.observacoes_envio)
+    return _registrar_destinatarios(pedido, destinatarios, cc, cco, dados.observacoes_envio)
 
 
 @router.post("/pedidos/{pedido_id}/destinatarios")
@@ -317,7 +333,9 @@ def atualizar_destinatarios_pedido(pedido_id: str, dados: AtualizarDestinatarios
     pedido = _primeiro("cti_pedidos", pedido_id, "Pedido não encontrado")
     return _registrar_destinatarios(
         pedido,
-        _emails_validos(dados.destinatarios),
+        _emails_validos(dados.destinatarios, campo="Para"),
+        _emails_validos(dados.cc, obrigatorio=False, campo="CC"),
+        _emails_validos(dados.cco, obrigatorio=False, campo="CCO"),
         dados.observacoes_envio,
     )
 
@@ -334,11 +352,15 @@ def enviar_pedido_operacional(pedido_id: str, dados: EnviarPedidoRequest):
     if protocolo_existente.get("status_envio") == "ENVIADO":
         return pacote
 
-    destinatarios = _emails_validos(list(envio.get("destinatarios") or []))
+    destinatarios = _emails_validos(list(envio.get("destinatarios") or []), campo="Para")
+    cc = _emails_validos(list(envio.get("cc") or []), obrigatorio=False, campo="CC")
+    cco = _emails_validos(list(envio.get("cco") or []), obrigatorio=False, campo="CCO")
     assunto, html, texto = _html_pedido(pacote)
     try:
         resultado = enviar_email(
             destinatarios=destinatarios,
+            cc=cc,
+            cco=cco,
             assunto=assunto,
             html=html,
             texto=texto,
@@ -363,6 +385,8 @@ def enviar_pedido_operacional(pedido_id: str, dados: EnviarPedidoRequest):
             "message_id": resultado.message_id,
             "remetente": resultado.remetente,
             "destinatarios": resultado.destinatarios,
+            "cc": resultado.cc,
+            "cco": resultado.cco,
             "assunto": assunto,
             "enviado_em": enviado_em,
         }

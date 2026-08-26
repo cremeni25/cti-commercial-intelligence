@@ -42,10 +42,6 @@ export function ControlledSelect({
     }
   }, [])
 
-  useEffect(() => {
-    if (disabled) setAberto(false)
-  }, [disabled])
-
   return (
     <div ref={raizRef} className="relative w-full">
       {name ? <input type="hidden" name={name} value={value} /> : null}
@@ -53,13 +49,13 @@ export function ControlledSelect({
         type="button"
         disabled={disabled}
         aria-haspopup="listbox"
-        aria-expanded={aberto}
+        aria-expanded={aberto && !disabled}
         aria-controls={listaId}
         onClick={() => setAberto((atual) => !atual)}
         className={`flex h-12 w-full items-center justify-between gap-3 border border-[#24466f] bg-[#020817] px-4 text-left text-white outline-none transition focus:border-cyan-600 disabled:cursor-not-allowed disabled:opacity-60 ${buttonClassName}`}
       >
         <span className="min-w-0 truncate">{selecionada?.[1] || "Selecione"}</span>
-        <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${aberto ? "rotate-180" : ""}`} />
+        <ChevronDown size={18} className={`shrink-0 text-slate-400 transition-transform ${aberto && !disabled ? "rotate-180" : ""}`} />
       </button>
 
       {aberto && !disabled ? (

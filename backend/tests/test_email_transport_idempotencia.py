@@ -32,13 +32,43 @@ def test_envio_resend_recebe_chave_idempotencia(monkeypatch):
     monkeypatch.setattr(transport.httpx, "post", fake_post)
     enviado = transport.enviar_email(
         destinatarios=["destino@example.com"],
+        cc=["copia@example.com"],
+        cco=["oculta@example.com"],
         assunto="Assunto",
         html="<p>Teste</p>",
         idempotency_key="cti/proposta/123",
     )
 
     assert enviado.message_id == "email-123"
+    assert enviado.destinatarios == ["destino@example.com"]
+    assert enviado.cc == ["copia@example.com"]
+    assert enviado.cco == ["oculta@example.com"]
     assert capturado["headers"]["Idempotency-Key"] == "cti/proposta/123"
+    assert capturado["json"]["to"] == ["destino@example.com"]
+    assert capturado["json"]["cc"] == ["copia@example.com"]
+    assert capturado["json"]["bcc"] == ["oculta@example.com"]
+
+
+def test_envio_sem_cc_cco_preserva_compatibilidade(monkeypatch):
+    monkeypatch.setenv("RESEND_API_KEY", "re_teste")
+    monkeypatch.setenv("CTI_EMAIL_FROM", "CTI <cti@example.com>")
+    capturado = {}
+
+    def fake_post(url, *, headers, json, timeout):
+        capturado["json"] = json
+        return _Resposta(200, {"id": "email-sem-copias"})
+
+    monkeypatch.setattr(transport.httpx, "post", fake_post)
+    enviado = transport.enviar_email(
+        destinatarios=["destino@example.com"],
+        assunto="Assunto",
+        html="<p>Teste</p>",
+    )
+
+    assert enviado.cc == []
+    assert enviado.cco == []
+    assert "cc" not in capturado["json"]
+    assert "bcc" not in capturado["json"]
 
 
 def test_busca_envio_confirmado_por_assunto_e_destinatario(monkeypatch):

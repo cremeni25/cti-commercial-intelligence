@@ -61,17 +61,25 @@ def enviar_pedido_com_documento_oficial(pedido_id: str, dados: EnviarPedidoOfici
     except ProposalOrderDocumentError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-    # Depois da finalização, revalida a idempotência pelo SHA. Uma revisão corretiva
-    # recebe SHA/path próprios e pode ser enviada sem apagar o protocolo anterior.
     if protocolo_existente and protocolo_existente.get("status_envio") == "ENVIADO":
         anexo_anterior = protocolo_existente.get("anexo")
         if isinstance(anexo_anterior, Mapping) and str(anexo_anterior.get("sha256") or "") == attachment.sha256:
             return _pacote_pedido(pedido_id)
 
-    destinatarios = _emails_validos(list(envio.get("destinatarios") or []))
+    destinatarios = _emails_validos(list(envio.get("destinatarios") or []), campo="Para")
+    cc = _emails_validos(list(envio.get("cc") or []), obrigatorio=False, campo="CC")
+    cco = _emails_validos(list(envio.get("cco") or []), obrigatorio=False, campo="CCO")
     assunto, html, texto = _html_pedido(pacote)
     try:
-        resultado = enviar_email(destinatarios=destinatarios, assunto=assunto, html=html, texto=texto, attachments=[attachment.resend_payload()])
+        resultado = enviar_email(
+            destinatarios=destinatarios,
+            cc=cc,
+            cco=cco,
+            assunto=assunto,
+            html=html,
+            texto=texto,
+            attachments=[attachment.resend_payload()],
+        )
     except TransporteEmailNaoConfigurado as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except Exception as exc:
@@ -87,6 +95,7 @@ def enviar_pedido_com_documento_oficial(pedido_id: str, dados: EnviarPedidoOfici
     dossie.append({
         "tipo": "ENVIO_PEDIDO_OFICIAL", "status_envio": "ENVIADO", "provider": resultado.provider,
         "message_id": resultado.message_id, "remetente": resultado.remetente, "destinatarios": resultado.destinatarios,
+        "cc": resultado.cc, "cco": resultado.cco,
         "assunto": assunto, "anexo": {"filename": attachment.filename, "sha256": attachment.sha256, "bucket": attachment.bucket,
         "path": attachment.path, "template_code": attachment.template_code, "template_version": attachment.template_version, "immutable": True},
         "enviado_em": enviado_em,

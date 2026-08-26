@@ -35,7 +35,9 @@ export default function PedidoCrmAppPage() {
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
   const [editando, setEditando] = useState(false)
-  const [emails, setEmails] = useState("")
+  const [para, setPara] = useState("")
+  const [cc, setCc] = useState("")
+  const [cco, setCco] = useState("")
   const [observacoes, setObservacoes] = useState("")
 
   const carregar = useCallback(async () => {
@@ -47,7 +49,11 @@ export default function PedidoCrmAppPage() {
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível carregar o pedido (${resposta.status}).`))
       setDados(payload)
       const atuais = Array.isArray(payload?.envio?.destinatarios) ? payload.envio.destinatarios : []
-      setEmails(atuais.join("\n"))
+      const copias = Array.isArray(payload?.envio?.cc) ? payload.envio.cc : []
+      const ocultas = Array.isArray(payload?.envio?.cco) ? payload.envio.cco : []
+      setPara(atuais.join("\n"))
+      setCc(copias.join("\n"))
+      setCco(ocultas.join("\n"))
       setObservacoes(String(payload?.envio?.observacoes_envio || ""))
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao carregar o pedido.") }
     finally { setCarregando(false) }
@@ -56,16 +62,16 @@ export default function PedidoCrmAppPage() {
   useEffect(() => { void carregar() }, [carregar])
 
   async function salvarDestinatarios() {
-    const destinatarios = separarEmails(emails)
-    if (!destinatarios.length) { setErro("Informe ao menos um destinatário válido."); return }
+    const destinatarios = separarEmails(para)
+    if (!destinatarios.length) { setErro("Informe ao menos um endereço no campo Para."); return }
     setSalvando(true); setErro(""); setMensagem("")
     try {
       const resposta = await fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}/destinatarios`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destinatarios, observacoes_envio: observacoes || null }),
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destinatarios, cc: separarEmails(cc), cco: separarEmails(cco), observacoes_envio: observacoes || null }),
       })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível salvar os destinatários (${resposta.status}).`))
-      setMensagem("Destinatários registrados no pedido.")
+      setMensagem("Endereçamento do pedido registrado.")
       setEditando(false)
       await carregar()
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao salvar os destinatários.") }
@@ -74,8 +80,8 @@ export default function PedidoCrmAppPage() {
 
   async function enviarPedido() {
     const destinatarios = Array.isArray(dados?.envio?.destinatarios) ? dados.envio.destinatarios as string[] : []
-    if (!destinatarios.length) { setErro("Registre os destinatários antes de enviar o pedido."); return }
-    if (!window.confirm(`Confirma o envio definitivo deste pedido para ${destinatarios.length} destinatário(s)?`)) return
+    if (!destinatarios.length) { setErro("Registre o campo Para antes de enviar o pedido."); return }
+    if (!window.confirm(`Confirma o envio definitivo deste pedido para ${destinatarios.length} destinatário(s) principal(is)?`)) return
     setEnviando(true); setErro(""); setMensagem("")
     try {
       const resposta = await fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}/enviar`, {
@@ -107,6 +113,8 @@ export default function PedidoCrmAppPage() {
   }
 
   const destinatarios = Array.isArray(dados?.envio?.destinatarios) ? dados?.envio?.destinatarios as string[] : []
+  const copias = Array.isArray(dados?.envio?.cc) ? dados?.envio?.cc as string[] : []
+  const ocultas = Array.isArray(dados?.envio?.cco) ? dados?.envio?.cco as string[] : []
   const protocolo = dados?.protocolo_envio || null
   const enviado = texto(protocolo?.status_envio || dados?.envio?.status_envio, "PENDENTE") === "ENVIADO"
   const statusEnvio = enviado ? "ENVIADO" : texto(dados?.envio?.status_envio, "PENDENTE")
@@ -114,7 +122,7 @@ export default function PedidoCrmAppPage() {
   const cliente = texto(dados?.cliente?.razao_social || dados?.cliente?.nome || dados?.oportunidade?.cliente_nome, "Cliente não identificado no cadastro")
 
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-4xl">
-    <header className="mb-5 flex items-center gap-3"><Link href="/crm-app/pedidos" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Acompanhamento do pedido</h1><p className="text-sm text-slate-400">Documento, destinatários e situação operacional</p></div></header>
+    <header className="mb-5 flex items-center gap-3"><Link href="/crm-app/pedidos" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Acompanhamento do pedido</h1><p className="text-sm text-slate-400">Documento, endereçamento e situação operacional</p></div></header>
     {carregando && <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>}
     {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
     {mensagem && <div className="mb-4 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-emerald-200">{mensagem}</div>}
@@ -130,15 +138,16 @@ export default function PedidoCrmAppPage() {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">Destinatários responsáveis</h3><p className="text-sm text-slate-400">Pessoas que deverão receber o pedido</p></div><div className="flex items-center gap-2"><span className={`rounded-full border px-3 py-1 text-xs ${enviado ? "border-emerald-700 text-emerald-300" : "border-amber-700 text-amber-300"}`}>ENVIO {statusEnvio}</span>{!enviado && <button type="button" onClick={() => setEditando((valor) => !valor)} className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-200">{destinatarios.length ? "Editar" : "Adicionar"}</button>}</div></div>
-        {editando ? <div className="mt-4 space-y-3"><label className="block text-sm text-slate-300">E-mails dos destinatários<textarea value={emails} onChange={(evento) => setEmails(evento.target.value)} placeholder="um@empresa.com.br\noutro@empresa.com.br" className="mt-2 min-h-28 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><label className="block text-sm text-slate-300">Observações<textarea value={observacoes} onChange={(evento) => setObservacoes(evento.target.value)} className="mt-2 min-h-20 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><button disabled={salvando} onClick={() => void salvarDestinatarios()} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50"><Save className="mr-2 inline" size={18}/>{salvando ? "Salvando..." : "Salvar destinatários"}</button></div> : <div className="mt-4 space-y-2">{destinatarios.length ? destinatarios.map((email) => <div key={email} className="flex items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-3"><Mail size={18} className="text-cyan-300"/><span className="break-all text-sm">{email}</span></div>) : <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhum destinatário registrado. Use o botão Adicionar.</p>}</div>}
+      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-bold">Endereçamento do pedido</h3><p className="text-sm text-slate-400">Para obrigatório; CC e CCO opcionais</p></div><div className="flex items-center gap-2"><span className={`rounded-full border px-3 py-1 text-xs ${enviado ? "border-emerald-700 text-emerald-300" : "border-amber-700 text-amber-300"}`}>ENVIO {statusEnvio}</span>{!enviado && <button type="button" onClick={() => setEditando((valor) => !valor)} className="rounded-xl border border-cyan-700 px-3 py-2 text-sm text-cyan-200">{destinatarios.length ? "Editar" : "Adicionar"}</button>}</div></div>
+        {editando ? <div className="mt-4 space-y-3"><label className="block text-sm text-slate-300">Para<textarea value={para} onChange={(evento) => setPara(evento.target.value)} placeholder="compras@cliente.com.br\ndiretor@cliente.com.br" className="mt-2 min-h-20 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><label className="block text-sm text-slate-300">CC — cópia<textarea value={cc} onChange={(evento) => setCc(evento.target.value)} placeholder="gestor@empresa.com.br" className="mt-2 min-h-16 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><label className="block text-sm text-slate-300">CCO — cópia oculta<textarea value={cco} onChange={(evento) => setCco(evento.target.value)} placeholder="arquivo@empresa.com.br" className="mt-2 min-h-16 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><label className="block text-sm text-slate-300">Observações<textarea value={observacoes} onChange={(evento) => setObservacoes(evento.target.value)} className="mt-2 min-h-20 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-3 text-white outline-none focus:border-cyan-600"/></label><button disabled={salvando} onClick={() => void salvarDestinatarios()} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50"><Save className="mr-2 inline" size={18}/>{salvando ? "Salvando..." : "Salvar endereçamento"}</button></div> : <div className="mt-4 space-y-3"><GrupoEmails titulo="Para" emails={destinatarios}/>{copias.length>0&&<GrupoEmails titulo="CC" emails={copias}/>} {ocultas.length>0&&<GrupoEmails titulo="CCO" emails={ocultas}/>} {!destinatarios.length&&<p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhum destinatário principal registrado. Use o botão Adicionar.</p>}</div>}
         {!editando && texto(dados.envio?.observacoes_envio, "") && <div className="mt-4 rounded-2xl bg-[#020817] p-4 text-sm text-slate-300"><strong className="block text-xs text-slate-500">Observações para o envio</strong>{texto(dados.envio?.observacoes_envio)}</div>}
-        {!enviado && !editando && <div className="mt-4"><button disabled={enviando || !destinatarios.length || !transporteConfigurado} onClick={() => void enviarPedido()} className="w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"><Send className="mr-2 inline" size={18}/>{enviando ? "Enviando pedido..." : "Enviar pedido aos destinatários"}</button><p className={`mt-3 text-xs ${transporteConfigurado ? "text-emerald-300" : "text-amber-300"}`}>{transporteConfigurado ? `Transporte confirmado: ${texto(dados.transporte_email?.remetente)}` : "Envio bloqueado até a confirmação do domínio e da chave de transporte no Render."}</p></div>}
+        {!enviado && !editando && <div className="mt-4"><button disabled={enviando || !destinatarios.length || !transporteConfigurado} onClick={() => void enviarPedido()} className="w-full rounded-xl bg-emerald-500 px-4 py-3 font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"><Send className="mr-2 inline" size={18}/>{enviando ? "Enviando pedido..." : "Enviar pedido"}</button><p className={`mt-3 text-xs ${transporteConfigurado ? "text-emerald-300" : "text-amber-300"}`}>{transporteConfigurado ? `Transporte confirmado: ${texto(dados.transporte_email?.remetente)}` : "Envio bloqueado até a confirmação do domínio e da chave de transporte no Render."}</p></div>}
         {enviado && protocolo && <div className="mt-4 rounded-2xl border border-emerald-800 bg-emerald-950/30 p-4"><h4 className="font-semibold text-emerald-200">Envio confirmado</h4><div className="mt-3 grid gap-2 text-sm text-slate-300 sm:grid-cols-2"><p><strong className="text-slate-500">Data:</strong> {dataBr(protocolo.enviado_em)}</p><p><strong className="text-slate-500">Provedor:</strong> {texto(protocolo.provider)}</p><p className="sm:col-span-2 break-all"><strong className="text-slate-500">Protocolo:</strong> {texto(protocolo.message_id)}</p><p className="sm:col-span-2 break-all"><strong className="text-slate-500">Remetente:</strong> {texto(protocolo.remetente)}</p></div></div>}
       </section>
-      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><h3 className="font-bold">Dossiê comercial preservado</h3><p className="mt-2 text-sm leading-6 text-slate-400">O pedido mantém vínculo com a proposta aceita, o aceite registrado, a oportunidade, o item comercial, os destinatários e o protocolo de envio.</p></section>
+      <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><h3 className="font-bold">Dossiê comercial preservado</h3><p className="mt-2 text-sm leading-6 text-slate-400">O pedido mantém vínculo com a proposta aceita, o aceite registrado, a oportunidade, o item comercial, o endereçamento e o protocolo de envio.</p></section>
     </div>}
   </div></main>
 }
 
+function GrupoEmails({titulo,emails}:{titulo:string;emails:string[]}) { return <div><strong className="mb-2 block text-xs uppercase tracking-[.14em] text-slate-500">{titulo}</strong><div className="space-y-2">{emails.map((email)=><div key={`${titulo}:${email}`} className="flex items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-3"><Mail size={18} className="text-cyan-300"/><span className="break-all text-sm">{email}</span></div>)}</div></div> }
 function Info({ icone, label, valor }: { icone: React.ReactNode; label: string; valor: string }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="flex items-center gap-2 text-cyan-300">{icone}<span className="text-xs text-slate-400">{label}</span></div><strong className="mt-2 block">{valor}</strong></div> }
