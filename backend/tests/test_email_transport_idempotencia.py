@@ -3,7 +3,11 @@ from __future__ import annotations
 import inspect
 
 from services import email_transport_service as transport
-from routers.crm_app_proposta_envio_router import _chave_idempotencia, enviar_proposta_por_email
+from routers.crm_app_proposta_envio_router import (
+    _chave_idempotencia,
+    _snapshot_com_envio,
+    enviar_proposta_por_email,
+)
 
 
 class _Resposta:
@@ -75,3 +79,24 @@ def test_chave_idempotencia_e_estavel_para_mesmo_payload():
 def test_pos_envio_nao_tenta_gravar_updated_at_inexistente():
     codigo = inspect.getsource(enviar_proposta_por_email)
     assert '"updated_at"' not in codigo
+
+
+def test_snapshot_de_envio_preserva_dados_existentes_e_grava_protocolo():
+    proposta = {"snapshot_dados": {"documento_final": {"frete": "CIF"}, "item": {"quantidade": 1}}}
+    snapshot = _snapshot_com_envio(
+        proposta,
+        provider="RESEND",
+        message_id="email-789",
+        destinatarios=["destino@example.com"],
+        assunto="Proposta comercial PROP-1 - CTI",
+        arquivo="PROP-1.pdf",
+        arquivo_sha256="sha-pdf",
+        paginas=4,
+        enviado_em="2026-08-26T16:20:00+00:00",
+    )
+
+    assert snapshot["documento_final"]["frete"] == "CIF"
+    assert snapshot["item"]["quantidade"] == 1
+    assert snapshot["envio_email"]["message_id"] == "email-789"
+    assert snapshot["envio_email"]["destinatarios"] == ["destino@example.com"]
+    assert snapshot["envio_email"]["paginas"] == 4
