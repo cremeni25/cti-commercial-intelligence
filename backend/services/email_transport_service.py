@@ -13,6 +13,8 @@ class EmailEnviado:
     message_id: str
     remetente: str
     destinatarios: list[str]
+    cc: list[str]
+    cco: list[str]
 
 
 class TransporteEmailNaoConfigurado(RuntimeError):
@@ -99,8 +101,12 @@ def enviar_email(
     texto: str | None = None,
     attachments: Sequence[Mapping[str, str]] | None = None,
     idempotency_key: str | None = None,
+    cc: Sequence[str] | None = None,
+    cco: Sequence[str] | None = None,
 ) -> EmailEnviado:
     api_key, remetente, reply_to = _configuracao_resend()
+    cc_lista = [str(item).strip() for item in cc or [] if str(item).strip()]
+    cco_lista = [str(item).strip() for item in cco or [] if str(item).strip()]
 
     payload: dict[str, Any] = {
         "from": remetente,
@@ -108,6 +114,10 @@ def enviar_email(
         "subject": assunto,
         "html": html,
     }
+    if cc_lista:
+        payload["cc"] = cc_lista
+    if cco_lista:
+        payload["bcc"] = cco_lista
     if texto:
         payload["text"] = texto
     if reply_to:
@@ -144,4 +154,6 @@ def enviar_email(
         message_id=message_id,
         remetente=remetente,
         destinatarios=destinatarios,
+        cc=cc_lista,
+        cco=cco_lista,
     )
