@@ -29,6 +29,8 @@ STATUS_ENVIAVEL = {"EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO", "ACEITA
 
 class EnviarPropostaRequest(BaseModel):
     destinatarios: list[str] = Field(min_length=1)
+    cc: list[str] = Field(default_factory=list)
+    cco: list[str] = Field(default_factory=list)
     assunto: str | None = None
     mensagem: str | None = None
 
@@ -55,21 +57,44 @@ def _cliente(cliente_id: str) -> dict[str, Any]:
     return {}
 
 
-def _emails_validos(valores: list[str]) -> list[str]:
+def _emails_validos(
+    valores: list[str], *, obrigatorio: bool = True, campo: str = "Para"
+) -> list[str]:
     resultado: list[str] = []
     for bruto in valores:
         email = str(bruto or "").strip().lower()
-        if not email or "@" not in email or email.startswith("@") or email.endswith("@"):
-            raise HTTPException(status_code=422, detail=f"E-mail inválido: {bruto}")
+        if not email:
+            continue
+        if "@" not in email or email.startswith("@") or email.endswith("@") or "." not in email.split("@")[-1]:
+            raise HTTPException(status_code=422, detail=f"E-mail inválido em {campo}: {bruto}")
         if email not in resultado:
             resultado.append(email)
-    if not resultado:
-        raise HTTPException(status_code=422, detail="Informe ao menos um destinatário válido.")
+    if obrigatorio and not resultado:
+        raise HTTPException(status_code=422, detail="Informe ao menos um endereço válido no campo Para.")
     return resultado
 
 
-def _chave_idempotencia(proposta_id: str, destinatarios: list[str], assunto: str, mensagem: str, pdf_sha: str) -> str:
-    base = "|".join([proposta_id, ",".join(destinatarios), assunto, mensagem, pdf_sha])
+def _chave_idempotencia(
+    proposta_id: str,
+    destinatarios: list[str],
+    assunto: str,
+    mensagem: str,
+    pdf_sha: str,
+    *,
+    cc: list[str] | None = None,
+    cco: list[str] | None = None,
+) -> str:
+    cc_lista = cc or []
+    cco_lista = cco or []
+    base = "|".join([
+        proposta_id,
+        ",".join(sorted(destinatarios)),
+        ",".join(sorted(cc_lista)),
+        ",".join(sorted(cco_lista)),
+        assunto,
+        mensagem,
+        pdf_sha,
+    ])
     digest = hashlib.sha256(base.encode("utf-8")).hexdigest()
     return f"cti-proposta/{proposta_id}/{digest[:40]}"
 
@@ -85,12 +110,17 @@ def _snapshot_com_envio(
     arquivo_sha256: str,
     paginas: int,
     enviado_em: str,
+    cc: list[str] | None = None,
+    cco: list[str] | None = None,
 ) -> dict[str, Any]:
     snapshot = dict(proposta.get("snapshot_dados") or {})
     snapshot["envio_email"] = {
         "provider": provider,
         "message_id": message_id,
+        "para": list(destinatarios),
         "destinatarios": list(destinatarios),
+        "cc": list(cc or []),
+        "cco": list(cco or []),
         "assunto": assunto,
         "arquivo": arquivo,
         "arquivo_sha256": arquivo_sha256,
@@ -157,7 +187,9 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     except (ProposalDocumentRepositoryError, DocxPdfConversionError) as exc:
         raise HTTPException(status_code=503, detail=f"Não foi possível preparar o PDF oficial da proposta: {exc}") from exc
 
-    destinatarios = _emails_validos(dados.destinatarios)
+    destinatarios = _emails_validos(dados.destinatarios, campo="Para")
+    cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
+    cco = _emails_validos(dados.cco, obrigatorio=False, campo="CCO")
     numero = str(proposta.get("numero") or proposta_id)
     cliente_nome = str(cliente.get("nome") or cliente.get("razao_social") or cliente.get("nome_fantasia") or "Cliente").strip()
     valor = float(proposta.get("valor") or 0)
@@ -176,11 +208,21 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     try:
         enviado = enviar_email(
             destinatarios=destinatarios,
+            cc=cc,
+            cco=cco,
             assunto=assunto,
             html=html,
             texto=texto,
             attachments=[{"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")}],
-            idempotency_key=_chave_idempotencia(proposta_id, destinatarios, assunto, mensagem, pdf.sha256),
+            idempotency_key=_chave_idempotencia(
+                proposta_id,
+                destinatarios,
+                assunto,
+                mensagem,
+                pdf.sha256,
+                cc=cc,
+                cco=cco,
+            ),
         )
     except TransporteEmailNaoConfigurado as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -193,6 +235,8 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
         provider=enviado.provider,
         message_id=enviado.message_id,
         destinatarios=destinatarios,
+        cc=cc,
+        cco=cco,
         assunto=assunto,
         arquivo=pdf.filename,
         arquivo_sha256=pdf.sha256,
@@ -218,6 +262,8 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
         "proposta_id": proposta_id,
         "numero": numero,
         "destinatarios": destinatarios,
+        "cc": cc,
+        "cco": cco,
         "provider": enviado.provider,
         "message_id": enviado.message_id,
         "arquivo": pdf.filename,
