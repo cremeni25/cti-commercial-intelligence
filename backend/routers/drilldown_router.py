@@ -9,14 +9,13 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
+from services.crm_live_projection import carregar_oportunidades_enriquecidas, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
 from routers.strategic_layers_router import (
     _anfir,
     _data_no_intervalo,
-    _familia_crm,
     _familia_historico,
     _familia_registro_anfir,
-    _lista_segura,
 )
 
 router = APIRouter(prefix="/estrategia", tags=["Estratégia CTI - Drill-down"])
@@ -45,7 +44,7 @@ CAMPOS: dict[str, dict[str, tuple[str, ...]]] = {
         "estado": ("estado",),
         "municipio": ("municipio",),
         "ddd": ("ddd",),
-        "equipamento": ("equipamento", "linha_equipamentos"),
+        "equipamento": ("equipamentos", "equipamento", "linha_equipamentos"),
         "status": ("status",),
         "empresa": ("cliente_nome", "cliente", "empresa"),
     },
@@ -54,7 +53,7 @@ CAMPOS: dict[str, dict[str, tuple[str, ...]]] = {
 COLUNAS = {
     "anfir": ["cliente", "empresa", "transportadora", "estado", "cidade", "municipio", "ddd", "implementadora", "modelo", "linha", "produto", "valor", "data", "created_at"],
     "historico": ["aba_origem", "linha_origem", "data", "ano", "cliente", "equipamento", "quantidade", "valor_unitario", "valor_total", "representante_original", "representante_atual", "status", "motivo_perda", "canal_venda", "implementadora", "previsao", "probabilidade", "observacao"],
-    "crm": ["id", "titulo", "cliente_nome", "cliente", "status", "equipamento", "linha_equipamentos", "valor_estimado", "estado", "municipio", "ddd", "data_fechamento_prevista", "created_at"],
+    "crm": ["id", "titulo", "cliente_nome", "status", "equipamentos", "linhas_equipamentos", "quantidade_total", "valor_estimado", "estado", "municipio", "ddd", "data_fechamento_prevista", "created_at"],
 }
 
 
@@ -66,14 +65,22 @@ def _fold(valor: Any) -> str:
 def _valor_campo(registro: dict[str, Any], candidatos: tuple[str, ...]) -> Any:
     for chave in candidatos:
         valor = registro.get(chave)
-        if valor not in (None, ""):
+        if valor not in (None, "", []):
             return valor
     return None
 
 
 def _corresponde(registro: dict[str, Any], candidatos: tuple[str, ...], valor: str) -> bool:
     alvo = _fold(valor)
-    return _fold(_valor_campo(registro, candidatos)) == alvo
+    for chave in candidatos:
+        atual = registro.get(chave)
+        if isinstance(atual, list):
+            if any(_fold(item) == alvo for item in atual):
+                return True
+            continue
+        if atual not in (None, "") and _fold(atual) == alvo:
+            return True
+    return False
 
 
 def _buscar(registros: list[dict[str, Any]], busca: str | None) -> list[dict[str, Any]]:
@@ -92,7 +99,7 @@ def _ordenar(registros: list[dict[str, Any]], campo: str | None, direcao: str) -
 
 def _projetar(registro: dict[str, Any], camada: str) -> dict[str, Any]:
     chaves = COLUNAS[camada]
-    projetado = {chave: registro.get(chave) for chave in chaves if registro.get(chave) not in (None, "")}
+    projetado = {chave: registro.get(chave) for chave in chaves if registro.get(chave) not in (None, "", [], {})}
     if not projetado:
         projetado = {chave: valor for chave, valor in registro.items() if valor not in (None, "", [], {})}
     return projetado
@@ -179,14 +186,18 @@ def detalhamento_indicador(
     else:
         inicio_efetivo, fim_efetivo = inicio, fim
         fechados = {"GANHO", "PERDIDO", "CANCELADO", "CANCELADA", "CONCLUIDO", "CONCLUIDA"}
-        registros = [item for item in _lista_segura("cti_oportunidades") if str(item.get("status") or "").upper() not in fechados]
+        registros = [item for item in carregar_oportunidades_enriquecidas() if str(item.get("status") or "").upper() not in fechados]
         if familia:
-            registros = [item for item in registros if _familia_crm(item) == familia]
+            registros = [item for item in registros if familia in familias_registro(item)]
 
     if campo == "familia" and valor:
         familia_alvo = valor
-        seletor = _familia_registro_anfir if camada == "anfir" else _familia_historico if camada == "historico" else _familia_crm
-        registros = [item for item in registros if seletor(item) == familia_alvo]
+        if camada == "anfir":
+            registros = [item for item in registros if _familia_registro_anfir(item) == familia_alvo]
+        elif camada == "historico":
+            registros = [item for item in registros if _familia_historico(item) == familia_alvo]
+        else:
+            registros = [item for item in registros if familia_alvo in familias_registro(item)]
     elif campo and valor:
         registros = [item for item in registros if _corresponde(item, CAMPOS[camada][campo], valor)]
 
