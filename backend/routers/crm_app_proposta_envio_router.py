@@ -74,6 +74,32 @@ def _chave_idempotencia(proposta_id: str, destinatarios: list[str], assunto: str
     return f"cti-proposta/{proposta_id}/{digest[:40]}"
 
 
+def _snapshot_com_envio(
+    proposta: dict[str, Any],
+    *,
+    provider: str,
+    message_id: str,
+    destinatarios: list[str],
+    assunto: str,
+    arquivo: str,
+    arquivo_sha256: str,
+    paginas: int,
+    enviado_em: str,
+) -> dict[str, Any]:
+    snapshot = dict(proposta.get("snapshot_dados") or {})
+    snapshot["envio_email"] = {
+        "provider": provider,
+        "message_id": message_id,
+        "destinatarios": list(destinatarios),
+        "assunto": assunto,
+        "arquivo": arquivo,
+        "arquivo_sha256": arquivo_sha256,
+        "paginas": paginas,
+        "enviado_em": enviado_em,
+    }
+    return snapshot
+
+
 @router.get("/{proposta_id}/status-envio-provedor")
 def status_envio_provedor(proposta_id: str):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
@@ -161,36 +187,31 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao enviar a proposta: {exc}") from exc
 
+    enviado_em = _agora()
+    snapshot = _snapshot_com_envio(
+        proposta,
+        provider=enviado.provider,
+        message_id=enviado.message_id,
+        destinatarios=destinatarios,
+        assunto=assunto,
+        arquivo=pdf.filename,
+        arquivo_sha256=pdf.sha256,
+        paginas=pdf.page_count,
+        enviado_em=enviado_em,
+    )
     try:
         supabase.table("cti_propostas").update({
             "status_documento": "ENVIADA",
             "status": "ENVIADA",
-            "emitida_em": proposta.get("emitida_em") or _agora(),
+            "emitida_em": proposta.get("emitida_em") or enviado_em,
+            "enviada_em": enviado_em,
+            "snapshot_dados": snapshot,
         }).eq("id", proposta_id).execute()
     except Exception as exc:
         raise HTTPException(
             status_code=503,
             detail=f"E-mail confirmado pelo provedor ({enviado.message_id}), mas o CTI não conseguiu atualizar o status da proposta. Não reenvie; solicite reconciliação administrativa.",
         ) from exc
-
-    try:
-        supabase.table("cti_oportunidade_historico").insert({
-            "oportunidade_id": oportunidade_id,
-            "tipo": "PROPOSTA_ENVIO",
-            "descricao": f"Proposta {numero} enviada por e-mail pelo CRM App.",
-            "payload": {
-                "proposta_id": proposta_id,
-                "destinatarios": destinatarios,
-                "provider": enviado.provider,
-                "message_id": enviado.message_id,
-                "arquivo": pdf.filename,
-                "arquivo_sha256": pdf.sha256,
-                "paginas": pdf.page_count,
-            },
-            "created_at": _agora(),
-        }).execute()
-    except Exception:
-        pass
 
     return {
         "success": True,
@@ -202,4 +223,5 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
         "arquivo": pdf.filename,
         "sha256": pdf.sha256,
         "paginas": pdf.page_count,
+        "enviada_em": enviado_em,
     }
