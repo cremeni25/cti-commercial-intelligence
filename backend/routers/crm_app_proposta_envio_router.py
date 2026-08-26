@@ -77,17 +77,20 @@ def _emails_validos(
 def _chave_idempotencia(
     proposta_id: str,
     destinatarios: list[str],
-    cc: list[str],
-    cco: list[str],
     assunto: str,
     mensagem: str,
     pdf_sha: str,
+    *,
+    cc: list[str] | None = None,
+    cco: list[str] | None = None,
 ) -> str:
+    cc_lista = cc or []
+    cco_lista = cco or []
     base = "|".join([
         proposta_id,
         ",".join(sorted(destinatarios)),
-        ",".join(sorted(cc)),
-        ",".join(sorted(cco)),
+        ",".join(sorted(cc_lista)),
+        ",".join(sorted(cco_lista)),
         assunto,
         mensagem,
         pdf_sha,
@@ -102,13 +105,13 @@ def _snapshot_com_envio(
     provider: str,
     message_id: str,
     destinatarios: list[str],
-    cc: list[str],
-    cco: list[str],
     assunto: str,
     arquivo: str,
     arquivo_sha256: str,
     paginas: int,
     enviado_em: str,
+    cc: list[str] | None = None,
+    cco: list[str] | None = None,
 ) -> dict[str, Any]:
     snapshot = dict(proposta.get("snapshot_dados") or {})
     snapshot["envio_email"] = {
@@ -116,8 +119,8 @@ def _snapshot_com_envio(
         "message_id": message_id,
         "para": list(destinatarios),
         "destinatarios": list(destinatarios),
-        "cc": list(cc),
-        "cco": list(cco),
+        "cc": list(cc or []),
+        "cco": list(cco or []),
         "assunto": assunto,
         "arquivo": arquivo,
         "arquivo_sha256": arquivo_sha256,
@@ -211,7 +214,15 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             html=html,
             texto=texto,
             attachments=[{"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")}],
-            idempotency_key=_chave_idempotencia(proposta_id, destinatarios, cc, cco, assunto, mensagem, pdf.sha256),
+            idempotency_key=_chave_idempotencia(
+                proposta_id,
+                destinatarios,
+                assunto,
+                mensagem,
+                pdf.sha256,
+                cc=cc,
+                cco=cco,
+            ),
         )
     except TransporteEmailNaoConfigurado as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
