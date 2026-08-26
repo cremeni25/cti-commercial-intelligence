@@ -288,12 +288,14 @@ def nucleo_comercial():
             _valor_item(item)
             for item in itens_oportunidade
             if _status(item.get("status")) not in ETAPAS_PROBABILIDADE_ZERO
+            and not item.get("arquivado_em")
         ), 2)
         valor = (
             _numero(pedido_vigente.get("valor") if pedido_vigente else None)
-            or _numero(proposta_vigente.get("valor") if proposta_vigente else None)
-            or valor_itens
-            or _numero(oportunidade.get("valor_estimado"))
+            if etapa in {"PEDIDO", "DOSSIÊ", "DOSSIE", "CARRIER", "FATURADO"} and pedido_vigente
+            else 0.0
+        ) or valor_itens or _numero(oportunidade.get("valor_estimado")) or _numero(
+            proposta_vigente.get("valor") if proposta_vigente else None
         )
 
         cliente_id = (
@@ -330,7 +332,7 @@ def nucleo_comercial():
             "pedido_id": pedido_vigente.get("id") if pedido_vigente else None,
             "pedido_numero": pedido_vigente.get("numero") if pedido_vigente else None,
             "status_pedido": pedido_vigente.get("status") if pedido_vigente else None,
-            "quantidade_itens": len(itens_oportunidade),
+            "quantidade_itens": len([item for item in itens_oportunidade if not item.get("arquivado_em")]),
             "quantidade_atividades": len(atividades_oportunidade),
             "quantidade_propostas_ativas": len(propostas_ativas),
             "encerrada": etapa in STATUS_OPORTUNIDADE_ENCERRADA or etapa in {"FATURADO", "ENCERRADO"},
