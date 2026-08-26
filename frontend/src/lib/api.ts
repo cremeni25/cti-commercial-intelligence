@@ -5,8 +5,11 @@ export async function apiGet(endpoint: string) {
   const contentType = response.headers.get("content-type") || ""
 
   if (!contentType.includes("application/json")) {
-    const trecho = (await response.text()).slice(0, 160).replace(/\s+/g, " ")
-    throw new Error(`Backend CTI retornou conteúdo inválido (${response.status}): ${trecho || "sem conteúdo"}`)
+    throw new Error(
+      response.status >= 500
+        ? "Serviço CTI temporariamente indisponível. Aguarde alguns segundos e tente novamente."
+        : `Não foi possível interpretar a resposta do CTI (${response.status}).`,
+    )
   }
 
   const payload = await response.json()
