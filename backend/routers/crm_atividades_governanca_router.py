@@ -10,6 +10,9 @@ from core.supabase_client import supabase
 
 router = APIRouter(prefix="/crm", tags=["CRM - Governança de atividades"])
 
+TABELA_ATIVIDADES = "cti_atividades_registros"
+VIEW_ATIVIDADES_ATIVAS = "cti_atividades"
+
 
 class AtividadeAdminUpdate(BaseModel):
     administrador_id: str
@@ -48,9 +51,10 @@ def _master(usuario_id: str) -> dict[str, Any]:
     return usuario
 
 
-def _atividade(atividade_id: str) -> dict[str, Any]:
+def _atividade(atividade_id: str, incluir_arquivadas: bool = False) -> dict[str, Any]:
+    fonte = TABELA_ATIVIDADES if incluir_arquivadas else VIEW_ATIVIDADES_ATIVAS
     resultado = (
-        supabase.table("cti_atividades")
+        supabase.table(fonte)
         .select("*")
         .eq("id", atividade_id)
         .limit(1)
@@ -113,9 +117,8 @@ def _auditar(atividade_id: str, acao: str, usuario_id: str, antes: dict[str, Any
 @router.get("/atividades")
 def listar_atividades_operacionais():
     registros = (
-        supabase.table("cti_atividades")
+        supabase.table(VIEW_ATIVIDADES_ATIVAS)
         .select("*")
-        .is_("arquivado_em", "null")
         .order("created_at", desc=True)
         .execute()
         .data
@@ -128,23 +131,21 @@ def listar_atividades_operacionais():
 def listar_atividades_arquivadas(usuario_id: str):
     _master(usuario_id)
     registros = (
-        supabase.table("cti_atividades")
+        supabase.table(TABELA_ATIVIDADES)
         .select("*")
+        .not_.is_("arquivado_em", "null")
         .order("created_at", desc=True)
         .execute()
         .data
         or []
     )
-    arquivadas = [item for item in registros if item.get("arquivado_em")]
-    return _enriquecer(arquivadas)
+    return _enriquecer(registros)
 
 
 @router.put("/atividades/{atividade_id}/administrar")
 def administrar_atividade(atividade_id: str, alteracao: AtividadeAdminUpdate):
     _master(alteracao.administrador_id)
     anterior = _atividade(atividade_id)
-    if anterior.get("arquivado_em"):
-        raise HTTPException(status_code=409, detail="Atividade arquivada não pode ser alterada operacionalmente.")
 
     campos = ["cliente_id", "oportunidade_id", "tipo", "titulo", "descricao", "data", "horario", "status"]
     payload = {
@@ -156,9 +157,9 @@ def administrar_atividade(atividade_id: str, alteracao: AtividadeAdminUpdate):
         return _enriquecer([anterior])[0]
 
     payload["updated_at"] = _now()
-    resultado = supabase.table("cti_atividades").update(payload).eq("id", atividade_id).execute()
+    resultado = supabase.table(TABELA_ATIVIDADES).update(payload).eq("id", atividade_id).is_("arquivado_em", "null").execute()
     if not resultado.data:
-        raise HTTPException(status_code=404, detail="Atividade não encontrada.")
+        raise HTTPException(status_code=409, detail="Atividade não encontrada ou já arquivada.")
     atualizado = resultado.data[0]
     _auditar(atividade_id, "EDICAO_ADMIN_MASTER", alteracao.administrador_id, anterior, atualizado)
     return _enriquecer([atualizado])[0]
@@ -171,7 +172,7 @@ def arquivar_atividade(atividade_id: str, comando: AtividadeArquivar):
     if len(motivo) < 5:
         raise HTTPException(status_code=422, detail="Informe o motivo do arquivamento com pelo menos 5 caracteres.")
 
-    anterior = _atividade(atividade_id)
+    anterior = _atividade(atividade_id, incluir_arquivadas=True)
     if anterior.get("arquivado_em"):
         return _enriquecer([anterior])[0]
 
@@ -181,9 +182,16 @@ def arquivar_atividade(atividade_id: str, comando: AtividadeArquivar):
         "motivo_arquivamento": motivo,
         "updated_at": _now(),
     }
-    resultado = supabase.table("cti_atividades").update(payload).eq("id", atividade_id).execute()
+    resultado = (
+        supabase.table(TABELA_ATIVIDADES)
+        .update(payload)
+        .eq("id", atividade_id)
+        .is_("arquivado_em", "null")
+        .execute()
+    )
     if not resultado.data:
-        raise HTTPException(status_code=404, detail="Atividade não encontrada.")
+        atual = _atividade(atividade_id, incluir_arquivadas=True)
+        return _enriquecer([atual])[0]
     atualizado = resultado.data[0]
     _auditar(atividade_id, "ARQUIVAMENTO_ADMIN_MASTER", comando.administrador_id, anterior, atualizado, motivo)
     return _enriquecer([atualizado])[0]
@@ -191,23 +199,20 @@ def arquivar_atividade(atividade_id: str, comando: AtividadeArquivar):
 
 @router.get("/dashboard")
 def dashboard_crm_operacional():
-    def contar(tabela: str, somente_ativas: bool = False) -> int:
-        consulta = supabase.table(tabela).select("id", count="exact").limit(1)
-        if somente_ativas:
-            consulta = consulta.is_("arquivado_em", "null")
-        resposta = consulta.execute()
+    def contar(tabela: str) -> int:
+        resposta = supabase.table(tabela).select("id", count="exact").limit(1).execute()
         return int(resposta.count or 0)
 
     return {
         "oportunidades": contar("cti_oportunidades"),
         "propostas": contar("cti_propostas"),
         "pedidos": contar("cti_pedidos"),
-        "atividades": contar("cti_atividades", somente_ativas=True),
+        "atividades": contar(VIEW_ATIVIDADES_ATIVAS),
         "contexto": {
             "origem": "CRM operacional",
             "periodo": "Registros operacionais ativos",
             "significado": "Atividades arquivadas administrativamente permanecem auditáveis, mas não contam na operação.",
-            "criterio_calculo": "Contagem operacional exclui cti_atividades.arquivado_em preenchido.",
+            "criterio_calculo": "Contagem de atividades usa a view operacional cti_atividades, que contém somente registros com arquivado_em nulo.",
             "finalidade_operacional": "Evitar que correções e lançamentos indevidos inflem os indicadores comerciais.",
         },
     }
