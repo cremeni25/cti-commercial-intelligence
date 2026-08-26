@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import inspect
+
 from services import email_transport_service as transport
-from routers.crm_app_proposta_envio_router import _chave_idempotencia
+from routers.crm_app_proposta_envio_router import _chave_idempotencia, enviar_proposta_por_email
 
 
 class _Resposta:
@@ -68,3 +70,8 @@ def test_chave_idempotencia_e_estavel_para_mesmo_payload():
     assert _chave_idempotencia(*args) != _chave_idempotencia(
         "proposta-1", ["outro@example.com"], "Assunto", "Mensagem", "sha-pdf"
     )
+
+
+def test_pos_envio_nao_tenta_gravar_updated_at_inexistente():
+    codigo = inspect.getsource(enviar_proposta_por_email)
+    assert '"updated_at"' not in codigo
