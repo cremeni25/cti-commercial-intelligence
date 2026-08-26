@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 from datetime import datetime, timezone
 from html import escape
 from typing import Any
@@ -12,7 +13,11 @@ from core.supabase_client import supabase
 from routers.propostas_pedidos_router import emitir_proposta
 from routers.propostas_primeira_pagina_router import validar_documento_para_emissao
 from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
-from services.email_transport_service import TransporteEmailNaoConfigurado, enviar_email
+from services.email_transport_service import (
+    TransporteEmailNaoConfigurado,
+    buscar_email_enviado,
+    enviar_email,
+)
 from services.proposal_document_preview import build_preview_official_proposal
 from services.proposal_document_repository import ProposalDocumentRepositoryError
 
@@ -61,6 +66,32 @@ def _emails_validos(valores: list[str]) -> list[str]:
     if not resultado:
         raise HTTPException(status_code=422, detail="Informe ao menos um destinatário válido.")
     return resultado
+
+
+def _chave_idempotencia(proposta_id: str, destinatarios: list[str], assunto: str, mensagem: str, pdf_sha: str) -> str:
+    base = "|".join([proposta_id, ",".join(destinatarios), assunto, mensagem, pdf_sha])
+    digest = hashlib.sha256(base.encode("utf-8")).hexdigest()
+    return f"cti-proposta/{proposta_id}/{digest[:40]}"
+
+
+@router.get("/{proposta_id}/status-envio-provedor")
+def status_envio_provedor(proposta_id: str):
+    proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
+    numero = str(proposta.get("numero") or proposta_id)
+    assunto = f"Proposta comercial {numero} - CTI"
+    try:
+        envio = buscar_email_enviado(assunto=assunto)
+    except TransporteEmailNaoConfigurado as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar o provedor de e-mail: {exc}") from exc
+    return {
+        "success": True,
+        "proposta_id": proposta_id,
+        "numero": numero,
+        "encontrado": bool(envio),
+        "envio": envio,
+    }
 
 
 @router.post("/{proposta_id}/enviar-email")
@@ -123,18 +154,24 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             html=html,
             texto=texto,
             attachments=[{"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")}],
+            idempotency_key=_chave_idempotencia(proposta_id, destinatarios, assunto, mensagem, pdf.sha256),
         )
     except TransporteEmailNaoConfigurado as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao enviar a proposta: {exc}") from exc
 
-    supabase.table("cti_propostas").update({
-        "status_documento": "ENVIADA",
-        "status": "ENVIADA",
-        "emitida_em": proposta.get("emitida_em") or _agora(),
-        "updated_at": _agora(),
-    }).eq("id", proposta_id).execute()
+    try:
+        supabase.table("cti_propostas").update({
+            "status_documento": "ENVIADA",
+            "status": "ENVIADA",
+            "emitida_em": proposta.get("emitida_em") or _agora(),
+        }).eq("id", proposta_id).execute()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"E-mail confirmado pelo provedor ({enviado.message_id}), mas o CTI não conseguiu atualizar o status da proposta. Não reenvie; solicite reconciliação administrativa.",
+        ) from exc
 
     try:
         supabase.table("cti_oportunidade_historico").insert({
