@@ -16,7 +16,7 @@ def test_router_preserva_tres_camadas_sem_fusao():
     assert '"regra": "CAMADAS_SEPARADAS_SEM_FUSAO"' in fonte
     assert '"regra": "CORRELACAO_SEM_FUSAO"' in fonte
     assert 'carregar_historico_comercial()' in fonte
-    assert '_lista_segura("cti_oportunidades")' in fonte
+    assert 'carregar_oportunidades_enriquecidas()' in fonte
     assert 'repository.buscar_cti_anfir()' in fonte
 
 
