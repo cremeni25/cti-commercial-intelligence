@@ -4,6 +4,7 @@ import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, ClipboardCheck, Loader2, MapPinned, Search } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { ControlledSelect } from "@/components/crm-app/ControlledSelect"
 
 type Cliente = { id: string; nome: string; cidade?: string; estado?: string }
 type Negociacao = {
@@ -139,6 +140,14 @@ export default function NovaAtividadePage() {
     [cliente, negociacoes],
   )
 
+  const opcoesNegociacao = useMemo(
+    () => [
+      ["", "Interação geral com o cliente"],
+      ...negociacoesDoCliente.map((item) => [item.oportunidade_id, `${item.titulo} — ${item.etapa}`] as const),
+    ] as const,
+    [negociacoesDoCliente],
+  )
+
   const negociacaoSelecionada = useMemo(
     () => negociacoes.find((item) => item.oportunidade_id === oportunidadeId) || null,
     [negociacoes, oportunidadeId],
@@ -194,8 +203,8 @@ export default function NovaAtividadePage() {
     {carregando ? <div className="grid min-h-72 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : <form onSubmit={salvar} className="grid gap-4 rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:grid-cols-2">
       <label className="relative sm:col-span-2"><span className="mb-2 block text-sm text-slate-300">Cliente</span><div className="relative"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={clienteBusca} onChange={(e) => { setClienteBusca(e.target.value); setCliente(null); setOportunidadeId("") }} placeholder="Digite pelo menos 2 letras do nome" className="h-12 w-full rounded-2xl border border-[#24466f] bg-[#020817] pl-11 pr-4"/></div>{sugestoes.length > 0 && <div className="absolute z-20 mt-2 max-h-64 w-full overflow-auto rounded-2xl border border-[#24466f] bg-[#07162b] shadow-2xl">{sugestoes.map((item) => <button type="button" key={item.id} onClick={() => { setCliente(item); setClienteBusca(item.nome); setOportunidadeId("") }} className="flex w-full items-center justify-between border-b border-[#16325c] px-4 py-3 text-left last:border-0"><span><strong className="block">{item.nome}</strong><small className="text-slate-400">{[item.cidade, item.estado].filter(Boolean).join("/") || "Cliente cadastrado"}</small></span><Check size={16} className="text-cyan-300"/></button>)}</div>}</label>
       {cliente && <div className="sm:col-span-2 rounded-xl border border-emerald-900 bg-emerald-950/20 p-3 text-sm text-emerald-200">Cliente selecionado: <strong>{cliente.nome}</strong>{oportunidadeId ? " · negociação preservada" : ""}</div>}
-      <label className="sm:col-span-2"><span className="mb-2 block text-sm text-slate-300">Negociação relacionada</span><select value={oportunidadeId} onChange={(e) => setOportunidadeId(e.target.value)} disabled={!cliente} className="h-12 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 disabled:opacity-60"><option value="">Interação geral com o cliente</option>{negociacoesDoCliente.map((item) => <option key={item.oportunidade_id} value={item.oportunidade_id}>{item.titulo} — {item.etapa}</option>)}</select></label>
-      <label><span className="mb-2 block text-sm text-slate-300">Tipo de atividade</span><select value={tipo} onChange={(e) => setTipo(e.target.value)} className="h-12 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4">{tipos.map(([valor, rotulo]) => <option key={valor} value={valor}>{rotulo}</option>)}</select></label>
+      <div className="sm:col-span-2"><span className="mb-2 block text-sm text-slate-300">Negociação relacionada</span><ControlledSelect value={oportunidadeId} onChange={setOportunidadeId} disabled={!cliente} options={opcoesNegociacao}/></div>
+      <div><span className="mb-2 block text-sm text-slate-300">Tipo de atividade</span><ControlledSelect value={tipo} onChange={setTipo} options={tipos}/></div>
       <Campo name="titulo" label={visita ? "Objetivo da visita" : "Título"} required/>
       <Campo name="data" label="Data" type="date" required/>
       <Campo name="horario" label="Horário" type="time"/>
