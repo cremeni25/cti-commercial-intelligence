@@ -13,13 +13,13 @@ import { useAuth } from "@/core/auth/AuthContext"
 const permissoesMenu = {
   ADMIN_MASTER: [
     "/dashboard", "/historico-comercial", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
+    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/relatorios/modular", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais", "/backoffice-fontes",
   ],
   DIRETOR: [
     "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/atividades", "/forecast",
+    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/relatorios/modular", "/atividades", "/forecast",
     "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
     "/mapa-estrategico", "/usuarios", "/configuracoes",
   ],
@@ -49,6 +49,7 @@ const menuGroups: MenuGroup[] = [
       { label: "Pedidos", href: "/pedidos", icon: "📦", type: "emoji" },
       { label: "Vendas", href: "/vendas", icon: "💰", type: "emoji" },
       { label: "Relatórios", href: "/relatorios", icon: "📑", type: "emoji" },
+      { label: "Gerar relatório", href: "/relatorios/modular", icon: "🖨️", type: "emoji" },
       { label: "Atividades", href: "/atividades", icon: "📅", type: "emoji" },
       { label: "Forecast", href: "/forecast", icon: "📊", type: "emoji" },
     ],
