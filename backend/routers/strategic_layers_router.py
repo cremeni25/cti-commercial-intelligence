@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from core.supabase_client import supabase
 from repositories.cti_repository import repository
 from services.base_analytics import valor_float
+from services.crm_live_projection import carregar_oportunidades_enriquecidas, equipamentos_registro, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
 from services.operational_filters import filtrar_registros, resolver_periodo
 
@@ -107,17 +108,22 @@ def _familia_historico(registro: dict[str, Any]) -> str | None:
     return None
 
 
-def _familia_crm(registro: dict[str, Any]) -> str | None:
+def _familias_crm(registro: dict[str, Any]) -> list[str]:
+    familias = familias_registro(registro)
+    if familias:
+        return familias
     por_codigo = _codigo_familia(registro.get("linha_equipamentos"))
     if por_codigo:
-        return por_codigo
+        return [por_codigo]
     texto = _texto(
         registro.get("linha_equipamentos"), registro.get("equipamento"), registro.get("titulo"), registro.get("descricao")
     )
-    for slug, config in EQUIPAMENTOS.items():
-        if _combina(texto, config["termos"]):
-            return slug
-    return None
+    return [slug for slug, config in EQUIPAMENTOS.items() if _combina(texto, config["termos"])]
+
+
+def _familia_crm(registro: dict[str, Any]) -> str | None:
+    familias = _familias_crm(registro)
+    return familias[0] if familias else None
 
 
 def _camada_anfir(registros: list[dict[str, Any]]) -> dict[str, Any]:
@@ -153,6 +159,10 @@ def _camada_historico(registros: list[dict[str, Any]]) -> dict[str, Any]:
 def _camada_crm(registros: list[dict[str, Any]]) -> dict[str, Any]:
     fechados = {"GANHO", "PERDIDO", "CANCELADO", "CANCELADA", "CONCLUIDO", "CONCLUIDA"}
     ativos = [item for item in registros if str(item.get("status") or "").upper() not in fechados]
+    equipamentos_counter: Counter[str] = Counter()
+    for item in ativos:
+        for equipamento in equipamentos_registro(item):
+            equipamentos_counter[equipamento] += 1
     return {
         "origem": "CRM",
         "semantica": "EM_CURSO",
@@ -161,7 +171,7 @@ def _camada_crm(registros: list[dict[str, Any]]) -> dict[str, Any]:
         "estados": _ranking(Counter(item.get("estado") for item in ativos)),
         "municipios": _ranking(Counter(item.get("municipio") for item in ativos)),
         "ddds": _ranking(Counter(item.get("ddd") for item in ativos)),
-        "equipamentos": _ranking(Counter(item.get("equipamento") or item.get("linha_equipamentos") for item in ativos)),
+        "equipamentos": _ranking(equipamentos_counter),
         "status": _ranking(Counter(item.get("status") for item in ativos)),
     }
 
@@ -188,7 +198,7 @@ def equipamento_estrategico(
         if _familia_historico(item) == slug and _data_no_intervalo(item.get("data"), inicio_efetivo, fim_efetivo)
     ]
 
-    crm_registros = [item for item in _lista_segura("cti_oportunidades") if _familia_crm(item) == slug]
+    crm_registros = [item for item in carregar_oportunidades_enriquecidas() if slug in _familias_crm(item)]
 
     return {
         "slug": slug,
@@ -222,11 +232,14 @@ def mapa_estrategico(
         item for item in carregar_historico_comercial()
         if _data_no_intervalo(item.get("data"), inicio_efetivo, fim_efetivo)
     ]
-    crm = _lista_segura("cti_oportunidades")
+    crm = carregar_oportunidades_enriquecidas()
 
     familias_anfir = Counter(_familia_registro_anfir(item) for item in anf_base)
     familias_hist = Counter(_familia_historico(item) for item in historico)
-    familias_crm = Counter(_familia_crm(item) for item in crm)
+    familias_crm: Counter[str] = Counter()
+    for item in crm:
+        for familia in _familias_crm(item):
+            familias_crm[familia] += 1
 
     def familias(counter: Counter) -> list[dict[str, Any]]:
         return [
