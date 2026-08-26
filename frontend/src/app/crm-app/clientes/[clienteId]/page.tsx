@@ -87,7 +87,7 @@ export default function DossieClientePage() {
         const clienteNormalizado = {
           id: texto(cadastro?.id || cadastro?.cliente_id || negocioBase?.cliente_id) || clienteId,
           nome,
-          codigo: texto(cadastro?.codigo || cadastro?.codigo_cliente || cadastro?.id || negocioBase?.cliente_id) || clienteId,
+          codigo: texto(cadastro?.codigo || cadastro?.codigo_cliente),
           cidade: texto(cadastro?.cidade || cadastro?.municipio || negocioBase?.cliente_cidade || negocioBase?.municipio),
           uf: texto(cadastro?.estado || cadastro?.uf || negocioBase?.cliente_estado || negocioBase?.uf).toUpperCase(),
         }
@@ -137,7 +137,7 @@ export default function DossieClientePage() {
       {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
       {carregando ? <div className="grid min-h-72 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : cliente && <>
         <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5">
-          <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2/></span><div><h2 className="text-xl font-bold">{cliente.nome}</h2><p className="mt-1 text-sm text-slate-400">{cliente.codigo}</p>{cliente.cidade && <p className="mt-1 flex items-center gap-1 text-sm text-slate-300"><MapPin size={15}/>{cliente.cidade}{cliente.uf ? `/${cliente.uf}` : ""}</p>}</div></div><Link href={`/crm-app/clientes/${encodeURIComponent(cliente.id)}/editar`} className="flex shrink-0 items-center gap-2 rounded-xl border border-cyan-800 px-3 py-2 text-xs font-semibold text-cyan-200"><Pencil size={15}/>Editar cadastro</Link></div>
+          <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2/></span><div><h2 className="text-xl font-bold">{cliente.nome}</h2>{cliente.codigo && <p className="mt-1 text-sm text-slate-400">{cliente.codigo}</p>}{cliente.cidade && <p className="mt-1 flex items-center gap-1 text-sm text-slate-300"><MapPin size={15}/>{cliente.cidade}{cliente.uf ? `/${cliente.uf}` : ""}</p>}</div></div><Link href={`/crm-app/clientes/${encodeURIComponent(cliente.id)}/editar`} className="flex shrink-0 items-center gap-2 rounded-xl border border-cyan-800 px-3 py-2 text-xs font-semibold text-cyan-200"><Pencil size={15}/>Editar cadastro</Link></div>
           <div className="mt-5 grid gap-2 sm:grid-cols-3"><Link href={`/crm-app/visitas?cliente=${encodeURIComponent(cliente.id)}`} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><CalendarClock size={16}/>Agendar visita</Link><Link href={`/crm-app/atividades/nova?cliente=${encodeURIComponent(cliente.id)}&origem=clientes`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><MessageSquarePlus size={16}/>Registrar atividade</Link><Link href={`/crm-app/oportunidades/nova?cliente=${encodeURIComponent(cliente.id)}&nome=${encodeURIComponent(cliente.nome)}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><Plus size={16}/>Nova oportunidade</Link></div>
         </section>
 

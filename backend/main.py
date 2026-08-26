@@ -15,6 +15,7 @@ from routers.analytics_router import router as analytics_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
 from routers.clientes_router import router as clientes_router
+from routers.crm_atividades_governanca_router import router as crm_atividades_governanca_router
 from routers.crm_router import router as crm_router
 from routers.cti_api_router import router as cti_api_router
 from routers.drilldown_router import router as drilldown_router
@@ -44,6 +45,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Governança de atividades vem antes do router CRM legado para que as leituras
+# operacionais excluam arquivadas e resolvam corretamente o cliente.
+app.include_router(crm_atividades_governanca_router)
 app.include_router(crm_router)
 app.include_router(analytics_router)
 app.include_router(engine_router)
