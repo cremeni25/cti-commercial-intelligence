@@ -30,6 +30,17 @@ def configuracao_email() -> dict[str, str | bool]:
     }
 
 
+def _configuracao_resend() -> tuple[str, str, str]:
+    api_key = os.getenv("RESEND_API_KEY", "").strip()
+    remetente = os.getenv("CTI_EMAIL_FROM", "CTI Pedidos <pedidos@send.cti-intelligence.com>").strip()
+    reply_to = os.getenv("CTI_EMAIL_REPLY_TO", "").strip()
+    if not api_key or not remetente:
+        raise TransporteEmailNaoConfigurado(
+            "O transporte de e-mail ainda não está configurado. Defina RESEND_API_KEY e CTI_EMAIL_FROM no Render."
+        )
+    return api_key, remetente, reply_to
+
+
 def _attachments_payload(
     attachments: Sequence[Mapping[str, str]] | None,
 ) -> list[dict[str, str]]:
@@ -43,6 +54,43 @@ def _attachments_payload(
     return result
 
 
+def buscar_email_enviado(*, assunto: str, destinatarios: Sequence[str] | None = None) -> dict[str, Any] | None:
+    """Localiza no Resend um envio já confirmado, sem acessar conteúdo do corpo do e-mail."""
+    api_key, _, _ = _configuracao_resend()
+    try:
+        resposta = httpx.get(
+            "https://api.resend.com/emails",
+            headers={"Authorization": f"Bearer {api_key}"},
+            params={"limit": 100},
+            timeout=20.0,
+        )
+    except httpx.HTTPError as exc:
+        raise RuntimeError(f"Falha ao consultar o provedor de e-mail: {exc}") from exc
+
+    dados = resposta.json() if resposta.content else {}
+    if resposta.status_code >= 400:
+        detalhe = dados.get("message") if isinstance(dados, dict) else None
+        raise RuntimeError(detalhe or f"O provedor recusou a consulta ({resposta.status_code}).")
+
+    esperados = {str(item).strip().lower() for item in destinatarios or [] if str(item).strip()}
+    itens = dados.get("data") if isinstance(dados, dict) else []
+    for item in itens or []:
+        if str(item.get("subject") or "").strip() != str(assunto or "").strip():
+            continue
+        encontrados = {str(valor).strip().lower() for valor in item.get("to") or [] if str(valor).strip()}
+        if esperados and encontrados != esperados:
+            continue
+        return {
+            "id": str(item.get("id") or "").strip(),
+            "to": list(item.get("to") or []),
+            "from": str(item.get("from") or "").strip(),
+            "subject": str(item.get("subject") or "").strip(),
+            "created_at": str(item.get("created_at") or "").strip(),
+            "last_event": str(item.get("last_event") or "").strip(),
+        }
+    return None
+
+
 def enviar_email(
     *,
     destinatarios: list[str],
@@ -50,14 +98,9 @@ def enviar_email(
     html: str,
     texto: str | None = None,
     attachments: Sequence[Mapping[str, str]] | None = None,
+    idempotency_key: str | None = None,
 ) -> EmailEnviado:
-    api_key = os.getenv("RESEND_API_KEY", "").strip()
-    remetente = os.getenv("CTI_EMAIL_FROM", "CTI Pedidos <pedidos@send.cti-intelligence.com>").strip()
-    reply_to = os.getenv("CTI_EMAIL_REPLY_TO", "").strip()
-    if not api_key or not remetente:
-        raise TransporteEmailNaoConfigurado(
-            "O transporte de e-mail ainda não está configurado. Defina RESEND_API_KEY e CTI_EMAIL_FROM no Render."
-        )
+    api_key, remetente, reply_to = _configuracao_resend()
 
     payload: dict[str, Any] = {
         "from": remetente,
@@ -73,10 +116,14 @@ def enviar_email(
     if attachment_payload:
         payload["attachments"] = attachment_payload
 
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    if idempotency_key:
+        headers["Idempotency-Key"] = str(idempotency_key)[:256]
+
     try:
         resposta = httpx.post(
             "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            headers=headers,
             json=payload,
             timeout=30.0,
         )
