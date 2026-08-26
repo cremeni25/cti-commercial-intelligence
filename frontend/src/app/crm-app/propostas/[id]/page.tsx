@@ -11,7 +11,7 @@ type Pacote = { proposta: Registro; item: Registro | null; oportunidade: Registr
 
 function texto(valor: unknown, padrao = "—") { const v = String(valor ?? "").trim(); return v || padrao }
 function moeda(valor: unknown) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
-function emails(valor: string) { return valor.split(/[;,\n]/).map((item) => item.trim()).filter(Boolean) }
+function emails(valor: string) { return valor.split(/[;,\n]+/).map((item) => item.trim()).filter(Boolean) }
 
 export default function PropostaCrmAppPage() {
   const params = useParams<{ id: string }>()
@@ -25,9 +25,13 @@ export default function PropostaCrmAppPage() {
   const [mensagem, setMensagem] = useState("")
   const [revisaoAberta, setRevisaoAberta] = useState(false)
   const [envioAberto, setEnvioAberto] = useState(false)
-  const [destinatarios, setDestinatarios] = useState("")
+  const [paraPedido, setParaPedido] = useState("")
+  const [ccPedido, setCcPedido] = useState("")
+  const [ccoPedido, setCcoPedido] = useState("")
   const [observacoes, setObservacoes] = useState("")
-  const [destinatariosProposta, setDestinatariosProposta] = useState("")
+  const [paraProposta, setParaProposta] = useState("")
+  const [ccProposta, setCcProposta] = useState("")
+  const [ccoProposta, setCcoProposta] = useState("")
   const [mensagemEmail, setMensagemEmail] = useState("Segue a proposta comercial para sua análise.")
 
   async function carregar() {
@@ -38,7 +42,10 @@ export default function PropostaCrmAppPage() {
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível carregar a proposta (${resposta.status}).`))
       setDados(payload)
       const emailCliente = texto(payload?.cliente?.email, "")
-      if (emailCliente) setDestinatariosProposta((atual) => atual || emailCliente)
+      if (emailCliente) {
+        setParaProposta((atual) => atual || emailCliente)
+        setParaPedido((atual) => atual || emailCliente)
+      }
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao carregar a proposta.") }
     finally { setCarregando(false) }
   }
@@ -59,14 +66,19 @@ export default function PropostaCrmAppPage() {
   }
 
   async function enviarProposta() {
-    const lista = emails(destinatariosProposta)
-    if (!lista.length) return setErro("Informe ao menos um e-mail para enviar a proposta.")
+    const destinatarios = emails(paraProposta)
+    if (!destinatarios.length) return setErro("Informe ao menos um endereço no campo Para.")
     setProcessando(true); setErro(""); setMensagem("")
     try {
       const resposta = await fetch(`/api/crm-proxy/crm-app/propostas/${encodeURIComponent(id)}/enviar-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destinatarios: lista, mensagem: mensagemEmail.trim() || null }),
+        body: JSON.stringify({
+          destinatarios,
+          cc: emails(ccProposta),
+          cco: emails(ccoProposta),
+          mensagem: mensagemEmail.trim() || null,
+        }),
       })
       const payload = await resposta.json().catch(() => ({})) as Registro
       if (!resposta.ok) throw new Error(texto(payload.detail) || `Não foi possível enviar a proposta (${resposta.status}).`)
@@ -128,12 +140,20 @@ export default function PropostaCrmAppPage() {
   }
 
   async function converterPedido() {
-    const lista = emails(destinatarios)
-    if (!lista.length) { setErro("Informe ao menos um destinatário responsável pelo pedido."); return }
+    const destinatarios = emails(paraPedido)
+    if (!destinatarios.length) { setErro("Informe ao menos um endereço no campo Para do pedido."); return }
     setProcessando(true); setErro(""); setMensagem("")
     try {
       const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}/converter-pedido-operacional`, {
-        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destinatarios: lista, observacoes_envio: observacoes || null, responsavel_id: usuario?.id ? String(usuario.id) : null }),
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          destinatarios,
+          cc: emails(ccPedido),
+          cco: emails(ccoPedido),
+          observacoes_envio: observacoes || null,
+          responsavel_id: usuario?.id ? String(usuario.id) : null,
+        }),
       })
       const payload = await resposta.json().catch(() => ({})) as Registro
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível gerar o pedido (${resposta.status}).`))
@@ -169,11 +189,15 @@ export default function PropostaCrmAppPage() {
         {pedido && <Link href={`/crm-app/pedidos/${String(pedido.id)}`} className="rounded-xl border border-emerald-700 px-4 py-3 text-center font-semibold text-emerald-300">Abrir pedido</Link>}
       </div></section>
 
-      {envioAberto && <section className="rounded-3xl border border-cyan-800 bg-cyan-950/15 p-5"><h3 className="text-lg font-bold">Enviar proposta ao cliente</h3><p className="mt-1 text-sm text-slate-400">O aplicativo gera o PDF a partir do modelo oficial e anexa ao e-mail.</p><label className="mt-4 block"><span className="mb-2 block text-sm">E-mail do cliente</span><textarea value={destinatariosProposta} onChange={(e) => setDestinatariosProposta(e.target.value)} rows={2} placeholder="cliente@empresa.com.br" className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/><small className="text-slate-500">Para mais de um destinatário, separe por vírgula, ponto e vírgula ou linha.</small></label><label className="mt-4 block"><span className="mb-2 block text-sm">Mensagem</span><textarea value={mensagemEmail} onChange={(e) => setMensagemEmail(e.target.value)} rows={4} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => setEnvioAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando || !emails(destinatariosProposta).length} onClick={() => void enviarProposta()} className="rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:opacity-40">{processando ? <Loader2 className="mr-2 inline animate-spin" size={18}/> : <Send className="mr-2 inline" size={18}/>}Enviar PDF oficial</button></div></section>}
+      {envioAberto && <section className="rounded-3xl border border-cyan-800 bg-cyan-950/15 p-5"><h3 className="text-lg font-bold">Enviar proposta ao cliente</h3><p className="mt-1 text-sm text-slate-400">O aplicativo gera o PDF oficial e usa o mesmo endereçamento de um e-mail convencional.</p><div className="mt-4 space-y-3"><CampoEmail titulo="Para" valor={paraProposta} alterar={setParaProposta} obrigatorio placeholder="cliente@empresa.com.br"/><CampoEmail titulo="CC — cópia" valor={ccProposta} alterar={setCcProposta} placeholder="gestor@empresa.com.br"/><CampoEmail titulo="CCO — cópia oculta" valor={ccoProposta} alterar={setCcoProposta} placeholder="arquivo@empresa.com.br"/><label className="block"><span className="mb-2 block text-sm">Mensagem</span><textarea value={mensagemEmail} onChange={(e) => setMensagemEmail(e.target.value)} rows={4} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => setEnvioAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando || !emails(paraProposta).length} onClick={() => void enviarProposta()} className="rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:opacity-40">{processando ? <Loader2 className="mr-2 inline animate-spin" size={18}/> : <Send className="mr-2 inline" size={18}/>}Enviar PDF oficial</button></div></section>}
 
-      {podePedido && revisaoAberta && <section className="rounded-3xl border border-emerald-800 bg-emerald-950/20 p-5"><h3 className="text-lg font-bold">Revisão e destinatários do pedido</h3><p className="mt-1 text-sm text-slate-400">Confirme os responsáveis que deverão receber o pedido após a geração.</p><label className="mt-4 block"><span className="mb-2 block text-sm">Destinatários</span><textarea value={destinatarios} onChange={(e) => setDestinatarios(e.target.value)} rows={3} placeholder="compras@cliente.com.br; pedidos@empresa.com.br" className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/><small className="text-slate-500">Separe os e-mails por vírgula, ponto e vírgula ou linha.</small></label><label className="mt-4 block"><span className="mb-2 block text-sm">Observações do pedido</span><textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={3} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => setRevisaoAberta(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando} onClick={() => void converterPedido()} className="rounded-xl bg-emerald-600 px-4 py-3 font-bold disabled:opacity-40"><Send className="mr-2 inline" size={18}/>Gerar pedido</button></div></section>}
+      {podePedido && revisaoAberta && <section className="rounded-3xl border border-emerald-800 bg-emerald-950/20 p-5"><h3 className="text-lg font-bold">Revisão e endereçamento do pedido</h3><p className="mt-1 text-sm text-slate-400">Defina agora Para, CC e CCO. O pedido será criado já com esse envelope registrado.</p><div className="mt-4 space-y-3"><CampoEmail titulo="Para" valor={paraPedido} alterar={setParaPedido} obrigatorio placeholder="compras@cliente.com.br"/><CampoEmail titulo="CC — cópia" valor={ccPedido} alterar={setCcPedido} placeholder="gestor@empresa.com.br"/><CampoEmail titulo="CCO — cópia oculta" valor={ccoPedido} alterar={setCcoPedido} placeholder="arquivo@empresa.com.br"/><label className="block"><span className="mb-2 block text-sm">Observações do pedido</span><textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} rows={3} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label></div><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => setRevisaoAberta(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando || !emails(paraPedido).length} onClick={() => void converterPedido()} className="rounded-xl bg-emerald-600 px-4 py-3 font-bold disabled:opacity-40"><Send className="mr-2 inline" size={18}/>Gerar pedido</button></div></section>}
     </div>}
   </div></main>
+}
+
+function CampoEmail({ titulo, valor, alterar, obrigatorio = false, placeholder }: { titulo: string; valor: string; alterar: (valor: string) => void; obrigatorio?: boolean; placeholder: string }) {
+  return <label className="block"><span className="mb-2 block text-sm">{titulo}{obrigatorio ? " *" : ""}</span><textarea value={valor} onChange={(e) => alterar(e.target.value)} rows={2} placeholder={placeholder} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/><small className="text-slate-500">Separe múltiplos endereços por vírgula, ponto e vírgula ou nova linha.</small></label>
 }
 
 function Info({ label, valor }: { label: string; valor: string }) { return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-xs text-slate-400">{label}</p><strong className="mt-1 block">{valor}</strong></div> }
