@@ -59,3 +59,30 @@ def test_nucleo_comercial_ignora_item_arquivado_no_total(monkeypatch):
 
     assert resultado[0]["quantidade_itens"] == 1
     assert resultado[0]["valor"] == 100000.00
+
+
+def test_titulo_generico_usa_tipo_comercial_da_descricao_sem_cliente_ou_equipamento():
+    oportunidade = {
+        "titulo": "Proposta Comercial",
+        "descricao": "Tipo da oportunidade: Cotação / tomada de preços\n[CONTEXTO CTI]\nequipamentos: CITIMAX 400",
+    }
+
+    titulo = core._titulo_comercial(
+        oportunidade,
+        "PINEX LOGISTIC SOLUTION LTDA",
+        {"equipamento": "CITIMAX 400"},
+        {"numero": "PROP-20260826-045F0DF1"},
+    )
+
+    assert titulo == "Cotação / tomada de preços"
+
+
+def test_titulo_generico_sem_tipo_nao_e_substituido_por_cliente_item_ou_proposta():
+    titulo = core._titulo_comercial(
+        {"titulo": "Proposta Comercial", "descricao": "Negociação em andamento"},
+        "PINEX LOGISTIC SOLUTION LTDA",
+        {"equipamento": "CITIMAX 400"},
+        {"numero": "PROP-20260826-045F0DF1"},
+    )
+
+    assert titulo == "Oportunidade comercial"
