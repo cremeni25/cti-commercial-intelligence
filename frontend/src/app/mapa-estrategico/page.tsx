@@ -4,10 +4,12 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { useAuth } from "@/core/auth/AuthContext"
 import { useOperationalContext } from "@/context/OperationalContext"
 import { getMapaEstrategico, type MapaEstrategicoResumo, type RankingItem } from "@/services/modulos-api"
 
 export default function Page() {
+  const { usuario } = useAuth()
   const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [dados, setDados] = useState<MapaEstrategicoResumo | null>(null)
   const [loading, setLoading] = useState(true)
@@ -28,6 +30,8 @@ export default function Page() {
   }, [queryString])
 
   const periodoExibido = periodo === "TODO_HISTORICO" ? "Todo o histórico" : periodo === "PERSONALIZADO" ? `${dataInicio || "?"} a ${dataFim || "?"}` : periodo.replaceAll("_", " ")
+  const adminMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
+  const escopoExibido = adminMaster ? "Consolidado do contexto selecionado" : `Contexto permitido para ${usuario?.nome || "usuário autenticado"}`
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
@@ -39,7 +43,12 @@ export default function Page() {
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">CTI operacional</p>
             <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Mapa Estratégico</h1>
             <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Leitura territorial e comercial do mercado refrigerado. Clique em qualquer total individualizável para abrir os registros que o compõem.</p>
-            <p className="mt-2 text-sm text-cyan-300">Contexto: {contextoAtual.label} • Período: {periodoExibido}</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
+              <span className="rounded-full border border-cyan-700/70 bg-cyan-950/30 px-3 py-1.5 text-cyan-200">Escopo comercial: {escopoExibido}</span>
+              <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-slate-300">Sessão: {usuario?.nome || "Usuário autenticado"}</span>
+              <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-slate-300">Contexto: {contextoAtual.label}</span>
+              <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-slate-300">Período: {periodoExibido}</span>
+            </div>
           </header>
 
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
