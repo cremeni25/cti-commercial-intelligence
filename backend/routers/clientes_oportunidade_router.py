@@ -14,6 +14,8 @@ router = APIRouter(prefix="/crm-app", tags=["CRM App"])
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 CRM_APP_BACKEND_VERSION = "2026.08.08-clientes-cadastro-completo-v3"
+PREFIXO_TIPO_OPORTUNIDADE = "TIPO DA OPORTUNIDADE:"
+TITULOS_GENERICOS = {"", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"}
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase não configurado")
@@ -119,6 +121,25 @@ def _validar_titulo(titulo: str) -> str:
     if not titulo_normalizado:
         raise HTTPException(status_code=422, detail="Informe o título da oportunidade.")
     return titulo_normalizado
+
+
+def _tipo_da_descricao(descricao: Optional[str]) -> str:
+    for linha in str(descricao or "").splitlines():
+        limpa = linha.strip()
+        if limpa.upper().startswith(PREFIXO_TIPO_OPORTUNIDADE):
+            return limpa.split(":", 1)[1].strip()
+    return ""
+
+
+def _titulo_canonico(titulo: str, descricao: Optional[str]) -> str:
+    """Grava no cabeçalho a intenção comercial, nunca cliente, equipamento ou documento."""
+    tipo = _tipo_da_descricao(descricao)
+    if tipo:
+        return tipo
+    titulo_validado = _validar_titulo(titulo)
+    if titulo_validado.upper() in TITULOS_GENERICOS:
+        return "Oportunidade comercial"
+    return titulo_validado
 
 
 def _nome_cliente(item: dict[str, Any]) -> str:
@@ -262,7 +283,9 @@ def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
         contexto = _contexto_comercial(dados)
         probabilidade = _normalizar_probabilidade(oportunidade.probabilidade)
         valor_estimado = _normalizar_valor(oportunidade.valor_estimado)
-        payload = {"cliente_id": cliente_id, "responsavel_id": oportunidade.responsavel_id, "titulo": _validar_titulo(oportunidade.titulo), "descricao": _descricao_com_contexto(oportunidade.descricao, contexto), "origem": "CRM_APP", "status": "OPORTUNIDADE", "valor_estimado": valor_estimado, "probabilidade": probabilidade, "data_fechamento_prevista": oportunidade.data_fechamento_prevista}
+        descricao = _descricao_com_contexto(oportunidade.descricao, contexto)
+        titulo = _titulo_canonico(oportunidade.titulo, oportunidade.descricao)
+        payload = {"cliente_id": cliente_id, "responsavel_id": oportunidade.responsavel_id, "titulo": titulo, "descricao": descricao, "origem": "CRM_APP", "status": "OPORTUNIDADE", "valor_estimado": valor_estimado, "probabilidade": probabilidade, "data_fechamento_prevista": oportunidade.data_fechamento_prevista}
         criado, compat_oportunidade = insert_schema_compatible(supabase, "cti_oportunidades", payload, protected_fields={"cliente_id", "titulo"})
         if not criado:
             raise RuntimeError("A oportunidade não retornou registro após a inserção.")
