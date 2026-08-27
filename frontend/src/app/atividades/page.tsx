@@ -12,6 +12,9 @@ type Atividade = {
   tipo: string
   cliente_id?: string
   cliente_nome?: string
+  parceiro_nome?: string
+  parceiro_tipo?: string
+  parceiro_organizacao?: string
   oportunidade_id?: string
   oportunidade_titulo?: string
   responsavel_id?: string
@@ -108,12 +111,19 @@ export default function AtividadesPage() {
   function clienteLegivel(item: Atividade) {
     if (item.cliente_nome) return item.cliente_nome
     const encontrado = clientes.find((cliente) => cliente.id && cliente.id === item.cliente_id)
-    return encontrado?.nome || (item.cliente_id ? "Cliente vinculado" : "-")
+    return encontrado?.nome || (item.cliente_id ? "Cliente vinculado" : "")
+  }
+
+  function comQuem(item: Atividade) {
+    const cliente = clienteLegivel(item)
+    if (cliente) return { nome: cliente, organizacao: "Cliente cadastrado" }
+    if (item.parceiro_nome) return { nome: item.parceiro_nome, organizacao: item.parceiro_organizacao || item.parceiro_tipo || "Contato externo" }
+    return { nome: "Não identificado", organizacao: "Revisar cadastro da atividade" }
   }
 
   function responsavelLegivel(item: Atividade) {
     if (item.responsavel_nome) return item.responsavel_nome
-    return item.responsavel_id || item.usuario_id ? "Responsável vinculado" : "-"
+    return item.responsavel_id || item.usuario_id ? "Responsável CTI vinculado" : "-"
   }
 
   const itensFiltrados = agenda.itens.filter((item) => {
@@ -129,7 +139,7 @@ export default function AtividadesPage() {
 
   return (
     <main className="flex min-h-screen bg-[#020817]"><Sidebar /><section className="min-w-0 flex-1"><Topbar /><div className="space-y-6 p-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-4xl font-bold text-white">CRM • Agenda e Follow-up</h1><p className="mt-2 text-gray-400">Próximos contatos, visitas, reuniões e tarefas vinculados aos clientes e oportunidades existentes.</p></div><button type="button" onClick={() => setMostrarFormulario(true)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Nova atividade</button></div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-4xl font-bold text-white">CRM • Agenda e Follow-up</h1><p className="mt-2 text-gray-400">Próximos contatos, visitas, reuniões e tarefas com identificação clara de cliente, contato ou parceiro envolvido.</p></div><button type="button" onClick={() => setMostrarFormulario(true)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Nova atividade</button></div>
       {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
 
       {mostrarFormulario && <form onSubmit={criarAtividade} className="rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200"><h2 className="text-xl font-bold text-white">Agendar atividade comercial</h2><p className="mt-2 text-sm text-gray-400">O registro utiliza os clientes e oportunidades já existentes e passa a integrar o histórico comercial.</p><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -144,7 +154,7 @@ export default function AtividadesPage() {
 
       <div className="flex flex-wrap gap-2">{filtrosAgenda.map((item) => <button key={item} type="button" onClick={() => setFiltro(item)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${filtro === item ? "bg-cyan-500 text-slate-950" : "border border-[#20345e] text-gray-300"}`}>{item}</button>)}</div>
 
-      <div id="composicao-agenda" className="scroll-mt-24 overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <div className="p-10 text-gray-400">Carregando agenda...</div> : itensFiltrados.length === 0 ? <div className="p-10 text-gray-300">Nenhuma atividade encontrada neste filtro.</div> : <><div className="border-b border-[#13203f] px-5 py-3 text-xs text-cyan-300">Composição exata: {itensFiltrados.length.toLocaleString("pt-BR")} atividade(s) no filtro {filtro}.</div><table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">Situação</th><th className="p-4">Data/Hora</th><th className="p-4">Atividade</th><th className="p-4">Cliente</th><th className="p-4">Oportunidade</th><th className="p-4">Responsável</th><th className="p-4">Ação</th></tr></thead><tbody>{itensFiltrados.map((item) => <tr key={item.id} className="border-b border-[#13203f] text-gray-200"><td className="p-4"><Situacao valor={item.situacao} /></td><td className="p-4 text-yellow-300">{formatarData(item.data)} {item.horario || ""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo || item.tipo}</div><div className="text-xs text-gray-400">{item.tipo}</div></td><td className="p-4 text-cyan-300">{clienteLegivel(item)}</td><td className="p-4">{item.oportunidade_titulo || "-"}</td><td className="p-4">{responsavelLegivel(item)}</td><td className="p-4">{!["CONCLUIDA", "CANCELADA"].includes(item.situacao) && <button type="button" onClick={() => void concluir(item.id)} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">Concluir</button>}</td></tr>)}</tbody></table></>}</div>
+      <div id="composicao-agenda" className="scroll-mt-24 overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <div className="p-10 text-gray-400">Carregando agenda...</div> : itensFiltrados.length === 0 ? <div className="p-10 text-gray-300">Nenhuma atividade encontrada neste filtro.</div> : <><div className="border-b border-[#13203f] px-5 py-3 text-xs text-cyan-300">Composição exata: {itensFiltrados.length.toLocaleString("pt-BR")} atividade(s) no filtro {filtro}.</div><table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">Situação</th><th className="p-4">Data/Hora</th><th className="p-4">Atividade</th><th className="p-4">Com quem</th><th className="p-4">Negociação</th><th className="p-4">Responsável CTI</th><th className="p-4">Ação</th></tr></thead><tbody>{itensFiltrados.map((item) => { const contexto = comQuem(item); return <tr key={item.id} className="border-b border-[#13203f] text-gray-200"><td className="p-4"><Situacao valor={item.situacao} /></td><td className="p-4 text-yellow-300">{formatarData(item.data)} {item.horario || ""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo || item.tipo}</div><div className="text-xs text-gray-400">{item.tipo}</div></td><td className="p-4"><div className="font-semibold text-cyan-200">{contexto.nome}</div><div className="mt-1 text-xs text-gray-400">{contexto.organizacao}</div></td><td className="p-4">{item.oportunidade_titulo || "Sem negociação vinculada"}</td><td className="p-4">{responsavelLegivel(item)}</td><td className="p-4">{!["CONCLUIDA", "CANCELADA"].includes(item.situacao) && <button type="button" onClick={() => void concluir(item.id)} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">Concluir</button>}</td></tr> })}</tbody></table></>}</div>
     </div></section></main>
   )
 }
