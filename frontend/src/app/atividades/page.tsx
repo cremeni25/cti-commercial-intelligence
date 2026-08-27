@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
+import { useAuth } from "@/core/auth"
 
 type Atividade = {
   id: string
@@ -38,6 +39,7 @@ const tipos = ["FOLLOW_UP", "LIGACAO", "VISITA_COMERCIAL", "VISITA_TECNICA", "RE
 const filtrosAgenda = ["ABERTAS", "ATRASADA", "HOJE", "FUTURA", "SEM_DATA", "CONCLUIDA", "TODAS"]
 
 export default function AtividadesPage() {
+  const { usuario } = useAuth()
   const [agenda, setAgenda] = useState<AgendaResponse>({ itens: [], resumo: { total: 0, atrasadas: 0, hoje: 0, futuras: 0, sem_data: 0, concluidas: 0 } })
   const [clientes, setClientes] = useState<ClienteMestre[]>([])
   const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
@@ -123,7 +125,9 @@ export default function AtividadesPage() {
 
   function responsavelLegivel(item: Atividade) {
     if (item.responsavel_nome) return item.responsavel_nome
-    return item.responsavel_id || item.usuario_id ? "Responsável CTI vinculado" : "-"
+    const idRegistro = item.usuario_id || item.responsavel_id || ""
+    if (idRegistro && usuario?.id && idRegistro === usuario.id) return usuario.nome || usuario.email || "Usuário do login"
+    return idRegistro ? "Usuário CTI vinculado" : "-"
   }
 
   const itensFiltrados = agenda.itens.filter((item) => {
