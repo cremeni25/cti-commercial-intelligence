@@ -182,7 +182,11 @@ def criar_atividade_operacional(atividade: AtividadeCreate):
         "registro_teste": False,
         "created_at": _now(),
     }
-    payload = {chave: valor for chave, valor in payload.items() if valor is not None}
+    payload = {
+        chave: valor
+        for chave, valor in payload.items()
+        if valor is not None or chave == "cliente_id"
+    }
     resultado = supabase.table(TABELA_ATIVIDADES).insert(payload).execute().data or []
     if not resultado:
         raise HTTPException(status_code=409, detail="O banco não confirmou o registro da atividade.")
