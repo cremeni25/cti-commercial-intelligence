@@ -13,6 +13,7 @@ STATUS_PROPOSTA_FINAL = {"ACEITA", "CONVERTIDA_PEDIDO"}
 ETAPAS_PROBABILIDADE_TOTAL = {"PEDIDO", "DOSSIÊ", "DOSSIE", "CARRIER", "FATURADO", "GANHO", "ENCERRADO"}
 ETAPAS_PROBABILIDADE_ZERO = {"PERDIDO", "CANCELADO"}
 TITULOS_GENERICOS = {"", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"}
+PREFIXO_TIPO_OPORTUNIDADE = "TIPO DA OPORTUNIDADE:"
 
 
 def _texto(valor: Any) -> str:
@@ -194,22 +195,36 @@ def _nome_cliente(cliente: dict[str, Any], *fontes: dict[str, Any] | None) -> st
     return "Cliente não identificado"
 
 
+def _tipo_oportunidade_da_descricao(oportunidade: dict[str, Any]) -> str:
+    descricao = _texto(oportunidade.get("descricao"))
+    if not descricao:
+        return ""
+    for linha in descricao.splitlines():
+        limpa = linha.strip()
+        if limpa.upper().startswith(PREFIXO_TIPO_OPORTUNIDADE):
+            return limpa.split(":", 1)[1].strip()
+    return ""
+
+
 def _titulo_comercial(
     oportunidade: dict[str, Any],
     cliente_nome: str,
     item: dict[str, Any] | None,
     proposta: dict[str, Any] | None,
 ) -> str:
+    """Retorna a identidade comercial da oportunidade sem confundir cliente, item ou documento.
+
+    O título representa a intenção comercial. Cliente, equipamento e número de
+    proposta permanecem em seus campos próprios e nunca substituem o título.
+    """
+    tipo_descricao = _tipo_oportunidade_da_descricao(oportunidade)
+    if tipo_descricao:
+        return tipo_descricao
+
     titulo = _texto(oportunidade.get("titulo"))
     if titulo.upper() not in TITULOS_GENERICOS:
         return titulo
-    equipamento = _texto((item or {}).get("equipamento") or (item or {}).get("modelo_equipamento"))
-    numero_proposta = _texto((proposta or {}).get("numero"))
-    partes = [parte for parte in (equipamento, cliente_nome) if parte and parte != "Cliente não identificado"]
-    if partes:
-        return " • ".join(partes)
-    if numero_proposta:
-        return numero_proposta
+
     return "Oportunidade comercial"
 
 
