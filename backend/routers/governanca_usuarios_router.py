@@ -95,8 +95,12 @@ def _agora() -> str:
 
 
 def _exigir_master(usuario: UsuarioAutenticado) -> None:
-    if usuario.tipo_usuario != "ADMIN_MASTER":
-        raise HTTPException(status_code=403, detail="Operação exclusiva do ADMIN_MASTER.")
+    perfil = str(usuario.tipo_usuario or "").upper()
+    if perfil == "ADMIN_MASTER":
+        return
+    if perfil == "DIRETOR_VIENA_SP" and (usuario.permissoes.get("usuarios_administrar") or usuario.permissoes.get("acesso_total")):
+        return
+    raise HTTPException(status_code=403, detail="Operação permitida ao ADMIN_MASTER ou à Diretoria Viena com permissão de administrar usuários.")
 
 
 def _permissoes_dict(payload: PermissoesUsuario) -> dict:
@@ -119,6 +123,13 @@ def _buscar_usuario(usuario_id: str) -> dict:
     if not dados:
         raise HTTPException(status_code=404, detail="Usuário CTI não encontrado.")
     return dados
+
+
+def _proteger_admin_master_edicao(alvo: dict, usuario_atual_cti: UsuarioAutenticado) -> None:
+    alvo_master = str(alvo.get("tipo_usuario") or "").upper() == "ADMIN_MASTER"
+    ator_master = str(usuario_atual_cti.tipo_usuario or "").upper() == "ADMIN_MASTER"
+    if alvo_master and not ator_master:
+        raise HTTPException(status_code=403, detail="A conta ADMIN_MASTER só pode ser administrada pelo próprio nível ADMIN_MASTER.")
 
 
 def _proteger_admin_master(alvo: dict, usuario_atual_cti: UsuarioAutenticado) -> None:
@@ -229,6 +240,7 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
 def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
     alvo = _buscar_usuario(usuario_id)
+    _proteger_admin_master_edicao(alvo, usuario)
     dados_cadastrais = {
         "nome": payload.nome.strip(),
         "empresa": payload.empresa.strip(),
@@ -254,6 +266,8 @@ def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: Usu
 @router.put("/usuarios/{usuario_id}/permissoes")
 def atualizar_permissoes(usuario_id: str, payload: PermissoesUsuario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
+    alvo = _buscar_usuario(usuario_id)
+    _proteger_admin_master_edicao(alvo, usuario)
     dados = {"user_id": usuario_id, **_permissoes_dict(payload)}
     resposta = supabase.table("cti_user_permissions").upsert(dados, on_conflict="user_id").execute()
     return _dados(resposta)[0] if _dados(resposta) else dados
