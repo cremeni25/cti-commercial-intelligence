@@ -13,9 +13,10 @@ def _proposta(documento_final: dict | None = None):
     return {"snapshot_dados": {"documento_final": documento_final or {}}}
 
 
-def _item():
+def _item(equipamento: str = "CITIMAX 400"):
     return {
-        "configuracao": "ACOPLADO_E_ELETRICO",
+        "equipamento": equipamento,
+        "configuracao": "PADRAO",
         "opcionais": [],
         "condicao_pagamento": None,
         "local_entrega": None,
@@ -28,7 +29,7 @@ def _item():
 def _completo():
     return {
         "voltagem": "12V",
-        "tipo_equipamento": "Acoplado e elétrico",
+        "tipo_equipamento": "Padrão",
         "impostos": "04% ICMS/PIS/COFINS",
         "condicao_pagamento": "30/60/90 dias",
         "possui_entrada": False,
@@ -63,7 +64,20 @@ def test_documento_completo_pode_ser_emitido():
     assert campos["frete"] == "CIF"
 
 
-def test_regras_condicionais_de_entrada_e_autorizada():
+def test_supra_850_nao_exige_voltagem_que_nao_existe_no_documento():
+    dados = _completo()
+    dados.pop("voltagem")
+    dados.update({
+        "local_entrega": "AUTORIZADA CARRIER",
+        "autorizada_nome_endereco": None,
+    })
+    pendentes = campos_pendentes_documento(_proposta(dados), _item("SUPRA 850"))
+    assert "voltagem" not in pendentes
+    assert "nome e endereço da autorizada Carrier" not in pendentes
+    assert pendentes == []
+
+
+def test_regras_condicionais_de_entrada():
     dados = _completo()
     dados.update({
         "possui_entrada": True,
@@ -73,7 +87,7 @@ def test_regras_condicionais_de_entrada_e_autorizada():
     })
     pendentes = campos_pendentes_documento(_proposta(dados), _item())
     assert "valor da entrada" in pendentes
-    assert "nome e endereço da autorizada Carrier" in pendentes
+    assert "nome e endereço da autorizada Carrier" not in pendentes
 
 
 def test_rota_emitir_bloqueia_documento_incompleto(monkeypatch):
