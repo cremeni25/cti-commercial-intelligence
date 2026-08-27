@@ -17,6 +17,8 @@ ETAPAS_PIPELINE = [
     "GANHO",
     "PERDIDO",
 ]
+TITULOS_GENERICOS = {"", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"}
+PREFIXO_TIPO_OPORTUNIDADE = "TIPO DA OPORTUNIDADE:"
 
 
 class Negociacao(BaseModel):
@@ -28,6 +30,10 @@ class Negociacao(BaseModel):
     status: str | None = None
 
 
+def _texto(valor: Any) -> str:
+    return str(valor or "").strip()
+
+
 def _lista(tabela: str, ordem: str = "created_at") -> list[dict[str, Any]]:
     try:
         return supabase.table(tabela).select("*").order(ordem, desc=True).execute().data or []
@@ -35,13 +41,17 @@ def _lista(tabela: str, ordem: str = "created_at") -> list[dict[str, Any]]:
         raise HTTPException(status_code=500, detail=f"Falha ao consultar {tabela}: {exc}") from exc
 
 
-def _oportunidades_comerciais() -> list[dict[str, Any]]:
-    """Retorna todas as oportunidades do núcleo comercial autorizado.
+def _registro_operacional(registro: dict[str, Any]) -> bool:
+    return not bool(registro.get("registro_teste")) and not bool(registro.get("arquivado_em"))
 
-    A origem permanece como metadado de auditoria e nunca como barreira de
-    visibilidade entre o CRM App e a plataforma principal.
+
+def _oportunidades_comerciais() -> list[dict[str, Any]]:
+    """Retorna apenas oportunidades operacionais do núcleo comercial.
+
+    Registros de teste e registros arquivados continuam preservados no banco e
+    podem ser abertos por ID para homologação, mas não entram em quadro ou agenda.
     """
-    return _lista("cti_oportunidades")
+    return [item for item in _lista("cti_oportunidades") if _registro_operacional(item)]
 
 
 def _fator_probabilidade(valor: Any) -> float:
@@ -81,6 +91,101 @@ def _situacao_atividade(atividade: dict[str, Any], hoje: date | None = None) -> 
     return "FUTURA"
 
 
+def _titulo_oportunidade(oportunidade: dict[str, Any]) -> str:
+    titulo = _texto(oportunidade.get("titulo"))
+    if titulo.upper() not in TITULOS_GENERICOS:
+        return titulo
+    descricao = _texto(oportunidade.get("descricao"))
+    for linha in descricao.splitlines():
+        limpa = linha.strip()
+        if limpa.upper().startswith(PREFIXO_TIPO_OPORTUNIDADE):
+            tipo = limpa.split(":", 1)[1].strip()
+            if tipo:
+                return tipo
+    return "Oportunidade comercial"
+
+
+def _nome_cliente(cliente_id: Any) -> str:
+    identificador = _texto(cliente_id)
+    if not identificador:
+        return ""
+    for tabela in ("cti_clientes", "clientes"):
+        try:
+            dados = (
+                supabase.table(tabela)
+                .select("*")
+                .eq("id", identificador)
+                .limit(1)
+                .execute()
+                .data
+                or []
+            )
+        except Exception:
+            continue
+        if not dados:
+            continue
+        cliente = dados[0]
+        nome = _texto(
+            cliente.get("razao_social")
+            or cliente.get("nome_fantasia")
+            or cliente.get("nome")
+            or cliente.get("empresa")
+            or cliente.get("cliente")
+        )
+        if nome:
+            return nome
+    return ""
+
+
+def _consultar_oportunidade(tabela: str, oportunidade_id: str) -> list[dict[str, Any]]:
+    return (
+        supabase.table(tabela)
+        .select("*")
+        .eq("oportunidade_id", oportunidade_id)
+        .execute()
+        .data
+        or []
+    )
+
+
+def _pedidos_da_oportunidade(
+    propostas: list[dict[str, Any]],
+    itens: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    proposta_ids = {_texto(item.get("id")) for item in propostas if item.get("id")}
+    item_ids = {_texto(item.get("id")) for item in itens if item.get("id")}
+    if not proposta_ids and not item_ids:
+        return []
+
+    encontrados: dict[str, dict[str, Any]] = {}
+
+    def adicionar(registros: list[dict[str, Any]]) -> None:
+        for registro in registros:
+            chave = _texto(registro.get("id"))
+            if chave:
+                encontrados[chave] = registro
+
+    if proposta_ids:
+        ids = list(proposta_ids)
+        adicionar(supabase.table("cti_pedidos").select("*").in_("proposta_id", ids).execute().data or [])
+        adicionar(supabase.table("cti_pedidos").select("*").in_("proposta_aceita_id", ids).execute().data or [])
+    if item_ids:
+        adicionar(supabase.table("cti_pedidos").select("*").in_("item_oportunidade_id", list(item_ids)).execute().data or [])
+
+    return list(encontrados.values())
+
+
+def _evento(tipo: str, registro: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "tipo": tipo,
+        "data_hora": registro.get("updated_at") or registro.get("created_at") or registro.get("data") or registro.get("data_pedido"),
+        "titulo": registro.get("titulo") or registro.get("descricao") or registro.get("numero") or tipo.title(),
+        "status": registro.get("status_documento") or registro.get("status") or registro.get("nova_etapa") or registro.get("etapa"),
+        "responsavel_id": registro.get("usuario_id") or registro.get("responsavel_id"),
+        "registro": registro,
+    }
+
+
 @router.post("/negociacoes")
 def criar_negociacao(negociacao: Negociacao):
     try:
@@ -102,7 +207,7 @@ def quadro_pipeline():
     movimentacoes = [
         movimento
         for movimento in _lista("cti_pipeline")
-        if movimento.get("oportunidade_id") in oportunidades_ids
+        if movimento.get("oportunidade_id") in oportunidades_ids and _registro_operacional(movimento)
     ]
 
     ultima_movimentacao: dict[str, dict[str, Any]] = {}
@@ -129,7 +234,7 @@ def quadro_pipeline():
         cards.append({
             "id": oportunidade_id,
             "oportunidade_id": oportunidade_id,
-            "titulo": oportunidade.get("titulo") or "Oportunidade sem título",
+            "titulo": _titulo_oportunidade(oportunidade),
             "cliente_id": oportunidade.get("cliente_id"),
             "responsavel_id": oportunidade.get("responsavel_id"),
             "etapa": etapa,
@@ -163,17 +268,19 @@ def quadro_pipeline():
 
 @router.get("/crm/agenda")
 def agenda_comercial():
-    """Consolida todas as atividades autorizadas sem separar pela origem."""
+    """Consolida apenas atividades operacionais ligadas ao núcleo comercial ativo."""
     oportunidades = {item.get("id"): item for item in _oportunidades_comerciais()}
-    atividades = _lista("cti_atividades")
+    atividades = [item for item in _lista("cti_atividades") if _registro_operacional(item)]
 
     itens = []
     for atividade in atividades:
         oportunidade = oportunidades.get(atividade.get("oportunidade_id"), {})
+        if atividade.get("oportunidade_id") and not oportunidade:
+            continue
         itens.append({
             **atividade,
             "situacao": _situacao_atividade(atividade),
-            "oportunidade_titulo": oportunidade.get("titulo"),
+            "oportunidade_titulo": _titulo_oportunidade(oportunidade) if oportunidade else None,
             "cliente_id": atividade.get("cliente_id") or oportunidade.get("cliente_id"),
             "responsavel_id": atividade.get("usuario_id") or oportunidade.get("responsavel_id"),
             "origem_oportunidade": oportunidade.get("origem"),
@@ -198,7 +305,7 @@ def agenda_comercial():
 
 @router.get("/crm/timeline/{oportunidade_id}")
 def timeline_oportunidade(oportunidade_id: str):
-    """Monta uma timeline resiliente para qualquer oportunidade do núcleo."""
+    """Monta a timeline usando somente fontes existentes e vínculos reais do schema."""
     try:
         oportunidade = (
             supabase.table("cti_oportunidades")
@@ -218,51 +325,53 @@ def timeline_oportunidade(oportunidade_id: str):
         raise HTTPException(status_code=404, detail="Oportunidade não encontrada")
 
     oportunidade_atual = oportunidade[0]
+    oportunidade_enriquecida = {
+        **oportunidade_atual,
+        "titulo": _titulo_oportunidade(oportunidade_atual),
+        "cliente_nome": _nome_cliente(oportunidade_atual.get("cliente_id")),
+    }
     eventos: list[dict[str, Any]] = [{
         "tipo": "OPORTUNIDADE",
         "data_hora": oportunidade_atual.get("created_at") or oportunidade_atual.get("updated_at"),
-        "titulo": oportunidade_atual.get("titulo") or "Oportunidade criada",
+        "titulo": _titulo_oportunidade(oportunidade_atual),
         "status": oportunidade_atual.get("status") or "OPORTUNIDADE",
         "responsavel_id": oportunidade_atual.get("responsavel_id"),
-        "registro": oportunidade_atual,
+        "registro": oportunidade_enriquecida,
     }]
     fontes_indisponiveis: list[str] = []
-    fontes = [
-        ("HISTORICO", "cti_oportunidade_historico"),
+
+    registros_por_tipo: dict[str, list[dict[str, Any]]] = {}
+    for tipo, tabela in (
         ("ATIVIDADE", "cti_atividades"),
         ("PIPELINE", "cti_pipeline"),
         ("PROPOSTA", "cti_propostas"),
-        ("PEDIDO", "cti_pedidos"),
-    ]
-
-    for tipo, tabela in fontes:
+    ):
         try:
-            registros = (
-                supabase.table(tabela)
-                .select("*")
-                .eq("oportunidade_id", oportunidade_id)
-                .execute()
-                .data
-                or []
-            )
+            registros_por_tipo[tipo] = _consultar_oportunidade(tabela, oportunidade_id)
         except Exception:
+            registros_por_tipo[tipo] = []
             fontes_indisponiveis.append(tabela)
-            continue
 
-        for registro in registros:
-            eventos.append({
-                "tipo": tipo,
-                "data_hora": registro.get("updated_at") or registro.get("created_at") or registro.get("data"),
-                "titulo": registro.get("titulo") or registro.get("descricao") or registro.get("numero") or tipo.title(),
-                "status": registro.get("status") or registro.get("nova_etapa") or registro.get("etapa"),
-                "responsavel_id": registro.get("usuario_id") or registro.get("responsavel_id"),
-                "registro": registro,
-            })
+    try:
+        itens = _consultar_oportunidade("cti_oportunidade_itens", oportunidade_id)
+    except Exception:
+        itens = []
+        fontes_indisponiveis.append("cti_oportunidade_itens")
+
+    try:
+        registros_por_tipo["PEDIDO"] = _pedidos_da_oportunidade(registros_por_tipo.get("PROPOSTA", []), itens)
+    except Exception:
+        registros_por_tipo["PEDIDO"] = []
+        fontes_indisponiveis.append("cti_pedidos")
+
+    for tipo in ("ATIVIDADE", "PIPELINE", "PROPOSTA", "PEDIDO"):
+        for registro in registros_por_tipo.get(tipo, []):
+            eventos.append(_evento(tipo, registro))
 
     eventos.sort(key=lambda item: str(item.get("data_hora") or ""), reverse=True)
     return {
-        "oportunidade": oportunidade_atual,
+        "oportunidade": oportunidade_enriquecida,
         "eventos": eventos,
-        "fontes_indisponiveis": fontes_indisponiveis,
+        "fontes_indisponiveis": sorted(set(fontes_indisponiveis)),
         "parcial": bool(fontes_indisponiveis),
     }
