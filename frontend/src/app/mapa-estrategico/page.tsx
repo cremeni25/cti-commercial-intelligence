@@ -30,8 +30,9 @@ export default function Page() {
   }, [queryString])
 
   const periodoExibido = periodo === "TODO_HISTORICO" ? "Todo o histórico" : periodo === "PERSONALIZADO" ? `${dataInicio || "?"} a ${dataFim || "?"}` : periodo.replaceAll("_", " ")
-  const adminMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-  const escopoExibido = adminMaster ? "Consolidado do contexto selecionado" : `Contexto permitido para ${usuario?.nome || "usuário autenticado"}`
+  const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
+  const gestaoComercial = perfil === "ADMIN_MASTER" || perfil === "DIRETOR_VIENA_SP"
+  const escopoExibido = gestaoComercial ? "Consolidado do contexto selecionado" : `Contexto permitido para ${usuario?.nome || "usuário autenticado"}`
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
