@@ -6,7 +6,7 @@ import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Loader2, Search, Tag, UserP
 import { useAuth } from "@/core/auth"
 
 type Registro = Record<string, unknown>
-type Cliente = { id: string; nome: string; cidade: string; estado: string; ddd: string; sub_regiao: string; segmento: string }
+type Cliente = { id: string; nome: string; razaoSocial: string; nomeFantasia: string; cnpj: string; cidade: string; estado: string; ddd: string; sub_regiao: string; segmento: string }
 type PrecoVigente = { preco_cheio?: number; tabela_codigo?: string; vigencia_inicio?: string }
 type EquipamentoCatalogo = { codigo: string; linha_produto: string; nome_comercial: string; configuracao?: string; preco_vigente?: PrecoVigente | null }
 type ItemNegociado = { quantidade: number; desconto: number; precoNegociado: number }
@@ -24,15 +24,19 @@ const tiposOportunidade = [
 
 function texto(valor: unknown): string { return String(valor ?? "").trim() }
 function chave(valor: unknown): string { return texto(valor).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleUpperCase("pt-BR") }
+function somenteDigitos(valor: unknown): string { return texto(valor).replace(/\D/g, "") }
+function formatarCnpj(valor: string): string { const d = somenteDigitos(valor); return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : valor }
 function moeda(valor: number): string { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 function moedaInput(valor: number): string { return Number(valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 function lerMoeda(valor: string): number { const digitos = valor.replace(/\D/g, ""); return digitos ? Number(digitos) / 100 : 0 }
 function precoTabela(item?: EquipamentoCatalogo): number { return Number(item?.preco_vigente?.preco_cheio || 0) }
 function campanhaTecnica(valor: string): string { return texto(valor).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") }
 function normalizarCliente(item: Registro): Cliente | null {
-  const nome = texto(item.razao_social || item.nome || item.nome_fantasia || item.empresa || item.cliente)
+  const razaoSocial = texto(item.razao_social)
+  const nomeFantasia = texto(item.nome_fantasia)
+  const nome = texto(item.nome || razaoSocial || nomeFantasia || item.empresa || item.cliente)
   if (!nome) return null
-  return { id: texto(item.id || item.cliente_id || item.uuid), nome, cidade: texto(item.cidade || item.municipio), estado: texto(item.estado || item.uf).toUpperCase(), ddd: texto(item.ddd), sub_regiao: texto(item.sub_regiao || item.subRegiao), segmento: texto(item.segmento || item.categoria) || "TRANSPORTADORA" }
+  return { id: texto(item.id || item.cliente_id || item.uuid), nome, razaoSocial, nomeFantasia, cnpj: texto(item.cnpj || item.cnpj_cpf || item.documento), cidade: texto(item.cidade || item.municipio), estado: texto(item.estado || item.uf).toUpperCase(), ddd: texto(item.ddd), sub_regiao: texto(item.sub_regiao || item.subRegiao), segmento: texto(item.segmento || item.categoria) || "TRANSPORTADORA" }
 }
 
 export default function NovaOportunidadePage() {
@@ -72,9 +76,14 @@ export default function NovaOportunidadePage() {
   }, [])
 
   const sugestoes = useMemo(() => {
-    const termo = buscaCliente.trim().toLocaleLowerCase("pt-BR")
+    const termo = buscaCliente.trim()
     if (termo.length < 2 || clienteSelecionado) return []
-    return clientes.filter((cliente) => `${cliente.nome} ${cliente.cidade} ${cliente.estado}`.toLocaleLowerCase("pt-BR").includes(termo)).slice(0, 10)
+    const termoTexto = chave(termo)
+    const termoCnpj = somenteDigitos(termo)
+    return clientes.filter((cliente) => {
+      const nomes = [cliente.nome, cliente.razaoSocial, cliente.nomeFantasia].filter(Boolean).map(chave)
+      return nomes.some((valor) => valor.includes(termoTexto)) || (termoCnpj.length > 0 && somenteDigitos(cliente.cnpj).includes(termoCnpj))
+    }).slice(0, 10)
   }, [buscaCliente, clienteSelecionado, clientes])
   const linhasDisponiveis = useMemo(() => [...new Set(catalogo.map((item) => item.linha_produto).filter(Boolean))].sort(), [catalogo])
   const equipamentosDisponiveis = useMemo(() => catalogo.filter((item) => linhas.includes(item.linha_produto)), [catalogo, linhas])
@@ -190,7 +199,7 @@ export default function NovaOportunidadePage() {
       {erro && <div className="mb-4 rounded-2xl border border-red-500/50 bg-red-950/30 px-4 py-3 text-sm text-red-200">{erro}</div>}
       {sucesso && <div className="mb-4 flex items-center gap-2 rounded-2xl border border-emerald-500/40 bg-emerald-950/25 px-4 py-3 text-sm text-emerald-200"><CheckCircle2 size={18} />{sucesso}</div>}
       <form onSubmit={salvar} className="space-y-5 rounded-3xl border border-[#16325c] bg-[#071a33] p-5">
-        <section><div className="mb-2 flex items-center justify-between"><label className="text-xs font-semibold text-slate-300">Cliente</label><Link href="/crm-app/clientes/nova" className="flex items-center gap-1 text-xs font-semibold text-cyan-300"><UserPlus size={14}/>Cadastrar cliente completo</Link></div><div className="relative"><div className="relative"><Search className="absolute left-3 top-3 text-slate-500" size={17} /><input value={buscaCliente} onChange={(e) => { setBuscaCliente(e.target.value); setClienteSelecionado(null) }} placeholder="Digite ao menos 2 letras" className="w-full rounded-xl border border-[#28507c] bg-[#020d1f] py-3 pl-10 pr-3 text-sm" /></div>{sugestoes.length > 0 && <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-[#28507c] bg-[#071a33]">{sugestoes.map((cliente) => <button type="button" key={`${cliente.id}-${cliente.nome}`} onClick={() => { setClienteSelecionado(cliente); setBuscaCliente(cliente.nome) }} className="block w-full border-b border-[#16325c] px-4 py-3 text-left text-sm"><strong>{cliente.nome}</strong><span className="ml-2 text-xs text-slate-400">{cliente.cidade}/{cliente.estado}</span></button>)}</div>}</div>{clienteSelecionado && <p className="mt-2 text-xs text-emerald-300">Cliente selecionado: {clienteSelecionado.nome}</p>}</section>
+        <section><div className="mb-2 flex items-center justify-between"><label className="text-xs font-semibold text-slate-300">Cliente</label><Link href="/crm-app/clientes/nova" className="flex items-center gap-1 text-xs font-semibold text-cyan-300"><UserPlus size={14}/>Cadastrar cliente completo</Link></div><div className="relative"><div className="relative"><Search className="absolute left-3 top-3 text-slate-500" size={17} /><input value={buscaCliente} onChange={(e) => { setBuscaCliente(e.target.value); setClienteSelecionado(null) }} placeholder="Nome, razão social, fantasia ou CNPJ" className="w-full rounded-xl border border-[#28507c] bg-[#020d1f] py-3 pl-10 pr-3 text-sm" /></div>{sugestoes.length > 0 && <div className="absolute z-20 mt-1 max-h-64 w-full overflow-auto rounded-xl border border-[#28507c] bg-[#071a33]">{sugestoes.map((cliente) => <button type="button" key={`${cliente.id}-${cliente.nome}`} onClick={() => { setClienteSelecionado(cliente); setBuscaCliente(cliente.nome) }} className="block w-full border-b border-[#16325c] px-4 py-3 text-left text-sm"><strong>{cliente.nome}</strong>{cliente.cnpj&&<span className="ml-2 text-xs text-cyan-300">CNPJ {formatarCnpj(cliente.cnpj)}</span>}<span className="ml-2 text-xs text-slate-400">{cliente.cidade}{cliente.estado?`/${cliente.estado}`:""}</span></button>)}</div>}</div>{clienteSelecionado && <p className="mt-2 text-xs text-emerald-300">Cliente selecionado: {clienteSelecionado.nome}{clienteSelecionado.cnpj?` · CNPJ ${formatarCnpj(clienteSelecionado.cnpj)}`:""}</p>}</section>
 
         <section className="grid gap-4 sm:grid-cols-2">
           <label className="text-xs text-slate-300">Tipo da oportunidade<select required value={tipo} onChange={(e) => setTipo(e.target.value)} className={input}><option value="">Selecione</option>{tiposOportunidade.map(([codigo, nome]) => <option key={codigo} value={codigo}>{nome}</option>)}</select></label>
