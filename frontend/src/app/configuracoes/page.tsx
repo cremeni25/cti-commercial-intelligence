@@ -37,8 +37,8 @@ export default function Page() {
   const [aliasTarget, setAliasTarget] = useState<"line" | "model">("model")
 
   const role = String(usuario?.tipo_usuario || "").toUpperCase()
-  const canRead = role === "ADMIN_MASTER" || role === "DIRETOR"
-  const canWrite = role === "ADMIN_MASTER"
+  const canRead = role === "ADMIN_MASTER" || role === "DIRETOR" || role === "DIRETOR_VIENA_SP"
+  const canWrite = role === "ADMIN_MASTER" || role === "DIRETOR_VIENA_SP"
 
   const loadCatalog = useCallback(async () => {
     if (!canRead) {
@@ -170,7 +170,7 @@ export default function Page() {
             <div className="rounded-3xl border border-red-900/60 bg-red-950/20 p-8">
               <h2 className="text-xl font-bold text-red-300">Acesso não autorizado</h2>
               <p className="mt-2 text-sm text-red-100/70">
-                Este módulo é restrito aos perfis ADMIN_MASTER e DIRETOR.
+                Este módulo é restrito ao ADMIN_MASTER e à Diretoria Viena autorizada.
               </p>
             </div>
           ) : (
@@ -216,7 +216,7 @@ export default function Page() {
                   <div className="rounded-3xl border border-[#13203f] bg-[#071427] p-6">
                     <h2 className="text-lg font-bold">Administração do catálogo</h2>
                     <p className="mt-2 text-sm leading-6 text-slate-400">
-                      Somente ADMIN_MASTER pode criar ou alterar itens. DIRETOR possui consulta integral.
+                      ADMIN_MASTER e DIRETOR_VIENA_SP autorizado podem administrar o catálogo operacional. Ferramentas técnicas de desenvolvimento e homologação permanecem separadas.
                     </p>
 
                     <label className="mt-5 block text-xs font-semibold uppercase tracking-wider text-slate-400">
