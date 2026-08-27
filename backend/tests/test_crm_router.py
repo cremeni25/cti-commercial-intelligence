@@ -6,7 +6,7 @@ os.environ.setdefault("SUPABASE_KEY", "test-key")
 
 from fastapi.testclient import TestClient
 from main import app
-from routers import crm_router
+from routers import crm_atividades_governanca_router, crm_router
 
 
 class Result:
@@ -78,12 +78,14 @@ class Query:
 
 class FakeSupabase:
     def __init__(self):
+        atividades = []
         self.db = {
             "cti_oportunidades": [],
             "cti_pipeline": [],
             "cti_propostas": [],
             "cti_pedidos": [],
-            "cti_atividades": [],
+            "cti_atividades": atividades,
+            "cti_atividades_registros": atividades,
         }
 
     def table(self, name):
@@ -93,6 +95,7 @@ class FakeSupabase:
 def client_with_fake(monkeypatch):
     fake = FakeSupabase()
     monkeypatch.setattr(crm_router, "supabase", fake)
+    monkeypatch.setattr(crm_atividades_governanca_router, "supabase", fake)
     return TestClient(app), fake
 
 
@@ -162,6 +165,25 @@ def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
     concluida = client.put(f"/crm/atividades/{atividade_id}/concluir")
     assert concluida.status_code == 200
     assert concluida.json()[0]["status"] == "CONCLUIDA"
+
+
+def test_atividade_pode_ser_registrada_para_parceiro_sem_cliente(monkeypatch):
+    client, fake = client_with_fake(monkeypatch)
+    atividade = client.post("/crm/atividades", json={
+        "cliente_id": None,
+        "parceiro_nome": "João Parceiro",
+        "parceiro_tipo": "PESSOA_FISICA",
+        "usuario_id": "user-1",
+        "tipo": "VISITA_PRESENCIAL",
+        "titulo": "Visita institucional",
+        "data": "2026-08-28",
+    })
+    assert atividade.status_code == 200
+    registro = atividade.json()[0]
+    assert registro["cliente_id"] is None
+    assert registro["cliente_nome"] == "João Parceiro"
+    assert registro["contexto_atividade"] == "PARCEIRO"
+    assert fake.db["cti_atividades_registros"][0]["parceiro_nome"] == "João Parceiro"
 
 
 def test_forecast_calcula_probabilidades_percentual_e_decimal(monkeypatch):
