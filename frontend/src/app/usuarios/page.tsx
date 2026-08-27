@@ -92,7 +92,9 @@ export default function Page() {
   const [processando, setProcessando] = useState(false)
   const [erro, setErro] = useState("")
   const [mensagem, setMensagem] = useState("")
-  const autorizado = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
+  const perfilAtual = String(usuario?.tipo_usuario || "").toUpperCase()
+  const adminMaster = perfilAtual === "ADMIN_MASTER"
+  const autorizado = adminMaster || perfilAtual === "DIRETOR_VIENA_SP"
 
   async function carregar() {
     setLoading(true)
@@ -134,6 +136,7 @@ export default function Page() {
   }
 
   function abrirEdicao(item: UsuarioCTI) {
+    if (!adminMaster && String(item.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER") return
     setEditando(item)
     setDddsEdicao((item.ddds || []).join(", "))
     setEdicao({
@@ -199,7 +202,7 @@ export default function Page() {
             </div>
           </header>
 
-          {authLoading || loading ? <Aviso>Carregando usuários...</Aviso> : !autorizado ? <Aviso>Este módulo é exclusivo do Admin Master.</Aviso> : <>
+          {authLoading || loading ? <Aviso>Carregando usuários...</Aviso> : !autorizado ? <Aviso>Este módulo é restrito ao Admin Master e à Diretoria Viena autorizada.</Aviso> : <>
             {mensagem && <div className="rounded-2xl border border-emerald-800 bg-emerald-950/30 px-5 py-4 text-sm text-emerald-200">{mensagem}</div>}
             {erro && <div className="rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">{erro}</div>}
 
@@ -211,7 +214,7 @@ export default function Page() {
 
             <div className="grid gap-4 sm:grid-cols-3"><Metric label="Usuários cadastrados" value={String(usuarios.length)} /><Metric label="Usuários ativos" value={String(usuarios.filter((item) => item.ativo).length)} /><Metric label="Primeiro acesso pendente" value={String(usuarios.filter((item) => item.status_acesso === "PRIMEIRO_ACESSO_PENDENTE").length)} /></div>
 
-            <section className="overflow-hidden rounded-3xl border border-[#13203f] bg-[#071427]"><div className="border-b border-[#13203f] px-6 py-5"><h2 className="text-lg font-bold">Contas reais cadastradas</h2></div><div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-[#061326] text-xs uppercase text-slate-500"><tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">Cargo / função</th><th className="px-6 py-4">Gestor</th><th className="px-6 py-4">Território / DDDs</th><th className="px-6 py-4">Acessos</th><th className="px-6 py-4">Situação</th><th className="px-6 py-4">Ações</th></tr></thead><tbody className="divide-y divide-[#13203f]">{usuarios.map((item) => { const protegido = String(item.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"; return <tr key={item.id}><td className="px-6 py-4"><strong>{item.nome}</strong><div className="mt-1 text-xs text-slate-500">{item.email}</div></td><td className="px-6 py-4 text-cyan-300">{item.funcao || item.cargo || "—"}</td><td className="px-6 py-4 text-slate-300">{item.gestor_responsavel || "—"}</td><td className="px-6 py-4 text-slate-300">{item.territorio || "—"}{item.ddds?.length ? ` / ${item.ddds.join(", ")}` : ""}</td><td className="px-6 py-4 text-xs text-slate-300">{item.permissoes?.acesso_total ? "ACESSO TOTAL" : [item.permissoes?.acesso_portal && "SITE", item.permissoes?.acesso_crm && "CRM"].filter(Boolean).join(" + ") || "SEM ACESSO"}</td><td className="px-6 py-4"><span className="rounded-full border border-[#254b75] px-3 py-1 text-xs text-slate-300">{item.status_acesso || (item.ativo ? "ATIVO" : "INATIVO")}</span></td><td className="px-6 py-4"><div className="flex flex-wrap gap-2"><button onClick={() => abrirEdicao(item)} className="rounded-lg border border-cyan-800 px-3 py-2 text-xs text-cyan-200">Editar</button>{!protegido && <button disabled={processando} onClick={() => void alternarEstado(item)} className="rounded-lg border border-amber-700 px-3 py-2 text-xs text-amber-200">{item.ativo ? "Desativar" : "Reativar"}</button>}{!protegido && item.primeiro_acesso_pendente && !item.cadastro_completo && <button onClick={() => { setExcluindo(item); setConfirmacaoEmail("") }} className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-200">Excluir</button>}</div></td></tr> })}</tbody></table></div></section>
+            <section className="overflow-hidden rounded-3xl border border-[#13203f] bg-[#071427]"><div className="border-b border-[#13203f] px-6 py-5"><h2 className="text-lg font-bold">Contas reais cadastradas</h2></div><div className="overflow-x-auto"><table className="min-w-full text-left text-sm"><thead className="bg-[#061326] text-xs uppercase text-slate-500"><tr><th className="px-6 py-4">Usuário</th><th className="px-6 py-4">Cargo / função</th><th className="px-6 py-4">Gestor</th><th className="px-6 py-4">Território / DDDs</th><th className="px-6 py-4">Acessos</th><th className="px-6 py-4">Situação</th><th className="px-6 py-4">Ações</th></tr></thead><tbody className="divide-y divide-[#13203f]">{usuarios.map((item) => { const protegido = String(item.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"; const podeEditar = !protegido || adminMaster; return <tr key={item.id}><td className="px-6 py-4"><strong>{item.nome}</strong><div className="mt-1 text-xs text-slate-500">{item.email}</div></td><td className="px-6 py-4 text-cyan-300">{item.funcao || item.cargo || "—"}</td><td className="px-6 py-4 text-slate-300">{item.gestor_responsavel || "—"}</td><td className="px-6 py-4 text-slate-300">{item.territorio || "—"}{item.ddds?.length ? ` / ${item.ddds.join(", ")}` : ""}</td><td className="px-6 py-4 text-xs text-slate-300">{item.permissoes?.acesso_total ? "ACESSO TOTAL" : [item.permissoes?.acesso_portal && "SITE", item.permissoes?.acesso_crm && "CRM"].filter(Boolean).join(" + ") || "SEM ACESSO"}</td><td className="px-6 py-4"><span className="rounded-full border border-[#254b75] px-3 py-1 text-xs text-slate-300">{item.status_acesso || (item.ativo ? "ATIVO" : "INATIVO")}</span></td><td className="px-6 py-4"><div className="flex flex-wrap gap-2">{podeEditar && <button onClick={() => abrirEdicao(item)} className="rounded-lg border border-cyan-800 px-3 py-2 text-xs text-cyan-200">Editar</button>}{!protegido && <button disabled={processando} onClick={() => void alternarEstado(item)} className="rounded-lg border border-amber-700 px-3 py-2 text-xs text-amber-200">{item.ativo ? "Desativar" : "Reativar"}</button>}{!protegido && item.primeiro_acesso_pendente && !item.cadastro_completo && <button onClick={() => { setExcluindo(item); setConfirmacaoEmail("") }} className="rounded-lg border border-red-800 px-3 py-2 text-xs text-red-200">Excluir</button>}</div></td></tr> })}</tbody></table></div></section>
           </>}
         </div>
       </section>
