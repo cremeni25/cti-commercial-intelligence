@@ -10,9 +10,23 @@ import PropostasProcessoSection from "@/components/crm-app/negociacao/PropostasP
 type Registro = Record<string, unknown>
 type Evento = { tipo: string; data_hora: string; titulo: string; status: string; responsavel_id: string; registro_id: string }
 
+const TITULOS_GENERICOS = new Set(["", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"])
+
 function texto(v: unknown) { return String(v || "").trim() }
 function data(v: string) { if (!v) return "Data não informada"; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString("pt-BR") }
 function nomeCliente(item: Registro) { return texto(item.razao_social || item.nome || item.nome_fantasia || item.empresa || item.cliente) }
+function tituloCanonico(oportunidade: Registro) {
+  const descricao = texto(oportunidade.descricao)
+  for (const linha of descricao.split(/\r?\n/)) {
+    const limpa = linha.trim()
+    if (limpa.toLocaleUpperCase("pt-BR").startsWith("TIPO DA OPORTUNIDADE:")) {
+      const tipo = limpa.split(":", 2)[1]?.trim()
+      if (tipo) return tipo
+    }
+  }
+  const titulo = texto(oportunidade.titulo)
+  return titulo && !TITULOS_GENERICOS.has(titulo.toLocaleUpperCase("pt-BR")) ? titulo : "Oportunidade comercial"
+}
 
 export default function Historico() {
   const p = useParams<{ oportunidadeId: string }>()
@@ -73,10 +87,11 @@ export default function Historico() {
   }, [id])
 
   const cliente = clienteResolvido || texto(o.cliente_nome || o.razao_social || o.nome_cliente)
+  const oportunidadeTitulo = tituloCanonico(o)
 
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6"><div className="mx-auto max-w-4xl">
     <header className="mb-5 flex items-center gap-3"><Link href={voltar} className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Histórico comercial</h1><p className="text-sm text-slate-400">Negociação, proposta e próximas ações no mesmo fluxo</p></div></header>
-    <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5"><p className="text-sm text-slate-400">Cliente</p><h2 className="mt-1 text-xl font-bold text-cyan-200">{cliente || "Cliente vinculado não localizado"}</h2><p className="mt-3 text-xs uppercase tracking-[.16em] text-slate-500">Oportunidade</p><h3 className="mt-1 text-lg font-semibold">{texto(o.titulo) || "Negociação comercial"}</h3><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-cyan-900 bg-cyan-950/40 px-3 py-1 text-cyan-200">{texto(o.status) || "OPORTUNIDADE"}</span>{texto(o.data_fechamento_prevista) && <span className="rounded-full border border-[#24466f] px-3 py-1 text-slate-300">Fechamento: {data(texto(o.data_fechamento_prevista))}</span>}</div><div className="mt-4 grid gap-2 sm:grid-cols-2"><Link href={`/crm-app/oportunidades/${id}/editar?origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><FilePenLine size={16}/>Editar cabeçalho</Link><Link href={`/crm-app/atividades/nova?oportunidade=${id}&origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>Nova interação</Link></div></section>
+    <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5"><p className="text-sm text-slate-400">Cliente</p><h2 className="mt-1 text-xl font-bold text-cyan-200">{cliente || "Cliente vinculado não localizado"}</h2><p className="mt-3 text-xs uppercase tracking-[.16em] text-slate-500">Oportunidade</p><h3 className="mt-1 text-lg font-semibold">{oportunidadeTitulo}</h3><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-cyan-900 bg-cyan-950/40 px-3 py-1 text-cyan-200">{texto(o.status) || "OPORTUNIDADE"}</span>{texto(o.data_fechamento_prevista) && <span className="rounded-full border border-[#24466f] px-3 py-1 text-slate-300">Fechamento: {data(texto(o.data_fechamento_prevista))}</span>}</div><div className="mt-4 grid gap-2 sm:grid-cols-2"><Link href={`/crm-app/oportunidades/${id}/editar?origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><FilePenLine size={16}/>Editar cabeçalho</Link><Link href={`/crm-app/atividades/nova?oportunidade=${id}&origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>Nova interação</Link></div></section>
     <ResumoFinanceiroOportunidade oportunidadeId={id}/>
     <PropostasProcessoSection oportunidadeId={id}/>
     {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
