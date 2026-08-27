@@ -16,6 +16,9 @@ function texto(v: unknown) { return String(v || "").trim() }
 function data(v: string) { if (!v) return "Data não informada"; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString("pt-BR") }
 function nomeCliente(item: Registro) { return texto(item.razao_social || item.nome || item.nome_fantasia || item.empresa || item.cliente) }
 function tituloCanonico(oportunidade: Registro) {
+  const titulo = texto(oportunidade.titulo)
+  if (titulo && !TITULOS_GENERICOS.has(titulo.toLocaleUpperCase("pt-BR"))) return titulo
+
   const descricao = texto(oportunidade.descricao)
   for (const linha of descricao.split(/\r?\n/)) {
     const limpa = linha.trim()
@@ -24,8 +27,7 @@ function tituloCanonico(oportunidade: Registro) {
       if (tipo) return tipo
     }
   }
-  const titulo = texto(oportunidade.titulo)
-  return titulo && !TITULOS_GENERICOS.has(titulo.toLocaleUpperCase("pt-BR")) ? titulo : "Oportunidade comercial"
+  return "Oportunidade comercial"
 }
 
 export default function Historico() {

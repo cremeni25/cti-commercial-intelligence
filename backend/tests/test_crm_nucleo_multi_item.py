@@ -86,3 +86,14 @@ def test_titulo_generico_sem_tipo_nao_e_substituido_por_cliente_item_ou_proposta
     )
 
     assert titulo == "Oportunidade comercial"
+
+
+def test_titulo_comercial_legitimo_e_preservado_mesmo_com_classificacao_diferente():
+    titulo = core._titulo_comercial(
+        {"titulo": "Tomada de Preços", "descricao": "Tipo da oportunidade: Prospecção comercial"},
+        "PRIME CARGO LOGISTICA INTEGRADA LTDA",
+        {"equipamento": "SUPRA 750"},
+        None,
+    )
+
+    assert titulo == "Tomada de Preços"

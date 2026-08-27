@@ -212,18 +212,18 @@ def _titulo_comercial(
     item: dict[str, Any] | None,
     proposta: dict[str, Any] | None,
 ) -> str:
-    """Retorna a identidade comercial da oportunidade sem confundir cliente, item ou documento.
+    """Mantém o assunto comercial informado e usa a classificação apenas como fallback.
 
-    O título representa a intenção comercial. Cliente, equipamento e número de
-    proposta permanecem em seus campos próprios e nunca substituem o título.
+    Cliente, equipamento e número de proposta permanecem em campos próprios e
+    nunca substituem o título da oportunidade.
     """
-    tipo_descricao = _tipo_oportunidade_da_descricao(oportunidade)
-    if tipo_descricao:
-        return tipo_descricao
-
     titulo = _texto(oportunidade.get("titulo"))
     if titulo.upper() not in TITULOS_GENERICOS:
         return titulo
+
+    tipo_descricao = _tipo_oportunidade_da_descricao(oportunidade)
+    if tipo_descricao:
+        return tipo_descricao
 
     return "Oportunidade comercial"
 

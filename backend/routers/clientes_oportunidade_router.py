@@ -16,6 +16,7 @@ SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 CRM_APP_BACKEND_VERSION = "2026.08.08-clientes-cadastro-completo-v3"
 PREFIXO_TIPO_OPORTUNIDADE = "TIPO DA OPORTUNIDADE:"
 TITULOS_GENERICOS = {"", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"}
+MARCADOR_CONTEXTO = "[CONTEXTO CTI]"
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise Exception("Supabase não configurado")
@@ -132,14 +133,14 @@ def _tipo_da_descricao(descricao: Optional[str]) -> str:
 
 
 def _titulo_canonico(titulo: str, descricao: Optional[str]) -> str:
-    """Grava no cabeçalho a intenção comercial, nunca cliente, equipamento ou documento."""
+    """Preserva o assunto comercial; classificação é fallback para títulos genéricos."""
+    titulo_validado = _validar_titulo(titulo)
+    if titulo_validado.upper() not in TITULOS_GENERICOS:
+        return titulo_validado
     tipo = _tipo_da_descricao(descricao)
     if tipo:
         return tipo
-    titulo_validado = _validar_titulo(titulo)
-    if titulo_validado.upper() in TITULOS_GENERICOS:
-        return "Oportunidade comercial"
-    return titulo_validado
+    return "Oportunidade comercial"
 
 
 def _nome_cliente(item: dict[str, Any]) -> str:
@@ -236,9 +237,9 @@ def _contexto_comercial(dados: ClienteOportunidadeCreate) -> dict[str, Any]:
 
 
 def _descricao_com_contexto(descricao: Optional[str], contexto: dict[str, Any]) -> str:
-    base = (descricao or "").strip()
+    base = (descricao or "").split(MARCADOR_CONTEXTO, 1)[0].strip()
     linhas = [base] if base else []
-    linhas.append("[CONTEXTO CTI]")
+    linhas.append(MARCADOR_CONTEXTO)
     for chave, valor in contexto.items():
         if valor:
             linhas.append(f"{chave}: {valor}")
