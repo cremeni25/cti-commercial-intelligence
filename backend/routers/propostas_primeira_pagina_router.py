@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
+from services.proposal_document_definitions import document_definition_for_equipment
 
 router = APIRouter(prefix="/crm-documentos", tags=["Propostas - primeira página"])
 
@@ -84,6 +85,18 @@ def _editavel(proposta: dict[str, Any]) -> bool:
     return _arquivo_atual(proposta) is None
 
 
+def _campo_existe_no_documento(item: dict[str, Any], nome: str) -> bool:
+    equipamento = str(item.get("equipamento") or item.get("nome_comercial") or item.get("modelo_base") or "").strip()
+    if not equipamento:
+        return False
+    try:
+        definicao = document_definition_for_equipment(equipamento)
+    except (KeyError, ValueError):
+        return False
+    sufixo = f".{nome}"
+    return any(campo.code.endswith(sufixo) for campo in definicao.fields)
+
+
 def campos_documentais(proposta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
     final = _documento_final(proposta)
     return {
@@ -109,7 +122,6 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
     campos = campos_documentais(proposta, item)
     pendentes: list[str] = []
     obrigatorios = {
-        "voltagem": "voltagem",
         "tipo_equipamento": "tipo/configuração do equipamento",
         "impostos": "impostos",
         "condicao_pagamento": "condição de pagamento",
@@ -118,6 +130,9 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
         "prazo_entrega": "prazo de entrega",
         "validade": "validade da proposta",
     }
+    if _campo_existe_no_documento(item, "voltagem"):
+        obrigatorios = {"voltagem": "voltagem", **obrigatorios}
+
     for chave, rotulo in obrigatorios.items():
         valor = campos.get(chave)
         if valor is None or not str(valor).strip():
@@ -133,9 +148,9 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
         if valor_entrada <= 0:
             pendentes.append("valor da entrada")
 
-    local_entrega = str(campos.get("local_entrega") or "").strip().upper()
-    if "AUTORIZADA" in local_entrega and not str(campos.get("autorizada_nome_endereco") or "").strip():
-        pendentes.append("nome e endereço da autorizada Carrier")
+    # Nome/endereço da autorizada permanece disponível para compor o documento,
+    # mas não bloqueia a emissão: pode não ser aplicável ou ainda não estar definido
+    # no momento comercial da proposta.
     return pendentes
 
 
