@@ -14,6 +14,23 @@ TABELA_ATIVIDADES = "cti_atividades_registros"
 VIEW_ATIVIDADES_ATIVAS = "cti_atividades"
 
 
+class AtividadeCreate(BaseModel):
+    cliente_id: Optional[str] = None
+    parceiro_nome: Optional[str] = None
+    parceiro_tipo: Optional[str] = None
+    parceiro_organizacao: Optional[str] = None
+    oportunidade_id: Optional[str] = None
+    proposta_id: Optional[str] = None
+    pedido_id: Optional[str] = None
+    usuario_id: str
+    tipo: str
+    titulo: Optional[str] = None
+    descricao: Optional[str] = None
+    data: Optional[str] = None
+    horario: Optional[str] = None
+    status: str = "PENDENTE"
+
+
 class AtividadeAdminUpdate(BaseModel):
     administrador_id: str
     cliente_id: Optional[str] = None
@@ -33,6 +50,13 @@ class AtividadeArquivar(BaseModel):
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _texto(valor: Optional[str]) -> Optional[str]:
+    if valor is None:
+        return None
+    normalizado = " ".join(valor.strip().split())
+    return normalizado or None
 
 
 def _master(usuario_id: str) -> dict[str, Any]:
@@ -97,7 +121,9 @@ def _enriquecer(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for item in registros:
         registro = dict(item)
         cliente_id = str(registro.get("cliente_id") or "")
-        registro["cliente_nome"] = nomes.get(cliente_id, "")
+        parceiro = str(registro.get("parceiro_nome") or "").strip()
+        registro["cliente_nome"] = nomes.get(cliente_id, "") or parceiro
+        registro["contexto_atividade"] = "CLIENTE" if cliente_id else ("PARCEIRO" if parceiro else "GERAL")
         saida.append(registro)
     return saida
 
@@ -125,6 +151,42 @@ def listar_atividades_operacionais():
         or []
     )
     return _enriquecer(registros)
+
+
+@router.post("/atividades")
+def criar_atividade_operacional(atividade: AtividadeCreate):
+    cliente_id = _texto(atividade.cliente_id)
+    parceiro_nome = _texto(atividade.parceiro_nome)
+    if not cliente_id and not parceiro_nome:
+        raise HTTPException(status_code=422, detail="Selecione um cliente ou informe um parceiro/contato externo.")
+    if cliente_id and parceiro_nome:
+        raise HTTPException(status_code=422, detail="Use cliente ou parceiro/contato externo como contexto principal, não os dois ao mesmo tempo.")
+    if not cliente_id and atividade.oportunidade_id:
+        raise HTTPException(status_code=422, detail="Negociação relacionada só pode ser vinculada quando houver cliente selecionado.")
+
+    payload = {
+        "cliente_id": cliente_id,
+        "parceiro_nome": parceiro_nome,
+        "parceiro_tipo": _texto(atividade.parceiro_tipo),
+        "parceiro_organizacao": _texto(atividade.parceiro_organizacao),
+        "oportunidade_id": atividade.oportunidade_id,
+        "proposta_id": atividade.proposta_id,
+        "pedido_id": atividade.pedido_id,
+        "usuario_id": atividade.usuario_id,
+        "tipo": _texto(atividade.tipo),
+        "titulo": _texto(atividade.titulo),
+        "descricao": _texto(atividade.descricao),
+        "data": atividade.data,
+        "horario": atividade.horario,
+        "status": _texto(atividade.status) or "PENDENTE",
+        "registro_teste": False,
+        "created_at": _now(),
+    }
+    payload = {chave: valor for chave, valor in payload.items() if valor is not None}
+    resultado = supabase.table(TABELA_ATIVIDADES).insert(payload).execute().data or []
+    if not resultado:
+        raise HTTPException(status_code=409, detail="O banco não confirmou o registro da atividade.")
+    return _enriquecer(resultado)
 
 
 @router.get("/atividades/arquivadas")
