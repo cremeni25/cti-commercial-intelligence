@@ -31,7 +31,9 @@ from routers.pedidos_operacionais_router import (
 )
 from routers.propostas_consulta_router import consultar_proposta
 from routers.propostas_pedidos_router import (
+    ConverterPedidoRequest,
     SolicitarAceiteRequest,
+    converter_em_pedido,
     emitir_proposta,
     solicitar_aceite,
 )
@@ -61,8 +63,6 @@ def _filtrar_por_usuario(registros: list[dict], usuario: UsuarioAutenticado) -> 
     if _visao_consolidada(usuario):
         return registros
     if not _usa_escopo_proprio(usuario):
-        # USUARIO_CTI permanece com o comportamento atual até definição
-        # específica de governança (caso administrativo da Gessica).
         return registros
     resultado: list[dict] = []
     for item in registros:
@@ -80,11 +80,10 @@ def _responsavel_dossie(registro: dict) -> str:
     if not isinstance(dossie, list):
         return ""
     for item in reversed(dossie):
-        if not isinstance(item, dict):
-            continue
-        responsavel = str(item.get("responsavel_id") or "").strip()
-        if responsavel:
-            return responsavel
+        if isinstance(item, dict):
+            responsavel = str(item.get("responsavel_id") or "").strip()
+            if responsavel:
+                return responsavel
     return ""
 
 
@@ -92,14 +91,12 @@ def _responsavel_efetivo(registro: dict) -> str:
     responsavel = str(registro.get("responsavel_id") or "").strip()
     if responsavel:
         return responsavel
-
     oportunidade_id = str(registro.get("oportunidade_id") or "").strip()
     if oportunidade_id:
         oportunidade = obter_oportunidade(oportunidade_id)
         responsavel = str(oportunidade.get("responsavel_id") or "").strip()
         if responsavel:
             return responsavel
-
     proposta_id = str(registro.get("proposta_id") or registro.get("proposta_aceita_id") or "").strip()
     if proposta_id:
         proposta = obter_proposta(proposta_id)
@@ -117,7 +114,6 @@ def _responsavel_efetivo(registro: dict) -> str:
             responsavel = str(snapshot.get("responsavel_id") or "").strip()
             if responsavel:
                 return responsavel
-
     return _responsavel_dossie(registro)
 
 
@@ -126,14 +122,11 @@ def _exigir_acesso(registro: dict, usuario: UsuarioAutenticado) -> dict:
         return registro
     if _responsavel_efetivo(registro) == str(usuario.id):
         return registro
-    # 404 evita revelar a existência de um registro fora do escopo do usuário.
     raise HTTPException(status_code=404, detail="Registro comercial não encontrado")
 
 
 def _impedir_transferencia(responsavel_id: str | None, usuario: UsuarioAutenticado) -> None:
-    if not _usa_escopo_proprio(usuario) or responsavel_id is None:
-        return
-    if str(responsavel_id) != str(usuario.id):
+    if _usa_escopo_proprio(usuario) and responsavel_id is not None and str(responsavel_id) != str(usuario.id):
         raise HTTPException(status_code=403, detail="Não é permitido transferir o responsável deste registro")
 
 
@@ -198,6 +191,17 @@ def solicitar_aceite_seguro(proposta_id: str, dados: SolicitarAceiteRequest, usu
 def enviar_proposta_email_seguro(proposta_id: str, dados: EnviarPropostaRequest, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _proposta_autorizada(proposta_id, usuario)
     return enviar_proposta_por_email(proposta_id, dados)
+
+
+@router.post("/propostas/{proposta_id}/converter-pedido")
+def converter_pedido_seguro(proposta_id: str, dados: ConverterPedidoRequest, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    proposta = _proposta_autorizada(proposta_id, usuario)
+    if _usa_escopo_proprio(usuario):
+        dados = dados.model_copy(update={"responsavel_id": str(usuario.id)})
+    elif dados.responsavel_id is None:
+        responsavel = _responsavel_efetivo(proposta)
+        dados = dados.model_copy(update={"responsavel_id": responsavel or None})
+    return converter_em_pedido(proposta_id, dados)
 
 
 @router.post("/propostas/{proposta_id}/converter-pedido-operacional")
