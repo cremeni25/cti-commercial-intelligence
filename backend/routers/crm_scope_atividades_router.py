@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.supabase_client import supabase
 from routers.crm_atividades_governanca_router import (
     AtividadeCreate,
     criar_atividade_operacional,
@@ -72,9 +73,61 @@ def _filtrar_agenda(payload: dict, usuario: UsuarioAutenticado) -> dict:
     return {**payload, "itens": itens, "resumo": resumo}
 
 
+def _como_dict(registro) -> dict:
+    if isinstance(registro, dict):
+        return dict(registro)
+    model_dump = getattr(registro, "model_dump", None)
+    if callable(model_dump):
+        return dict(model_dump())
+    return {}
+
+
+def _enriquecer_responsaveis(itens: list) -> list[dict]:
+    normalizados = [_como_dict(item) for item in itens]
+    ids = sorted(
+        {
+            str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+            for item in normalizados
+            if str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+        }
+    )
+    if not ids:
+        return normalizados
+
+    resposta = (
+        supabase.table("cti_users")
+        .select("id,nome,email")
+        .in_("id", ids)
+        .execute()
+    )
+    usuarios = getattr(resposta, "data", None) or []
+    por_id = {str(item.get("id")): item for item in usuarios}
+
+    enriquecidos: list[dict] = []
+    for item in normalizados:
+        responsavel_id = str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+        usuario = por_id.get(responsavel_id)
+        if usuario:
+            item["responsavel_id"] = responsavel_id
+            item["responsavel_nome"] = str(usuario.get("nome") or usuario.get("email") or "Usuário CTI")
+        enriquecidos.append(item)
+    return enriquecidos
+
+
+def _enriquecer_atividade(atividade) -> dict:
+    itens = _enriquecer_responsaveis([atividade])
+    return itens[0] if itens else _como_dict(atividade)
+
+
+def _enriquecer_agenda(payload: dict) -> dict:
+    itens = _enriquecer_responsaveis(list(payload.get("itens") or []))
+    return {**payload, "itens": itens}
+
+
 @router.get("/agenda")
 def agenda_segura(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    return _filtrar_agenda(agenda_comercial(), usuario)
+    payload = _filtrar_agenda(agenda_comercial(), usuario)
+    return _enriquecer_agenda(payload)
 
 
 @router.get("/atividades/{atividade_id}")
@@ -82,7 +135,7 @@ def obter_atividade_segura(
     atividade_id: str,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    return _atividade_autorizada(atividade_id, usuario)
+    return _enriquecer_atividade(_atividade_autorizada(atividade_id, usuario))
 
 
 @router.post("/atividades")
