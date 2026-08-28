@@ -139,7 +139,39 @@ export type HistoricoResumo = {
   motivos_perda: RankingItem[]
 }
 
+export type ClienteCanonicoSeguro = {
+  id: string
+  nome: string
+  razao_social?: string
+  nome_fantasia?: string
+  cnpj?: string
+  cidade?: string
+  estado?: string
+  segmento?: string
+  categoria?: string
+  status?: string
+}
+
+export type CrmResumoEmpresaSeguro = {
+  oportunidades: Record<string, unknown>[]
+  propostas: Record<string, unknown>[]
+  pedidos: Record<string, unknown>[]
+  atividades: Record<string, unknown>[]
+}
+
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
+
+async function apiSeguro<T>(caminho: string): Promise<T> {
+  const resposta = await fetchCrmSeguroProxy(caminho, { cache: "no-store" })
+  const payload = await resposta.json().catch(() => null)
+  if (!resposta.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String((payload as { detail?: unknown }).detail)
+      : `Erro do backend CTI: ${resposta.status}`
+    throw new Error(detalhe)
+  }
+  return payload as T
+}
 
 async function apiEstrategiaSegura<T>(caminho: string): Promise<T> {
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/estrategia/${caminho}`, { cache: "no-store" })
@@ -153,9 +185,14 @@ async function apiEstrategiaSegura<T>(caminho: string): Promise<T> {
   return payload as T
 }
 
-export function getEmpresas(query: string) { return apiGet(`/modulos/empresas?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
-export function getClientes(query: string) { return apiGet(`/modulos/clientes?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
+export async function getEmpresas(query: string) {
+  const payload = await apiSeguro<{ itens?: EmpresaResumoItem[] }>(`crm-seguro/empresas?${normalizarQuery(query)}`)
+  return Array.isArray(payload?.itens) ? payload.itens : []
+}
+export function getClientes(query: string) { return getEmpresas(query) }
 export function getClienteDetalhe(nome: string, query: string) { return apiGet(`/modulos/clientes/${encodeURIComponent(nome)}?${normalizarQuery(query)}`) as Promise<ClienteDetalheComercial> }
+export function getClientesCanonicosSeguros() { return apiSeguro<ClienteCanonicoSeguro[]>("crm-seguro/clientes") }
+export function getCrmResumoEmpresasSeguro() { return apiSeguro<CrmResumoEmpresaSeguro>("crm-seguro/empresas/crm-resumo") }
 export function getTransportadoras(query: string) { return getEmpresas(query) }
 export function getEquipamento(slug: string, query: string) { return apiEstrategiaSegura<EquipamentoEstrategico>(`equipamentos/${slug}?${normalizarQuery(query)}`) }
 export function getMapaEstrategico(query: string) { return apiEstrategiaSegura<MapaEstrategicoResumo>(`mapa?${normalizarQuery(query)}`) }
