@@ -1,10 +1,11 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
 import { useAuth } from "@/core/auth"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 
 type Atividade = {
   id: string
@@ -33,10 +34,21 @@ type AgendaResponse = {
 }
 
 type ClienteMestre = { id?: string; nome: string }
-type Oportunidade = { id: string; titulo: string; cliente_id?: string }
+type Oportunidade = { id: string; titulo: string; cliente_id?: string; responsavel_id?: string }
 
 const tipos = ["FOLLOW_UP", "LIGACAO", "VISITA_COMERCIAL", "VISITA_TECNICA", "REUNIAO", "EMAIL", "WHATSAPP", "TAREFA", "LEMBRETE"]
 const filtrosAgenda = ["ABERTAS", "ATRASADA", "HOJE", "FUTURA", "SEM_DATA", "CONCLUIDA", "TODAS"]
+
+function resumir(itens: Atividade[]): AgendaResponse["resumo"] {
+  return {
+    total: itens.length,
+    atrasadas: itens.filter((i) => i.situacao === "ATRASADA").length,
+    hoje: itens.filter((i) => i.situacao === "HOJE").length,
+    futuras: itens.filter((i) => i.situacao === "FUTURA").length,
+    sem_data: itens.filter((i) => i.situacao === "SEM_DATA").length,
+    concluidas: itens.filter((i) => i.situacao === "CONCLUIDA").length,
+  }
+}
 
 export default function AtividadesPage() {
   const { usuario } = useAuth()
@@ -75,6 +87,16 @@ export default function AtividadesPage() {
     })
   }, [])
 
+  const agendaEscopada = useMemo<AgendaResponse>(() => {
+    const itens = agenda.itens.filter((item) => pertenceAoEscopoDoUsuario(item.usuario_id || item.responsavel_id, usuario))
+    return { itens, resumo: resumir(itens) }
+  }, [agenda.itens, usuario])
+
+  const oportunidadesEscopadas = useMemo(
+    () => oportunidades.filter((item) => pertenceAoEscopoDoUsuario(item.responsavel_id, usuario)),
+    [oportunidades, usuario],
+  )
+
   async function criarAtividade(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setErro("")
@@ -82,7 +104,7 @@ export default function AtividadesPage() {
     const payload = {
       cliente_id: String(form.get("cliente_id") || ""),
       oportunidade_id: String(form.get("oportunidade_id") || "") || undefined,
-      usuario_id: String(form.get("usuario_id") || ""),
+      usuario_id: String(usuario?.id || form.get("usuario_id") || ""),
       tipo: String(form.get("tipo") || "FOLLOW_UP"),
       titulo: String(form.get("titulo") || "") || undefined,
       descricao: String(form.get("descricao") || "") || undefined,
@@ -96,7 +118,7 @@ export default function AtividadesPage() {
       setMostrarFormulario(false)
       await carregar()
     } catch {
-      setErro("Não foi possível criar a atividade. Informe cliente, responsável, tipo e data do próximo contato.")
+      setErro("Não foi possível criar a atividade. Informe cliente, tipo e data do próximo contato.")
     }
   }
 
@@ -130,7 +152,7 @@ export default function AtividadesPage() {
     return idRegistro ? "Usuário CTI vinculado" : "-"
   }
 
-  const itensFiltrados = agenda.itens.filter((item) => {
+  const itensFiltrados = agendaEscopada.itens.filter((item) => {
     if (filtro === "TODAS") return true
     if (filtro === "ABERTAS") return !["CONCLUIDA", "CANCELADA"].includes(item.situacao)
     return item.situacao === filtro
@@ -146,15 +168,15 @@ export default function AtividadesPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-4xl font-bold text-white">CRM • Agenda e Follow-up</h1><p className="mt-2 text-gray-400">Próximos contatos, visitas, reuniões e tarefas com identificação clara de cliente, contato ou parceiro envolvido.</p></div><button type="button" onClick={() => setMostrarFormulario(true)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Nova atividade</button></div>
       {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
 
-      {mostrarFormulario && <form onSubmit={criarAtividade} className="rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200"><h2 className="text-xl font-bold text-white">Agendar atividade comercial</h2><p className="mt-2 text-sm text-gray-400">O registro utiliza os clientes e oportunidades já existentes e passa a integrar o histórico comercial.</p><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+      {mostrarFormulario && <form onSubmit={criarAtividade} className="rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200"><h2 className="text-xl font-bold text-white">Agendar atividade comercial</h2><p className="mt-2 text-sm text-gray-400">A atividade é registrada para o usuário autenticado e passa a integrar seu histórico comercial.</p><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
         <label className="text-sm text-gray-300">Cliente da base<input name="cliente_id" list="clientes-agenda" required className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white" /><datalist id="clientes-agenda">{clientes.map((cliente) => <option key={cliente.nome} value={cliente.nome} />)}</datalist></label>
-        <label className="text-sm text-gray-300">Oportunidade<select name="oportunidade_id" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"><option value="">Sem vínculo específico</option>{oportunidades.map((item) => <option key={item.id} value={item.id}>{item.titulo} • {item.cliente_id || "Cliente"}</option>)}</select></label>
-        <Campo nome="usuario_id" label="Responsável comercial" obrigatorio />
+        <label className="text-sm text-gray-300">Oportunidade<select name="oportunidade_id" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"><option value="">Sem vínculo específico</option>{oportunidadesEscopadas.map((item) => <option key={item.id} value={item.id}>{item.titulo} • {item.cliente_id || "Cliente"}</option>)}</select></label>
+        <div className="rounded-lg border border-[#13203f] bg-[#020817] p-3 text-sm text-gray-300"><span className="block text-xs text-gray-500">Responsável comercial</span><strong className="mt-1 block text-cyan-200">{usuario?.nome || "Usuário autenticado"}</strong></div>
         <label className="text-sm text-gray-300">Tipo<select name="tipo" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white">{tipos.map((tipo) => <option key={tipo}>{tipo}</option>)}</select></label>
         <Campo nome="titulo" label="Assunto" obrigatorio /><Campo nome="data" label="Data" tipo="date" obrigatorio /><Campo nome="horario" label="Horário" tipo="time" /><Campo nome="descricao" label="Orientação / observação" />
       </div><div className="mt-5 flex gap-3"><button className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Salvar atividade</button><button type="button" onClick={() => setMostrarFormulario(false)} className="rounded-xl border border-cyan-500 px-5 py-3 font-semibold text-cyan-300">Cancelar</button></div></form>}
 
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-6"><Kpi titulo="Total" valor={agenda.resumo.total} onOpen={() => abrirComposicao("TODAS")} /><Kpi titulo="Atrasadas" valor={agenda.resumo.atrasadas} destaque="text-red-400" onOpen={() => abrirComposicao("ATRASADA")} /><Kpi titulo="Hoje" valor={agenda.resumo.hoje} destaque="text-yellow-400" onOpen={() => abrirComposicao("HOJE")} /><Kpi titulo="Futuras" valor={agenda.resumo.futuras} onOpen={() => abrirComposicao("FUTURA")} /><Kpi titulo="Sem data" valor={agenda.resumo.sem_data} onOpen={() => abrirComposicao("SEM_DATA")} /><Kpi titulo="Concluídas" valor={agenda.resumo.concluidas} destaque="text-green-400" onOpen={() => abrirComposicao("CONCLUIDA")} /></section>
+      <section className="grid grid-cols-2 gap-4 md:grid-cols-6"><Kpi titulo="Total" valor={agendaEscopada.resumo.total} onOpen={() => abrirComposicao("TODAS")} /><Kpi titulo="Atrasadas" valor={agendaEscopada.resumo.atrasadas} destaque="text-red-400" onOpen={() => abrirComposicao("ATRASADA")} /><Kpi titulo="Hoje" valor={agendaEscopada.resumo.hoje} destaque="text-yellow-400" onOpen={() => abrirComposicao("HOJE")} /><Kpi titulo="Futuras" valor={agendaEscopada.resumo.futuras} onOpen={() => abrirComposicao("FUTURA")} /><Kpi titulo="Sem data" valor={agendaEscopada.resumo.sem_data} onOpen={() => abrirComposicao("SEM_DATA")} /><Kpi titulo="Concluídas" valor={agendaEscopada.resumo.concluidas} destaque="text-green-400" onOpen={() => abrirComposicao("CONCLUIDA")} /></section>
 
       <div className="flex flex-wrap gap-2">{filtrosAgenda.map((item) => <button key={item} type="button" onClick={() => setFiltro(item)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${filtro === item ? "bg-cyan-500 text-slate-950" : "border border-[#20345e] text-gray-300"}`}>{item}</button>)}</div>
 
