@@ -19,6 +19,8 @@ import {
   Plus,
   Target,
 } from "lucide-react"
+import { useAuth } from "@/core/auth/AuthContext"
+import { buscarNucleoComercialSeguro, fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Cliente = { id: string; nome: string; codigo: string; cidade: string; uf: string }
@@ -48,6 +50,7 @@ function dataBr(valor: string) {
 function concluida(status: string) { return ["CONCLUIDA", "CONCLUÍDA", "REALIZADA"].includes(status.toUpperCase()) }
 
 export default function DossieClientePage() {
+  const { usuario } = useAuth()
   const params = useParams<{ clienteId: string }>()
   const search = useSearchParams()
   const clienteId = decodeURIComponent(String(params.clienteId || ""))
@@ -57,21 +60,22 @@ export default function DossieClientePage() {
   const [atividades, setAtividades] = useState<Atividade[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState("")
+  const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
+  const podeEditarCliente = perfil === "ADMIN_MASTER" || perfil === "DIRETOR_VIENA_SP" || Boolean(usuario?.permissoes?.acesso_total || usuario?.permissoes?.clientes_editar)
 
   useEffect(() => {
     let ativo = true
     async function carregar() {
       setCarregando(true); setErro("")
       try {
-        const [clientesResposta, nucleoResposta, atividadesResposta] = await Promise.all([
+        const [clientesResposta, nucleoPayload, agendaResposta] = await Promise.all([
           fetch("/api/crm-proxy/crm-app/clientes", { cache: "no-store" }),
-          fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" }),
-          fetch("/api/crm-proxy/crm/atividades", { cache: "no-store" }),
+          buscarNucleoComercialSeguro<unknown>(),
+          fetchCrmSeguroProxy("crm-seguro/agenda", { cache: "no-store" }),
         ])
-        if (!nucleoResposta.ok) throw new Error(`Não foi possível carregar o núcleo comercial (${nucleoResposta.status}).`)
+        if (!agendaResposta.ok) throw new Error(`Não foi possível carregar as atividades autorizadas (${agendaResposta.status}).`)
         const clientesPayload = clientesResposta.ok ? await clientesResposta.json() : []
-        const nucleoPayload = await nucleoResposta.json()
-        const atividadesPayload = atividadesResposta.ok ? await atividadesResposta.json() : []
+        const atividadesPayload = await agendaResposta.json()
         if (!ativo) return
 
         const clientes = lista(clientesPayload)
@@ -137,7 +141,7 @@ export default function DossieClientePage() {
       {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
       {carregando ? <div className="grid min-h-72 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : cliente && <>
         <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5">
-          <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2/></span><div><h2 className="text-xl font-bold">{cliente.nome}</h2>{cliente.codigo && <p className="mt-1 text-sm text-slate-400">{cliente.codigo}</p>}{cliente.cidade && <p className="mt-1 flex items-center gap-1 text-sm text-slate-300"><MapPin size={15}/>{cliente.cidade}{cliente.uf ? `/${cliente.uf}` : ""}</p>}</div></div><Link href={`/crm-app/clientes/${encodeURIComponent(cliente.id)}/editar`} className="flex shrink-0 items-center gap-2 rounded-xl border border-cyan-800 px-3 py-2 text-xs font-semibold text-cyan-200"><Pencil size={15}/>Editar cadastro</Link></div>
+          <div className="flex items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2/></span><div><h2 className="text-xl font-bold">{cliente.nome}</h2>{cliente.codigo && <p className="mt-1 text-sm text-slate-400">{cliente.codigo}</p>}{cliente.cidade && <p className="mt-1 flex items-center gap-1 text-sm text-slate-300"><MapPin size={15}/>{cliente.cidade}{cliente.uf ? `/${cliente.uf}` : ""}</p>}</div></div>{podeEditarCliente && <Link href={`/crm-app/clientes/${encodeURIComponent(cliente.id)}/editar`} className="flex shrink-0 items-center gap-2 rounded-xl border border-cyan-800 px-3 py-2 text-xs font-semibold text-cyan-200"><Pencil size={15}/>Editar cadastro</Link>}</div>
           <div className="mt-5 grid gap-2 sm:grid-cols-3"><Link href={`/crm-app/visitas?cliente=${encodeURIComponent(cliente.id)}`} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><CalendarClock size={16}/>Agendar visita</Link><Link href={`/crm-app/atividades/nova?cliente=${encodeURIComponent(cliente.id)}&origem=clientes`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><MessageSquarePlus size={16}/>Registrar atividade</Link><Link href={`/crm-app/oportunidades/nova?cliente=${encodeURIComponent(cliente.id)}&nome=${encodeURIComponent(cliente.nome)}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><Plus size={16}/>Nova oportunidade</Link></div>
         </section>
 
@@ -153,9 +157,9 @@ export default function DossieClientePage() {
           <Situacao titulo="Próxima ação" icone={proximaAcao && proximaAcao.data < hoje ? <AlertTriangle size={18}/> : <Clock3 size={18}/>} principal={proximaAcao ? proximaAcao.titulo : "Nenhuma próxima ação"} detalhe={proximaAcao ? `${dataBr(proximaAcao.data)} · ${proximaAcao.status}` : "Defina uma atividade para manter o cliente em acompanhamento."} alerta={!!proximaAcao && proximaAcao.data < hoje} />
         </section>
 
-        <section className="mb-4 rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="mb-4 flex items-center gap-2"><Target className="text-cyan-300"/><h2 className="text-lg font-bold">Negociações</h2></div>{negocios.length === 0 ? <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhuma oportunidade vinculada. Use “Nova oportunidade” para iniciar uma negociação.</p> : <div className="space-y-2">{negocios.map((item) => <Link key={item.id} href={`/crm-app/historico/${item.id}?origem=clientes`} className="flex items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="min-w-0 flex-1"><strong className="block truncate">{item.titulo}</strong><span className="text-xs text-slate-400">{item.etapa} · {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}{item.fechamento ? ` · ${dataBr(item.fechamento)}` : ""}</span></div><ChevronRight className="text-cyan-300" size={18}/></Link>)}</div>}</section>
+        <section className="mb-4 rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="mb-4 flex items-center gap-2"><Target className="text-cyan-300"/><h2 className="text-lg font-bold">Negociações</h2></div>{negocios.length === 0 ? <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhuma oportunidade vinculada ao seu escopo comercial para este cliente.</p> : <div className="space-y-2">{negocios.map((item) => <Link key={item.id} href={`/crm-app/historico/${item.id}?origem=clientes`} className="flex items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="min-w-0 flex-1"><strong className="block truncate">{item.titulo}</strong><span className="text-xs text-slate-400">{item.etapa} · {item.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}{item.fechamento ? ` · ${dataBr(item.fechamento)}` : ""}</span></div><ChevronRight className="text-cyan-300" size={18}/></Link>)}</div>}</section>
 
-        <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="mb-4 flex items-center gap-2"><FileText className="text-cyan-300"/><h2 className="text-lg font-bold">Histórico comercial do cliente</h2></div>{atividades.length === 0 ? <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhuma atividade registrada para este cliente.</p> : <div className="space-y-3">{atividades.map((item) => <article key={item.id} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><span className="text-xs font-semibold text-cyan-300">{item.tipo}</span><h3 className="mt-1 font-bold">{item.titulo}</h3></div><span className="text-xs text-slate-400">{dataBr(item.data)}</span></div>{item.descricao && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-300">{item.descricao}</p>}<div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-300">{item.status}</span>{item.oportunidadeId && <Link href={`/crm-app/historico/${item.oportunidadeId}?origem=clientes`} className="text-xs font-semibold text-cyan-300">Abrir negociação →</Link>}</div></article>)}</div>}</section>
+        <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="mb-4 flex items-center gap-2"><FileText className="text-cyan-300"/><h2 className="text-lg font-bold">Histórico comercial do cliente</h2></div>{atividades.length === 0 ? <p className="rounded-2xl border border-dashed border-[#24466f] p-4 text-sm text-slate-400">Nenhuma atividade do seu escopo registrada para este cliente.</p> : <div className="space-y-3">{atividades.map((item) => <article key={item.id} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="flex flex-wrap items-start justify-between gap-2"><div><span className="text-xs font-semibold text-cyan-300">{item.tipo}</span><h3 className="mt-1 font-bold">{item.titulo}</h3></div><span className="text-xs text-slate-400">{dataBr(item.data)}</span></div>{item.descricao && <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-300">{item.descricao}</p>}<div className="mt-3 flex flex-wrap items-center justify-between gap-2"><span className="rounded-full bg-slate-800 px-2 py-1 text-xs text-slate-300">{item.status}</span>{item.oportunidadeId && <Link href={`/crm-app/historico/${item.oportunidadeId}?origem=clientes`} className="text-xs font-semibold text-cyan-300">Abrir negociação →</Link>}</div></article>)}</div>}</section>
       </>}
     </div>
   </main>
