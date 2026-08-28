@@ -38,6 +38,8 @@ export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
     acesso_portal: perfil.acesso_portal !== false,
     acesso_crm: perfil.acesso_crm !== false,
     status_acesso: String(perfil.status_acesso || ""),
+    primeiro_acesso_pendente: perfil.primeiro_acesso_pendente === true,
+    cadastro_completo: perfil.cadastro_completo !== false,
     territorio: perfil.territorio ? String(perfil.territorio) : null,
     ddds: Array.isArray(perfil.ddds) ? perfil.ddds.map((item: unknown) => String(item)) : [],
     permissoes: perfil.permissoes && typeof perfil.permissoes === "object" ? perfil.permissoes : {},
