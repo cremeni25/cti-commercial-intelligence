@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, CheckCircle2, FileText, Loader2, Mail, PackageCheck, Send } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import { useAuth } from "@/core/auth"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Pacote = { proposta: Registro; item: Registro | null; oportunidade: Registro | null; cliente: Registro | null; aceites: Registro[]; pedidos: Registro[] }
@@ -37,7 +38,7 @@ export default function PropostaCrmAppPage() {
   async function carregar() {
     setCarregando(true); setErro("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}`, { cache: "no-store" })
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/pacote`, { cache: "no-store" })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível carregar a proposta (${resposta.status}).`))
       setDados(payload)
@@ -55,7 +56,7 @@ export default function PropostaCrmAppPage() {
   async function executar(sufixo: string, body: Registro = {}) {
     setProcessando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}${sufixo}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}${sufixo}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || `Operação não concluída (${resposta.status}).`))
       setMensagem("Operação registrada com sucesso.")
@@ -70,7 +71,7 @@ export default function PropostaCrmAppPage() {
     if (!destinatarios.length) return setErro("Informe ao menos um endereço no campo Para.")
     setProcessando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-app/propostas/${encodeURIComponent(id)}/enviar-email`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/enviar-email`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -101,7 +102,7 @@ export default function PropostaCrmAppPage() {
 
     setProcessando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}/aceites`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/aceites`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ metodo, nome_signatario: nome, email_signatario: email }),
@@ -144,7 +145,7 @@ export default function PropostaCrmAppPage() {
     if (!destinatarios.length) { setErro("Informe ao menos um endereço no campo Para do pedido."); return }
     setProcessando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}/converter-pedido-operacional`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/converter-pedido-operacional`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
