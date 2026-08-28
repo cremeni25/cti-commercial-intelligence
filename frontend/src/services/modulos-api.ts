@@ -174,7 +174,15 @@ async function apiSeguro<T>(caminho: string): Promise<T> {
 }
 
 async function apiEstrategiaSegura<T>(caminho: string): Promise<T> {
-  return apiSeguro<T>(`crm-seguro/estrategia/${caminho}`)
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/estrategia/${caminho}`, { cache: "no-store" })
+  const payload = await resposta.json().catch(() => null)
+  if (!resposta.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String((payload as { detail?: unknown }).detail)
+      : `Erro do backend CTI: ${resposta.status}`
+    throw new Error(detalhe)
+  }
+  return payload as T
 }
 
 export async function getEmpresas(query: string) {
