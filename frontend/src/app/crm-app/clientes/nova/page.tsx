@@ -4,6 +4,7 @@ import Link from "next/link"
 import { FormEvent, useRef, useState } from "react"
 import { ArrowLeft, Building2, Loader2, Save, Search } from "lucide-react"
 import { ControlledSelect } from "@/components/crm-app/ControlledSelect"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 const categorias = [
   ["TRANSPORTADORA", "Transportadora"], ["PRODUTOR", "Produtor"], ["EMBARCADOR", "Embarcador"],
@@ -68,7 +69,7 @@ export default function NovoClientePage() {
       const checagem=await fetch(`/api/crm-proxy/crm-app/clientes/cnpj/${encodeURIComponent(payload.cnpj)}`,{cache:"no-store"})
       const existente=await checagem.json().catch(()=>({})) as Registro
       if(checagem.ok&&existente.status==="CLIENTE_EXISTENTE")throw new Error(`Este CNPJ já pertence a ${texto((existente.cliente as Registro)?.nome)||"um cliente cadastrado"}. Cadastro duplicado não foi criado.`)
-      const resposta=await fetch("/api/crm-proxy/crm-app/clientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
+      const resposta=await fetchCrmSeguroProxy("crm-seguro/clientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       const retorno=await resposta.json().catch(()=>({})) as Registro
       if(!resposta.ok)throw new Error(texto(retorno.detail)||`Não foi possível cadastrar o cliente (${resposta.status}).`)
       formulario.reset();setCategoria("TRANSPORTADORA");setAviso("");setSucesso("Cliente cadastrado com sucesso e disponível em toda a jornada comercial.")
