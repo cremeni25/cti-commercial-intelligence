@@ -34,6 +34,7 @@ from routers.drilldown_router import router as drilldown_router
 from routers.engine_router import router as engine_router
 from routers.modulos_router import router as modulos_router
 from routers.negociacoes_router import router as negociacoes_router
+from routers.primeiro_acesso_scope_router import router as primeiro_acesso_scope_router
 from routers.strategic_layers_router import router as strategic_layers_router
 from routers.upload_router import router as upload_router
 from routers.vendas_router import router as vendas_router
@@ -74,6 +75,9 @@ app.include_router(crm_scope_implementadoras_router)
 app.include_router(crm_scope_relatorios_router)
 app.include_router(crm_scope_vendas_router)
 app.include_router(crm_scope_negocio_historico_router)
+# Esta rota vem antes do cti_api_router, que ainda contém a implementação
+# legada do primeiro acesso, para impedir que o próprio usuário redefina DDD/território.
+app.include_router(primeiro_acesso_scope_router)
 app.include_router(analytics_router)
 app.include_router(engine_router)
 app.include_router(negociacoes_router)
