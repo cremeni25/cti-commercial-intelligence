@@ -66,7 +66,15 @@ def _filtrar_agenda(payload: dict, usuario: UsuarioAutenticado) -> dict:
         for item in list(payload.get("itens") or [])
         if str(item.get("usuario_id") or item.get("responsavel_id") or "") == str(usuario.id)
     ]
-    return {**payload, "itens": itens}
+    resumo = {
+        "total": len(itens),
+        "atrasadas": sum(1 for item in itens if item.get("situacao") == "ATRASADA"),
+        "hoje": sum(1 for item in itens if item.get("situacao") == "HOJE"),
+        "futuras": sum(1 for item in itens if item.get("situacao") == "FUTURA"),
+        "sem_data": sum(1 for item in itens if item.get("situacao") == "SEM_DATA"),
+        "concluidas": sum(1 for item in itens if item.get("situacao") == "CONCLUIDA"),
+    }
+    return {**payload, "itens": itens, "resumo": resumo}
 
 
 def _como_dict(registro) -> dict:
