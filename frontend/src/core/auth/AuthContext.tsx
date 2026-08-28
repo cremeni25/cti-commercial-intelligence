@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 import { buscarUsuarioAtual } from "./auth.service"
+import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 
 interface AuthContextType {
   usuario: UsuarioCTI | null
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let ativo = true
 
     async function carregar() {
+      setLoading(true)
       try {
         const supabase = getSupabaseClient()
         const { data } = await supabase.auth.getSession()
@@ -87,9 +89,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const acessoPermitido = ativoNoSistema && (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false)
 
         if (!acessoPermitido && !rotaPublica) {
-          await supabase.auth.signOut()
-          if (ativo) setUsuario(null)
-          router.replace(`${rotaCrm ? "/crm-app/login" : "/login"}?acesso=negado`)
+          if (ativo) setUsuario(perfil)
+          router.replace(`${rotaCrm ? "/crm-app" : "/dashboard"}?acesso=negado`)
+          return
+        }
+
+        if (!rotaPublica && !rotaAutorizadaCTI(pathname, perfil)) {
+          if (ativo) setUsuario(perfil)
+          router.replace(rotaCrm ? "/crm-app?acesso=restrito" : "/dashboard?acesso=restrito")
           return
         }
 
