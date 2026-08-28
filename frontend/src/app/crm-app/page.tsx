@@ -21,6 +21,7 @@ import {
   Users,
 } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
 
 type Registro = Record<string, unknown>
@@ -100,23 +101,28 @@ export default function CrmAppPage() {
       return
     }
 
-    const oportunidades = lista(nucleoR.value)
+    const oportunidadesTodas = lista(nucleoR.value)
+    const oportunidades = oportunidadesTodas.filter((item) => pertenceAoEscopoDoUsuario(String(item.responsavel_id || ""), usuario))
     const abertas = oportunidades.filter((item) => !FINAIS.has(etapa(item)))
-    const agenda = agendaR.status === "fulfilled" && agendaR.value && typeof agendaR.value === "object"
-      ? agendaR.value as { resumo?: { hoje?: number; atrasadas?: number; futuras?: number; sem_data?: number } }
-      : {}
-    const atividades = atividadesR.status === "fulfilled" ? lista(atividadesR.value) : []
+    const idsPermitidos = new Set(oportunidades.map((item) => String(item.oportunidade_id || item.id || "")).filter(Boolean))
+    const escopoProprio = possuiEscopoProprio(usuario)
+
+    const agendaItens = agendaR.status === "fulfilled" ? lista(agendaR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
+    const atividades = atividadesR.status === "fulfilled" ? lista(atividadesR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
     const clientes = clientesR.status === "fulfilled" ? lista(clientesR.value) : []
-    const propostas = propostasR.status === "fulfilled" ? lista(propostasR.value) : []
-    const pedidos = pedidosR.status === "fulfilled" ? lista(pedidosR.value) : []
-    const vendas = vendasR.status === "fulfilled" ? lista(vendasR.value) : []
+    const propostasTodas = propostasR.status === "fulfilled" ? lista(propostasR.value) : []
+    const pedidosTodos = pedidosR.status === "fulfilled" ? lista(pedidosR.value) : []
+    const vendasTodas = vendasR.status === "fulfilled" ? lista(vendasR.value) : []
+    const propostas = escopoProprio ? propostasTodas.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : propostasTodas
+    const pedidos = escopoProprio ? pedidosTodos.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : pedidosTodos
+    const vendas = escopoProprio ? vendasTodas.filter((item) => pertenceAoEscopoDoUsuario(String(item.responsavel_id || ""), usuario) || idsPermitidos.has(String(item.oportunidade_id || ""))) : vendasTodas
 
     const hoje = new Date().toISOString().slice(0, 10)
     const visitas = atividades.filter((item) =>
       String(item.tipo || "").toUpperCase().includes("VISITA") &&
       String(item.data || item.data_atividade || "").slice(0, 10) === hoje
     ).length
-    const pendencias = Number(agenda.resumo?.atrasadas || 0) + Number(agenda.resumo?.hoje || 0) + Number(agenda.resumo?.futuras || 0) + Number(agenda.resumo?.sem_data || 0)
+    const pendencias = agendaItens.filter((item) => !["CONCLUIDA", "CONCLUÍDA", "CANCELADA"].includes(String(item.status || "").toUpperCase())).length
     const destaque = abertas[0]
     const contexto = destaque ? lerContextoOportunidade(destaque) : null
     const titulo = destaque ? textoSeguro(destaque.titulo) || textoSeguro(destaque.equipamento) || "Oportunidade" : ""
@@ -136,7 +142,7 @@ export default function CrmAppPage() {
     })
     setOnline(true)
     setSincronizando(false)
-  }, [])
+  }, [usuario])
 
   useEffect(() => {
     queueMicrotask(() => void sincronizar())
