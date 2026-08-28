@@ -6,6 +6,7 @@ import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
 import { useAuth } from "@/core/auth"
 import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Atividade = {
   id: string
@@ -35,6 +36,7 @@ type AgendaResponse = {
 
 type ClienteMestre = { id?: string; nome: string }
 type Oportunidade = { id: string; titulo: string; cliente_id?: string; responsavel_id?: string }
+type Registro = Record<string, unknown>
 
 const tipos = ["FOLLOW_UP", "LIGACAO", "VISITA_COMERCIAL", "VISITA_TECNICA", "REUNIAO", "EMAIL", "WHATSAPP", "TAREFA", "LEMBRETE"]
 const filtrosAgenda = ["ABERTAS", "ATRASADA", "HOJE", "FUTURA", "SEM_DATA", "CONCLUIDA", "TODAS"]
@@ -63,16 +65,28 @@ export default function AtividadesPage() {
   async function carregar() {
     setLoading(true)
     try {
-      const [agendaResponse, clientesResponse, oportunidadesResponse] = await Promise.all([
-        fetch(`${API_URL}/crm/agenda`),
+      const [agendaResponse, clientesResponse, nucleoResponse] = await Promise.all([
+        fetchCrmSeguroProxy("crm-seguro/agenda", { cache: "no-store" }),
         fetch(`${API_URL}/modulos/clientes?contexto=brasil&periodo=TODO_HISTORICO`),
-        fetch(`${API_URL}/crm/oportunidades?origem=CRM_APP`),
+        fetchCrmSeguroProxy("crm-seguro/nucleo-comercial", { cache: "no-store" }),
       ])
-      if (!agendaResponse.ok || !clientesResponse.ok || !oportunidadesResponse.ok) throw new Error("Falha de carregamento")
-      const [agendaJson, clientesJson, oportunidadesJson] = await Promise.all([agendaResponse.json(), clientesResponse.json(), oportunidadesResponse.json()])
+      if (!agendaResponse.ok || !clientesResponse.ok || !nucleoResponse.ok) throw new Error("Falha de carregamento")
+      const [agendaJson, clientesJson, nucleoJson] = await Promise.all([agendaResponse.json(), clientesResponse.json(), nucleoResponse.json()])
       setAgenda(agendaJson)
       setClientes(Array.isArray(clientesJson) ? clientesJson : [])
-      setOportunidades(Array.isArray(oportunidadesJson) ? oportunidadesJson : [])
+      const nucleo = Array.isArray(nucleoJson) ? nucleoJson as Registro[] : []
+      const mapa = new Map<string, Oportunidade>()
+      nucleo.forEach((item) => {
+        const id = String(item.oportunidade_id || item.id || "").trim()
+        if (!id || mapa.has(id)) return
+        mapa.set(id, {
+          id,
+          titulo: String(item.titulo || "Oportunidade comercial"),
+          cliente_id: item.cliente_id ? String(item.cliente_id) : undefined,
+          responsavel_id: item.responsavel_id ? String(item.responsavel_id) : undefined,
+        })
+      })
+      setOportunidades([...mapa.values()])
     } catch {
       setErro("Não foi possível carregar a agenda comercial e seus vínculos.")
     } finally {
@@ -113,7 +127,7 @@ export default function AtividadesPage() {
       status: "PENDENTE",
     }
     try {
-      const response = await fetch(`${API_URL}/crm/atividades`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      const response = await fetchCrmSeguroProxy("crm-seguro/atividades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error("Falha ao criar atividade")
       setMostrarFormulario(false)
       await carregar()
@@ -124,7 +138,7 @@ export default function AtividadesPage() {
 
   async function concluir(id: string) {
     try {
-      const response = await fetch(`${API_URL}/crm/atividades/${id}/concluir`, { method: "PUT" })
+      const response = await fetchCrmSeguroProxy(`crm-seguro/atividades/${id}/concluir`, { method: "PUT" })
       if (!response.ok) throw new Error("Falha ao concluir")
       await carregar()
     } catch {
