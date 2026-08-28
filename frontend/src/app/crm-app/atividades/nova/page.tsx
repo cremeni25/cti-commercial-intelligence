@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, Check, ClipboardCheck, Loader2, MapPinned, Search } from "lucide-react"
 import { useAuth } from "@/core/auth"
 import { ControlledSelect } from "@/components/crm-app/ControlledSelect"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Cliente = { id: string; nome: string; cidade?: string; estado?: string }
 type Negociacao = {
@@ -78,7 +79,7 @@ export default function NovaAtividadePage() {
         const tipoContexto = texto(params.get("tipo")).toUpperCase()
         const [clientesResposta, nucleoResposta] = await Promise.all([
           fetch("/api/crm-proxy/crm-app/clientes", { cache: "no-store" }),
-          fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" }),
+          fetchCrmSeguroProxy("crm-seguro/nucleo-comercial", { cache: "no-store" }),
         ])
         const clientesDados = await clientesResposta.json().catch(() => [])
         const nucleoDados = await nucleoResposta.json().catch(() => [])
@@ -184,7 +185,7 @@ export default function NovaAtividadePage() {
     setSalvando(true)
     const dados = new FormData(evento.currentTarget)
     try {
-      const resposta = await fetch("/api/crm-proxy/crm/atividades", {
+      const resposta = await fetchCrmSeguroProxy("crm-seguro/atividades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
