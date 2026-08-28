@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from routers import ia_comercial_acoes_router as acoes
 from services import ia_comercial_dados_semanticos as dados
 from services import ia_comercial_universo as universo
 
@@ -94,9 +95,10 @@ def escopo_crm_autorizado(usuario_id: str, tipo_usuario: str) -> dict[str, list[
 
 
 def aplicar_patch_rbac_ia() -> None:
-    # ia_comercial_universo importou a função original por referência; substituir
-    # nesse módulo garante que catálogo e consultas universais usem o mesmo escopo.
+    # Ambos os módulos importam a função histórica por referência. Substituí-la
+    # nos pontos de consumo mantém leitura e ações controladas no mesmo escopo.
     universo._escopo_autorizado = escopo_crm_autorizado
+    acoes._escopo_autorizado = escopo_crm_autorizado
 
 
 aplicar_patch_rbac_ia()
