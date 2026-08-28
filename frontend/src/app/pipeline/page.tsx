@@ -7,9 +7,11 @@ import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YA
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import JornadaComercialNav from "@/components/crm/JornadaComercialNav"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 import { API_URL } from "@/lib/api"
 
-type LinhaNucleo = { oportunidade_id:string; titulo:string; cliente_nome:string; etapa:string; valor:number; probabilidade:number; valor_ponderado:number; data_fechamento_prevista?:string|null; encerrada:boolean; pedido_id?:string|null }
+type LinhaNucleo = { oportunidade_id:string; titulo:string; cliente_nome:string; responsavel_id?:string|null; etapa:string; valor:number; probabilidade:number; valor_ponderado:number; data_fechamento_prevista?:string|null; encerrada:boolean; pedido_id?:string|null }
 type CicloPedido = { id:string; status_ciclo?:string; instalado_em?:string|null; encerrado_em?:string|null }
 const ETAPAS_PIPELINE=["OPORTUNIDADE","ATIVIDADE","PROPOSTA","ACEITE","PEDIDO","CARRIER","FATURADO","ENTREGUE","INSTALADO","ENCERRADO"]
 function moeda(valor:number){return Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
@@ -20,10 +22,12 @@ function dataIsoValida(valor?:string|null){return Boolean(valor&&/^\d{4}-\d{2}-\
 function dataPrevista(valor?:string|null){return dataIsoValida(valor)?new Date(`${valor}T12:00:00`).toLocaleDateString("pt-BR"):"Sem previsão"}
 
 export default function PipelinePage(){
+ const { usuario } = useAuth()
  const[dados,setDados]=useState<LinhaNucleo[]>([]),[ciclos,setCiclos]=useState<CicloPedido[]>([]),[inicio,setInicio]=useState(inicioMesAtual),[fim,setFim]=useState(fimMesAtual),[loading,setLoading]=useState(true),[erro,setErro]=useState("")
  useEffect(()=>{let ativo=true;setLoading(true);setErro("");Promise.all([fetch(`${API_URL}/crm/nucleo-comercial`,{cache:"no-store"}),fetch(`${API_URL}/carrier-operacional/ciclos`,{cache:"no-store"})]).then(async([rn,rc])=>{const pn=await rn.json().catch(()=>[]),pc=await rc.json().catch(()=>[]);if(!rn.ok)throw new Error(pn?.detail||"Falha ao carregar núcleo comercial");if(ativo){setDados(Array.isArray(pn)?pn:[]);setCiclos(rc.ok&&Array.isArray(pc)?pc:[])}}).catch(e=>{if(ativo)setErro(e instanceof Error?e.message:"Não foi possível carregar o pipeline.")}).finally(()=>{if(ativo)setLoading(false)});return()=>{ativo=false}},[])
  const cicloPorPedido=useMemo(()=>new Map(ciclos.map(c=>[String(c.id),c])),[ciclos])
- const consolidados=useMemo(()=>dados.map(item=>{const ciclo=item.pedido_id?cicloPorPedido.get(String(item.pedido_id)):undefined;const etapaCiclo=String(ciclo?.status_ciclo||"").toUpperCase();return etapaCiclo&&ETAPAS_PIPELINE.includes(etapaCiclo)?{...item,etapa:etapaCiclo,encerrada:etapaCiclo==="ENCERRADO"}:item}),[dados,cicloPorPedido])
+ const dadosEscopados=useMemo(()=>dados.filter(item=>pertenceAoEscopoDoUsuario(item.responsavel_id,usuario)),[dados,usuario])
+ const consolidados=useMemo(()=>dadosEscopados.map(item=>{const ciclo=item.pedido_id?cicloPorPedido.get(String(item.pedido_id)):undefined;const etapaCiclo=String(ciclo?.status_ciclo||"").toUpperCase();return etapaCiclo&&ETAPAS_PIPELINE.includes(etapaCiclo)?{...item,etapa:etapaCiclo,encerrada:etapaCiclo==="ENCERRADO"}:item}),[dadosEscopados,cicloPorPedido])
  const filtrados=useMemo(()=>consolidados.filter(item=>{const data=dataIsoValida(item.data_fechamento_prevista)?String(item.data_fechamento_prevista):"";if(!data)return true;return data>=inicio&&data<=fim}),[consolidados,fim,inicio])
  const valorTotal=filtrados.reduce((t,i)=>t+Number(i.valor||0),0),valorPonderado=filtrados.reduce((t,i)=>t+Number(i.valor_ponderado||0),0)
  const grafico=useMemo(()=>ETAPAS_PIPELINE.map(etapa=>{const itens=filtrados.filter(item=>item.etapa===etapa);return{etapa:etapa.replaceAll("_"," "),valor:itens.reduce((t,i)=>t+Number(i.valor||0),0),negociacoes:itens.length}}),[filtrados])
