@@ -9,6 +9,8 @@ type StatusPrimeiroAcesso = {
   primeiro_acesso_pendente: boolean
   cadastro_completo: boolean
   tipo_usuario?: string
+  territorio?: string | null
+  ddds?: string[]
 }
 
 export default function PrimeiroAcessoPage() {
@@ -20,8 +22,6 @@ export default function PrimeiroAcessoPage() {
   const [telefone, setTelefone] = useState("")
   const [cargo, setCargo] = useState("")
   const [departamento, setDepartamento] = useState("")
-  const [territorio, setTerritorio] = useState("Viena SP")
-  const [ddds, setDdds] = useState("")
   const [erro, setErro] = useState("")
   const [salvando, setSalvando] = useState(false)
 
@@ -74,8 +74,6 @@ export default function PrimeiroAcessoPage() {
             telefone: telefone.trim(),
             cargo: cargo.trim(),
             departamento: departamento.trim() || null,
-            territorio: territorio.trim() || null,
-            ddds: ddds.split(",").map((item) => item.trim()).filter(Boolean),
           },
         }),
       })
@@ -96,7 +94,7 @@ export default function PrimeiroAcessoPage() {
       <section className="mx-auto max-w-3xl rounded-3xl border border-[#16325c] bg-[#091a33] p-6 shadow-2xl sm:p-8">
         <p className="text-xs font-semibold uppercase tracking-[0.28em] text-cyan-400">CTI Primeiro acesso</p>
         <h1 className="mt-3 text-3xl font-bold">Defina sua senha e complete o cadastro</h1>
-        <p className="mt-3 text-sm leading-6 text-slate-400">A navegação normal será liberada somente depois da substituição da senha temporária e da conclusão dos dados funcionais.</p>
+        <p className="mt-3 text-sm leading-6 text-slate-400">A navegação normal será liberada depois da substituição da senha temporária e da conclusão dos dados pessoais. Seu território e seus DDDs já foram definidos pela administração do CTI.</p>
 
         {!status && !erro && <p className="mt-6 text-slate-400">Verificando acesso...</p>}
         {erro && <div className="mt-6 rounded-xl border border-red-800 bg-red-950/30 px-4 py-3 text-sm text-red-200">{erro}</div>}
@@ -109,9 +107,12 @@ export default function PrimeiroAcessoPage() {
             <Campo label="Telefone" value={telefone} onChange={setTelefone} required />
             <Campo label="Cargo/função formal" value={cargo} onChange={setCargo} required />
             <Campo label="Departamento" value={departamento} onChange={setDepartamento} />
-            <Campo label="Território" value={territorio} onChange={setTerritorio} />
-            <Campo label="DDDs autorizados" value={ddds} onChange={setDdds} placeholder="011, 012, 013" />
-            <div className="sm:col-span-2 rounded-xl border border-cyan-900/70 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-200">Função de acesso definida pelo ADMIN_MASTER: <strong>{status.tipo_usuario || "CTI"}</strong></div>
+            <div className="sm:col-span-2 rounded-xl border border-cyan-900/70 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100">
+              <div>Perfil de acesso: <strong>{status.tipo_usuario || "CTI"}</strong></div>
+              <div className="mt-1">Território autorizado: <strong>{status.territorio || "Conforme cadastro administrativo"}</strong></div>
+              <div className="mt-1">DDDs autorizados: <strong>{status.ddds?.length ? status.ddds.join(", ") : "Conforme perfil"}</strong></div>
+              <div className="mt-2 text-xs text-cyan-300">Essas definições são administradas pelo CTI e não são alteradas no primeiro acesso.</div>
+            </div>
             <button disabled={salvando} className="sm:col-span-2 rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">{salvando ? "Concluindo..." : "Concluir primeiro acesso"}</button>
           </form>
         )}
@@ -120,6 +121,6 @@ export default function PrimeiroAcessoPage() {
   )
 }
 
-function Campo({ label, value, onChange, type = "text", placeholder, required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; placeholder?: string; required?: boolean }) {
-  return <label className="text-sm text-slate-300">{label}<input value={value} onChange={(e) => onChange(e.target.value)} type={type} placeholder={placeholder} required={required} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" /></label>
+function Campo({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (value: string) => void; type?: string; required?: boolean }) {
+  return <label className="text-sm text-slate-300">{label}<input value={value} onChange={(e) => onChange(e.target.value)} type={type} required={required} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" /></label>
 }
