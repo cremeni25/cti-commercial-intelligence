@@ -128,6 +128,94 @@ def _resumo_agenda(itens: list[dict]) -> dict:
     }
 
 
+def _enriquecer_clientes(itens: list) -> list[dict]:
+    normalizados = [_como_dict(item) for item in itens]
+    referencias = sorted(
+        {
+            str(item.get("cliente_id") or "").strip()
+            for item in normalizados
+            if str(item.get("cliente_id") or "").strip()
+        }
+    )
+    if not referencias:
+        return normalizados
+
+    nomes: dict[str, str] = {}
+
+    try:
+        clientes = (
+            supabase.table("clientes")
+            .select("id,nome")
+            .in_("id", referencias)
+            .execute()
+        )
+        for cliente in getattr(clientes, "data", None) or []:
+            identificador = str(cliente.get("id") or "").strip()
+            nome = str(cliente.get("nome") or "").strip()
+            if identificador and nome:
+                nomes[identificador] = nome
+    except Exception:
+        pass
+
+    faltantes = [referencia for referencia in referencias if referencia not in nomes]
+    if faltantes:
+        try:
+            clientes_por_nome = (
+                supabase.table("clientes")
+                .select("id,nome")
+                .in_("nome", faltantes)
+                .execute()
+            )
+            for cliente in getattr(clientes_por_nome, "data", None) or []:
+                nome = str(cliente.get("nome") or "").strip()
+                if nome:
+                    nomes[nome] = nome
+        except Exception:
+            pass
+
+    faltantes = [referencia for referencia in referencias if referencia not in nomes]
+    if faltantes:
+        try:
+            consolidados = (
+                supabase.table("cti_clientes")
+                .select("id,cliente")
+                .in_("id", faltantes)
+                .execute()
+            )
+            for cliente in getattr(consolidados, "data", None) or []:
+                identificador = str(cliente.get("id") or "").strip()
+                nome = str(cliente.get("cliente") or "").strip()
+                if identificador and nome:
+                    nomes[identificador] = nome
+        except Exception:
+            pass
+
+    faltantes = [referencia for referencia in referencias if referencia not in nomes]
+    if faltantes:
+        try:
+            consolidados_por_nome = (
+                supabase.table("cti_clientes")
+                .select("id,cliente")
+                .in_("cliente", faltantes)
+                .execute()
+            )
+            for cliente in getattr(consolidados_por_nome, "data", None) or []:
+                nome = str(cliente.get("cliente") or "").strip()
+                if nome:
+                    nomes[nome] = nome
+        except Exception:
+            pass
+
+    for item in normalizados:
+        if str(item.get("cliente_nome") or "").strip():
+            continue
+        referencia = str(item.get("cliente_id") or "").strip()
+        nome = nomes.get(referencia, "")
+        if nome:
+            item["cliente_nome"] = nome
+    return normalizados
+
+
 def _enriquecer_responsaveis(itens: list) -> list[dict]:
     normalizados = [_como_dict(item) for item in itens]
     ids = sorted(
@@ -161,14 +249,16 @@ def _enriquecer_responsaveis(itens: list) -> list[dict]:
 
 
 def _enriquecer_atividade(atividade) -> dict:
-    itens = _enriquecer_responsaveis([atividade])
+    itens = _enriquecer_clientes([atividade])
+    itens = _enriquecer_responsaveis(itens)
     item = itens[0] if itens else _como_dict(atividade)
     item["situacao_calendario"] = _situacao_calendario(item)
     return item
 
 
 def _enriquecer_agenda(payload: dict) -> dict:
-    itens = _enriquecer_responsaveis(list(payload.get("itens") or []))
+    itens = _enriquecer_clientes(list(payload.get("itens") or []))
+    itens = _enriquecer_responsaveis(itens)
     for item in itens:
         item["situacao_calendario"] = _situacao_calendario(item)
     return {**payload, "itens": itens, "resumo": _resumo_agenda(itens)}
