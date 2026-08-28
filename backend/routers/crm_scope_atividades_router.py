@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.supabase_client import supabase
 from routers.crm_atividades_governanca_router import (
     AtividadeCreate,
     criar_atividade_operacional,
@@ -72,9 +73,52 @@ def _filtrar_agenda(payload: dict, usuario: UsuarioAutenticado) -> dict:
     return {**payload, "itens": itens, "resumo": resumo}
 
 
+def _enriquecer_responsaveis(itens: list[dict]) -> list[dict]:
+    ids = sorted(
+        {
+            str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+            for item in itens
+            if str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+        }
+    )
+    if not ids:
+        return [dict(item) for item in itens]
+
+    resposta = (
+        supabase.table("cti_users")
+        .select("id,nome,email")
+        .in_("id", ids)
+        .execute()
+    )
+    usuarios = getattr(resposta, "data", None) or []
+    por_id = {str(item.get("id")): item for item in usuarios}
+
+    enriquecidos: list[dict] = []
+    for original in itens:
+        item = dict(original)
+        responsavel_id = str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
+        usuario = por_id.get(responsavel_id)
+        if usuario:
+            item["responsavel_id"] = responsavel_id
+            item["responsavel_nome"] = str(usuario.get("nome") or usuario.get("email") or "Usuário CTI")
+        enriquecidos.append(item)
+    return enriquecidos
+
+
+def _enriquecer_atividade(atividade: dict) -> dict:
+    itens = _enriquecer_responsaveis([atividade])
+    return itens[0] if itens else atividade
+
+
+def _enriquecer_agenda(payload: dict) -> dict:
+    itens = _enriquecer_responsaveis(list(payload.get("itens") or []))
+    return {**payload, "itens": itens}
+
+
 @router.get("/agenda")
 def agenda_segura(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    return _filtrar_agenda(agenda_comercial(), usuario)
+    payload = _filtrar_agenda(agenda_comercial(), usuario)
+    return _enriquecer_agenda(payload)
 
 
 @router.get("/atividades/{atividade_id}")
@@ -82,7 +126,7 @@ def obter_atividade_segura(
     atividade_id: str,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    return _atividade_autorizada(atividade_id, usuario)
+    return _enriquecer_atividade(_atividade_autorizada(atividade_id, usuario))
 
 
 @router.post("/atividades")
@@ -93,7 +137,7 @@ def criar_atividade_segura(
     _validar_oportunidade(atividade.oportunidade_id, usuario)
     if _usa_escopo_proprio(usuario):
         atividade = atividade.model_copy(update={"usuario_id": str(usuario.id)})
-    return criar_atividade_operacional(atividade)
+    return _enriquecer_atividade(criar_atividade_operacional(atividade))
 
 
 @router.put("/atividades/{atividade_id}")
@@ -108,7 +152,7 @@ def atualizar_atividade_segura(
         if atividade.usuario_id is not None and str(atividade.usuario_id) != str(usuario.id):
             raise HTTPException(status_code=403, detail="Não é permitido transferir o responsável desta atividade")
         atividade = atividade.model_copy(update={"usuario_id": str(usuario.id)})
-    return atualizar_atividade(atividade_id, atividade)
+    return _enriquecer_atividade(atualizar_atividade(atividade_id, atividade))
 
 
 @router.put("/atividades/{atividade_id}/concluir")
@@ -117,4 +161,4 @@ def concluir_atividade_segura(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     _atividade_autorizada(atividade_id, usuario)
-    return concluir_atividade(atividade_id)
+    return _enriquecer_atividade(concluir_atividade(atividade_id))
