@@ -4,7 +4,7 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type PreviewWord = {
   filename: string
@@ -29,8 +29,8 @@ export default function DocumentoPropostaPage() {
       setErro("")
       setPreview(null)
       try {
-        const resposta = await fetch(
-          `${API_URL}/crm-documentos/propostas/${encodeURIComponent(id)}/previsualizar-documento`,
+        const resposta = await fetchCrmSeguroProxy(
+          `crm-seguro/propostas/${encodeURIComponent(id)}/previsualizar-documento`,
           { cache: "no-store", headers: { Accept: "application/json" } },
         )
         const payload = await resposta.json().catch(() => null)
@@ -38,7 +38,7 @@ export default function DocumentoPropostaPage() {
           throw new Error(String(payload?.detail || "Não foi possível preparar a visualização do Word oficial."))
         }
         if (!payload?.viewer_url) {
-          throw new Error("O CTI não recebeu a URL de visualização do Word oficial.")
+          throw new Error("O CTI não recebeu a URL temporária de visualização do Word oficial.")
         }
         if (ativo) setPreview(payload as PreviewWord)
       } catch (falha) {
@@ -58,13 +58,13 @@ export default function DocumentoPropostaPage() {
         {preview?.viewer_url && <a href={preview.viewer_url} target="_blank" rel="noreferrer" className="rounded-xl bg-[#17468f] px-5 py-2 font-semibold text-white">Ampliar visualização</a>}
       </div>
 
-      {carregando && <div className="rounded-xl bg-white p-8 text-slate-600 shadow-sm">Preparando o Word oficial preenchido para visualização...</div>}
+      {carregando && <div className="rounded-xl bg-white p-8 text-slate-600 shadow-sm">Preparando acesso temporário ao Word oficial preenchido...</div>}
       {erro && <div className="rounded-xl border border-red-300 bg-red-50 p-5 text-red-800">{erro}</div>}
 
       {preview && <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
         <div className="border-b border-slate-200 px-5 py-4">
           <h1 className="text-xl font-bold text-slate-900">Proposta oficial Carrier</h1>
-          <p className="mt-1 text-sm text-slate-600">Word oficial preenchido com os dados do dossiê e visualizado dentro do CTI. Nenhum arquivo precisa ser salvo localmente.</p>
+          <p className="mt-1 text-sm text-slate-600">Word oficial preenchido, autorizado pela sessão CTI e entregue ao visualizador por acesso temporário assinado.</p>
         </div>
         <iframe
           title="Proposta oficial Carrier em Word"
