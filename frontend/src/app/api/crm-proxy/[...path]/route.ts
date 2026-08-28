@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from "next/server"
 import { caminhoCanonicoLeitura } from "@/lib/crm-canonical"
 
 const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com").replace(/\/$/, "")
+const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
+const ATRASOS_RETRY_MS = [0, 180, 450]
 
 type Registro = Record<string, unknown>
 
@@ -10,10 +12,33 @@ function texto(valor: unknown): string {
   return String(valor ?? "").trim()
 }
 
+function aguardar(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchBackend(destino: URL | string, init: RequestInit, permitirRetry: boolean) {
+  let ultimoErro: unknown = null
+  let ultimaResposta: Response | null = null
+  const tentativas = permitirRetry ? ATRASOS_RETRY_MS : [0]
+
+  for (const atraso of tentativas) {
+    if (atraso) await aguardar(atraso)
+    try {
+      const resposta = await fetch(destino, { ...init, cache: "no-store" })
+      ultimaResposta = resposta
+      if (!permitirRetry || !STATUS_TRANSITORIOS.has(resposta.status)) return resposta
+    } catch (erro) {
+      ultimoErro = erro
+      if (!permitirRetry) throw erro
+    }
+  }
+
+  if (ultimaResposta) return ultimaResposta
+  throw ultimoErro instanceof Error ? ultimoErro : new Error("Falha transitória de comunicação com o backend")
+}
+
 async function buscarJson(caminho: string): Promise<unknown | null> {
-  const resposta = await fetch(`${BACKEND_CTI}/${caminho}`, {
-    cache: "no-store",
-  }).catch(() => null)
+  const resposta = await fetchBackend(`${BACKEND_CTI}/${caminho}`, {}, true).catch(() => null)
   if (!resposta?.ok) return null
   return resposta.json().catch(() => null)
 }
@@ -109,14 +134,12 @@ async function encaminhar(
   if (authorization) headers.set("authorization", authorization)
 
   try {
-    const resposta = await fetch(destino, {
+    const leitura = ["GET", "HEAD"].includes(request.method)
+    const resposta = await fetchBackend(destino, {
       method: request.method,
       headers,
-      body: ["GET", "HEAD"].includes(request.method)
-        ? undefined
-        : await request.arrayBuffer(),
-      cache: "no-store",
-    })
+      body: leitura ? undefined : await request.arrayBuffer(),
+    }, leitura)
 
     if (!resposta.ok && request.method === "GET") {
       const alternativa = await fallbackSeguro(caminhoSolicitado)
