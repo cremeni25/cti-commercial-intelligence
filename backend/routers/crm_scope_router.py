@@ -15,6 +15,10 @@ from routers.crm_router import (
     obter_pedido,
     obter_proposta,
 )
+from routers.documentos_comerciais_listagem_router import (
+    listar_pedidos_operacionais,
+    listar_propostas_operacionais,
+)
 
 router = APIRouter(prefix="/crm-seguro", tags=["crm-seguro"])
 
@@ -43,11 +47,15 @@ def _filtrar_por_usuario(registros: list[dict], usuario: UsuarioAutenticado) -> 
         # USUARIO_CTI permanece com o comportamento atual até definição
         # específica de governança (caso administrativo da Gessica).
         return registros
-    return [
-        item
-        for item in registros
-        if str(item.get("responsavel_id") or "") == str(usuario.id)
-    ]
+    resultado: list[dict] = []
+    for item in registros:
+        try:
+            responsavel = _responsavel_efetivo(item)
+        except HTTPException:
+            responsavel = str(item.get("responsavel_id") or "")
+        if responsavel == str(usuario.id):
+            resultado.append(item)
+    return resultado
 
 
 def _responsavel_efetivo(registro: dict) -> str:
@@ -83,6 +91,20 @@ def nucleo_comercial_seguro(
 ):
     """Núcleo canônico com enforcement de escopo baseado no login autenticado."""
     return _filtrar_por_usuario(nucleo_comercial(), usuario)
+
+
+@router.get("/propostas")
+def listar_propostas_seguras(
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    return _filtrar_por_usuario(listar_propostas_operacionais(), usuario)
+
+
+@router.get("/pedidos")
+def listar_pedidos_seguros(
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    return _filtrar_por_usuario(listar_pedidos_operacionais(), usuario)
 
 
 @router.get("/oportunidades/{oportunidade_id}")
