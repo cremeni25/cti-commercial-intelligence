@@ -69,6 +69,7 @@ def test_regional_nao_herda_negocio_alheio_por_cliente_compartilhado(monkeypatch
     assert ids(retorno["clientes"]) == {"cli-1"}
 
 
-def test_patch_substitui_funcao_usada_pelo_universo():
+def test_patch_substitui_funcao_usada_por_leitura_e_acoes():
     modulo.aplicar_patch_rbac_ia()
     assert modulo.universo._escopo_autorizado is modulo.escopo_crm_autorizado
+    assert modulo.acoes._escopo_autorizado is modulo.escopo_crm_autorizado
