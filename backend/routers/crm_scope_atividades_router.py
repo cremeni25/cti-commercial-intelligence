@@ -146,7 +146,7 @@ def criar_atividade_segura(
     _validar_oportunidade(atividade.oportunidade_id, usuario)
     if _usa_escopo_proprio(usuario):
         atividade = atividade.model_copy(update={"usuario_id": str(usuario.id)})
-    return _enriquecer_atividade(criar_atividade_operacional(atividade))
+    return criar_atividade_operacional(atividade)
 
 
 @router.put("/atividades/{atividade_id}")
@@ -161,7 +161,7 @@ def atualizar_atividade_segura(
         if atividade.usuario_id is not None and str(atividade.usuario_id) != str(usuario.id):
             raise HTTPException(status_code=403, detail="Não é permitido transferir o responsável desta atividade")
         atividade = atividade.model_copy(update={"usuario_id": str(usuario.id)})
-    return _enriquecer_atividade(atualizar_atividade(atividade_id, atividade))
+    return atualizar_atividade(atividade_id, atividade)
 
 
 @router.put("/atividades/{atividade_id}/concluir")
@@ -170,4 +170,4 @@ def concluir_atividade_segura(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     _atividade_autorizada(atividade_id, usuario)
-    return _enriquecer_atividade(concluir_atividade(atividade_id))
+    return concluir_atividade(atividade_id)
