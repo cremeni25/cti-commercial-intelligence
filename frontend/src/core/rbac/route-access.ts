@@ -17,6 +17,9 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
 
   if (["/", "/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"].includes(pathname)) return true
 
+  // Onboarding é uma rota autenticada de qualquer perfil. Não concede acesso a módulos.
+  if (pathname === "/primeiro-acesso") return true
+
   // Ferramentas técnicas e de homologação não pertencem à operação diretiva.
   if (inicia(pathname, "/backoffice-fontes")) return master
   if (inicia(pathname, "/configuracoes/modelos-oficiais")) return master

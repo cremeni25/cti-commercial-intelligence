@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const { data } = await supabase.auth.getSession()
         const rotaPublica = ROTAS_PUBLICAS.has(pathname)
         const rotaCrm = pathname.startsWith("/crm-app")
+        const rotaPrimeiroAcesso = pathname === "/primeiro-acesso"
 
         if (!data.session) {
           if (ativo) setUsuario(null)
@@ -86,7 +87,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const perfil = perfilBase as UsuarioComCanais
         const ativoNoSistema = perfil.ativo !== false && !["INATIVO", "BLOQUEADO", "REJEITADO"].includes(String(perfil.status_acesso || ""))
-        const acessoPermitido = ativoNoSistema && (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false)
+        const primeiroAcessoPendente = perfil.primeiro_acesso_pendente === true || perfil.cadastro_completo === false
+
+        // Onboarding é obrigatório antes da navegação normal, mas não altera o escopo do usuário.
+        if (ativoNoSistema && primeiroAcessoPendente && !rotaPrimeiroAcesso) {
+          if (ativo) setUsuario(perfil)
+          router.replace("/primeiro-acesso")
+          return
+        }
+
+        if (ativoNoSistema && !primeiroAcessoPendente && rotaPrimeiroAcesso) {
+          if (ativo) setUsuario(perfil)
+          router.replace(perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : "/dashboard")
+          return
+        }
+
+        // A rota de primeiro acesso é neutra de canal: um usuário CRM-only também precisa concluir o onboarding.
+        const acessoPermitido = ativoNoSistema && (rotaPrimeiroAcesso || (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false))
 
         if (!acessoPermitido && !rotaPublica) {
           if (ativo) setUsuario(perfil)
