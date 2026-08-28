@@ -138,8 +138,10 @@ export default function AtividadesPage() {
     event.preventDefault()
     setErro("")
     const form = new FormData(event.currentTarget)
+    const clienteInformado = String(form.get("cliente_id") || "").trim()
+    const clienteSelecionado = clientes.find((cliente) => cliente.nome.trim() === clienteInformado)
     const payload = {
-      cliente_id: String(form.get("cliente_id") || ""),
+      cliente_id: clienteSelecionado?.id || clienteInformado,
       oportunidade_id: String(form.get("oportunidade_id") || "") || undefined,
       usuario_id: String(usuario?.id || form.get("usuario_id") || ""),
       tipo: String(form.get("tipo") || "FOLLOW_UP"),
@@ -186,8 +188,8 @@ export default function AtividadesPage() {
 
   function clienteLegivel(item: Atividade) {
     if (item.cliente_nome) return item.cliente_nome
-    const encontrado = clientes.find((cliente) => cliente.id && cliente.id === item.cliente_id)
-    return encontrado?.nome || (item.cliente_id ? "Cliente vinculado" : "")
+    const encontrado = clientes.find((cliente) => (cliente.id && cliente.id === item.cliente_id) || cliente.nome === item.cliente_id)
+    return encontrado?.nome || ""
   }
 
   function comQuem(item: Atividade) {
