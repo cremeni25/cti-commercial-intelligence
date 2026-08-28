@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
@@ -24,6 +27,7 @@ PERFIS_ESCOPO_PROPRIO = {
     "REPRES_REGIAO_02",
     "INDICADOR_VIENA_SP",
 }
+FUSO_COMERCIAL = ZoneInfo("America/Sao_Paulo")
 
 
 def _visao_consolidada(usuario: UsuarioAutenticado) -> bool:
@@ -82,6 +86,48 @@ def _como_dict(registro) -> dict:
     return {}
 
 
+def _data_atividade(registro: dict) -> date | None:
+    valor = registro.get("data") or registro.get("data_atividade")
+    if not valor:
+        return None
+    texto = str(valor).strip()
+    try:
+        return date.fromisoformat(texto[:10])
+    except ValueError:
+        try:
+            return datetime.fromisoformat(texto.replace("Z", "+00:00")).date()
+        except ValueError:
+            return None
+
+
+def _situacao_calendario(registro: dict, hoje: date | None = None) -> str:
+    referencia = hoje or datetime.now(FUSO_COMERCIAL).date()
+    data_registro = _data_atividade(registro)
+    if data_registro is None:
+        return "SEM_DATA"
+    if data_registro < referencia:
+        return "ATRASADA"
+    if data_registro == referencia:
+        return "HOJE"
+    return "FUTURA"
+
+
+def _esta_concluida(registro: dict) -> bool:
+    status = str(registro.get("status") or "").upper()
+    return status in {"CONCLUIDA", "CONCLUÍDA"} or registro.get("situacao") == "CONCLUIDA"
+
+
+def _resumo_agenda(itens: list[dict]) -> dict:
+    return {
+        "total": len(itens),
+        "atrasadas": sum(1 for item in itens if item.get("situacao_calendario") == "ATRASADA"),
+        "hoje": sum(1 for item in itens if item.get("situacao_calendario") == "HOJE"),
+        "futuras": sum(1 for item in itens if item.get("situacao_calendario") == "FUTURA"),
+        "sem_data": sum(1 for item in itens if item.get("situacao_calendario") == "SEM_DATA"),
+        "concluidas": sum(1 for item in itens if _esta_concluida(item)),
+    }
+
+
 def _enriquecer_responsaveis(itens: list) -> list[dict]:
     normalizados = [_como_dict(item) for item in itens]
     ids = sorted(
@@ -116,12 +162,16 @@ def _enriquecer_responsaveis(itens: list) -> list[dict]:
 
 def _enriquecer_atividade(atividade) -> dict:
     itens = _enriquecer_responsaveis([atividade])
-    return itens[0] if itens else _como_dict(atividade)
+    item = itens[0] if itens else _como_dict(atividade)
+    item["situacao_calendario"] = _situacao_calendario(item)
+    return item
 
 
 def _enriquecer_agenda(payload: dict) -> dict:
     itens = _enriquecer_responsaveis(list(payload.get("itens") or []))
-    return {**payload, "itens": itens}
+    for item in itens:
+        item["situacao_calendario"] = _situacao_calendario(item)
+    return {**payload, "itens": itens, "resumo": _resumo_agenda(itens)}
 
 
 @router.get("/agenda")
