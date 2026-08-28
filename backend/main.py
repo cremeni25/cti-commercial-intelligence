@@ -1,16 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 from collections import Counter
 from datetime import datetime, timezone
 import os
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
 from core.supabase_client import supabase
+from core.transient_http import is_transient_http_error
 from routers.analytics_router import router as analytics_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
@@ -50,6 +52,28 @@ def _cors_origins() -> list[str]:
 
 app = FastAPI(title="CTI Comercial Intelligence API")
 
+
+@app.middleware("http")
+async def retry_transient_read_failures(request: Request, call_next):
+    if request.method not in {"GET", "HEAD"}:
+        return await call_next(request)
+
+    atrasos = (0.0, 0.15, 0.45)
+    ultimo_erro: BaseException | None = None
+    for indice, atraso in enumerate(atrasos):
+        if atraso:
+            await asyncio.sleep(atraso)
+        try:
+            return await call_next(request)
+        except BaseException as exc:
+            ultimo_erro = exc
+            if not is_transient_http_error(exc) or indice == len(atrasos) - 1:
+                raise
+
+    assert ultimo_erro is not None
+    raise ultimo_erro
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins(),
@@ -75,8 +99,6 @@ app.include_router(crm_scope_implementadoras_router)
 app.include_router(crm_scope_relatorios_router)
 app.include_router(crm_scope_vendas_router)
 app.include_router(crm_scope_negocio_historico_router)
-# Esta rota vem antes do cti_api_router, que ainda contém a implementação
-# legada do primeiro acesso, para impedir que o próprio usuário redefina DDD/território.
 app.include_router(primeiro_acesso_scope_router)
 app.include_router(analytics_router)
 app.include_router(engine_router)
@@ -94,26 +116,18 @@ app.include_router(drilldown_router)
 
 @app.get("/")
 def root():
-    return {
-        "status": "ok",
-        "sistema": "CTI Comercial Intelligence",
-        "versao": "3.0",
-    }
+    return {"status": "ok", "sistema": "CTI Comercial Intelligence", "versao": "3.0"}
 
 
 @app.get("/status")
 def status():
-    return {
-        "status": "ok",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
+    return {"status": "ok", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
 def _carregar_base_anfir_ativa() -> list[dict]:
     base: list[dict] = []
     pagina = 0
     limite = 1000
-
     while True:
         response = (
             supabase.table("cti_anfir")
@@ -127,7 +141,6 @@ def _carregar_base_anfir_ativa() -> list[dict]:
         if len(registros) < limite:
             break
         pagina += 1
-
     return base
 
 
@@ -136,11 +149,9 @@ def insights():
     data = _carregar_base_anfir_ativa()
     if not data:
         return {"status": "sem_dados"}
-
     clientes = Counter()
     estados = Counter()
     valores: list[float] = []
-
     for row in data:
         if row.get("cliente"):
             clientes[str(row["cliente"])] += 1
@@ -151,11 +162,9 @@ def insights():
                 valores.append(float(row["valor"]))
             except (TypeError, ValueError):
                 pass
-
     top_cliente = clientes.most_common(1)
     top_estado = estados.most_common(1)
     ticket = sum(valores) / len(valores) if valores else 0
-
     return {
         "status": "ok",
         "leitura_estrategica": {
@@ -181,8 +190,4 @@ def pipeline_status():
         .execute()
     )
     total = resposta.count or 0
-    return {
-        "linhas_brutas": total,
-        "linhas_processadas": total,
-        "pipeline": "ativo",
-    }
+    return {"linhas_brutas": total, "linhas_processadas": total, "pipeline": "ativo"}
