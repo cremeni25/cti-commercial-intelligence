@@ -5,15 +5,19 @@ import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import JornadaComercialNav from "@/components/crm/JornadaComercialNav"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 import { API_URL } from "@/lib/api"
 
 type Venda={id?:string;cliente_id?:string;cliente_nome?:string;equipamento_id?:string;equipamento_codigo?:string;equipamento_nome?:string;implementador_id?:string;implementadora_id?:string;implementadora_nome?:string;pedido_id?:string;pedido_numero?:string;tipo_venda?:string;valor?:number;data_venda?:string;observacao?:string}
+type LinhaNucleo={responsavel_id?:string|null;pedido_id?:string|null}
 function moeda(valor:unknown){return Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function dataBr(valor?:string){if(!valor)return"-";const data=new Date(`${valor}T12:00:00`);return Number.isNaN(data.getTime())?valor:data.toLocaleDateString("pt-BR")}
 
 export default function VendasPage(){
+ const { usuario } = useAuth()
  const[dados,setDados]=useState<Venda[]>([]),[busca,setBusca]=useState(""),[loading,setLoading]=useState(true),[erro,setErro]=useState("")
- useEffect(()=>{let ativo=true;setLoading(true);setErro("");fetch(`${API_URL}/vendas`,{cache:"no-store"}).then(async response=>{const payload=await response.json().catch(()=>null);if(!response.ok)throw new Error(payload?.detail||"Não foi possível carregar as vendas.");if(!Array.isArray(payload))throw new Error("A API de vendas retornou um formato inesperado.");return payload as Venda[]}).then(payload=>{if(ativo)setDados(payload)}).catch(falha=>{if(ativo)setErro(falha instanceof Error?falha.message:"Falha ao carregar vendas.")}).finally(()=>{if(ativo)setLoading(false)});return()=>{ativo=false}},[])
+ useEffect(()=>{let ativo=true;setLoading(true);setErro("");Promise.all([fetch(`${API_URL}/vendas`,{cache:"no-store"}),fetch(`${API_URL}/crm/nucleo-comercial`,{cache:"no-store"})]).then(async([rv,rn])=>{const vendas=await rv.json().catch(()=>null),nucleo=await rn.json().catch(()=>[]);if(!rv.ok)throw new Error(vendas?.detail||"Não foi possível carregar as vendas.");if(!Array.isArray(vendas))throw new Error("A API de vendas retornou um formato inesperado.");if(!possuiEscopoProprio(usuario)){if(ativo)setDados(vendas as Venda[]);return}const pedidosPermitidos=new Set((rn.ok&&Array.isArray(nucleo)?nucleo:[]).filter((item:LinhaNucleo)=>pertenceAoEscopoDoUsuario(item.responsavel_id,usuario)).map((item:LinhaNucleo)=>String(item.pedido_id||"")).filter(Boolean));if(ativo)setDados((vendas as Venda[]).filter(item=>Boolean(item.pedido_id)&&pedidosPermitidos.has(String(item.pedido_id))))}).catch(falha=>{if(ativo)setErro(falha instanceof Error?falha.message:"Falha ao carregar vendas.")}).finally(()=>{if(ativo)setLoading(false)});return()=>{ativo=false}},[usuario])
  const filtrados=useMemo(()=>{const termo=busca.trim().toLocaleLowerCase("pt-BR");if(!termo)return dados;return dados.filter(item=>JSON.stringify(item).toLocaleLowerCase("pt-BR").includes(termo))},[busca,dados])
  const valorTotal=dados.reduce((total,item)=>total+Number(item.valor||0),0),ticketMedio=dados.length?valorTotal/dados.length:0,tipos=new Set(dados.map(item=>String(item.tipo_venda||"").trim()).filter(Boolean)).size
  function abrirRealizado(){setBusca("");window.setTimeout(()=>document.getElementById("historico-vendas")?.scrollIntoView({behavior:"smooth",block:"start"}),0)}
