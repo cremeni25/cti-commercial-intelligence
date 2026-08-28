@@ -6,6 +6,7 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, Clock3, ExternalLink, FilePenLine, FileText, Loader2, MessageSquarePlus } from "lucide-react"
 import ResumoFinanceiroOportunidade from "@/components/crm-app/negociacao/ResumoFinanceiroOportunidade"
 import PropostasProcessoSection from "@/components/crm-app/negociacao/PropostasProcessoSection"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Evento = { tipo: string; data_hora: string; titulo: string; status: string; responsavel_id: string; registro_id: string }
@@ -46,7 +47,7 @@ export default function Historico() {
     let ativo = true
     void (async () => {
       try {
-        const resposta = await fetch(`/api/crm-proxy/crm/timeline/${encodeURIComponent(id)}`, { cache: "no-store" })
+        const resposta = await fetchCrmSeguroProxy(`crm-seguro/timeline/${encodeURIComponent(id)}`, { cache: "no-store" })
         const x = await resposta.json().catch(() => ({})) as Registro
         if (!resposta.ok) throw new Error(String(x.detail || `Falha ${resposta.status}`))
         if (!ativo) return
