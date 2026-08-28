@@ -119,7 +119,7 @@ def _criar_oportunidade(dados: ClienteOportunidadeCreate, cliente: dict, compat_
     }
 
 
-@router.post("/cliente-oportunidade-referencia")
+@router.post("/cliente-oportunidade")
 def criar_cliente_oportunidade_por_referencia(
     dados: ClienteOportunidadeCreate,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
