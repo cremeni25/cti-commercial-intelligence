@@ -1,4 +1,5 @@
 import { apiGet } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 export type EmpresaResumoItem = {
   nome: string
@@ -50,7 +51,7 @@ export type ClienteDetalheComercial = {
 }
 
 export type RankingItem = { nome: string; quantidade_registros: number }
-export type EquipamentoResumo = { slug: string; nome: string; total_registros: number; valor_total: number; estados: RankingItem[]; implementadoras: RankingItem[]; linhas: RankingItem[]; empresas: RankingItem[]; metadata?: Record<string, string | null> }
+export type EquipamentoResumo = { slug: string; nome: string; total_registros: number; valor_total: number; estados: RankingItem[]; implementadoras: RankingItem[]; linhas: RankingItem[]; empresas: RankingItem[]; metadata?: Record<string, unknown> }
 
 export type CamadaRealizado = {
   origem: string
@@ -97,7 +98,7 @@ export type EquipamentoEstrategico = {
   slug: string
   nome: string
   regra: "CAMADAS_SEPARADAS_SEM_FUSAO"
-  metadata?: Record<string, string | null>
+  metadata?: Record<string, unknown>
   realizado: CamadaRealizado
   historico_comercial: CamadaHistorico
   em_curso: CamadaEmCurso
@@ -105,7 +106,7 @@ export type EquipamentoEstrategico = {
 
 export type MapaEstrategicoResumo = {
   regra: "CORRELACAO_SEM_FUSAO"
-  metadata?: Record<string, string | null>
+  metadata?: Record<string, unknown>
   realizado: CamadaRealizado
   historico_comercial: CamadaHistorico
   em_curso: CamadaEmCurso
@@ -120,7 +121,7 @@ export type DrilldownResultado = {
   pagina: number
   limite: number
   total_paginas: number
-  metadata?: Record<string, string | null>
+  metadata?: Record<string, unknown>
   registros: Record<string, unknown>[]
 }
 
@@ -139,11 +140,24 @@ export type HistoricoResumo = {
 }
 
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
+
+async function apiEstrategiaSegura<T>(caminho: string): Promise<T> {
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/estrategia/${caminho}`, { cache: "no-store" })
+  const payload = await resposta.json().catch(() => null)
+  if (!resposta.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String((payload as { detail?: unknown }).detail)
+      : `Erro do backend CTI: ${resposta.status}`
+    throw new Error(detalhe)
+  }
+  return payload as T
+}
+
 export function getEmpresas(query: string) { return apiGet(`/modulos/empresas?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClientes(query: string) { return apiGet(`/modulos/clientes?${normalizarQuery(query)}`) as Promise<EmpresaResumoItem[]> }
 export function getClienteDetalhe(nome: string, query: string) { return apiGet(`/modulos/clientes/${encodeURIComponent(nome)}?${normalizarQuery(query)}`) as Promise<ClienteDetalheComercial> }
 export function getTransportadoras(query: string) { return getEmpresas(query) }
-export function getEquipamento(slug: string, query: string) { return apiGet(`/estrategia/equipamentos/${slug}?${normalizarQuery(query)}`) as Promise<EquipamentoEstrategico> }
-export function getMapaEstrategico(query: string) { return apiGet(`/estrategia/mapa?${normalizarQuery(query)}`) as Promise<MapaEstrategicoResumo> }
-export function getDrilldown(query: string) { return apiGet(`/estrategia/detalhamento?${query}`) as Promise<DrilldownResultado> }
-export function getHistoricoResumo() { return apiGet(`/estrategia/detalhamento/resumo-historico`) as Promise<HistoricoResumo> }
+export function getEquipamento(slug: string, query: string) { return apiEstrategiaSegura<EquipamentoEstrategico>(`equipamentos/${slug}?${normalizarQuery(query)}`) }
+export function getMapaEstrategico(query: string) { return apiEstrategiaSegura<MapaEstrategicoResumo>(`mapa?${normalizarQuery(query)}`) }
+export function getDrilldown(query: string) { return apiEstrategiaSegura<DrilldownResultado>(`detalhamento?${query}`) }
+export function getHistoricoResumo() { return apiEstrategiaSegura<HistoricoResumo>("detalhamento/resumo-historico") }
