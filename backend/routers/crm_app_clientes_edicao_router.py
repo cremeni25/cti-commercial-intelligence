@@ -105,7 +105,6 @@ def obter_cliente_crm_app(cliente_id: str):
     return cliente
 
 
-@router.put("/clientes/{cliente_id}")
 def atualizar_cliente_crm_app(cliente_id: str, dados: ClienteEdicao):
     origem = _localizar_unificado(cliente_id)
     if not origem:

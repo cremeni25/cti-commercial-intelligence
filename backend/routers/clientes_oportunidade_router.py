@@ -265,13 +265,11 @@ def listar_clientes_crm_app():
     return _clientes_unificados()
 
 
-@router.post("/clientes")
 def criar_cliente_crm_app(dados: ClienteCreate):
     cliente, compat = _criar_ou_atualizar_cliente(dados)
     return {"cliente": cliente, "compatibilidade": compat, "backend_version": CRM_APP_BACKEND_VERSION}
 
 
-@router.post("/cliente-oportunidade")
 def criar_cliente_e_oportunidade(dados: ClienteOportunidadeCreate):
     etapa = "cliente"
     try:
