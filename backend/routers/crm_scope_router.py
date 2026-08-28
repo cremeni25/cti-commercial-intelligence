@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from routers.crm_app_proposta_envio_router import EnviarPropostaRequest, enviar_proposta_por_email
 from routers.crm_core_extension import nucleo_comercial
 from routers.crm_router import (
     OportunidadeUpdate,
@@ -18,6 +19,16 @@ from routers.crm_router import (
 from routers.documentos_comerciais_listagem_router import (
     listar_pedidos_operacionais,
     listar_propostas_operacionais,
+)
+from routers.pedidos_operacionais_router import (
+    ConverterPedidoOperacionalRequest,
+    converter_pedido_operacional,
+)
+from routers.propostas_consulta_router import consultar_proposta
+from routers.propostas_pedidos_router import (
+    SolicitarAceiteRequest,
+    emitir_proposta,
+    solicitar_aceite,
 )
 
 router = APIRouter(prefix="/crm-seguro", tags=["crm-seguro"])
@@ -85,6 +96,10 @@ def _impedir_transferencia(responsavel_id: str | None, usuario: UsuarioAutentica
         raise HTTPException(status_code=403, detail="Não é permitido transferir o responsável deste registro")
 
 
+def _proposta_autorizada(proposta_id: str, usuario: UsuarioAutenticado) -> dict:
+    return _exigir_acesso(obter_proposta(proposta_id), usuario)
+
+
 @router.get("/nucleo-comercial")
 def nucleo_comercial_seguro(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
@@ -130,7 +145,61 @@ def obter_proposta_segura(
     proposta_id: str,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    return _exigir_acesso(obter_proposta(proposta_id), usuario)
+    return _proposta_autorizada(proposta_id, usuario)
+
+
+@router.get("/propostas/{proposta_id}/pacote")
+def consultar_proposta_segura(
+    proposta_id: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _proposta_autorizada(proposta_id, usuario)
+    return consultar_proposta(proposta_id)
+
+
+@router.post("/propostas/{proposta_id}/emitir")
+def emitir_proposta_segura(
+    proposta_id: str,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _proposta_autorizada(proposta_id, usuario)
+    return emitir_proposta(proposta_id)
+
+
+@router.post("/propostas/{proposta_id}/aceites")
+def solicitar_aceite_seguro(
+    proposta_id: str,
+    dados: SolicitarAceiteRequest,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _proposta_autorizada(proposta_id, usuario)
+    return solicitar_aceite(proposta_id, dados)
+
+
+@router.post("/propostas/{proposta_id}/enviar-email")
+def enviar_proposta_email_seguro(
+    proposta_id: str,
+    dados: EnviarPropostaRequest,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _proposta_autorizada(proposta_id, usuario)
+    return enviar_proposta_por_email(proposta_id, dados)
+
+
+@router.post("/propostas/{proposta_id}/converter-pedido-operacional")
+def converter_pedido_operacional_seguro(
+    proposta_id: str,
+    dados: ConverterPedidoOperacionalRequest,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    proposta = _proposta_autorizada(proposta_id, usuario)
+    if _usa_escopo_proprio(usuario):
+        # Nunca confia no responsável enviado pelo navegador de um perfil regional.
+        dados = dados.model_copy(update={"responsavel_id": str(usuario.id)})
+    elif dados.responsavel_id is None:
+        responsavel = _responsavel_efetivo(proposta)
+        dados = dados.model_copy(update={"responsavel_id": responsavel or None})
+    return converter_pedido_operacional(proposta_id, dados)
 
 
 @router.put("/propostas/{proposta_id}")
@@ -139,7 +208,7 @@ def atualizar_proposta_segura(
     proposta: PropostaUpdate,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    _exigir_acesso(obter_proposta(proposta_id), usuario)
+    _proposta_autorizada(proposta_id, usuario)
     _impedir_transferencia(proposta.responsavel_id, usuario)
     return atualizar_proposta(proposta_id, proposta)
 
