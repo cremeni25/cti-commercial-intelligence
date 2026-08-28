@@ -1,4 +1,5 @@
 import { getSupabaseClient } from "@/core/database/supabase"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 const API_URL = "/api/cti"
 const BACKOFFICE_URL = "/api/crm-proxy/backoffice-fontes"
@@ -36,6 +37,18 @@ async function request(endpoint: string) {
   return payload
 }
 
+async function requestSeguro(endpoint: string) {
+  const response = await fetchCrmSeguroProxy(endpoint, { cache: "no-store" })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String((payload as { detail?: unknown }).detail)
+      : `Erro ao carregar ${endpoint}`
+    throw new Error(detalhe)
+  }
+  return payload
+}
+
 async function registrarFonteGovernada(file: File): Promise<Record<string, unknown>> {
   const formData = new FormData()
   formData.append("arquivo", file)
@@ -61,7 +74,10 @@ export async function getDashboardExecutivoContextual(query: string | Operationa
 }
 export async function getImplementadorasContextuais(query: string | OperationalContextValue) {
   const qs = query.includes("=") ? query : `contexto=${encodeURIComponent(query)}`
-  return request(`/modulos/implementadoras?${qs}`)
+  const payload = await requestSeguro(`crm-seguro/implementadoras?${qs}`)
+  return payload && typeof payload === "object" && "itens" in payload
+    ? (payload as { itens?: unknown[] }).itens || []
+    : []
 }
 export async function getBrasilDashboard() { return request("/brasil/dashboard") }
 export async function getBrasilImplementadoras() { return request("/brasil/implementadoras") }
