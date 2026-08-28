@@ -3,10 +3,13 @@
 import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Loader2, Pencil, Plus, Save, UserRound, Building2 } from "lucide-react"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 
 type Registro = Record<string, unknown>
 type Item = {
   id: string
+  usuarioId: string
   titulo: string
   tipo: string
   status: string
@@ -37,6 +40,7 @@ function contextoCompromisso(item: Item) {
 }
 
 export default function Agenda() {
+  const { usuario } = useAuth()
   const [mes, setMes] = useState(() => new Date())
   const [itens, setItens] = useState<Item[]>([])
   const [selecionado, setSelecionado] = useState<Item | null>(null)
@@ -55,6 +59,7 @@ export default function Agenda() {
       if (!r.ok) throw new Error(String((p as Registro).detail || `Falha ${r.status}`))
       setItens(lista(p).map(i => ({
         id: texto(i.id || i.atividade_id),
+        usuarioId: texto(i.usuario_id || i.responsavel_id),
         titulo: texto(i.titulo || i.assunto || i.descricao) || "Atividade comercial",
         tipo: texto(i.tipo || i.tipo_atividade).toUpperCase() || "ATIVIDADE",
         status: texto(i.status).toUpperCase() || "PENDENTE",
@@ -76,7 +81,8 @@ export default function Agenda() {
 
   useEffect(() => { void carregar() }, [])
 
-  const doMes = useMemo(() => itens.filter(i => i.data.startsWith(chaveMes(mes))).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`)), [itens, mes])
+  const itensEscopados = useMemo(() => itens.filter(i => pertenceAoEscopoDoUsuario(i.usuarioId, usuario)), [itens, usuario])
+  const doMes = useMemo(() => itensEscopados.filter(i => i.data.startsWith(chaveMes(mes))).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`)), [itensEscopados, mes])
   const titulo = mes.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })
   const primeiro = new Date(mes.getFullYear(), mes.getMonth(), 1)
   const totalDias = new Date(mes.getFullYear(), mes.getMonth() + 1, 0).getDate()
@@ -88,7 +94,7 @@ export default function Agenda() {
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!selecionado) return
+    if (!selecionado || !pertenceAoEscopoDoUsuario(selecionado.usuarioId, usuario)) return
     setSalvando(true); setErro(""); setSucesso("")
     const f = new FormData(e.currentTarget)
     const payload = { titulo: texto(f.get("titulo")), tipo: texto(f.get("tipo")), data: texto(f.get("data")), horario: texto(f.get("horario")), descricao: texto(f.get("descricao")) || null, status: texto(f.get("status")) }
@@ -102,6 +108,8 @@ export default function Agenda() {
   }
 
   async function concluir(id: string) {
+    const item = itensEscopados.find(i => i.id === id)
+    if (!item) return
     const r = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(id)}/concluir`, { method: "PUT" })
     if (!r.ok) setErro("Não foi possível concluir o compromisso.")
     else { setSucesso("Compromisso concluído e enviado ao histórico comercial."); await carregar() }

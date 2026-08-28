@@ -5,6 +5,8 @@ import { useCallback, useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 import { useOperationalContext } from "@/context/OperationalContext"
 import { getDashboardExecutivoContextual } from "@/services/cti-api"
 import { API_URL } from "@/lib/api"
@@ -18,6 +20,7 @@ type DashboardContextual = {
 }
 type NucleoComercial = {
   oportunidade_id: string
+  responsavel_id?: string | null
   valor?: number
   proposta_id?: string | null
   pedido_id?: string | null
@@ -63,6 +66,7 @@ const RETRY_MS = 5_000
 const REFRESH_MS = 60_000
 
 export default function DashboardHub() {
+  const { usuario } = useAuth()
   const { contextoAtual, periodo, dataInicio, dataFim, queryString } = useOperationalContext()
   const [historico, setHistorico] = useState<DashboardContextual | null>(null)
   const [nucleo, setNucleo] = useState<NucleoComercial[] | null>(null)
@@ -170,7 +174,7 @@ export default function DashboardHub() {
   const nucleoDisponivel = nucleo !== null
   const oportunidadesDisponiveis = oportunidadesCrm !== null
   const operacionalDisponivel = nucleoDisponivel && oportunidadesDisponiveis
-  const abertos = (nucleo ?? []).filter((item) => !item.encerrada)
+  const abertos = (nucleo ?? []).filter((item) => !item.encerrada && pertenceAoEscopoDoUsuario(item.responsavel_id, usuario))
   const pipelineAberto = abertos.reduce((total, item) => total + Number(item.valor || 0), 0)
   const propostasAbertas = abertos.filter((item) => Boolean(item.proposta_id)).length
   const pedidosAbertos = abertos.filter((item) => Boolean(item.pedido_id)).length

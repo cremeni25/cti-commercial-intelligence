@@ -3,18 +3,21 @@
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, CalendarRange, ChevronRight, Loader2, Target, TrendingUp } from "lucide-react"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 
 type Registro=Record<string,unknown>
-type Linha={oportunidade_id:string;cliente_nome:string;titulo:string;competencia:string;etapa:string;valor:number;valor_ponderado:number;probabilidade:number;encerrada:boolean}
+type Linha={oportunidade_id:string;responsavel_id?:string|null;cliente_nome:string;titulo:string;competencia:string;etapa:string;valor:number;valor_ponderado:number;probabilidade:number;encerrada:boolean}
 function lista(payload:unknown):Registro[]{if(Array.isArray(payload))return payload as Registro[];if(payload&&typeof payload==="object"){const o=payload as Registro;for(const k of["dados","itens","oportunidades","resultado"])if(Array.isArray(o[k]))return o[k] as Registro[]}return[]}
 function texto(v:unknown){return String(v||"").trim()}
 function moeda(v:number){return Number(v||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function mesAtual(){return new Date().toISOString().slice(0,7)}
 
 export default function CrmAppForecastPage(){
+ const { usuario } = useAuth()
  const[dados,setDados]=useState<Linha[]>([]),[competencia,setCompetencia]=useState(mesAtual()),[carregando,setCarregando]=useState(true),[erro,setErro]=useState("")
- useEffect(()=>{fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String((p as Registro).detail||`Falha ${r.status}`));setDados(lista(p).map(i=>({oportunidade_id:texto(i.oportunidade_id||i.id),cliente_nome:texto(i.cliente_nome||i.cliente)||"Cliente em identificação",titulo:texto(i.titulo||i.equipamento)||"Negociação comercial",competencia:texto(i.competencia||i.data_fechamento_prevista).slice(0,7),etapa:texto(i.etapa||i.status).toUpperCase(),valor:Number(i.valor||i.valor_estimado||0),valor_ponderado:Number(i.valor_ponderado||0),probabilidade:Number(i.probabilidade||0),encerrada:Boolean(i.encerrada)})).filter(i=>i.oportunidade_id))}).catch(e=>setErro(e instanceof Error?e.message:"Não foi possível carregar o Forecast.")).finally(()=>setCarregando(false))},[])
- const abertas=useMemo(()=>dados.filter(i=>!i.encerrada),[dados])
+ useEffect(()=>{fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String((p as Registro).detail||`Falha ${r.status}`));setDados(lista(p).map(i=>({oportunidade_id:texto(i.oportunidade_id||i.id),responsavel_id:texto(i.responsavel_id)||null,cliente_nome:texto(i.cliente_nome||i.cliente)||"Cliente em identificação",titulo:texto(i.titulo||i.equipamento)||"Negociação comercial",competencia:texto(i.competencia||i.data_fechamento_prevista).slice(0,7),etapa:texto(i.etapa||i.status).toUpperCase(),valor:Number(i.valor||i.valor_estimado||0),valor_ponderado:Number(i.valor_ponderado||0),probabilidade:Number(i.probabilidade||0),encerrada:Boolean(i.encerrada)})).filter(i=>i.oportunidade_id))}).catch(e=>setErro(e instanceof Error?e.message:"Não foi possível carregar o Forecast.")).finally(()=>setCarregando(false))},[])
+ const abertas=useMemo(()=>dados.filter(i=>!i.encerrada&&pertenceAoEscopoDoUsuario(i.responsavel_id,usuario)),[dados,usuario])
  const competencias=useMemo(()=>Array.from(new Set(abertas.map(i=>i.competencia).filter(Boolean))).sort(),[abertas])
  const filtradas=useMemo(()=>abertas.filter(i=>!competencia||i.competencia===competencia),[abertas,competencia])
  const total=filtradas.reduce((s,i)=>s+i.valor,0),ponderado=filtradas.reduce((s,i)=>s+(i.valor_ponderado||i.valor*(i.probabilidade>1?i.probabilidade/100:i.probabilidade)),0)
