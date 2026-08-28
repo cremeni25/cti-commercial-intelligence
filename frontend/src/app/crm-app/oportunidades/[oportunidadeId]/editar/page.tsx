@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft, Loader2, Save } from "lucide-react"
 import { lerContextoOportunidade, montarDescricaoComContexto } from "@/lib/crm-opportunity"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 function texto(valor: unknown) { return String(valor || "").trim() }
@@ -24,7 +25,7 @@ export default function EditarOportunidade() {
   const contexto = useMemo(() => lerContextoOportunidade(dados), [dados])
 
   async function obter() {
-    const resposta = await fetch(`/api/crm-proxy/crm/oportunidades/${encodeURIComponent(id)}`, { cache: "no-store" })
+    const resposta = await fetchCrmSeguroProxy(`crm-seguro/oportunidades/${encodeURIComponent(id)}`, { cache: "no-store" })
     const payload = await resposta.json().catch(() => ({}))
     if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
     return (Array.isArray(payload) ? payload[0] || {} : payload) as Registro
@@ -63,7 +64,7 @@ export default function EditarOportunidade() {
     }
 
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm/oportunidades/${encodeURIComponent(id)}`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/oportunidades/${encodeURIComponent(id)}`, {
         method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
       })
       const detalhe = await resposta.json().catch(() => ({}))
