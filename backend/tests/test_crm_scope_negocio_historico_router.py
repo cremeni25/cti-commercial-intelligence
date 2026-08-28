@@ -16,15 +16,13 @@ def usuario(tipo="REPRES_REGIAO_01", identificador="user-1", acesso_total=False)
 
 def dados_criacao(responsavel="user-2"):
     return modulo.ClienteOportunidadeCreate(
-        cliente=modulo.ClienteOportunidadeCreate.model_fields["cliente"].annotation(
-            id="cliente-1", nome="Cliente Teste", cidade="São Paulo", estado="SP"
-        ),
-        oportunidade=modulo.ClienteOportunidadeCreate.model_fields["oportunidade"].annotation(
-            responsavel_id=responsavel,
-            titulo="Cotação de equipamentos",
-            valor_estimado=1000,
-            probabilidade=50,
-        ),
+        cliente={"id": "cliente-1", "nome": "Cliente Teste", "cidade": "São Paulo", "estado": "SP"},
+        oportunidade={
+            "responsavel_id": responsavel,
+            "titulo": "Cotação de equipamentos",
+            "valor_estimado": 1000,
+            "probabilidade": 50,
+        },
     )
 
 
