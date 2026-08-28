@@ -4,14 +4,18 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, CircleDollarSign, ClipboardCheck, Loader2, PackageCheck, Search } from "lucide-react"
 import JornadaDocumentalNav from "@/components/crm-app/JornadaDocumentalNav"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 
 type Venda = { id?: string; cliente_id?: string; oportunidade_id?: string; pedido_id?: string; cliente_nome?: string; pedido_numero?: string; equipamento_nome?: string; equipamento_codigo?: string; tipo_venda?: string; valor?: number; data_venda?: string }
+type LinhaNucleo={oportunidade_id?:string;pedido_id?:string|null;responsavel_id?:string|null}
 function moeda(valor: unknown){return Number(valor||0).toLocaleString("pt-BR",{style:"currency",currency:"BRL"})}
 function dataBr(valor?: string){if(!valor)return "—";const d=new Date(`${valor}T12:00:00`);return Number.isNaN(d.getTime())?valor:d.toLocaleDateString("pt-BR")}
 
 export default function VendasCrmAppPage(){
+  const { usuario } = useAuth()
   const [dados,setDados]=useState<Venda[]>([]),[busca,setBusca]=useState(""),[carregando,setCarregando]=useState(true),[erro,setErro]=useState("")
-  useEffect(()=>{fetch("/api/crm-proxy/vendas",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>[]);if(!r.ok)throw new Error(String(p.detail||`Falha ${r.status}`));setDados(Array.isArray(p)?p:[])}).catch(f=>setErro(f instanceof Error?f.message:"Não foi possível carregar as vendas.")).finally(()=>setCarregando(false))},[])
+  useEffect(()=>{Promise.all([fetch("/api/crm-proxy/vendas",{cache:"no-store"}),fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"})]).then(async([rv,rn])=>{const vendas=await rv.json().catch(()=>[]),nucleo=await rn.json().catch(()=>[]);if(!rv.ok)throw new Error(String(vendas.detail||`Falha ${rv.status}`));const listaVendas=Array.isArray(vendas)?vendas:[];if(!possuiEscopoProprio(usuario)){setDados(listaVendas);return}const permitidas=(rn.ok&&Array.isArray(nucleo)?nucleo:[]).filter((i:LinhaNucleo)=>pertenceAoEscopoDoUsuario(i.responsavel_id,usuario));const ops=new Set(permitidas.map((i:LinhaNucleo)=>String(i.oportunidade_id||"")).filter(Boolean)),pedidos=new Set(permitidas.map((i:LinhaNucleo)=>String(i.pedido_id||"")).filter(Boolean));setDados(listaVendas.filter((i:Venda)=>(Boolean(i.oportunidade_id)&&ops.has(String(i.oportunidade_id)))||(Boolean(i.pedido_id)&&pedidos.has(String(i.pedido_id)))))}).catch(f=>setErro(f instanceof Error?f.message:"Não foi possível carregar as vendas.")).finally(()=>setCarregando(false))},[usuario])
   const filtrados=useMemo(()=>{const termo=busca.trim().toLocaleLowerCase("pt-BR");if(!termo)return dados;return dados.filter(i=>`${i.cliente_nome||""} ${i.pedido_numero||""} ${i.equipamento_nome||i.equipamento_codigo||""} ${i.tipo_venda||""}`.toLocaleLowerCase("pt-BR").includes(termo))},[busca,dados])
   const valorTotal=dados.reduce((t,i)=>t+Number(i.valor||0),0)
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-6xl">
