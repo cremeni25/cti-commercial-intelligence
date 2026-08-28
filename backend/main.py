@@ -18,6 +18,7 @@ from routers.clientes_router import router as clientes_router
 from routers.crm_atividades_governanca_router import router as crm_atividades_governanca_router
 from routers.crm_router import router as crm_router
 from routers.crm_scope_router import router as crm_scope_router
+from routers.crm_scope_atividades_router import router as crm_scope_atividades_router
 from routers.crm_scope_carrier_router import router as crm_scope_carrier_router
 from routers.crm_scope_documents_router import public_router as crm_scope_documents_public_router, secure_router as crm_scope_documents_secure_router
 from routers.cti_api_router import router as cti_api_router
@@ -53,6 +54,7 @@ app.add_middleware(
 app.include_router(crm_atividades_governanca_router)
 app.include_router(crm_router)
 app.include_router(crm_scope_router)
+app.include_router(crm_scope_atividades_router)
 app.include_router(crm_scope_carrier_router)
 app.include_router(crm_scope_documents_secure_router)
 app.include_router(crm_scope_documents_public_router)
