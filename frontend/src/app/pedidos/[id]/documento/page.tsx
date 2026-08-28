@@ -4,7 +4,7 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { useParams } from "next/navigation"
-import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Detalhes = { pedido: Registro; proposta: Registro; item: Registro; aceite: Registro }
@@ -21,7 +21,7 @@ export default function DocumentoPedidoPage() {
 
   useEffect(() => {
     if (!id) return
-    fetch(`${API_URL}/carrier-operacional/pedidos/${id}`, { cache: "no-store" })
+    fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/carrier-pacote`, { cache: "no-store" })
       .then(async (resposta) => { const payload = await resposta.json().catch(() => null); if (!resposta.ok) throw new Error(payload?.detail || "Não foi possível carregar o pedido."); return payload })
       .then(setDados)
       .catch((falha) => setErro(falha instanceof Error ? falha.message : "Falha ao carregar o pedido."))
