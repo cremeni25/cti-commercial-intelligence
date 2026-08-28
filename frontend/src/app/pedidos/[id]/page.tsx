@@ -6,7 +6,7 @@ import { FormEvent, useEffect, useState } from "react"
 import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Destinatario = { id: string; nome?: string; email?: string; cargo?: string; regiao?: string }
@@ -28,7 +28,7 @@ export default function PedidoDetalhesPage() {
   async function carregar() {
     setLoading(true); setErro("")
     try {
-      const response = await fetch(`${API_URL}/carrier-operacional/pedidos/${id}`, { cache: "no-store" })
+      const response = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/carrier-pacote`, { cache: "no-store" })
       const payload = await response.json().catch(() => null)
       if (!response.ok) throw new Error(payload?.detail || "Não foi possível carregar o dossiê.")
       setDados(payload)
@@ -45,14 +45,14 @@ export default function PedidoDetalhesPage() {
     try {
       const emails = (dados?.destinatarios_disponiveis || []).filter((item) => selecionados.includes(item.id)).map((item) => String(item.email || "").trim()).filter(Boolean)
       if (!emails.length) throw new Error("Selecione ao menos um destinatário CARRIER ativo.")
-      const salvar = await fetch(`${API_URL}/crm-documentos/pedidos/${id}/destinatarios`, {
+      const salvar = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/destinatarios`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destinatarios: emails, observacoes_envio: String(form.get("observacao") || "") || null }),
       })
       const salvo = await salvar.json().catch(() => null)
       if (!salvar.ok) throw new Error(salvo?.detail || "Não foi possível registrar os destinatários do pedido.")
       if (!window.confirm(`Confirma o envio real deste pedido para ${emails.length} destinatário(s)?`)) { setMensagem("Destinatários registrados. Envio ainda não realizado."); return }
-      const enviar = await fetch(`${API_URL}/crm-documentos/pedidos/${id}/enviar`, {
+      const enviar = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/enviar`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmar: true }),
       })
       const retorno = await enviar.json().catch(() => null)
