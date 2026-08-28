@@ -21,6 +21,7 @@ from routers.crm_scope_router import router as crm_scope_router
 from routers.crm_scope_atividades_router import router as crm_scope_atividades_router
 from routers.crm_scope_carrier_router import router as crm_scope_carrier_router
 from routers.crm_scope_documents_router import public_router as crm_scope_documents_public_router, secure_router as crm_scope_documents_secure_router
+from routers.crm_scope_negocio_historico_router import router as crm_scope_negocio_historico_router
 from routers.cti_api_router import router as cti_api_router
 from routers.drilldown_router import router as drilldown_router
 from routers.engine_router import router as engine_router
@@ -58,6 +59,7 @@ app.include_router(crm_scope_atividades_router)
 app.include_router(crm_scope_carrier_router)
 app.include_router(crm_scope_documents_secure_router)
 app.include_router(crm_scope_documents_public_router)
+app.include_router(crm_scope_negocio_historico_router)
 app.include_router(analytics_router)
 app.include_router(engine_router)
 app.include_router(negociacoes_router)

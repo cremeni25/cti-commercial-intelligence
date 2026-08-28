@@ -4,6 +4,7 @@ import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, BriefcaseBusiness, CheckCircle2, Loader2, Search, Tag, UserPlus } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Cliente = { id: string; nome: string; razaoSocial: string; nomeFantasia: string; cnpj: string; cidade: string; estado: string; ddd: string; sub_regiao: string; segmento: string }
@@ -167,7 +168,7 @@ export default function NovaOportunidadePage() {
 
     setSalvando(true)
     try {
-      const resposta = await fetch("/api/crm-proxy/crm-app/cliente-oportunidade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      const resposta = await fetchCrmSeguroProxy("crm-seguro/cliente-oportunidade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const detalhe = await resposta.json().catch(() => ({})) as Registro
       if (!resposta.ok) throw new Error(texto(detalhe.detail) || `Falha ${resposta.status}`)
       const oportunidade = detalhe.oportunidade && typeof detalhe.oportunidade === "object" ? detalhe.oportunidade as Registro : {}
