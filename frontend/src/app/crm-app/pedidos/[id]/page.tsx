@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { ArrowLeft, Building2, CircleDollarSign, FileCheck2, Loader2, Mail, PackageCheck, Save, Send } from "lucide-react"
 import { useParams } from "next/navigation"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Pacote = {
@@ -44,7 +45,7 @@ export default function PedidoCrmAppPage() {
     if (!id) return
     setCarregando(true); setErro("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}`, { cache: "no-store" })
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/pacote`, { cache: "no-store" })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || `Não foi possível carregar o pedido (${resposta.status}).`))
       setDados(payload)
@@ -66,7 +67,7 @@ export default function PedidoCrmAppPage() {
     if (!destinatarios.length) { setErro("Informe ao menos um endereço no campo Para."); return }
     setSalvando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}/destinatarios`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/destinatarios`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ destinatarios, cc: separarEmails(cc), cco: separarEmails(cco), observacoes_envio: observacoes || null }),
       })
       const payload = await resposta.json().catch(() => ({}))
@@ -84,7 +85,7 @@ export default function PedidoCrmAppPage() {
     if (!window.confirm(`Confirma o envio definitivo deste pedido para ${destinatarios.length} destinatário(s) principal(is)?`)) return
     setEnviando(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/pedidos/${encodeURIComponent(id)}/enviar`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/enviar`, {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ confirmar: true }),
       })
       const payload = await resposta.json().catch(() => ({}))
@@ -99,7 +100,7 @@ export default function PedidoCrmAppPage() {
     if (!window.confirm("Confirma a conclusão deste pedido como venda? A venda passará a alimentar o painel gerencial do CTI.")) return
     setRegistrandoVenda(true); setErro(""); setMensagem("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/vendas/pedidos/${encodeURIComponent(id)}/concluir`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/pedidos/${encodeURIComponent(id)}/concluir-venda`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ confirmar: true, tipo_venda: tipoVenda }),
