@@ -3,10 +3,6 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
-from routers.clientes_oportunidade_router import (
-    ClienteOportunidadeCreate,
-    criar_cliente_e_oportunidade,
-)
 from routers.crm_router import obter_oportunidade
 from routers.negociacoes_router import timeline_oportunidade
 
@@ -37,17 +33,6 @@ def _oportunidade_autorizada(oportunidade_id: str, usuario: UsuarioAutenticado) 
     if str(oportunidade.get("responsavel_id") or "") == str(usuario.id):
         return oportunidade
     raise HTTPException(status_code=404, detail="Oportunidade comercial não encontrada")
-
-
-@router.post("/cliente-oportunidade")
-def criar_cliente_oportunidade_segura(
-    dados: ClienteOportunidadeCreate,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
-    if _usa_escopo_proprio(usuario):
-        oportunidade = dados.oportunidade.model_copy(update={"responsavel_id": str(usuario.id)})
-        dados = dados.model_copy(update={"oportunidade": oportunidade})
-    return criar_cliente_e_oportunidade(dados)
 
 
 @router.get("/timeline/{oportunidade_id}")
