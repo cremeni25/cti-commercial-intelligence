@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 interface PacoteProposta {
   proposta: Record<string, unknown>
@@ -32,7 +33,7 @@ export default function PropostaPage() {
   async function carregar() {
     setCarregando(true); setErro("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(id)}`, { cache: "no-store" })
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/pacote`, { cache: "no-store" })
       const payload = await resposta.json().catch(() => null)
       if (!resposta.ok) throw new Error(payload?.detail || `Não foi possível carregar a proposta (${resposta.status}).`)
       setDados(payload)
@@ -51,10 +52,10 @@ export default function PropostaPage() {
   const aceiteValido = dados?.aceites.find((item) => String(item.status || "").toUpperCase() === "ACEITO")
   const pedido = dados?.pedidos[0]
 
-  async function executar(endpoint: string, body?: Record<string, unknown>) {
+  async function executar(sufixo: string, body?: Record<string, unknown>) {
     setProcessando(true); setMensagem(""); setErro("")
     try {
-      const resposta = await fetch(`/api/crm-proxy${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}${sufixo}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
       const payload = await resposta.json().catch(() => null)
       if (!resposta.ok) throw new Error(payload?.detail || `A operação não pôde ser concluída (${resposta.status}).`)
       setMensagem("Operação registrada com sucesso."); await carregar(); return payload
@@ -65,7 +66,7 @@ export default function PropostaPage() {
   async function solicitarAceite(metodo: "PRESENCIAL_TELA" | "REMOTO_LINK") {
     const nome = window.prompt("Nome completo do cliente/signatário:")?.trim(); if (!nome) return
     const email = window.prompt("E-mail do cliente, quando disponível:")?.trim() || null
-    const payload = await executar(`/crm-documentos/propostas/${id}/aceites`, { metodo, nome_signatario: nome, email_signatario: email })
+    const payload = await executar("/aceites", { metodo, nome_signatario: nome, email_signatario: email })
     const token = payload?.link_token
     if (token) { const link = `${window.location.origin}/aceite/${token}`; await navigator.clipboard?.writeText(link); setMensagem(`Link de aceite copiado: ${link}`) }
   }
@@ -83,9 +84,9 @@ export default function PropostaPage() {
         <article className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Documentos e ações</h2><div className="mt-5 grid gap-3">
           <Link href={`/propostas/${id}/documento`} className="rounded-xl bg-cyan-500 px-4 py-3 text-center font-semibold text-slate-950">Visualizar proposta oficial CARRIER</Link>
           {pedido && <Link href={`/pedidos/${String(pedido.id)}`} className="rounded-xl border border-emerald-700 px-4 py-3 text-center font-semibold text-emerald-300">Abrir pedido e dossiê</Link>}
-          {!encerrada && podeEmitir && <button disabled={processando} onClick={() => void executar(`/crm-documentos/propostas/${id}/emitir`)} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Emitir proposta</button>}
+          {!encerrada && podeEmitir && <button disabled={processando} onClick={() => void executar("/emitir")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Emitir proposta</button>}
           {!encerrada && podeAceite && <><button disabled={processando} onClick={() => void solicitarAceite("PRESENCIAL_TELA")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Aceite presencial</button><button disabled={processando} onClick={() => void solicitarAceite("REMOTO_LINK")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Gerar link de aceite</button></>}
-          {podePedido && <button disabled={processando} onClick={() => void executar(`/crm-documentos/propostas/${id}/converter-pedido`, {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">Gerar pedido</button>}
+          {podePedido && <button disabled={processando} onClick={() => void executar("/converter-pedido", {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">Gerar pedido</button>}
         </div></article>
       </section>
       <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Auditoria do documento</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><Linha label="Hash" valor={texto(dados.proposta.hash_documento)} /><Linha label="Modelo" valor={texto(dados.proposta.modelo_proposta_id, "Modelo provisório")}/><Linha label="Emitida em" valor={dataHora(dados.proposta.emitida_em)} /><Linha label="Aceita em" valor={dataHora(dados.proposta.aceita_em)} /></div><details className="mt-5 rounded-2xl border border-[#13203f] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-300">Snapshot imutável</summary><pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(snapshot, null, 2)}</pre></details></section>
