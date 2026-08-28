@@ -6,7 +6,7 @@ import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
 import { getImplementadorasContextuais } from "@/services/cti-api"
-import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type ImplementadoraResumo = {
   nome: string
@@ -55,10 +55,16 @@ function drill(contexto: string, titulo: string, implementadora?: string) {
   return `/detalhamento?${query.toString()}`
 }
 
-async function buscarJson<T>(endpoint: string): Promise<T> {
-  const resposta = await fetch(`${API_URL}${endpoint}`, { cache: "no-store" })
-  if (!resposta.ok) throw new Error(`${resposta.status}`)
-  return resposta.json() as Promise<T>
+async function buscarSeguro<T>(endpoint: string): Promise<T> {
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/${endpoint}`, { cache: "no-store" })
+  const payload = await resposta.json().catch(() => null)
+  if (!resposta.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? String((payload as { detail?: unknown }).detail)
+      : `${resposta.status}`
+    throw new Error(detalhe)
+  }
+  return payload as T
 }
 
 export default function ImplementadorasPage() {
@@ -78,11 +84,11 @@ export default function ImplementadorasPage() {
       try {
         const [historico, vendasAtuais, pedidosAtuais] = await Promise.all([
           getImplementadorasContextuais(contexto),
-          buscarJson<Venda[]>("/vendas"),
-          buscarJson<Pedido[]>("/crm/pedidos"),
+          buscarSeguro<Venda[]>("vendas"),
+          buscarSeguro<Pedido[]>("pedidos"),
         ])
         if (!ativo) return
-        setImplementadoras(historico)
+        setImplementadoras(Array.isArray(historico) ? historico : [])
         setVendas(Array.isArray(vendasAtuais) ? vendasAtuais : [])
         setPedidos(Array.isArray(pedidosAtuais) ? pedidosAtuais : [])
       } catch {
