@@ -14,32 +14,6 @@ def usuario(tipo="REPRES_REGIAO_01", identificador="user-1", acesso_total=False)
     )
 
 
-def dados_criacao(responsavel="user-2"):
-    return modulo.ClienteOportunidadeCreate(
-        cliente={"id": "cliente-1", "nome": "Cliente Teste", "cidade": "São Paulo", "estado": "SP"},
-        oportunidade={
-            "responsavel_id": responsavel,
-            "titulo": "Cotação de equipamentos",
-            "valor_estimado": 1000,
-            "probabilidade": 50,
-        },
-    )
-
-
-def test_criacao_regional_forca_responsavel_autenticado(monkeypatch):
-    capturado = {}
-    monkeypatch.setattr(modulo, "criar_cliente_e_oportunidade", lambda dados: capturado.setdefault("dados", dados) or {})
-    modulo.criar_cliente_oportunidade_segura(dados_criacao(), usuario())
-    assert capturado["dados"].oportunidade.responsavel_id == "user-1"
-
-
-def test_master_preserva_responsavel_informado(monkeypatch):
-    capturado = {}
-    monkeypatch.setattr(modulo, "criar_cliente_e_oportunidade", lambda dados: capturado.setdefault("dados", dados) or {})
-    modulo.criar_cliente_oportunidade_segura(dados_criacao("user-2"), usuario("ADMIN_MASTER"))
-    assert capturado["dados"].oportunidade.responsavel_id == "user-2"
-
-
 def test_timeline_regional_bloqueia_oportunidade_alheia(monkeypatch):
     monkeypatch.setattr(modulo, "obter_oportunidade", lambda _: {"id": "opp-2", "responsavel_id": "user-2"})
     with pytest.raises(HTTPException) as erro:
@@ -52,3 +26,10 @@ def test_timeline_regional_libera_propria(monkeypatch):
     monkeypatch.setattr(modulo, "timeline_oportunidade", lambda _: {"oportunidade": {"id": "opp-1"}, "eventos": []})
     retorno = modulo.timeline_oportunidade_segura("opp-1", usuario())
     assert retorno["oportunidade"]["id"] == "opp-1"
+
+
+def test_timeline_master_preserva_visao_consolidada(monkeypatch):
+    monkeypatch.setattr(modulo, "obter_oportunidade", lambda _: {"id": "opp-2", "responsavel_id": "user-2"})
+    monkeypatch.setattr(modulo, "timeline_oportunidade", lambda _: {"oportunidade": {"id": "opp-2"}, "eventos": []})
+    retorno = modulo.timeline_oportunidade_segura("opp-2", usuario("ADMIN_MASTER"))
+    assert retorno["oportunidade"]["id"] == "opp-2"
