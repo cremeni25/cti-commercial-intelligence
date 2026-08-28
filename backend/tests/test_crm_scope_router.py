@@ -1,5 +1,8 @@
+import pytest
+from fastapi import HTTPException
+
 from core.admin_auth import UsuarioAutenticado
-from routers.crm_scope_router import _filtrar_por_usuario
+from routers.crm_scope_router import _exigir_acesso, _filtrar_por_usuario, _impedir_transferencia
 
 
 REGISTROS = [
@@ -46,3 +49,32 @@ def test_segundo_representante_nao_herda_negocios_da_primeira_regiao():
 def test_usuario_cti_generico_preserva_regra_atual_ate_definicao_especifica():
     resultado = _filtrar_por_usuario(REGISTROS, usuario("gessica", "USUARIO_CTI"))
     assert resultado == REGISTROS
+
+
+def test_representante_pode_abrir_detalhe_do_proprio_negocio():
+    registro = {"id": "opp-monica", "responsavel_id": "monica"}
+    assert _exigir_acesso(registro, usuario("monica", "REPRES_REGIAO_01")) == registro
+
+
+def test_representante_nao_pode_abrir_detalhe_de_outro_responsavel():
+    with pytest.raises(HTTPException) as erro:
+        _exigir_acesso(
+            {"id": "opp-anderson", "responsavel_id": "anderson"},
+            usuario("monica", "REPRES_REGIAO_01"),
+        )
+    assert erro.value.status_code == 404
+
+
+def test_master_pode_abrir_detalhe_de_qualquer_responsavel():
+    registro = {"id": "opp-monica", "responsavel_id": "monica"}
+    assert _exigir_acesso(registro, usuario("anderson", "ADMIN_MASTER")) == registro
+
+
+def test_representante_nao_pode_transferir_registro_para_outro_usuario():
+    with pytest.raises(HTTPException) as erro:
+        _impedir_transferencia("anderson", usuario("monica", "REPRES_REGIAO_01"))
+    assert erro.value.status_code == 403
+
+
+def test_representante_pode_manter_se_proprio_como_responsavel():
+    _impedir_transferencia("monica", usuario("monica", "REPRES_REGIAO_01"))

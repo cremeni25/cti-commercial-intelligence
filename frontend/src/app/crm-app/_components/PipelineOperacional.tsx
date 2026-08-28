@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { ArrowLeft, ArrowRight, CalendarDays, CircleAlert, History, Loader2, MessageSquarePlus, RefreshCw, TrendingUp } from "lucide-react"
 import { ControlledSelect } from "@/components/crm-app/ControlledSelect"
+import { buscarNucleoComercialSeguro, fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Negocio = {
@@ -59,9 +60,7 @@ export default function PipelineOperacional() {
     setCarregando(true)
     setErro("")
     try {
-      const resposta = await fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" })
-      const payload = await resposta.json().catch(() => ([]))
-      if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
+      const payload = await buscarNucleoComercialSeguro<unknown>()
       const negocios = lista(payload).map((item): Negocio => ({
         id: texto(item.oportunidade_id || item.id),
         cliente: texto(item.cliente_nome) || "Cliente em identificação",
@@ -106,7 +105,7 @@ export default function PipelineOperacional() {
     setErro("")
     setSucesso("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm/oportunidades/${encodeURIComponent(negocio.id)}`, {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/oportunidades/${encodeURIComponent(negocio.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: destino }),
