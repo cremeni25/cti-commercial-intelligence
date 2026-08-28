@@ -15,10 +15,13 @@ import {
   Search,
   TrendingUp,
 } from "lucide-react"
+import { useAuth } from "@/core/auth/AuthContext"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 
 type Registro = Record<string, unknown>
 type Negocio = {
   id: string
+  responsavelId: string
   cliente: string
   titulo: string
   etapa: string
@@ -58,25 +61,16 @@ function proximoPasso(negocio: Negocio) {
       ? `Pedido ${negocio.pedidoNumero} já gerado. Acompanhe a execução pelo pedido.`
       : "Pedido já gerado. Acompanhe a execução pelo pedido."
   }
-
-  if (!negocio.propostaId) {
-    return "Próximo passo: abra o negócio e prepare a proposta quando a negociação estiver pronta."
-  }
-
+  if (!negocio.propostaId) return "Próximo passo: abra o negócio e prepare a proposta quando a negociação estiver pronta."
   const status = negocio.statusProposta.toUpperCase().replaceAll(" ", "_")
-  if (["ACEITA", "APROVADA"].includes(status)) {
-    return "Proposta aceita. Próximo passo: abrir a proposta e converter em pedido."
-  }
-  if (status === "CONVERTIDA_PEDIDO") {
-    return "A proposta já foi convertida em pedido."
-  }
-  if (["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)) {
-    return "Próximo passo: abrir a proposta, registrar o aceite do cliente e então converter em pedido."
-  }
+  if (["ACEITA", "APROVADA"].includes(status)) return "Proposta aceita. Próximo passo: abrir a proposta e converter em pedido."
+  if (status === "CONVERTIDA_PEDIDO") return "A proposta já foi convertida em pedido."
+  if (["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)) return "Próximo passo: abrir a proposta, registrar o aceite do cliente e então converter em pedido."
   return "Proposta existente. Abra a proposta para revisar, emitir ou enviar antes do aceite."
 }
 
 export default function NegociosNativos({ modo }: { modo: "oportunidades" | "pipeline" }) {
+  const { usuario } = useAuth()
   const [dados, setDados] = useState<Negocio[]>([])
   const [busca, setBusca] = useState("")
   const [carregando, setCarregando] = useState(true)
@@ -89,6 +83,7 @@ export default function NegociosNativos({ modo }: { modo: "oportunidades" | "pip
         if (!r.ok) throw new Error(String((p as Registro).detail || `Falha ${r.status}`))
         setDados(lista(p).map((i) => ({
           id: texto(i.oportunidade_id || i.id),
+          responsavelId: texto(i.responsavel_id),
           cliente: texto(i.cliente_nome || i.razao_social || i.cliente) || "Cliente em identificação",
           titulo: texto(i.titulo || i.equipamento) || "Negociação comercial",
           etapa: texto(i.etapa || i.status_oportunidade || i.status).toUpperCase() || "OPORTUNIDADE",
@@ -107,12 +102,13 @@ export default function NegociosNativos({ modo }: { modo: "oportunidades" | "pip
   }, [])
 
   const visiveis = useMemo(() => {
-    const base = modo === "oportunidades" ? dados.filter((i) => !finais.has(i.etapa)) : dados
+    const escopados = dados.filter((i) => pertenceAoEscopoDoUsuario(i.responsavelId, usuario))
+    const base = modo === "oportunidades" ? escopados.filter((i) => !finais.has(i.etapa)) : escopados
     const termo = busca.trim().toLocaleLowerCase("pt-BR")
     return termo
       ? base.filter((i) => `${i.cliente} ${i.titulo} ${i.etapa} ${i.propostaNumero} ${i.pedidoNumero}`.toLocaleLowerCase("pt-BR").includes(termo))
       : base
-  }, [busca, dados, modo])
+  }, [busca, dados, modo, usuario])
 
   const total = visiveis.reduce((s, i) => s + i.valor, 0)
   const ponderado = visiveis.reduce((s, i) => s + i.valor * (i.probabilidade > 1 ? i.probabilidade / 100 : i.probabilidade), 0)
@@ -145,9 +141,7 @@ export default function NegociosNativos({ modo }: { modo: "oportunidades" | "pip
     {erro && <div className="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
     {carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : visiveis.length === 0 ? <div className="rounded-3xl border border-dashed border-[#24466f] p-8 text-center text-slate-400">Nenhum negócio encontrado nesta visão.</div> : <div className="space-y-3">{visiveis.map((i) => <article key={i.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-4">
       <div className="flex items-start gap-4"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><BriefcaseBusiness size={22}/></span><div className="min-w-0 flex-1"><strong className="block">{i.cliente} · {i.titulo}</strong><div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400"><span>{i.etapa}</span><span>{i.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span><span className="inline-flex items-center gap-1"><CalendarDays size={13}/>{dataBR(i.fechamento)}</span>{i.propostaNumero && <span className="rounded-full border border-cyan-900 px-2 py-0.5 text-cyan-300">{i.propostaNumero} · {i.statusProposta || "PROPOSTA"}</span>}{i.pedidoNumero && <span className="rounded-full border border-emerald-900 px-2 py-0.5 text-emerald-300">{i.pedidoNumero}</span>}</div></div></div>
-
       <div className="mt-4 rounded-2xl border border-[#24466f] bg-[#020817]/60 px-4 py-3 text-sm text-slate-300"><strong className="text-cyan-300">Próximo passo: </strong>{proximoPasso(i).replace(/^Próximo passo:\s*/i, "")}</div>
-
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
         <Link href={`/crm-app/historico/${i.id}?origem=${origem}#timeline`} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 px-3 py-3 text-sm font-semibold text-cyan-200"><History size={16}/>Histórico</Link>
         {i.pedidoId ? <Link href={`/crm-app/pedidos/${encodeURIComponent(i.pedidoId)}`} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-700 px-3 py-3 text-sm font-semibold text-emerald-300"><PackageCheck size={16}/>Abrir pedido</Link> : i.propostaId ? <Link href={`/crm-app/propostas/${encodeURIComponent(i.propostaId)}`} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white"><FileText size={16}/>Abrir proposta</Link> : <Link href={`/crm-app/historico/${i.id}?origem=${origem}#negociacao`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-3 py-3 text-sm font-semibold"><FilePenLine size={16}/>Abrir negócio</Link>}
