@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock3, Loader2, Pencil, Plus, Save, UserRound, Building2 } from "lucide-react"
 import { useAuth } from "@/core/auth/AuthContext"
 import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Item = {
@@ -54,7 +55,7 @@ export default function Agenda() {
     setCarregando(true)
     setErro("")
     try {
-      const r = await fetch("/api/crm-proxy/crm/agenda", { cache: "no-store" })
+      const r = await fetchCrmSeguroProxy("crm-seguro/agenda", { cache: "no-store" })
       const p = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(String((p as Registro).detail || `Falha ${r.status}`))
       setItens(lista(p).map(i => ({
@@ -99,7 +100,7 @@ export default function Agenda() {
     const f = new FormData(e.currentTarget)
     const payload = { titulo: texto(f.get("titulo")), tipo: texto(f.get("tipo")), data: texto(f.get("data")), horario: texto(f.get("horario")), descricao: texto(f.get("descricao")) || null, status: texto(f.get("status")) }
     try {
-      const r = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(selecionado.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
+      const r = await fetchCrmSeguroProxy(`crm-seguro/atividades/${encodeURIComponent(selecionado.id)}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
       const p = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(String(p.detail || `Falha ${r.status}`))
       setSucesso("Compromisso atualizado."); setSelecionado(null); await carregar()
@@ -110,7 +111,7 @@ export default function Agenda() {
   async function concluir(id: string) {
     const item = itensEscopados.find(i => i.id === id)
     if (!item) return
-    const r = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(id)}/concluir`, { method: "PUT" })
+    const r = await fetchCrmSeguroProxy(`crm-seguro/atividades/${encodeURIComponent(id)}/concluir`, { method: "PUT" })
     if (!r.ok) setErro("Não foi possível concluir o compromisso.")
     else { setSucesso("Compromisso concluído e enviado ao histórico comercial."); await carregar() }
   }
