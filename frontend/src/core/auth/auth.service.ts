@@ -35,5 +35,12 @@ export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
     cargo: String(perfil.cargo || ""),
     tipo_usuario: String(perfil.tipo_usuario || "").trim().toUpperCase(),
     ativo: perfil.ativo !== false,
+    acesso_portal: perfil.acesso_portal !== false,
+    acesso_crm: perfil.acesso_crm !== false,
+    status_acesso: String(perfil.status_acesso || ""),
+    territorio: perfil.territorio ? String(perfil.territorio) : null,
+    ddds: Array.isArray(perfil.ddds) ? perfil.ddds.map((item: unknown) => String(item)) : [],
+    permissoes: perfil.permissoes && typeof perfil.permissoes === "object" ? perfil.permissoes : {},
+    acesso_total: Boolean(perfil.acesso_total),
   }
 }

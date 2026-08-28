@@ -335,7 +335,7 @@ def rejeitar_solicitacao(
 @router.get("/me")
 def obter_usuario_atual(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     resposta = supabase.table("cti_users").select("*").eq("id", usuario.id).single().execute()
-    return getattr(resposta, "data", None) or {
+    perfil = getattr(resposta, "data", None) or {
         "id": usuario.id,
         "auth_id": usuario.auth_id,
         "email": usuario.email,
@@ -343,6 +343,9 @@ def obter_usuario_atual(usuario: UsuarioAutenticado = Depends(usuario_atual)):
         "tipo_usuario": usuario.tipo_usuario,
         "ativo": True,
     }
+    perfil["permissoes"] = dict(usuario.permissoes)
+    perfil["acesso_total"] = bool(usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total"))
+    return perfil
 
 
 @router.get("/users")

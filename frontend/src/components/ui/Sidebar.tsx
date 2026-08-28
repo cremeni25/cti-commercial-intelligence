@@ -9,23 +9,7 @@ import trailerIcon from "@/assets/equipamentos/trailer.png"
 import dieselTruckIcon from "@/assets/equipamentos/diesel-truck.png"
 import directDriveIcon from "@/assets/equipamentos/direct-drive.png"
 import { useAuth } from "@/core/auth/AuthContext"
-
-const permissoesMenu = {
-  ADMIN_MASTER: [
-    "/dashboard", "/historico-comercial", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/relatorios/modular", "/atividades", "/forecast",
-    "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
-    "/mapa-estrategico", "/usuarios", "/configuracoes", "/configuracoes/modelos-oficiais", "/backoffice-fontes",
-  ],
-  DIRETOR: [
-    "/dashboard", "/ia-comercial", "/upload", "/empresas", "/implementadoras",
-    "/oportunidades", "/pipeline", "/propostas", "/pedidos", "/vendas", "/relatorios", "/relatorios/modular", "/atividades", "/forecast",
-    "/equipamentos/trailer", "/equipamentos/diesel-truck", "/equipamentos/direct-drive",
-    "/mapa-estrategico", "/usuarios", "/configuracoes",
-  ],
-  GERENTE: ["/dashboard", "/empresas", "/implementadoras", "/oportunidades"],
-  VENDEDOR: ["/dashboard", "/oportunidades"],
-}
+import type { PermissoesSessaoCTI } from "@/core/auth/types"
 
 type MenuItem = { label: string; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
 type MenuGroup = { titulo: string; itens: MenuItem[] }
@@ -81,11 +65,35 @@ const menuGroups: MenuGroup[] = [
   },
 ]
 
+function tem(permissoes: PermissoesSessaoCTI | undefined, chave: keyof PermissoesSessaoCTI) {
+  return permissoes?.[chave] === true
+}
+
+function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessaoCTI | undefined, acessoTotal: boolean) {
+  const master = perfil === "ADMIN_MASTER"
+  const diretor = perfil === "DIRETOR_VIENA_SP"
+  const gestao = master || (diretor && acessoTotal)
+
+  if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais") return master
+  if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
+  if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
+  if (href === "/upload") return gestao
+  if (href === "/dashboard") return gestao || tem(permissoes, "dashboard_executivo")
+  if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
+  if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
+  if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")
+  if (href === "/pedidos") return gestao || tem(permissoes, "pedidos_visualizar")
+  if (href === "/vendas" || href === "/relatorios" || href === "/relatorios/modular") return gestao || tem(permissoes, "dashboard_executivo")
+  if (href.startsWith("/equipamentos/")) return gestao || tem(permissoes, "oportunidades_visualizar")
+  return master
+}
+
 export default function Sidebar() {
   const pathname = usePathname()
   const { usuario } = useAuth()
-  const perfilMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-  const menusPermitidos = permissoesMenu.ADMIN_MASTER
+  const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
+  const permissoes = usuario?.permissoes
+  const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
 
   return (
     <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
@@ -94,13 +102,13 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuGroups.map((grupo, index) => (
-          <div key={`${grupo.titulo}-${index}`}>
-            {grupo.titulo && <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{grupo.titulo}</p>}
-            {grupo.itens
-              .filter((item) => menusPermitidos.includes(item.href))
-              .filter((item) => item.href !== "/backoffice-fontes" || perfilMaster)
-              .map((item) => {
+        {menuGroups.map((grupo, index) => {
+          const itensPermitidos = grupo.itens.filter((item) => rotaPermitida(item.href, perfil, permissoes, acessoTotal))
+          if (itensPermitidos.length === 0) return null
+          return (
+            <div key={`${grupo.titulo}-${index}`}>
+              {grupo.titulo && <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{grupo.titulo}</p>}
+              {itensPermitidos.map((item) => {
                 const active = pathname === item.href
                 return (
                   <Link
@@ -119,8 +127,9 @@ export default function Sidebar() {
                   </Link>
                 )
               })}
-          </div>
-        ))}
+            </div>
+          )
+        })}
       </nav>
 
       <div className="p-4 border-t border-[#13203f]">
