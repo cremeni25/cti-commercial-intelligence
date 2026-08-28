@@ -73,16 +73,26 @@ def _filtrar_agenda(payload: dict, usuario: UsuarioAutenticado) -> dict:
     return {**payload, "itens": itens, "resumo": resumo}
 
 
-def _enriquecer_responsaveis(itens: list[dict]) -> list[dict]:
+def _como_dict(registro) -> dict:
+    if isinstance(registro, dict):
+        return dict(registro)
+    model_dump = getattr(registro, "model_dump", None)
+    if callable(model_dump):
+        return dict(model_dump())
+    return {}
+
+
+def _enriquecer_responsaveis(itens: list) -> list[dict]:
+    normalizados = [_como_dict(item) for item in itens]
     ids = sorted(
         {
             str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
-            for item in itens
+            for item in normalizados
             if str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
         }
     )
     if not ids:
-        return [dict(item) for item in itens]
+        return normalizados
 
     resposta = (
         supabase.table("cti_users")
@@ -94,8 +104,7 @@ def _enriquecer_responsaveis(itens: list[dict]) -> list[dict]:
     por_id = {str(item.get("id")): item for item in usuarios}
 
     enriquecidos: list[dict] = []
-    for original in itens:
-        item = dict(original)
+    for item in normalizados:
         responsavel_id = str(item.get("usuario_id") or item.get("responsavel_id") or "").strip()
         usuario = por_id.get(responsavel_id)
         if usuario:
@@ -105,9 +114,9 @@ def _enriquecer_responsaveis(itens: list[dict]) -> list[dict]:
     return enriquecidos
 
 
-def _enriquecer_atividade(atividade: dict) -> dict:
+def _enriquecer_atividade(atividade) -> dict:
     itens = _enriquecer_responsaveis([atividade])
-    return itens[0] if itens else atividade
+    return itens[0] if itens else _como_dict(atividade)
 
 
 def _enriquecer_agenda(payload: dict) -> dict:
