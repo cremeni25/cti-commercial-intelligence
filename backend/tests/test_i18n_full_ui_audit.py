@@ -6,6 +6,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FRONT = ROOT / "frontend" / "src"
 UI_ROOTS = [FRONT / "app", FRONT / "components"]
 LEGACY_CATALOG = json.loads((FRONT / "core/i18n/legacy-semantic.json").read_text(encoding="utf-8"))
+LEGACY_CATALOG.update(json.loads((FRONT / "core/i18n/legacy-semantic-extra.json").read_text(encoding="utf-8")))
 
 TEXT_AUDIT_EXCLUDED = {
     "app/page.tsx",
@@ -77,6 +78,7 @@ def test_ponte_semantica_global_esta_montada_e_localiza_formatos():
     bridge = (FRONT / "components/i18n/LegacySemanticBridge.tsx").read_text(encoding="utf-8")
     assert "<LegacySemanticBridge />" in layout
     assert "legacy-semantic.json" in bridge
+    assert "legacy-semantic-extra.json" in bridge
     assert "MutationObserver" in bridge
     assert "HTMLTextAreaElement" in bridge
     assert "localizeBrazilianFormats" in bridge
