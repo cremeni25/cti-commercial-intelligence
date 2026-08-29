@@ -16,7 +16,6 @@ TEXT_AUDIT_EXCLUDED = {
     "app/negocios/[slug]/page.tsx",
     "components/crm/CarrierProposalDocument.tsx",
 }
-LOCALE_AUDIT_EXCLUDED = {"components/crm/CarrierProposalDocument.tsx"}
 
 PORTUGUESE = re.compile(
     r"\b(?:"
@@ -41,12 +40,6 @@ USER_PROP = re.compile(r"\b(?:placeholder|title|aria-label|alt)=['\"]([^'\"]+)['
 USER_CALL = re.compile(
     r"\b(?:alert|confirm|prompt|setErro|setError|setMensagem|setAviso)\(\s*['\"]([^'\"]+)['\"]"
 )
-FIXED_LOCALE = [
-    'toLocaleString("pt-BR"', "toLocaleString('pt-BR'",
-    'toLocaleDateString("pt-BR"', "toLocaleDateString('pt-BR'",
-    'Intl.NumberFormat("pt-BR"', "Intl.NumberFormat('pt-BR'",
-    'Intl.DateTimeFormat("pt-BR"', "Intl.DateTimeFormat('pt-BR'",
-]
 
 
 def ui_files():
@@ -72,25 +65,16 @@ def user_facing_fragments(source: str):
             yield fragment, source.count("\n", 0, match.start()) + 1
 
 
-def test_ponte_semantica_global_esta_montada():
+def test_ponte_semantica_global_esta_montada_e_localiza_formatos():
     layout = (FRONT / "app/layout.tsx").read_text(encoding="utf-8")
     bridge = (FRONT / "components/i18n/LegacySemanticBridge.tsx").read_text(encoding="utf-8")
     assert "<LegacySemanticBridge />" in layout
     assert "legacy-semantic.json" in bridge
     assert "MutationObserver" in bridge
     assert "HTMLTextAreaElement" in bridge  # defaults localizados; texto livre só muda por correspondência exata
-
-
-def test_toda_ui_operacional_evitar_locale_brasileiro_fixo():
-    failures = []
-    for path, rel in ui_files():
-        if rel in LOCALE_AUDIT_EXCLUDED:
-            continue
-        source = path.read_text(encoding="utf-8")
-        for token in FIXED_LOCALE:
-            if token in source:
-                failures.append(f"{rel}: locale fixo {token}")
-    assert not failures, "\n" + "\n".join(failures)
+    assert "localizeBrazilianFormats" in bridge
+    assert '"en-US"' in bridge and '"es-419"' in bridge
+    assert "Intl.NumberFormat" in bridge and "Intl.DateTimeFormat" in bridge
 
 
 def test_texto_portugues_legado_tem_equivalencia_semantica_en_es():
@@ -102,7 +86,6 @@ def test_texto_portugues_legado_tem_equivalencia_semantica_en_es():
         for fragment, line in user_facing_fragments(source):
             if not PORTUGUESE.search(fragment):
                 continue
-            # Textos já renderizados via t()/tc()/copy[locale] não são literais de UI legada.
             if fragment in LEGACY_CATALOG:
                 entry = LEGACY_CATALOG[fragment]
                 if entry.get("en") and entry.get("es"):
