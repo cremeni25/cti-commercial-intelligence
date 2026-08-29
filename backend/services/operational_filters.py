@@ -81,12 +81,7 @@ def resolver_periodo(periodo: str = "TODO_HISTORICO", inicio: date | None = None
 
 
 def _competencia_referencia(registro: dict) -> date | None:
-    """Resolve a competência declarada pela própria fonte ANFIR.
-
-    `ano_referencia` é a evidência temporal mais forte quando existe. Isso evita
-    que datas técnicas/operacionais conflitantes desloquem um fato ANFIR de um
-    ano para outro. O mês continua sendo necessário para formar a competência.
-    """
+    """Resolve a competência declarada pela própria fonte ANFIR."""
     try:
         ano = int(registro.get("ano_referencia") or 0)
         mes = int(registro.get("mes") or 0)
@@ -142,9 +137,50 @@ def _fonte_carrier_jov(registro: dict) -> bool:
     aba = _sem_acento(registro.get("aba_origem"))
     versao = str(registro.get("versao_parser") or "").strip()
     pipeline = str(registro.get("pipeline") or "").strip().upper()
-    return aba == "RELATORIO PERFORMANCE 2026" or versao == "3.1.0" or (
+    return aba.startswith("RELATORIO PERFORMANCE ") or versao.startswith("3.1") or (
         pipeline == "UPLOAD_ANFIR_OPERACIONAL" and "REPRESENTACAO: JOV" in _sem_acento(registro.get("ocorrencia"))
     )
+
+
+def _ano_snapshot(registro: dict) -> int | None:
+    """Obtém o ano de referência sem recorrer a created_at/data de upload."""
+    for campo in ("ano_referencia", "ano"):
+        try:
+            ano = int(registro.get(campo) or 0)
+            if ano >= 2000:
+                return ano
+        except (TypeError, ValueError):
+            pass
+    competencia = _competencia_referencia(registro)
+    return competencia.year if competencia else None
+
+
+def selecionar_snapshot_viena(registros: Iterable[dict]) -> list[dict]:
+    """Evita somar snapshots redundantes da ANFIR no contexto Viena.
+
+    Quando existe uma fonte Carrier/JOV autoritativa para determinado ano, ela
+    substitui analiticamente apenas os snapshots anteriores da própria base
+    Viena daquele mesmo ano. Nada é apagado do banco e fontes de outros dealers
+    não são descartadas. Anos sem fonte Carrier/JOV permanecem inalterados.
+    """
+    base = list(registros or [])
+    anos_autoritativos = {
+        ano for registro in base
+        if _fonte_carrier_jov(registro) and (ano := _ano_snapshot(registro)) is not None
+    }
+    if not anos_autoritativos:
+        return base
+
+    resultado = []
+    for registro in base:
+        ano = _ano_snapshot(registro)
+        origem = str(registro.get("origem_base") or "").strip().upper()
+        autorizado = str(registro.get("autorizado") or registro.get("dealer") or "").strip().upper()
+        pertence_cluster_viena = origem == "VIENA_SP" or autorizado == "VIENA"
+        if ano in anos_autoritativos and pertence_cluster_viena and not _fonte_carrier_jov(registro):
+            continue
+        resultado.append(registro)
+    return resultado
 
 
 def _registro_viena(registro: dict, origem: str, autorizado: str) -> bool:
@@ -167,8 +203,12 @@ def _registro_viena(registro: dict, origem: str, autorizado: str) -> bool:
 def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None) -> list[dict]:
     uf_normalizada = str(uf).strip().upper() if uf else None
     ddd_normalizado = normalizar_ddd(ddd)
+    base = list(registros or [])
+    if contexto == "viena-sp" or contexto.startswith("ddd-"):
+        base = selecionar_snapshot_viena(base)
+
     resultado = []
-    for registro in registros or []:
+    for registro in base:
         estado = str(registro.get("estado") or registro.get("uf") or "").strip().upper()
         origem = str(registro.get("origem_base") or "").strip().upper()
         autorizado = str(registro.get("autorizado") or registro.get("dealer") or "").strip().upper()
