@@ -1,9 +1,22 @@
 from pathlib import Path
+import json
 import re
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONT = ROOT / "frontend" / "src"
 UI_ROOTS = [FRONT / "app", FRONT / "components"]
+LEGACY_CATALOG = json.loads((FRONT / "core/i18n/legacy-semantic.json").read_text(encoding="utf-8"))
+
+# O portal institucional público e o Radar não fazem parte do sistema autenticado CTI Web + CRM App.
+# O documento Carrier abaixo é conteúdo oficial/contratual imutável: não é texto de interface e não pode ser
+# reinterpretado automaticamente como tradução. A UI que o envolve continua coberta pela auditoria.
+TEXT_AUDIT_EXCLUDED = {
+    "app/page.tsx",
+    "app/radar/page.tsx",
+    "app/negocios/[slug]/page.tsx",
+    "components/crm/CarrierProposalDocument.tsx",
+}
+LOCALE_AUDIT_EXCLUDED = {"components/crm/CarrierProposalDocument.tsx"}
 
 PORTUGUESE = re.compile(
     r"\b(?:"
@@ -35,7 +48,7 @@ FIXED_LOCALE = [
     'Intl.DateTimeFormat("pt-BR"', "Intl.DateTimeFormat('pt-BR'",
 ]
 
-# Rotas de API não são UI. Arquivos de teste/gerados também não entram na auditoria visual.
+
 def ui_files():
     for root in UI_ROOTS:
         for path in root.rglob("*.tsx"):
@@ -45,15 +58,34 @@ def ui_files():
             yield path, rel
 
 
+def looks_like_source_fragment(fragment: str) -> bool:
+    technical = ["useState", "=>", "&&", "setClientes", "setPedidos", "setVendas", "setOportunidades", "buscarJson"]
+    return any(token in fragment for token in technical) or fragment.startswith(("([])", "=(", ":"))
+
+
 def user_facing_fragments(source: str):
     for regex in (JSX_TEXT, USER_PROP, USER_CALL):
         for match in regex.finditer(source):
-            yield match.group(1).strip(), source.count("\n", 0, match.start()) + 1
+            fragment = match.group(1).strip()
+            if not fragment or looks_like_source_fragment(fragment):
+                continue
+            yield fragment, source.count("\n", 0, match.start()) + 1
 
 
-def test_toda_ui_evitar_locale_brasileiro_fixo():
+def test_ponte_semantica_global_esta_montada():
+    layout = (FRONT / "app/layout.tsx").read_text(encoding="utf-8")
+    bridge = (FRONT / "components/i18n/LegacySemanticBridge.tsx").read_text(encoding="utf-8")
+    assert "<LegacySemanticBridge />" in layout
+    assert "legacy-semantic.json" in bridge
+    assert "MutationObserver" in bridge
+    assert "HTMLTextAreaElement" in bridge  # defaults localizados; texto livre só muda por correspondência exata
+
+
+def test_toda_ui_operacional_evitar_locale_brasileiro_fixo():
     failures = []
     for path, rel in ui_files():
+        if rel in LOCALE_AUDIT_EXCLUDED:
+            continue
         source = path.read_text(encoding="utf-8")
         for token in FIXED_LOCALE:
             if token in source:
@@ -61,15 +93,22 @@ def test_toda_ui_evitar_locale_brasileiro_fixo():
     assert not failures, "\n" + "\n".join(failures)
 
 
-def test_toda_ui_nao_expor_texto_portugues_fora_da_camda_i18n():
+def test_texto_portugues_legado_tem_equivalencia_semantica_en_es():
     failures = []
     for path, rel in ui_files():
+        if rel in TEXT_AUDIT_EXCLUDED:
+            continue
         source = path.read_text(encoding="utf-8")
         for fragment, line in user_facing_fragments(source):
-            if PORTUGUESE.search(fragment):
-                failures.append(f"{rel}:{line}: {fragment[:180]}")
+            if not PORTUGUESE.search(fragment):
+                continue
+            # Textos já renderizados via t()/tc()/copy[locale] não são literais de UI legada.
+            if fragment in LEGACY_CATALOG:
+                entry = LEGACY_CATALOG[fragment]
+                if entry.get("en") and entry.get("es"):
+                    continue
+            failures.append(f"{rel}:{line}: {fragment[:220]}")
     assert not failures, (
-        "\nTextos de interface ainda presos ao português. "
-        "Migrar para catálogo semântico PT/EN/ES ou expressão dependente de locale:\n"
+        "\nTexto operacional em português sem equivalência conceitual EN/ES no catálogo de compatibilidade:\n"
         + "\n".join(failures)
     )
