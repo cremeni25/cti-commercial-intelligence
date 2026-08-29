@@ -13,7 +13,8 @@ import type { PermissoesSessaoCTI } from "@/core/auth/types"
 import { useI18n, type MessageKey } from "@/core/i18n"
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 
-type MenuItem = { labelKey: MessageKey; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
+type LocalizedLabel = { "pt-BR": string; en: string; es: string }
+type MenuItem = { labelKey?: MessageKey; label?: LocalizedLabel; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
 type MenuGroup = { tituloKey: MessageKey; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
@@ -21,6 +22,7 @@ const menuGroups: MenuGroup[] = [
     tituloKey: "nav.main",
     itens: [
       { labelKey: "nav.dashboard", href: "/dashboard", icon: "📊", type: "emoji" },
+      { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📡", type: "emoji" },
       { labelKey: "nav.history", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
       { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
@@ -80,7 +82,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
   if (href === "/upload") return gestao
-  if (href === "/dashboard") return gestao || tem(permissoes, "dashboard_executivo")
+  if (href === "/dashboard" || href === "/inteligencia") return gestao || tem(permissoes, "dashboard_executivo")
   if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
   if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")
@@ -93,7 +95,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
 export default function Sidebar() {
   const pathname = usePathname()
   const { usuario } = useAuth()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
   const permissoes = usuario?.permissoes
   const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
@@ -114,7 +116,7 @@ export default function Sidebar() {
               <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{t(grupo.tituloKey)}</p>
               {itensPermitidos.map((item) => {
                 const active = pathname === item.href
-                const label = t(item.labelKey)
+                const label = item.labelKey ? t(item.labelKey) : item.label?.[locale] || item.href
                 return (
                   <Link
                     key={item.href}
