@@ -21,6 +21,8 @@ import {
   Users,
 } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { useI18n } from "@/core/i18n"
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
 
@@ -62,6 +64,7 @@ function etapa(item: Registro) {
 
 export default function CrmAppPage() {
   const { usuario } = useAuth()
+  const { t } = useI18n()
   const adminMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
   const [resumo, setResumo] = useState<Resumo>({
     visitas: 0,
@@ -73,7 +76,7 @@ export default function CrmAppPage() {
     propostas: 0,
     pedidos: 0,
     vendas: 0,
-    destaque: "Nenhuma oportunidade aberta",
+    destaque: t("crm.home.noOpenOpportunity"),
   })
   const [sincronizando, setSincronizando] = useState(false)
   const [online, setOnline] = useState(true)
@@ -96,7 +99,7 @@ export default function CrmAppPage() {
     const [nucleoR, agendaR, atividadesR, clientesR, propostasR, pedidosR, vendasR] = resultados
     if (nucleoR.status === "rejected") {
       setOnline(false)
-      setAviso("Não foi possível sincronizar o núcleo comercial.")
+      setAviso(t("crm.home.syncFailed"))
       setSincronizando(false)
       return
     }
@@ -125,8 +128,8 @@ export default function CrmAppPage() {
     const pendencias = agendaItens.filter((item) => !["CONCLUIDA", "CONCLUÍDA", "CANCELADA"].includes(String(item.status || "").toUpperCase())).length
     const destaque = abertas[0]
     const contexto = destaque ? lerContextoOportunidade(destaque) : null
-    const titulo = destaque ? textoSeguro(destaque.titulo) || textoSeguro(destaque.equipamento) || "Oportunidade" : ""
-    const cliente = destaque ? textoSeguro(destaque.cliente_nome) || "Cliente em identificação" : ""
+    const titulo = destaque ? textoSeguro(destaque.titulo) || textoSeguro(destaque.equipamento) || t("crm.opportunity.generic") : ""
+    const cliente = destaque ? textoSeguro(destaque.cliente_nome) || t("crm.account.identifying") : ""
 
     setResumo({
       visitas,
@@ -138,11 +141,11 @@ export default function CrmAppPage() {
       propostas: propostas.length,
       pedidos: pedidos.length,
       vendas: vendas.length,
-      destaque: destaque ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.` : "Nenhuma oportunidade aberta",
+      destaque: destaque ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.` : t("crm.home.noOpenOpportunity"),
     })
     setOnline(true)
     setSincronizando(false)
-  }, [usuario])
+  }, [t, usuario])
 
   useEffect(() => {
     queueMicrotask(() => void sincronizar())
@@ -152,48 +155,54 @@ export default function CrmAppPage() {
 
   const modulos = useMemo(() => {
     const base = [
-      { href: "/crm-app/agenda", label: "Agenda", valor: resumo.pendencias, descricao: "compromissos, atrasos e próximas ações", icon: CalendarDays },
-      { href: "/crm-app/atividades", label: "Atividades", valor: resumo.atividades, descricao: "histórico, pendências e interações comerciais", icon: ClipboardCheck },
-      { href: "/crm-app/clientes", label: "Clientes", valor: resumo.clientes, descricao: "carteira, cadastro e histórico comercial", icon: Users },
-      { href: "/crm-app/visitas", label: "Visitas", valor: resumo.visitas, descricao: "visitas realizadas hoje", icon: Route },
-      { href: "/crm-app/oportunidades", label: "Oportunidades", valor: resumo.oportunidades, descricao: resumo.destaque, icon: BriefcaseBusiness },
-      { href: "/crm-app/pipeline", label: "Pipeline", valor: resumo.pipeline, descricao: "posição atual dos negócios", icon: TrendingUp },
-      { href: "/crm-app/propostas", label: "Propostas", valor: resumo.propostas, descricao: "documento, envio, versões e aceite", icon: FileText },
-      { href: "/crm-app/pedidos", label: "Pedidos", valor: resumo.pedidos, descricao: "execução pós-aceite e envio", icon: PackageCheck },
-      { href: "/crm-app/vendas", label: "Vendas", valor: resumo.vendas, descricao: "negócios concluídos e realizados", icon: CircleDollarSign },
-      { href: "/ia-comercial", label: "IA Comercial", valor: "IA", descricao: "inteligência transversal, análises, gráficos, PDFs e recomendações sobre todo o CTI", icon: Bot },
+      { href: "/crm-app/agenda", label: t("crm.module.agenda"), valor: resumo.pendencias, descricao: t("crm.module.agendaDescription"), icon: CalendarDays, financeiro: false },
+      { href: "/crm-app/atividades", label: t("crm.module.activities"), valor: resumo.atividades, descricao: t("crm.module.activitiesDescription"), icon: ClipboardCheck, financeiro: false },
+      { href: "/crm-app/clientes", label: t("crm.module.accounts"), valor: resumo.clientes, descricao: t("crm.module.accountsDescription"), icon: Users, financeiro: false },
+      { href: "/crm-app/visitas", label: t("crm.module.visits"), valor: resumo.visitas, descricao: t("crm.module.visitsDescription"), icon: Route, financeiro: false },
+      { href: "/crm-app/oportunidades", label: t("crm.module.opportunities"), valor: resumo.oportunidades, descricao: resumo.destaque, icon: BriefcaseBusiness, financeiro: false },
+      { href: "/crm-app/pipeline", label: t("crm.module.pipeline"), valor: resumo.pipeline, descricao: t("crm.module.pipelineDescription"), icon: TrendingUp, financeiro: false },
+      { href: "/crm-app/propostas", label: t("crm.module.proposals"), valor: resumo.propostas, descricao: t("crm.module.proposalsDescription"), icon: FileText, financeiro: false },
+      { href: "/crm-app/pedidos", label: t("crm.module.orders"), valor: resumo.pedidos, descricao: t("crm.module.ordersDescription"), icon: PackageCheck, financeiro: false },
+      { href: "/crm-app/vendas", label: t("crm.module.sales"), valor: resumo.vendas, descricao: t("crm.module.salesDescription"), icon: CircleDollarSign, financeiro: false },
+      { href: "/ia-comercial", label: t("crm.module.salesAi"), valor: "IA", descricao: t("crm.module.salesAiDescription"), icon: Bot, financeiro: false },
     ]
 
     if (adminMaster) {
       base.push({
         href: "/crm-app/controle-financeiro",
-        label: "Controle Financeiro",
+        label: t("crm.module.financialControl"),
         valor: "MASTER",
-        descricao: "limite mensal, gastos, alertas e projeção financeira pessoal",
+        descricao: t("crm.module.financialControlDescription"),
         icon: PiggyBank,
+        financeiro: true,
       })
     }
 
     return base
-  }, [adminMaster, resumo])
+  }, [adminMaster, resumo, t])
 
-  const atalhos = [
-    { href: "/crm-app/clientes/nova", titulo: "Cadastrar cliente", descricao: "Novo cadastro mestre diretamente no aplicativo", icon: UserPlus },
-    { href: "/crm-app/atividades/nova", titulo: "Registrar atividade", descricao: "Visita, ligação, reunião, retorno ou próxima ação", icon: ClipboardCheck },
-    { href: "/crm-app/oportunidades/nova", titulo: "Nova oportunidade", descricao: "Abrir uma nova negociação comercial", icon: Target },
-    { href: "/crm-app/clientes", titulo: "Consultar cliente", descricao: "Buscar cadastro, editar, abrir histórico e negócios", icon: Building2 },
-  ]
+  const atalhos = useMemo(() => [
+    { href: "/crm-app/clientes/nova", titulo: t("crm.action.newAccount"), descricao: t("crm.action.newAccountDescription"), icon: UserPlus },
+    { href: "/crm-app/atividades/nova", titulo: t("crm.action.logActivity"), descricao: t("crm.action.logActivityDescription"), icon: ClipboardCheck },
+    { href: "/crm-app/oportunidades/nova", titulo: t("crm.action.newOpportunity"), descricao: t("crm.action.newOpportunityDescription"), icon: Target },
+    { href: "/crm-app/clientes", titulo: t("crm.action.findAccount"), descricao: t("crm.action.findAccountDescription"), icon: Building2 },
+  ], [t])
+
+  const primeiroNome = usuario?.nome?.split(" ")[0] || t("crm.home.defaultUser")
 
   return (
     <main className="min-h-[100dvh] bg-[#020817] pb-24 text-white">
       <header className="sticky top-0 z-20 border-b border-cyan-950/80 bg-[#061126]/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
         <div className="mx-auto flex w-full max-w-[94vw] items-center justify-between gap-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400 sm:text-xs">CTI / Viena São Paulo</p>
-            <h1 className="mt-1 text-lg font-bold sm:text-2xl">CRM Comercial</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400 sm:text-xs">{t("crm.home.brand")}</p>
+            <h1 className="mt-1 text-lg font-bold sm:text-2xl">{t("crm.home.title")}</h1>
           </div>
-          <div className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-300" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>
-            {online ? "Online" : "Reconectando"}
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher compact />
+            <div className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-300" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>
+              {online ? t("common.online") : t("common.reconnecting")}
+            </div>
           </div>
         </div>
       </header>
@@ -205,25 +214,25 @@ export default function CrmAppPage() {
             <section className="rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl sm:p-7">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-sm text-slate-400 sm:text-base">Operação comercial diária</p>
-                  <h2 className="mt-1 text-2xl font-bold sm:text-3xl">Olá, {usuario?.nome?.split(" ")[0] || "usuário CTI"}</h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">Execute sua rotina no aplicativo. O mesmo negócio percorre oportunidade, proposta, pedido e venda sem duplicar a fonte de verdade.</p>
+                  <p className="text-sm text-slate-400 sm:text-base">{t("crm.home.dailyOperation")}</p>
+                  <h2 className="mt-1 text-2xl font-bold sm:text-3xl">{t("crm.home.hello", { name: primeiroNome })}</h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">{t("crm.home.truthFlow")}</p>
                 </div>
                 <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="rounded-2xl border border-cyan-800 bg-cyan-950/30 p-3 text-cyan-300">
                   <RefreshCw size={20} className={sincronizando ? "animate-spin" : ""} />
                 </button>
               </div>
               <div className="mt-6 grid grid-cols-3 gap-3">
-                <Indicador valor={resumo.visitas} label="Visitas hoje" />
-                <Indicador valor={resumo.pendencias} label="Pendências" />
-                <Indicador valor={resumo.oportunidades} label="Oportunidades" />
+                <Indicador valor={resumo.visitas} label={t("crm.home.visitsToday")} />
+                <Indicador valor={resumo.pendencias} label={t("crm.home.pending")} />
+                <Indicador valor={resumo.oportunidades} label={t("crm.module.opportunities")} />
               </div>
             </section>
 
             <section>
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Ações rápidas</h2>
-                <span className="text-sm text-slate-500">uso em campo</span>
+                <h2 className="text-xl font-semibold">{t("crm.home.quickActions")}</h2>
+                <span className="text-sm text-slate-500">{t("crm.home.fieldUse")}</span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 {atalhos.map(({ href, titulo, descricao, icon: Icon }) => (
@@ -241,13 +250,13 @@ export default function CrmAppPage() {
           </div>
 
           <section>
-            <h2 className="mb-4 text-xl font-semibold">Módulos do CRM</h2>
+            <h2 className="mb-4 text-xl font-semibold">{t("crm.home.modules")}</h2>
             <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
-              {modulos.map(({ href, label, valor, descricao, icon: Icon }) => (
-                <Link href={href} key={label} className={`flex min-h-36 flex-col justify-between rounded-2xl border p-5 transition ${label === "Controle Financeiro" ? "border-emerald-800 bg-emerald-950/15 hover:border-emerald-500" : "border-[#16325c] bg-[#07162b] hover:border-cyan-700"}`}>
-                  <Icon className={label === "Controle Financeiro" ? "text-emerald-300" : "text-cyan-300"} size={24} />
+              {modulos.map(({ href, label, valor, descricao, icon: Icon, financeiro }) => (
+                <Link href={href} key={href} className={`flex min-h-36 flex-col justify-between rounded-2xl border p-5 transition ${financeiro ? "border-emerald-800 bg-emerald-950/15 hover:border-emerald-500" : "border-[#16325c] bg-[#07162b] hover:border-cyan-700"}`}>
+                  <Icon className={financeiro ? "text-emerald-300" : "text-cyan-300"} size={24} />
                   <div>
-                    <strong className={`mt-3 block text-2xl ${label === "Controle Financeiro" ? "text-emerald-300" : "text-cyan-300"}`}>{valor}</strong>
+                    <strong className={`mt-3 block text-2xl ${financeiro ? "text-emerald-300" : "text-cyan-300"}`}>{valor}</strong>
                     <span className="block font-semibold">{label}</span>
                     <span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span>
                   </div>
