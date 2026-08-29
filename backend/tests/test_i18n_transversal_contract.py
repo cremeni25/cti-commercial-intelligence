@@ -12,10 +12,11 @@ def read(path: str) -> str:
 def test_i18n_provider_e_tres_locales_permanecem_globais():
     layout = read("app/layout.tsx")
     context = read("core/i18n/I18nContext.tsx")
+    catalog = read("core/i18n/catalog.ts")
     switcher = read("components/i18n/LanguageSwitcher.tsx")
 
     assert "<I18nProvider>" in layout
-    assert '"pt-BR"' in context and '"en"' in context and '"es"' in context
+    assert 'LOCALES = ["pt-BR", "en", "es"]' in catalog
     assert 'locale: "pt-BR"' in switcher
     assert 'locale: "en"' in switcher
     assert 'locale: "es"' in switcher
@@ -58,7 +59,7 @@ def test_catalogos_semanticos_declaram_pt_en_es():
         assert re.search(r"\bes\s*[:=]", source)
 
 
-def test_fechamento_nao_altera_dados_livres_do_usuario():
+def test_fechamento_preserva_conceitos_e_dados_livres():
     glossary = read("core/i18n/SEMANTIC_GLOSSARY.md").lower()
     assert "dados livres" in glossary or "free-text" in glossary or "free text" in glossary
-    assert "não" in glossary and "traduz" in glossary
+    assert "conceitos, não traduções literais" in glossary
