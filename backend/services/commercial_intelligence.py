@@ -8,7 +8,7 @@ from services.commercial_intelligence_v18 import (
     _filtrar,
     _segmento,
     consolidar_inteligencia as _consolidar_inteligencia_v18,
-    opcoes_filtros,
+    opcoes_filtros as _opcoes_filtros_v18,
 )
 from services.operational_filters import data_registro, resolver_ddd_registro
 
@@ -16,12 +16,22 @@ from services.operational_filters import data_registro, resolver_ddd_registro
 def _preparar_registro_anfir(registro):
     payload = dict(registro)
     data = data_registro(payload)
-    if data and not payload.get("data_venda"):
+    # Esta camada trabalha exclusivamente com fatos ANFIR. A data usada pelo
+    # motor legado deve representar a competência ANFIR resolvida, mesmo quando
+    # um registro histórico carrega uma data_venda técnica conflitante.
+    # A correção ocorre somente na cópia analítica em memória; o banco não é
+    # reescrito por esta função.
+    if data:
         payload["data_venda"] = data.isoformat()
     ddd = resolver_ddd_registro(payload)
     if ddd and not payload.get("ddd"):
         payload["ddd"] = ddd
     return payload
+
+
+def opcoes_filtros(registros, filtros):
+    base = [_preparar_registro_anfir(item) for item in (registros or [])]
+    return _opcoes_filtros_v18(base, filtros)
 
 
 def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filtros=None, comparacao=None):

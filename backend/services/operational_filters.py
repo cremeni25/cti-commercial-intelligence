@@ -80,9 +80,31 @@ def resolver_periodo(periodo: str = "TODO_HISTORICO", inicio: date | None = None
     return inicio, fim
 
 
+def _competencia_referencia(registro: dict) -> date | None:
+    """Resolve a competência declarada pela própria fonte ANFIR.
+
+    `ano_referencia` é a evidência temporal mais forte quando existe. Isso evita
+    que datas técnicas/operacionais conflitantes desloquem um fato ANFIR de um
+    ano para outro. O mês continua sendo necessário para formar a competência.
+    """
+    try:
+        ano = int(registro.get("ano_referencia") or 0)
+        mes = int(registro.get("mes") or 0)
+        if ano >= 2000 and 1 <= mes <= 12:
+            return date(ano, mes, 1)
+    except (TypeError, ValueError):
+        pass
+    return None
+
+
 def data_registro(registro: dict) -> date | None:
-    # Datas comerciais reais têm prioridade. created_at é apenas data técnica de
-    # ingestão e não pode substituir a competência ANFIR quando ano/mês existem.
+    # Para ANFIR, competência de referência prevalece sobre uma data comercial
+    # conflitante. Em registros sem ano_referencia válido, preservamos a ordem
+    # histórica de datas reais e somente depois recorremos a ano/mês.
+    competencia = _competencia_referencia(registro)
+    if competencia:
+        return competencia
+
     for campo in ("data_venda", "data", "data_emissao", "data_pedido"):
         valor = registro.get(campo)
         if not valor:
@@ -98,7 +120,7 @@ def data_registro(registro: dict) -> date | None:
             except ValueError: pass
 
     try:
-        ano = int(registro.get("ano") or registro.get("ano_referencia") or 0)
+        ano = int(registro.get("ano") or 0)
         mes = int(registro.get("mes") or 0)
         if ano >= 2000 and 1 <= mes <= 12:
             return date(ano, mes, 1)
