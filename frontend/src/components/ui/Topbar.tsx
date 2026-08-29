@@ -8,7 +8,7 @@ import { OPERATIONAL_CONTEXTS, useOperationalContext, type OperationalContextVal
 type Pagina = { tituloKey?: MessageKey; titulo?: string; descricao: { "pt-BR": string; en: string; es: string } };
 
 const paginas: Record<string, Pagina> = {
-  "/dashboard": { tituloKey: "nav.dashboard", descricao: { "pt-BR": "Plataforma corporativa de inteligência comercial", en: "Corporate commercial intelligence platform", es: "Plataforma corporativa de inteligencia comercial" } },
+  "/dashboard": { tituloKey: "nav.dashboard", descricao: { "pt-BR": "Leitura estratégica ANFIR 2026 · Viena SP", en: "ANFIR 2026 strategic reading · Viena SP", es: "Lectura estratégica ANFIR 2026 · Viena SP" } },
   "/inteligencia": { titulo: "Inteligência de Mercado", descricao: { "pt-BR": "Leitura executiva do mercado realizado ANFIR", en: "Executive reading of realized ANFIR market", es: "Lectura ejecutiva del mercado realizado ANFIR" } },
   "/ia-comercial": { tituloKey: "nav.salesAi", descricao: { "pt-BR": "Central de inteligência e recomendações estratégicas", en: "Intelligence center for strategic recommendations", es: "Centro de inteligencia y recomendaciones estratégicas" } },
   "/empresas": { tituloKey: "nav.companies", descricao: { "pt-BR": "Gestão operacional de empresas e razões sociais", en: "Operational management of accounts and legal entities", es: "Gestión operativa de empresas y razones sociales" } },
@@ -19,7 +19,7 @@ const paginas: Record<string, Pagina> = {
   "/pipeline": { tituloKey: "nav.pipeline", descricao: { "pt-BR": "Gestão visual do funil comercial", en: "Visual sales-pipeline management", es: "Gestión visual del pipeline comercial" } },
   "/propostas": { tituloKey: "nav.proposals", descricao: { "pt-BR": "Gestão e acompanhamento de propostas comerciais", en: "Sales proposal management and follow-up", es: "Gestión y seguimiento de propuestas comerciales" } },
   "/pedidos": { tituloKey: "nav.orders", descricao: { "pt-BR": "Controle operacional dos pedidos comerciais", en: "Operational control of commercial orders", es: "Control operativo de pedidos comerciales" } },
-  "/atividades": { tituloKey: "nav.activities", descricao: { "pt-BR": "Agenda comercial e acompanhamento operacional", en: "Sales agenda and operational follow-up", es: "Agenda comercial y seguimiento operativo" } },
+  "/atividades": { tituloKey: "nav.activities", descricao: { "pt-BR": "Agenda comercial e acompanhamento operacional", en: "Sales agenda and operational follow-up", es: "Agenda comercial y seguimiento operacional" } },
   "/forecast": { tituloKey: "nav.forecast", descricao: { "pt-BR": "Previsão comercial e projeção de resultados", en: "Sales forecast and projected results", es: "Forecast comercial y proyección de resultados" } },
   "/mapa-estrategico": { tituloKey: "nav.strategicMap", descricao: { "pt-BR": "Análise territorial e expansão comercial", en: "Territory analysis and commercial expansion", es: "Análisis territorial y expansión comercial" } },
   "/equipamentos/trailer": { tituloKey: "nav.trailer", descricao: { "pt-BR": "Linha Trailer Carrier Transicold", en: "Carrier Transicold Trailer line", es: "Línea Trailer Carrier Transicold" } },
@@ -59,7 +59,7 @@ export default function Topbar() {
   const cargo = usuario?.cargo || tx.authenticated;
   const perfil = usuario?.tipo_usuario || tx.pending;
   const inicial = nome.trim().charAt(0).toUpperCase() || "U";
-  const exibirFiltrosExecutivos = pathname === "/dashboard" || pathname === "/inteligencia";
+  const exibirFiltrosExecutivos = pathname === "/inteligencia";
 
   return (
     <header className="w-full min-h-[90px] border-b border-[#13203f] bg-[#071028] flex flex-wrap items-center justify-between gap-3 px-8 py-3">
