@@ -6,6 +6,7 @@ import legacy from "@/core/i18n/legacy-semantic.json"
 
 type LegacyEntry = { en: string; es: string }
 type LegacyLocale = "en" | "es"
+type Locale = "pt-BR" | "en" | "es"
 
 const originalText = new WeakMap<Text, string>()
 const originalAttributes = new WeakMap<Element, Map<string, string>>()
@@ -13,13 +14,49 @@ const attributeNames = ["placeholder", "title", "aria-label", "alt"] as const
 const excludedTags = new Set(["SCRIPT", "STYLE", "CODE", "PRE"])
 const catalog = legacy as Record<string, LegacyEntry>
 
-function translateCore(value: string, locale: "pt-BR" | "en" | "es") {
-  if (locale === "pt-BR") return value
-  const exact = catalog[value]
-  return exact?.[locale as LegacyLocale] || value
+function intlLocale(locale: Locale) {
+  return locale === "en" ? "en-US" : locale === "es" ? "es-419" : "pt-BR"
 }
 
-function preserveWhitespace(value: string, locale: "pt-BR" | "en" | "es") {
+function brNumberToNumber(value: string) {
+  const normalized = value.replace(/\./g, "").replace(",", ".")
+  const number = Number(normalized)
+  return Number.isFinite(number) ? number : null
+}
+
+function localizeBrazilianFormats(value: string, locale: Locale) {
+  if (locale === "pt-BR") return value
+  const target = intlLocale(locale)
+  let result = value
+
+  // Moeda formada por chamadas legadas de toLocaleString("pt-BR").
+  result = result.replace(/R\$\s*((?:\d{1,3}(?:\.\d{3})*|\d+)(?:,\d+)?)/g, (match, raw: string) => {
+    const number = brNumberToNumber(raw)
+    return number === null ? match : new Intl.NumberFormat(target, { style: "currency", currency: "BRL" }).format(number)
+  })
+
+  // Data brasileira gerada por toLocaleDateString("pt-BR").
+  result = result.replace(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g, (match, day: string, month: string, year: string) => {
+    const date = new Date(Number(year), Number(month) - 1, Number(day))
+    return Number.isNaN(date.getTime()) ? match : new Intl.DateTimeFormat(target).format(date)
+  })
+
+  // Números com separador brasileiro. IDs, telefones, códigos e números simples sem separador não são tocados.
+  result = result.replace(/(?<![\w/.-])((?:\d{1,3}(?:\.\d{3})+)(?:,\d+)?|\d+,\d+)(?![\w/.-])/g, (match, raw: string) => {
+    const number = brNumberToNumber(raw)
+    return number === null ? match : new Intl.NumberFormat(target).format(number)
+  })
+
+  return result
+}
+
+function translateCore(value: string, locale: Locale) {
+  if (locale === "pt-BR") return value
+  const exact = catalog[value]
+  return localizeBrazilianFormats(exact?.[locale as LegacyLocale] || value, locale)
+}
+
+function preserveWhitespace(value: string, locale: Locale) {
   const start = value.match(/^\s*/)?.[0] || ""
   const end = value.match(/\s*$/)?.[0] || ""
   const core = value.trim()
