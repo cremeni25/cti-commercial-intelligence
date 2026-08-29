@@ -9,6 +9,7 @@ type Pagina = { tituloKey?: MessageKey; titulo?: string; descricao: { "pt-BR": s
 
 const paginas: Record<string, Pagina> = {
   "/dashboard": { tituloKey: "nav.dashboard", descricao: { "pt-BR": "Plataforma corporativa de inteligência comercial", en: "Corporate commercial intelligence platform", es: "Plataforma corporativa de inteligencia comercial" } },
+  "/inteligencia": { titulo: "Inteligência de Mercado", descricao: { "pt-BR": "Leitura executiva do mercado realizado ANFIR", en: "Executive reading of realized ANFIR market", es: "Lectura ejecutiva del mercado realizado ANFIR" } },
   "/ia-comercial": { tituloKey: "nav.salesAi", descricao: { "pt-BR": "Central de inteligência e recomendações estratégicas", en: "Intelligence center for strategic recommendations", es: "Centro de inteligencia y recomendaciones estratégicas" } },
   "/empresas": { tituloKey: "nav.companies", descricao: { "pt-BR": "Gestão operacional de empresas e razões sociais", en: "Operational management of accounts and legal entities", es: "Gestión operativa de empresas y razones sociales" } },
   "/transportadoras": { tituloKey: "nav.companies", descricao: { "pt-BR": "Redirecionamento legado para Empresas", en: "Legacy redirect to Companies", es: "Redirección heredada a Empresas" } },
@@ -58,7 +59,7 @@ export default function Topbar() {
   const cargo = usuario?.cargo || tx.authenticated;
   const perfil = usuario?.tipo_usuario || tx.pending;
   const inicial = nome.trim().charAt(0).toUpperCase() || "U";
-  const exibirFiltrosExecutivos = pathname === "/dashboard";
+  const exibirFiltrosExecutivos = pathname === "/dashboard" || pathname === "/inteligencia";
 
   return (
     <header className="w-full min-h-[90px] border-b border-[#13203f] bg-[#071028] flex flex-wrap items-center justify-between gap-3 px-8 py-3">
