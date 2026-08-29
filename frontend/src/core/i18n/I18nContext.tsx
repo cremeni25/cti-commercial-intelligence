@@ -31,9 +31,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>("pt-BR")
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(storageKey(usuario?.id))
+    const userPreference = usuario?.id ? window.localStorage.getItem(storageKey(usuario.id)) : null
+    const sharedPreference = window.localStorage.getItem(storageKey(null))
     const browser = typeof navigator !== "undefined" ? navigator.language : "pt-BR"
-    setLocaleState(normalizeLocale(saved || browser))
+    setLocaleState(normalizeLocale(userPreference || sharedPreference || browser))
   }, [usuario?.id])
 
   useEffect(() => {
@@ -42,8 +43,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)
-    window.localStorage.setItem(storageKey(usuario?.id), next)
-    // Mantém também uma preferência de fallback para login e troca entre CTI Web e CRM App.
+    if (usuario?.id) window.localStorage.setItem(storageKey(usuario.id), next)
+    // Preferência compartilhada entre login, CTI Web e CRM App no mesmo dispositivo.
     window.localStorage.setItem(storageKey(null), next)
   }, [usuario?.id])
 
