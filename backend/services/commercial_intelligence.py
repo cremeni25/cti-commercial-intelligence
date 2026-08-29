@@ -1,26 +1,31 @@
 from collections import Counter
 
 from core.data_semantics import contrato_dashboard, contrato_fonte
+from services.anfir_market_intelligence import consolidar_inteligencia_mercado
 from services.commercial_intelligence_v18 import (
     SEGMENTOS,
-    STATUS_GANHOS,
-    STATUS_PERDIDOS,
     _dimensao,
     _filtrar,
     _segmento,
     consolidar_inteligencia as _consolidar_inteligencia_v18,
     opcoes_filtros,
 )
+from services.operational_filters import data_registro, resolver_ddd_registro
+
+
+def _preparar_registro_anfir(registro):
+    payload = dict(registro)
+    data = data_registro(payload)
+    if data and not payload.get("data_venda"):
+        payload["data_venda"] = data.isoformat()
+    ddd = resolver_ddd_registro(payload)
+    if ddd and not payload.get("ddd"):
+        payload["ddd"] = ddd
+    return payload
 
 
 def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filtros=None, comparacao=None):
-    """Consolida inteligência exclusivamente sobre fatos realizados da base ANFIR.
-
-    O motor v18 permanece responsável por filtros/rankings e série histórica, mas
-    métricas próprias de Funil não são publicadas como verdade quando a origem é
-    ``cti_anfir``.
-    """
-    base = [dict(item) for item in (registros or [])]
+    base = [_preparar_registro_anfir(item) for item in (registros or [])]
     resultado = _consolidar_inteligencia_v18(
         base,
         contexto=contexto,
@@ -31,6 +36,7 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
 
     filtros_efetivos = {**(filtros or {}), "segmento": segmento if segmento in SEGMENTOS else "GERAL"}
     analisados = _filtrar(base, filtros_efetivos)
+    anteriores = _filtrar(base, comparacao) if comparacao else []
     kpis = resultado["kpis"]
     segmentos = Counter(_segmento(registro) for registro in base)
 
@@ -43,14 +49,9 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
         "clientes_unicos": clientes_unicos,
         "implementadoras_unicas": implementadoras_unicas,
     }
-    resultado["segmentos"] = {
-        nome: segmentos.get(nome, 0)
-        for nome in ("TR", "DT", "DD", "UNKNOWN")
-    }
+    resultado["segmentos"] = {nome: segmentos.get(nome, 0) for nome in ("TR", "DT", "DD", "UNKNOWN")}
     resultado["implementadoras"] = resultado["rankings"]["implementadora"][:10]
 
-    # ANFIR é fato de mercado realizado. Conversão e perda de oportunidade
-    # pertencem ao CRM/Funil e não podem ser inferidas desta base.
     resultado["kpis"]["conversao"] = None
     resultado["kpis"]["comparacoes"].pop("conversao", None)
     for ponto in resultado.get("serie_temporal", []):
@@ -77,11 +78,18 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
     ]
     resultado["clientes_inativos"] = []
 
+    resultado["inteligencia_mercado"] = consolidar_inteligencia_mercado(analisados, anteriores)
+    mercado = resultado["inteligencia_mercado"]["mercado"]
+    for chave in ("competencia_min", "competencia_max"):
+        if mercado.get(chave):
+            mercado[chave] = mercado[chave].isoformat()
+
     resultado.setdefault("metadata", {}).update({
         "origem": "cti_anfir",
         "natureza_dados": "FATO_MERCADO_REALIZADO",
         "contrato_fonte": contrato_fonte("ANFIR"),
         "contrato_dashboard": contrato_dashboard("INTELIGENCIA_MERCADO"),
+        "motor_mercado": "ANFIR_INTELLIGENCE_002",
         "nao_representa": ["FUNIL", "PIPELINE", "OPORTUNIDADE_ABERTA", "CONVERSAO_CRM"],
     })
 
