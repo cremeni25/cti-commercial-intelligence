@@ -10,57 +10,59 @@ import dieselTruckIcon from "@/assets/equipamentos/diesel-truck.png"
 import directDriveIcon from "@/assets/equipamentos/direct-drive.png"
 import { useAuth } from "@/core/auth/AuthContext"
 import type { PermissoesSessaoCTI } from "@/core/auth/types"
+import { useI18n, type MessageKey } from "@/core/i18n"
+import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 
-type MenuItem = { label: string; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
-type MenuGroup = { titulo: string; itens: MenuItem[] }
+type MenuItem = { labelKey: MessageKey; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
+type MenuGroup = { tituloKey: MessageKey; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
   {
-    titulo: "Principal",
+    tituloKey: "nav.main",
     itens: [
-      { label: "Dashboard Executivo", href: "/dashboard", icon: "📊", type: "emoji" },
-      { label: "Histórico Comercial", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
-      { label: "IA Comercial", href: "/ia-comercial", icon: "🧠", type: "emoji" },
+      { labelKey: "nav.dashboard", href: "/dashboard", icon: "📊", type: "emoji" },
+      { labelKey: "nav.history", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
+      { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
   },
   {
-    titulo: "CRM",
+    tituloKey: "nav.crm",
     itens: [
-      { label: "Oportunidades", href: "/oportunidades", icon: "📈", type: "emoji" },
-      { label: "Pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
-      { label: "Importar Dados", href: "/upload", icon: "📤", type: "emoji" },
-      { label: "Propostas", href: "/propostas", icon: "📄", type: "emoji" },
-      { label: "Pedidos", href: "/pedidos", icon: "📦", type: "emoji" },
-      { label: "Vendas", href: "/vendas", icon: "💰", type: "emoji" },
-      { label: "Relatórios", href: "/relatorios", icon: "📑", type: "emoji" },
-      { label: "Gerar relatório", href: "/relatorios/modular", icon: "🖨️", type: "emoji" },
-      { label: "Atividades", href: "/atividades", icon: "📅", type: "emoji" },
-      { label: "Forecast", href: "/forecast", icon: "📊", type: "emoji" },
+      { labelKey: "nav.opportunities", href: "/oportunidades", icon: "📈", type: "emoji" },
+      { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
+      { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
+      { labelKey: "nav.proposals", href: "/propostas", icon: "📄", type: "emoji" },
+      { labelKey: "nav.orders", href: "/pedidos", icon: "📦", type: "emoji" },
+      { labelKey: "nav.sales", href: "/vendas", icon: "💰", type: "emoji" },
+      { labelKey: "nav.reports", href: "/relatorios", icon: "📑", type: "emoji" },
+      { labelKey: "nav.generateReport", href: "/relatorios/modular", icon: "🖨️", type: "emoji" },
+      { labelKey: "nav.activities", href: "/atividades", icon: "📅", type: "emoji" },
+      { labelKey: "nav.forecast", href: "/forecast", icon: "📊", type: "emoji" },
     ],
   },
   {
-    titulo: "Cadastros",
+    tituloKey: "nav.masterData",
     itens: [
-      { label: "Empresas", href: "/empresas", icon: "🏢", type: "emoji" },
-      { label: "Implementadoras", href: "/implementadoras", icon: "🏭", type: "emoji" },
+      { labelKey: "nav.companies", href: "/empresas", icon: "🏢", type: "emoji" },
+      { labelKey: "nav.bodyBuilders", href: "/implementadoras", icon: "🏭", type: "emoji" },
     ],
   },
   {
-    titulo: "Equipamentos",
+    tituloKey: "nav.equipment",
     itens: [
-      { label: "TR • Trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
-      { label: "DT • Diesel Truck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
-      { label: "DD • Direct Drive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
-      { label: "Mapa Estratégico", href: "/mapa-estrategico", icon: "🌎", type: "emoji" },
+      { labelKey: "nav.trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
+      { labelKey: "nav.dieselTruck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
+      { labelKey: "nav.directDrive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
+      { labelKey: "nav.strategicMap", href: "/mapa-estrategico", icon: "🌎", type: "emoji" },
     ],
   },
   {
-    titulo: "Administração",
+    tituloKey: "nav.administration",
     itens: [
-      { label: "Governança de Fontes", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
-      { label: "Usuários", href: "/usuarios", icon: "👥", type: "emoji" },
-      { label: "Configurações", href: "/configuracoes", icon: "⚙️", type: "emoji" },
-      { label: "Modelos oficiais", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
+      { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
+      { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
+      { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
+      { labelKey: "nav.officialTemplates", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
     ],
   },
 ]
@@ -91,14 +93,16 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
 export default function Sidebar() {
   const pathname = usePathname()
   const { usuario } = useAuth()
+  const { t } = useI18n()
   const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
   const permissoes = usuario?.permissoes
   const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
 
   return (
     <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
-      <div className="p-4 border-b border-[#13203f] flex justify-center">
+      <div className="p-4 border-b border-[#13203f] flex flex-col items-center gap-3">
         <Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain" />
+        <LanguageSwitcher compact />
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -106,10 +110,11 @@ export default function Sidebar() {
           const itensPermitidos = grupo.itens.filter((item) => rotaPermitida(item.href, perfil, permissoes, acessoTotal))
           if (itensPermitidos.length === 0) return null
           return (
-            <div key={`${grupo.titulo}-${index}`}>
-              {grupo.titulo && <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{grupo.titulo}</p>}
+            <div key={`${grupo.tituloKey}-${index}`}>
+              <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{t(grupo.tituloKey)}</p>
               {itensPermitidos.map((item) => {
                 const active = pathname === item.href
+                const label = t(item.labelKey)
                 return (
                   <Link
                     key={item.href}
@@ -118,12 +123,12 @@ export default function Sidebar() {
                   >
                     <div className="w-[28px] flex items-center justify-center">
                       {item.type === "image" ? (
-                        <Image src={item.icon as StaticImageData} alt={item.label} width={28} height={28} className="object-contain" />
+                        <Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain" />
                       ) : (
                         <span className="text-lg">{item.icon as string}</span>
                       )}
                     </div>
-                    <span>{item.label}</span>
+                    <span>{label}</span>
                   </Link>
                 )
               })}
@@ -134,10 +139,10 @@ export default function Sidebar() {
 
       <div className="p-4 border-t border-[#13203f]">
         <div className="bg-[#101b36] rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-widest">Status Sistema</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p>
           <div className="flex items-center gap-2 mt-3">
             <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-green-400 text-sm font-medium">Online</span>
+            <span className="text-green-400 text-sm font-medium">{t("common.online")}</span>
           </div>
         </div>
       </div>
