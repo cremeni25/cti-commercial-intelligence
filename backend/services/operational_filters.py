@@ -116,19 +116,30 @@ def data_registro(registro: dict) -> date | None:
     return None
 
 
+def _fonte_carrier_jov(registro: dict) -> bool:
+    aba = _sem_acento(registro.get("aba_origem"))
+    versao = str(registro.get("versao_parser") or "").strip()
+    pipeline = str(registro.get("pipeline") or "").strip().upper()
+    return aba == "RELATORIO PERFORMANCE 2026" or versao == "3.1.0" or (
+        pipeline == "UPLOAD_ANFIR_OPERACIONAL" and "REPRESENTACAO: JOV" in _sem_acento(registro.get("ocorrencia"))
+    )
+
+
 def _registro_viena(registro: dict, origem: str, autorizado: str) -> bool:
     if origem != "VIENA_SP" and autorizado != "VIENA":
         return False
+
+    # Bases VIENA_SP históricas/canônicas já eram previamente autorizadas e
+    # permanecem compatíveis. O recorte geográfico rígido é exigido somente na
+    # fonte Carrier/JOV bruta, que contém registros externos ao território.
+    if not _fonte_carrier_jov(registro):
+        return True
+
     estado = str(registro.get("estado") or registro.get("uf") or "").strip().upper()
     if estado and estado != "SP":
         return False
     ddd = resolver_ddd_registro(registro)
-    if ddd:
-        return ddd in VIENA_DDDS
-    # Compatibilidade com registros legados Viena sem município/DDD. Fontes novas
-    # Carrier/JOV com município SP não mapeado ficam fora até classificação segura.
-    cidade = str(registro.get("cidade") or registro.get("municipio") or "").strip()
-    return not cidade
+    return bool(ddd and ddd in VIENA_DDDS)
 
 
 def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None) -> list[dict]:
