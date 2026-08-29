@@ -1,6 +1,5 @@
 import hashlib
 import re
-import uuid
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -15,18 +14,28 @@ ABAS_PROCESSADAS = {
         "autorizado": None,
         "ano_referencia": None,
         "escopo_operacional": "NACIONAL",
+        "formato": "CANONICO",
     },
     "VIENA SP 2025": {
         "origem_base": "VIENA_SP",
         "autorizado": "VIENA",
         "ano_referencia": 2025,
         "escopo_operacional": "AUTORIZADO",
+        "formato": "CANONICO",
     },
     "VIENA SP 2026": {
         "origem_base": "VIENA_SP",
         "autorizado": "VIENA",
         "ano_referencia": 2026,
         "escopo_operacional": "AUTORIZADO",
+        "formato": "CANONICO",
+    },
+    "RELATORIO PERFORMANCE 2026": {
+        "origem_base": "VIENA_SP",
+        "autorizado": "VIENA",
+        "ano_referencia": 2026,
+        "escopo_operacional": "AUTORIZADO",
+        "formato": "CARRIER_JOV",
     },
 }
 
@@ -38,7 +47,7 @@ COLUNAS = {
     "ddd": ["DDD"],
     "cidade": ["MUNICIPIO", "MUNICÍPIO", "CIDADE"],
     "sub_regiao": ["SUB REGIAO", "SUB-REGIAO", "SUBREGIAO", "SUB REGIÃO"],
-    "cliente": ["EMPRESA", "NOME_PROPRIETARIO", "NOME PROPRIETARIO", "CLIENTE", "NOME DO CLIENTE", "NOME_CLIENTE", "TRANSPORTADORA", "PROPRIETARIO", "RAZAO SOCIAL", "RAZÃO SOCIAL", "RAZAO_SOCIAL", "RAZAO_SOCIAL"],
+    "cliente": ["EMPRESA", "NOME_PROPRIETARIO", "NOME PROPRIETARIO", "CLIENTE", "NOME DO CLIENTE", "NOME_CLIENTE", "TRANSPORTADORA", "PROPRIETARIO", "RAZAO SOCIAL", "RAZÃO SOCIAL", "RAZAO_SOCIAL"],
     "cnpj": ["CNPJ_FATURADO", "CNPJ FATURADO", "CNPJ"],
     "fabricante_caminhao": ["FABRICANTE CAMINHAO", "FABRICANTE_CAMINHAO", "FABRICANTE_CAMINHÃO"],
     "modelo_caminhao": ["MODELO CAMINHAO", "MODELO_CAMINHAO", "MODELO_CAMINHÃO"],
@@ -60,11 +69,16 @@ COLUNAS = {
     "valor_concorrencia": ["VALOR - CONCORRÊNCIA", "VALOR - CONCORRENCIA"],
 }
 
+MESES = {
+    "JANEIRO": 1, "FEVEREIRO": 2, "MARCO": 3, "MARÇO": 3, "ABRIL": 4,
+    "MAIO": 5, "JUNHO": 6, "JULHO": 7, "AGOSTO": 8, "SETEMBRO": 9,
+    "OUTUBRO": 10, "NOVEMBRO": 11, "DEZEMBRO": 12,
+}
+
 
 def limpar_nome_coluna(nome):
     nome = "" if pd.isna(nome) else str(nome)
-    nome = re.sub(r"\s+", " ", nome.strip().upper())
-    return nome
+    return re.sub(r"\s+", " ", nome.strip().upper())
 
 
 def texto(valor):
@@ -77,6 +91,13 @@ def texto(valor):
 
 def texto_identificador(valor):
     return texto(valor).replace(".0", "")
+
+
+def texto_util(valor):
+    valor = texto(valor)
+    if valor.upper() in {"", "0", "80", "#N/A", "NAN", "NONE"}:
+        return ""
+    return valor
 
 
 def numero(valor):
@@ -118,6 +139,17 @@ def extrair_mes(data):
         return None
 
 
+def mes_carrier(valor):
+    chave = limpar_nome_coluna(valor)
+    if chave in MESES:
+        return MESES[chave]
+    try:
+        mes = int(float(valor))
+        return mes if 1 <= mes <= 12 else None
+    except (TypeError, ValueError):
+        return None
+
+
 def normalizar_chassi(chassi):
     return re.sub(r"[^A-Z0-9]", "", texto(chassi).upper())
 
@@ -130,6 +162,7 @@ def localizar_cabecalho(df):
     melhor_linha = None
     maior_pontuacao = -1
     aliases = {alias for lista in COLUNAS.values() for alias in lista}
+    aliases.update({"REPRESENTAÇÃO", "MÊS", "SEGMENTO", "MOTIVO CONCORRENTE", "OBSERVAÇÃO"})
     for indice in range(min(len(df), 30)):
         linha = [limpar_nome_coluna(c) for c in df.iloc[indice].tolist()]
         pontuacao = sum(1 for coluna in linha if coluna in aliases)
@@ -139,12 +172,25 @@ def localizar_cabecalho(df):
     return melhor_linha if maior_pontuacao > 0 else None
 
 
-def normalizar_dataframe(df):
+def _eh_formato_carrier_jov(cabecalhos):
+    campos = set(cabecalhos)
+    return {"REPRESENTAÇÃO", "SEGMENTO", "MOTIVO CONCORRENTE", "OBSERVAÇÃO"}.issubset(campos)
+
+
+def normalizar_dataframe(df, formato="CANONICO"):
     cabecalho = localizar_cabecalho(df)
     if cabecalho is None:
         return None
-    nomes = [limpar_nome_coluna(coluna) for coluna in df.iloc[cabecalho]]
-    dados = df.iloc[cabecalho + 1:].copy()
+    nomes = [limpar_nome_coluna(coluna) for coluna in df.iloc[cabecalho].tolist()]
+    if formato == "CARRIER_JOV" or _eh_formato_carrier_jov(nomes):
+        # O relatório Carrier contém um segundo bloco lateral de vendas/instalações
+        # com cabeçalhos CLIENTE/MODELO/DATA VENDA duplicados. A ANFIR é apenas o
+        # bloco principal, encerrado em STATUS PLANO AÇÃO 1.
+        limite = nomes.index("STATUS PLANO AÇÃO 1") + 1 if "STATUS PLANO AÇÃO 1" in nomes else 23
+        nomes = nomes[:limite]
+        dados = df.iloc[cabecalho + 1:, :limite].copy()
+    else:
+        dados = df.iloc[cabecalho + 1:].copy()
     dados.columns = nomes
     return dados.reset_index(drop=True).fillna("")
 
@@ -160,7 +206,19 @@ def campo(df, row, nome):
     coluna = localizar_coluna(df, COLUNAS[nome])
     if coluna is None:
         return ""
-    return row[coluna]
+    valor = row[coluna]
+    if isinstance(valor, pd.Series):
+        return valor.iloc[0] if not valor.empty else ""
+    return valor
+
+
+def campo_direto(row, nome):
+    if nome not in row.index:
+        return ""
+    valor = row[nome]
+    if isinstance(valor, pd.Series):
+        return valor.iloc[0] if not valor.empty else ""
+    return valor
 
 
 def chave_deduplicacao(registro):
@@ -174,13 +232,9 @@ def chave_deduplicacao(registro):
         chave = f"{origem}|{ano}|PLACA|{placa}"
     else:
         chave = "|".join([
-            str(origem),
-            str(ano),
-            "ALT",
-            texto(registro.get("cliente")),
-            texto(registro.get("data_venda")),
-            texto(registro.get("linha")),
-            str(registro.get("valor") or ""),
+            str(origem), str(ano), "ALT", texto(registro.get("cliente")),
+            texto(registro.get("data_venda")), texto(registro.get("linha")),
+            str(registro.get("mes") or ""), str(registro.get("cidade") or ""),
         ])
     return chave
 
@@ -210,41 +264,93 @@ def linha_valida(registro):
     return cliente not in {"TOTAL", "TOTAL GERAL", "SUBTOTAL", "GERAL", "RESUMO"}
 
 
-def converter_registro(df, row, nome_aba, contexto, arquivo_origem, linha_planilha=None):
-    data_venda = normalizar_data(campo(df, row, "data_venda"))
-    ano_referencia = contexto["ano_referencia"] or extrair_ano(data_venda)
+def _ocorrencia_carrier(row):
+    partes = []
+    representacao = texto_util(campo_direto(row, "REPRESENTAÇÃO"))
+    observacao = texto_util(campo_direto(row, "OBSERVAÇÃO"))
+    plano = texto_util(campo_direto(row, "PLANO AÇÃO 1"))
+    quando = texto_util(campo_direto(row, "QUANDO?"))
+    status_plano = texto_util(campo_direto(row, "STATUS PLANO AÇÃO 1"))
+    if representacao:
+        partes.append(f"REPRESENTAÇÃO: {representacao}")
+    if observacao:
+        partes.append(f"OBSERVAÇÃO: {observacao}")
+    if plano:
+        partes.append(f"PLANO AÇÃO 1: {plano}")
+    if quando:
+        partes.append(f"QUANDO: {quando}")
+    if status_plano:
+        partes.append(f"STATUS PLANO AÇÃO 1: {status_plano}")
+    return "\n".join(partes)
+
+
+def converter_registro_carrier_jov(df, row, nome_aba, contexto, arquivo_origem, linha_planilha=None):
     registro = CTIRecord(
-        ano=extrair_ano(data_venda),
-        mes=extrair_mes(data_venda),
-        data_venda=data_venda,
-        responsavel=texto(campo(df, row, "responsavel")),
-        regiao=texto(campo(df, row, "regiao")),
-        estado=texto(campo(df, row, "estado")),
-        ddd=texto_identificador(campo(df, row, "ddd")),
-        cidade=texto(campo(df, row, "cidade")),
-        sub_regiao=texto(campo(df, row, "sub_regiao")),
-        cliente=texto(campo(df, row, "cliente")),
-        cnpj=texto_identificador(campo(df, row, "cnpj")),
-        fabricante_caminhao=texto(campo(df, row, "fabricante_caminhao")),
-        modelo_caminhao=texto(campo(df, row, "modelo_caminhao")),
-        eixo=texto(campo(df, row, "eixo")),
-        tipo_veiculo=texto(campo(df, row, "tipo_veiculo")),
-        placa=texto_identificador(campo(df, row, "placa")),
-        chassi=texto_identificador(campo(df, row, "chassi")),
-        implementadora=normalizar_implementadora(texto(campo(df, row, "implementadora"))),
-        fabricante_equipamento=texto(campo(df, row, "fabricante_equipamento")),
-        linha=texto(campo(df, row, "linha")),
-        modelo=texto(campo(df, row, "modelo")),
-        status=texto(campo(df, row, "status")),
-        motivo=texto(campo(df, row, "motivo")),
-        ocorrencia=texto(campo(df, row, "ocorrencia")),
-        valor=valor_operacional(df, row),
+        ano=contexto["ano_referencia"],
+        mes=mes_carrier(campo_direto(row, "MÊS") or campo_direto(row, "MES")),
+        data_venda="",
+        responsavel="",
+        regiao=texto_util(campo_direto(row, "REGIAO") or campo_direto(row, "REGIÃO")),
+        estado=texto_util(campo_direto(row, "ESTADO")),
+        ddd="",
+        cidade=texto_util(campo_direto(row, "MUNICIPIO") or campo_direto(row, "MUNICÍPIO")),
+        sub_regiao="",
+        cliente=texto_util(campo_direto(row, "CLIENTE")),
+        cnpj="",
+        fabricante_caminhao=texto_util(campo_direto(row, "CAMINHÃO")),
+        modelo_caminhao=texto_util(campo_direto(row, "MODELO")),
+        eixo="",
+        tipo_veiculo=texto_util(campo_direto(row, "TIPO VEICULO")),
+        placa="",
+        chassi=texto_identificador(campo_direto(row, "CHASSI")),
+        implementadora=normalizar_implementadora(texto_util(campo_direto(row, "FABRICANTE"))),
+        fabricante_equipamento="",
+        linha=texto_util(campo_direto(row, "SEGMENTO")),
+        modelo="",
+        status=texto_util(campo_direto(row, "STATUS")),
+        motivo=texto_util(campo_direto(row, "MOTIVO CONCORRENTE")),
+        ocorrencia=_ocorrencia_carrier(row),
+        valor=0.0,
         origem_dado=contexto["origem_base"],
         arquivo_origem=arquivo_origem,
         aba_origem=nome_aba,
-        versao_parser="3.0.0",
+        versao_parser="3.1.0",
         pipeline="UPLOAD_ANFIR_OPERACIONAL",
         ativo=True,
+        created_at=datetime.utcnow().isoformat(),
+    ).to_dict()
+    registro["linha_planilha"] = linha_planilha
+    registro["origem_base"] = contexto["origem_base"]
+    registro["autorizado"] = contexto["autorizado"]
+    registro["ano_referencia"] = contexto["ano_referencia"]
+    registro["escopo_operacional"] = contexto["escopo_operacional"]
+    registro["hash_registro"] = gerar_hash(registro)
+    registro["id_operacional"] = gerar_id_operacional(registro)
+    return registro
+
+
+def converter_registro(df, row, nome_aba, contexto, arquivo_origem, linha_planilha=None):
+    if contexto.get("formato") == "CARRIER_JOV":
+        return converter_registro_carrier_jov(df, row, nome_aba, contexto, arquivo_origem, linha_planilha)
+    data_venda = normalizar_data(campo(df, row, "data_venda"))
+    ano_referencia = contexto["ano_referencia"] or extrair_ano(data_venda)
+    registro = CTIRecord(
+        ano=extrair_ano(data_venda), mes=extrair_mes(data_venda), data_venda=data_venda,
+        responsavel=texto(campo(df, row, "responsavel")), regiao=texto(campo(df, row, "regiao")),
+        estado=texto(campo(df, row, "estado")), ddd=texto_identificador(campo(df, row, "ddd")),
+        cidade=texto(campo(df, row, "cidade")), sub_regiao=texto(campo(df, row, "sub_regiao")),
+        cliente=texto(campo(df, row, "cliente")), cnpj=texto_identificador(campo(df, row, "cnpj")),
+        fabricante_caminhao=texto(campo(df, row, "fabricante_caminhao")),
+        modelo_caminhao=texto(campo(df, row, "modelo_caminhao")), eixo=texto(campo(df, row, "eixo")),
+        tipo_veiculo=texto(campo(df, row, "tipo_veiculo")), placa=texto_identificador(campo(df, row, "placa")),
+        chassi=texto_identificador(campo(df, row, "chassi")),
+        implementadora=normalizar_implementadora(texto(campo(df, row, "implementadora"))),
+        fabricante_equipamento=texto(campo(df, row, "fabricante_equipamento")),
+        linha=texto(campo(df, row, "linha")), modelo=texto(campo(df, row, "modelo")),
+        status=texto(campo(df, row, "status")), motivo=texto(campo(df, row, "motivo")),
+        ocorrencia=texto(campo(df, row, "ocorrencia")), valor=valor_operacional(df, row),
+        origem_dado=contexto["origem_base"], arquivo_origem=arquivo_origem, aba_origem=nome_aba,
+        versao_parser="3.1.0", pipeline="UPLOAD_ANFIR_OPERACIONAL", ativo=True,
         created_at=datetime.utcnow().isoformat(),
     ).to_dict()
     registro["modelo_carrier"] = texto(campo(df, row, "modelo_carrier"))
@@ -264,14 +370,12 @@ def processar_aba(df, nome_aba, arquivo_origem="PLANILHA_ANFIR"):
     contexto = ABAS_PROCESSADAS.get(chave_aba)
     if not contexto:
         return [], 0
-    df = normalizar_dataframe(df)
+    df = normalizar_dataframe(df, contexto.get("formato", "CANONICO"))
     if df is None:
         return [], 0
-    registros = []
-    vistos = set()
-    linhas_lidas = 0
-    for _, row in df.iterrows():
-        registro = converter_registro(df, row, nome_aba, contexto, arquivo_origem, int(_) + 2)
+    registros, vistos, linhas_lidas = [], set(), 0
+    for indice, row in df.iterrows():
+        registro = converter_registro(df, row, nome_aba, contexto, arquivo_origem, int(indice) + 2)
         if not linha_valida(registro):
             continue
         linhas_lidas += 1
@@ -283,15 +387,15 @@ def processar_aba(df, nome_aba, arquivo_origem="PLANILHA_ANFIR"):
     return registros, linhas_lidas
 
 
+def _base_relatorio():
+    return {"abas": [], "linhas_lidas": 0, "registros_validos": 0, "inseridos": 0, "atualizados": 0,
+            "duplicados_ignorados": 0, "erros": 0,
+            "erros_por_tipo": {"campo_invalido": 0, "registro_sem_identificador": 0, "schema_incompativel": 0,
+                               "erro_persistencia": 0, "outros": 0}, "amostra_erros": []}
+
+
 def criar_relatorio(arquivo):
-    return {
-        "arquivo": arquivo,
-        "bases_processadas": {
-            "BRASIL": {"abas": [], "linhas_lidas": 0, "registros_validos": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0, "erros_por_tipo": {"campo_invalido": 0, "registro_sem_identificador": 0, "schema_incompativel": 0, "erro_persistencia": 0, "outros": 0}, "amostra_erros": []},
-            "VIENA_SP": {"abas": [], "linhas_lidas": 0, "registros_validos": 0, "inseridos": 0, "atualizados": 0, "duplicados_ignorados": 0, "erros": 0, "erros_por_tipo": {"campo_invalido": 0, "registro_sem_identificador": 0, "schema_incompativel": 0, "erro_persistencia": 0, "outros": 0}, "amostra_erros": []},
-        },
-        "status": "PROCESSADO",
-    }
+    return {"arquivo": arquivo, "bases_processadas": {"BRASIL": _base_relatorio(), "VIENA_SP": _base_relatorio()}, "status": "PROCESSADO"}
 
 
 def processar_planilha_viena_com_relatorio(contents, arquivo_origem="PLANILHA_ANFIR"):
@@ -317,13 +421,8 @@ def processar_planilha_viena_com_relatorio(contents, arquivo_origem="PLANILHA_AN
             relatorio["bases_processadas"][base]["erros_por_tipo"]["outros"] += 1
             if len(relatorio["bases_processadas"][base]["amostra_erros"]) < 100:
                 relatorio["bases_processadas"][base]["amostra_erros"].append({
-                    "linha": None,
-                    "aba": nome_aba,
-                    "etapa": "parser",
-                    "tipo": "outros",
-                    "mensagem": str(erro),
-                    "campo": None,
-                    "valor": None,
+                    "linha": None, "aba": nome_aba, "etapa": "parser", "tipo": "outros",
+                    "mensagem": str(erro), "campo": None, "valor": None,
                 })
     if not registros:
         relatorio["status"] = "SEM_REGISTROS_PROCESSADOS"
