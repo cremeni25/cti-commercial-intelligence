@@ -7,6 +7,7 @@ import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
+import { useClosureI18n } from "@/core/i18n/closure"
 
 interface PacoteProposta {
   proposta: Record<string, unknown>
@@ -17,27 +18,37 @@ interface PacoteProposta {
   pedidos: Record<string, unknown>[]
 }
 
-function moeda(valor: unknown) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 function texto(valor: unknown, padrao = "—") { const resultado = String(valor ?? "").trim(); return resultado || padrao }
-function dataHora(valor: unknown) { if (!valor) return "—"; const data = new Date(String(valor)); return Number.isNaN(data.getTime()) ? String(valor) : data.toLocaleString("pt-BR") }
 
 export default function PropostaPage() {
   const params = useParams<{ id: string }>()
   const id = String(params?.id || "")
+  const { locale, tc, formatCurrency, formatDate } = useClosureI18n()
   const [dados, setDados] = useState<PacoteProposta | null>(null)
   const [erro, setErro] = useState("")
   const [carregando, setCarregando] = useState(true)
   const [processando, setProcessando] = useState(false)
   const [mensagem, setMensagem] = useState("")
 
+  const moeda = (valor: unknown) => formatCurrency(Number(valor || 0))
+  const dataHora = (valor: unknown) => !valor ? "—" : formatDate(String(valor), { dateStyle: "short", timeStyle: "short" })
+  const statusTexto = (valor: string) => {
+    const mapa: Record<string, Record<string, string>> = {
+      "pt-BR": { RASCUNHO:"Rascunho", EM_REVISAO:"Em revisão", APROVADA_INTERNA:"Aprovada internamente", EMITIDA:"Emitida", ENVIADA:"Enviada", VISUALIZADA:"Visualizada", EM_NEGOCIACAO:"Em negociação", ACEITA:"Aceita", CONVERTIDA_PEDIDO:"Convertida em pedido", REJEITADA:"Rejeitada", EXPIRADA:"Expirada", CANCELADA:"Cancelada", SUBSTITUIDA:"Substituída" },
+      en: { RASCUNHO:"Draft", EM_REVISAO:"Under review", APROVADA_INTERNA:"Internally approved", EMITIDA:"Issued", ENVIADA:"Sent", VISUALIZADA:"Viewed", EM_NEGOCIACAO:"In negotiation", ACEITA:"Accepted", CONVERTIDA_PEDIDO:"Converted to order", REJEITADA:"Rejected", EXPIRADA:"Expired", CANCELADA:"Cancelled", SUBSTITUIDA:"Superseded" },
+      es: { RASCUNHO:"Borrador", EM_REVISAO:"En revisión", APROVADA_INTERNA:"Aprobada internamente", EMITIDA:"Emitida", ENVIADA:"Enviada", VISUALIZADA:"Visualizada", EM_NEGOCIACAO:"En negociación", ACEITA:"Aceptada", CONVERTIDA_PEDIDO:"Convertida en pedido", REJEITADA:"Rechazada", EXPIRADA:"Vencida", CANCELADA:"Cancelada", SUBSTITUIDA:"Sustituida" },
+    }
+    return mapa[locale]?.[valor] || valor.replaceAll("_", " ")
+  }
+
   async function carregar() {
     setCarregando(true); setErro("")
     try {
       const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/pacote`, { cache: "no-store" })
       const payload = await resposta.json().catch(() => null)
-      if (!resposta.ok) throw new Error(payload?.detail || `Não foi possível carregar a proposta (${resposta.status}).`)
+      if (!resposta.ok) throw new Error(payload?.detail || tc("proposal.loadFailed"))
       setDados(payload)
-    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao carregar a proposta.") }
+    } catch (falha) { setErro(falha instanceof Error ? falha.message : tc("proposal.loadFailed")) }
     finally { setCarregando(false) }
   }
 
@@ -57,39 +68,39 @@ export default function PropostaPage() {
     try {
       const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}${sufixo}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) })
       const payload = await resposta.json().catch(() => null)
-      if (!resposta.ok) throw new Error(payload?.detail || `A operação não pôde ser concluída (${resposta.status}).`)
-      setMensagem("Operação registrada com sucesso."); await carregar(); return payload
-    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha na operação."); return null }
+      if (!resposta.ok) throw new Error(payload?.detail || tc("common.error"))
+      setMensagem(tc("common.success")); await carregar(); return payload
+    } catch (falha) { setErro(falha instanceof Error ? falha.message : tc("common.error")); return null }
     finally { setProcessando(false) }
   }
 
   async function solicitarAceite(metodo: "PRESENCIAL_TELA" | "REMOTO_LINK") {
-    const nome = window.prompt("Nome completo do cliente/signatário:")?.trim(); if (!nome) return
-    const email = window.prompt("E-mail do cliente, quando disponível:")?.trim() || null
+    const nome = window.prompt(tc("proposal.signerName"))?.trim(); if (!nome) return
+    const email = window.prompt(tc("proposal.signerEmail"))?.trim() || null
     const payload = await executar("/aceites", { metodo, nome_signatario: nome, email_signatario: email })
     const token = payload?.link_token
-    if (token) { const link = `${window.location.origin}/aceite/${token}`; await navigator.clipboard?.writeText(link); setMensagem(`Link de aceite copiado: ${link}`) }
+    if (token) { const link = `${window.location.origin}/aceite/${token}`; await navigator.clipboard?.writeText(link); setMensagem(tc("proposal.linkCopied", { link })) }
   }
 
   return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar /><section className="min-w-0 flex-1"><Topbar /><div className="space-y-6 p-4 sm:p-6 lg:p-8">
     <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6">
-      <Link href={dados?.proposta.oportunidade_id ? `/oportunidades/${dados.proposta.oportunidade_id}` : "/propostas"} className="text-sm font-semibold text-cyan-300">← Voltar</Link>
-      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">Proposta comercial</p><h1 className="mt-2 text-3xl font-bold">{texto(dados?.proposta.numero, "Proposta em elaboração")}</h1><p className="mt-2 text-slate-400">Versão {texto(dados?.proposta.versao, "1")} • {texto(dados?.item?.equipamento)}</p></div><span className="w-fit rounded-full border border-cyan-800 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200">{status.replaceAll("_", " ")}</span></div>
+      <Link href={dados?.proposta.oportunidade_id ? `/oportunidades/${dados.proposta.oportunidade_id}` : "/propostas"} className="text-sm font-semibold text-cyan-300">← {tc("common.back")}</Link>
+      <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">{tc("proposal.title")}</p><h1 className="mt-2 text-3xl font-bold">{texto(dados?.proposta.numero, tc("proposal.draft"))}</h1><p className="mt-2 text-slate-400">{tc("proposal.version")} {texto(dados?.proposta.versao, "1")} • {texto(dados?.item?.equipamento)}</p></div><span className="w-fit rounded-full border border-cyan-800 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200">{statusTexto(status)}</span></div>
     </header>
-    {carregando && <Aviso>Carregando proposta...</Aviso>}{erro && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">{erro}</div>}{mensagem && <div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 p-5 text-emerald-200">{mensagem}</div>}
+    {carregando && <Aviso>{tc("proposal.loading")}</Aviso>}{erro && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">{erro}</div>}{mensagem && <div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 p-5 text-emerald-200">{mensagem}</div>}
     {dados && <>
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi titulo="Valor" valor={moeda(dados.proposta.valor)} /><Kpi titulo="Quantidade" valor={texto(dados.item?.quantidade, "1")} /><Kpi titulo="Aceite válido" valor={aceiteValido ? "1" : "0"} /><Kpi titulo="Pedido" valor={pedido ? "1" : "0"} /></section>
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi titulo={tc("common.value")} valor={moeda(dados.proposta.valor)} /><Kpi titulo={tc("common.quantity")} valor={texto(dados.item?.quantidade, "1")} /><Kpi titulo={tc("proposal.validAcceptance")} valor={aceiteValido ? "1" : "0"} /><Kpi titulo={tc("proposal.order")} valor={pedido ? "1" : "0"} /></section>
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <article className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Dados comerciais</h2><dl className="mt-5 space-y-3 text-sm"><Linha label="Cliente" valor={texto(dados.cliente?.razao_social || dados.cliente?.nome || dados.oportunidade?.cliente_nome)} /><Linha label="Linha" valor={texto(dados.item?.linha_produto)} /><Linha label="Equipamento" valor={texto(dados.item?.equipamento)} /><Linha label="Configuração" valor={texto(dados.item?.configuracao)} /><Linha label="Preço unitário" valor={moeda(dados.item?.preco_unitario)} /><Linha label="Desconto" valor={`${texto(dados.item?.desconto_percentual, "0")}%`} /><Linha label="Pagamento" valor={texto(dados.item?.condicao_pagamento)} /><Linha label="Prazo" valor={texto(dados.item?.prazo_entrega)} /><Linha label="Garantia" valor={texto(dados.item?.garantia)} /><Linha label="Local de entrega" valor={texto(dados.item?.local_entrega)} /></dl></article>
-        <article className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Documentos e ações</h2><div className="mt-5 grid gap-3">
-          <Link href={`/propostas/${id}/documento`} className="rounded-xl bg-cyan-500 px-4 py-3 text-center font-semibold text-slate-950">Visualizar proposta oficial CARRIER</Link>
-          {pedido && <Link href={`/pedidos/${String(pedido.id)}`} className="rounded-xl border border-emerald-700 px-4 py-3 text-center font-semibold text-emerald-300">Abrir pedido e dossiê</Link>}
-          {!encerrada && podeEmitir && <button disabled={processando} onClick={() => void executar("/emitir")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Emitir proposta</button>}
-          {!encerrada && podeAceite && <><button disabled={processando} onClick={() => void solicitarAceite("PRESENCIAL_TELA")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Aceite presencial</button><button disabled={processando} onClick={() => void solicitarAceite("REMOTO_LINK")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">Gerar link de aceite</button></>}
-          {podePedido && <button disabled={processando} onClick={() => void executar("/converter-pedido", {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">Gerar pedido</button>}
+        <article className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">{tc("proposal.commercialData")}</h2><dl className="mt-5 space-y-3 text-sm"><Linha label={locale === "en" ? "Account" : "Cliente"} valor={texto(dados.cliente?.razao_social || dados.cliente?.nome || dados.oportunidade?.cliente_nome)} /><Linha label={tc("proposal.line")} valor={texto(dados.item?.linha_produto)} /><Linha label={tc("proposal.equipment")} valor={texto(dados.item?.equipamento)} /><Linha label={tc("proposal.configuration")} valor={texto(dados.item?.configuracao)} /><Linha label={tc("proposal.unitPrice")} valor={moeda(dados.item?.preco_unitario)} /><Linha label={tc("proposal.discount")} valor={`${texto(dados.item?.desconto_percentual, "0")}%`} /><Linha label={tc("proposal.payment")} valor={texto(dados.item?.condicao_pagamento)} /><Linha label={tc("proposal.deliveryTerm")} valor={texto(dados.item?.prazo_entrega)} /><Linha label={tc("proposal.warranty")} valor={texto(dados.item?.garantia)} /><Linha label={tc("proposal.deliveryPlace")} valor={texto(dados.item?.local_entrega)} /></dl></article>
+        <article className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">{tc("proposal.documentsActions")}</h2><div className="mt-5 grid gap-3">
+          <Link href={`/propostas/${id}/documento`} className="rounded-xl bg-cyan-500 px-4 py-3 text-center font-semibold text-slate-950">{tc("proposal.viewOfficial")}</Link>
+          {pedido && <Link href={`/pedidos/${String(pedido.id)}`} className="rounded-xl border border-emerald-700 px-4 py-3 text-center font-semibold text-emerald-300">{tc("proposal.openOrder")}</Link>}
+          {!encerrada && podeEmitir && <button disabled={processando} onClick={() => void executar("/emitir")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.issue")}</button>}
+          {!encerrada && podeAceite && <><button disabled={processando} onClick={() => void solicitarAceite("PRESENCIAL_TELA")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.inPersonAcceptance")}</button><button disabled={processando} onClick={() => void solicitarAceite("REMOTO_LINK")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.acceptanceLink")}</button></>}
+          {podePedido && <button disabled={processando} onClick={() => void executar("/converter-pedido", {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">{tc("proposal.generateOrder")}</button>}
         </div></article>
       </section>
-      <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">Auditoria do documento</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><Linha label="Hash" valor={texto(dados.proposta.hash_documento)} /><Linha label="Modelo" valor={texto(dados.proposta.modelo_proposta_id, "Modelo provisório")}/><Linha label="Emitida em" valor={dataHora(dados.proposta.emitida_em)} /><Linha label="Aceita em" valor={dataHora(dados.proposta.aceita_em)} /></div><details className="mt-5 rounded-2xl border border-[#13203f] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-300">Snapshot imutável</summary><pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(snapshot, null, 2)}</pre></details></section>
+      <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">{tc("proposal.audit")}</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><Linha label={tc("proposal.hash")} valor={texto(dados.proposta.hash_documento)} /><Linha label={tc("proposal.model")} valor={texto(dados.proposta.modelo_proposta_id, tc("common.notDefined"))}/><Linha label={tc("proposal.issuedAt")} valor={dataHora(dados.proposta.emitida_em)} /><Linha label={tc("proposal.acceptedAt")} valor={dataHora(dados.proposta.aceita_em)} /></div><details className="mt-5 rounded-2xl border border-[#13203f] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-300">{tc("proposal.snapshot")}</summary><pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(snapshot, null, 2)}</pre></details></section>
     </>}
   </div></section></main>
 }
