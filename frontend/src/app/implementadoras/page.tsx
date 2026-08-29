@@ -7,212 +7,34 @@ import Topbar from "@/components/ui/Topbar"
 import { useOperationalContext } from "@/context/OperationalContext"
 import { getImplementadorasContextuais } from "@/services/cti-api"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
+import { useClosureI18n } from "@/core/i18n/closure"
 
-type ImplementadoraResumo = {
-  nome: string
-  aliases?: string[]
-  quantidade_registros?: number
-  valor_total?: number
-  estados?: string[]
-  municipios?: string[]
-  clientes?: number
-  linhas_produto?: string[]
+type ImplementadoraResumo={nome:string;aliases?:string[];quantidade_registros?:number;valor_total?:number;estados?:string[];municipios?:string[];clientes?:number;linhas_produto?:string[]}
+type Venda={id?:string;pedido_id?:string;pedido_numero?:string;implementadora_id?:string|number;implementadora_nome?:string;equipamento_codigo?:string;equipamento_nome?:string;valor?:number}
+type Pedido={id?:string;numero?:string;status?:string;status_ciclo?:string;valor?:number}
+function normalizar(valor:string){return valor.normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().trim()}
+function drill(contexto:string,titulo:string,subtitulo:string,implementadora?:string){const q=new URLSearchParams({camada:"anfir",contexto,titulo,subtitulo});if(implementadora){q.set("campo","implementadora");q.set("valor",implementadora)}return `/detalhamento?${q.toString()}`}
+async function buscarSeguro<T>(endpoint:string):Promise<T>{const r=await fetchCrmSeguroProxy(`crm-seguro/${endpoint}`,{cache:"no-store"});const p=await r.json().catch(()=>null);if(!r.ok)throw new Error(p&&typeof p==="object"&&"detail" in p?String((p as {detail?:unknown}).detail):String(r.status));return p as T}
+
+export default function ImplementadorasPage(){
+ const {contexto,contextoAtual}=useOperationalContext();const {tc,formatCurrency,formatNumber}=useClosureI18n()
+ const[implementadoras,setImplementadoras]=useState<ImplementadoraResumo[]>([]),[vendas,setVendas]=useState<Venda[]>([]),[pedidos,setPedidos]=useState<Pedido[]>([]),[loading,setLoading]=useState(true),[erro,setErro]=useState(""),[busca,setBusca]=useState("")
+ useEffect(()=>{let ativo=true;queueMicrotask(async()=>{setLoading(true);setErro("");try{const[h,v,p]=await Promise.all([getImplementadorasContextuais(contexto),buscarSeguro<Venda[]>("vendas"),buscarSeguro<Pedido[]>("pedidos")]);if(!ativo)return;setImplementadoras(Array.isArray(h)?h:[]);setVendas(Array.isArray(v)?v:[]);setPedidos(Array.isArray(p)?p:[])}catch{if(ativo)setErro(tc("common.error"))}finally{if(ativo)setLoading(false)}});return()=>{ativo=false}},[contexto,tc])
+ const pedidosPorId=useMemo(()=>new Map(pedidos.map(i=>[String(i.id||""),i])),[pedidos])
+ const ciclosEmCurso=useMemo(()=>vendas.filter(v=>{if(!v.pedido_id)return false;const p=pedidosPorId.get(String(v.pedido_id));return !!p&&String(p.status_ciclo||p.status||"").toUpperCase()!=="ENCERRADO"}),[pedidosPorId,vendas])
+ const emCursoPorImplementadora=useMemo(()=>{const m=new Map<string,{quantidade:number;valor:number;equipamentos:string[]}>();ciclosEmCurso.forEach(v=>{if(!v.implementadora_nome)return;const k=normalizar(v.implementadora_nome),a=m.get(k)||{quantidade:0,valor:0,equipamentos:[]};a.quantidade+=1;a.valor+=Number(v.valor||0);const e=v.equipamento_nome||v.equipamento_codigo;if(e&&!a.equipamentos.includes(e))a.equipamentos.push(e);m.set(k,a)});return m},[ciclosEmCurso])
+ const semImplementadora=useMemo(()=>ciclosEmCurso.filter(i=>!i.implementadora_nome),[ciclosEmCurso]);const valorSem=semImplementadora.reduce((t,i)=>t+Number(i.valor||0),0),valorHistorico=implementadoras.reduce((t,i)=>t+Number(i.valor_total||0),0),registros=implementadoras.reduce((t,i)=>t+Number(i.quantidade_registros||0),0),comCiclo=new Set(ciclosEmCurso.map(i=>i.implementadora_nome).filter(Boolean)).size
+ const subDrill=tc("body.tableSub"),realizadoHref=drill(contexto,tc("body.tableTitle"),subDrill)
+ const lista=useMemo(()=>implementadoras.filter(i=>normalizar([i.nome,...(i.aliases??[]),...(i.estados??[]),...(i.linhas_produto??[])].join(" ")).includes(normalizar(busca))),[busca,implementadoras])
+ return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="space-y-6 p-4 sm:p-6 lg:p-8">
+  <header><p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">{tc("body.eyebrow")}</p><h1 className="mt-2 text-3xl font-bold">{tc("body.title")}</h1><p className="mt-2 text-sm text-slate-400">{tc("body.subtitle")}</p><p className="mt-2 text-sm text-cyan-300">{tc("body.activeContext")}: {contextoAtual.label} — {contextoAtual.description}</p></header>
+  {erro&&<div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
+  <section className="grid gap-5 xl:grid-cols-2"><PainelTempo titulo={tc("companies.realized")} subtitulo={tc("body.realizedSub")} destaque={tc("body.confirmedHistory")}><div className="grid gap-3 sm:grid-cols-2"><Kpi titulo={tc("body.historical")} valor={loading?"...":formatNumber(implementadoras.length)}/><Kpi titulo={tc("body.records")} valor={loading?"...":formatNumber(registros)} href={!loading?realizadoHref:undefined}/><Kpi titulo={tc("body.clients")} valor={loading?"...":formatNumber(implementadoras.reduce((s,i)=>s+Number(i.clientes||0),0))}/><Kpi titulo={tc("body.baseValue")} valor={loading?"...":formatCurrency(valorHistorico)} href={!loading?realizadoHref:undefined}/></div></PainelTempo>
+   <PainelTempo titulo={tc("companies.inProgress")} subtitulo={tc("body.inProgressSub")} destaque={tc("body.currentCycle")}><div className="grid gap-3 sm:grid-cols-2"><Kpi titulo={tc("body.defined")} valor={loading?"...":formatNumber(comCiclo)}/><Kpi titulo={tc("body.cycles")} valor={loading?"...":formatNumber(ciclosEmCurso.length)}/><Kpi titulo={tc("body.awaiting")} valor={loading?"...":formatNumber(semImplementadora.length)}/><Kpi titulo={tc("body.awaitingValue")} valor={loading?"...":formatCurrency(valorSem)}/></div>{!loading&&semImplementadora.length>0&&<div className="mt-4 rounded-xl border border-amber-700/70 bg-amber-950/20 p-4 text-sm text-amber-200">{tc("body.warning",{count:semImplementadora.length,value:formatCurrency(valorSem)})}</div>}</PainelTempo></section>
+  <section className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5 sm:p-6"><div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between"><div><h2 className="text-xl font-bold">{tc("body.tableTitle")}</h2><p className="mt-1 text-sm text-slate-400">{tc("body.tableSub")}</p></div><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder={tc("body.search")} className="rounded-xl border border-[#13203f] bg-[#071028] px-4 py-3 text-white"/></div>
+   {loading?<p className="mt-8 text-slate-400">{tc("common.loading")}</p>:lista.length===0?<p className="mt-8 text-slate-400">{tc("body.empty")}</p>:<div className="mt-6 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="border-b border-[#13203f] text-slate-400"><th className="p-3">{tc("body.title")}</th><th className="p-3">{tc("companies.realized")}</th><th className="p-3">{tc("companies.inProgress")}</th><th className="p-3">{tc("proposal.line")}</th></tr></thead><tbody>{lista.map(item=>{const atual=emCursoPorImplementadora.get(normalizar(item.nome)),href=drill(contexto,`${tc("body.title")} · ${item.nome}`,subDrill,item.nome);return <tr key={item.nome} className="border-b border-[#13203f] align-top text-slate-200 hover:bg-cyan-500/5"><td className="p-3"><p className="font-semibold text-white">{item.nome}</p><p className="text-xs text-slate-500">{item.aliases?.slice(0,3).join(", ")||tc("body.noAliases")}</p></td><td className="p-3"><Link href={href} className="block rounded-lg p-2 transition hover:bg-cyan-500/10"><p className="font-semibold text-cyan-200">{tc("companies.records",{count:item.quantidade_registros??0})}</p><p className="text-xs text-slate-500">{formatCurrency(Number(item.valor_total||0))} • {item.estados?.join(", ")||"-"}</p><p className="mt-1 text-[11px] text-cyan-400">{tc("common.clickDetail")}</p></Link></td><td className="p-3">{atual?<><p>{tc("companies.deals",{count:atual.quantidade})}</p><p className="text-xs text-emerald-300">{formatCurrency(atual.valor)} • {atual.equipamentos.join(", ")||tc("body.unidentifiedEquipment")}</p></>:<><p>{tc("companies.deals",{count:0})}</p><p className="text-xs text-slate-500">{tc("body.noCurrentLink")}</p></>}</td><td className="p-3">{item.linhas_produto?.join(", ")||"-"}</td></tr>})}</tbody></table></div>}
+  </section>
+ </div></section></main>
 }
-
-type Venda = {
-  id?: string
-  pedido_id?: string
-  pedido_numero?: string
-  implementadora_id?: string | number
-  implementadora_nome?: string
-  equipamento_codigo?: string
-  equipamento_nome?: string
-  valor?: number
-}
-
-type Pedido = {
-  id?: string
-  numero?: string
-  status?: string
-  status_ciclo?: string
-  valor?: number
-}
-
-function normalizar(valor: string) {
-  return valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim()
-}
-
-function moeda(valor: number) {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-}
-
-function drill(contexto: string, titulo: string, implementadora?: string) {
-  const query = new URLSearchParams({ camada: "anfir", contexto, titulo, subtitulo: "Registros individualizados do realizado ANFIR que formam este total" })
-  if (implementadora) {
-    query.set("campo", "implementadora")
-    query.set("valor", implementadora)
-  }
-  return `/detalhamento?${query.toString()}`
-}
-
-async function buscarSeguro<T>(endpoint: string): Promise<T> {
-  const resposta = await fetchCrmSeguroProxy(`crm-seguro/${endpoint}`, { cache: "no-store" })
-  const payload = await resposta.json().catch(() => null)
-  if (!resposta.ok) {
-    const detalhe = payload && typeof payload === "object" && "detail" in payload
-      ? String((payload as { detail?: unknown }).detail)
-      : `${resposta.status}`
-    throw new Error(detalhe)
-  }
-  return payload as T
-}
-
-export default function ImplementadorasPage() {
-  const { contexto, contextoAtual } = useOperationalContext()
-  const [implementadoras, setImplementadoras] = useState<ImplementadoraResumo[]>([])
-  const [vendas, setVendas] = useState<Venda[]>([])
-  const [pedidos, setPedidos] = useState<Pedido[]>([])
-  const [loading, setLoading] = useState(true)
-  const [erro, setErro] = useState("")
-  const [busca, setBusca] = useState("")
-
-  useEffect(() => {
-    let ativo = true
-    queueMicrotask(async () => {
-      setLoading(true)
-      setErro("")
-      try {
-        const [historico, vendasAtuais, pedidosAtuais] = await Promise.all([
-          getImplementadorasContextuais(contexto),
-          buscarSeguro<Venda[]>("vendas"),
-          buscarSeguro<Pedido[]>("pedidos"),
-        ])
-        if (!ativo) return
-        setImplementadoras(Array.isArray(historico) ? historico : [])
-        setVendas(Array.isArray(vendasAtuais) ? vendasAtuais : [])
-        setPedidos(Array.isArray(pedidosAtuais) ? pedidosAtuais : [])
-      } catch {
-        if (ativo) setErro("Erro ao carregar a leitura temporal de implementadoras.")
-      } finally {
-        if (ativo) setLoading(false)
-      }
-    })
-    return () => { ativo = false }
-  }, [contexto])
-
-  const pedidosPorId = useMemo(() => new Map(pedidos.map((item) => [String(item.id || ""), item])), [pedidos])
-
-  const ciclosEmCurso = useMemo(() => vendas.filter((venda) => {
-    if (!venda.pedido_id) return false
-    const pedido = pedidosPorId.get(String(venda.pedido_id))
-    if (!pedido) return false
-    return String(pedido.status_ciclo || pedido.status || "").toUpperCase() !== "ENCERRADO"
-  }), [pedidosPorId, vendas])
-
-  const emCursoPorImplementadora = useMemo(() => {
-    const mapa = new Map<string, { quantidade: number; valor: number; equipamentos: string[] }>()
-    ciclosEmCurso.forEach((venda) => {
-      if (!venda.implementadora_nome) return
-      const chave = normalizar(venda.implementadora_nome)
-      const atual = mapa.get(chave) || { quantidade: 0, valor: 0, equipamentos: [] }
-      atual.quantidade += 1
-      atual.valor += Number(venda.valor || 0)
-      const equipamento = venda.equipamento_nome || venda.equipamento_codigo
-      if (equipamento && !atual.equipamentos.includes(equipamento)) atual.equipamentos.push(equipamento)
-      mapa.set(chave, atual)
-    })
-    return mapa
-  }, [ciclosEmCurso])
-
-  const semImplementadora = useMemo(() => ciclosEmCurso.filter((item) => !item.implementadora_nome), [ciclosEmCurso])
-  const valorSemImplementadora = semImplementadora.reduce((total, item) => total + Number(item.valor || 0), 0)
-  const valorHistorico = implementadoras.reduce((total, item) => total + Number(item.valor_total || 0), 0)
-  const registrosHistoricos = implementadoras.reduce((total, item) => total + Number(item.quantidade_registros || 0), 0)
-  const implementadorasComCiclo = new Set(ciclosEmCurso.map((item) => item.implementadora_nome).filter(Boolean)).size
-  const realizadoHref = drill(contexto, "Implementadoras · realizado histórico")
-
-  const lista = useMemo(() => implementadoras.filter((item) =>
-    normalizar([item.nome, ...(item.aliases ?? []), ...(item.estados ?? []), ...(item.linhas_produto ?? [])].join(" ")).includes(normalizar(busca))
-  ), [busca, implementadoras])
-
-  return (
-    <main className="flex min-h-screen bg-[#020817] text-white">
-      <Sidebar />
-      <section className="min-w-0 flex-1">
-        <Topbar />
-        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
-          <header>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Leitura temporal por implementadora</p>
-            <h1 className="mt-2 text-3xl font-bold">Implementadoras</h1>
-            <p className="mt-2 text-sm text-slate-400">Histórico confirmado e vínculos reais do ciclo comercial atual, sem atribuições presumidas.</p>
-            <p className="mt-2 text-sm text-cyan-300">Contexto ativo: {contextoAtual.label} — {contextoAtual.description}</p>
-          </header>
-
-          {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
-
-          <section className="grid gap-5 xl:grid-cols-2">
-            <PainelTempo titulo="REALIZADO" subtitulo="O que as implementadoras já representaram." destaque="Histórico confirmado">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Kpi titulo="Implementadoras históricas" valor={loading ? "..." : implementadoras.length.toLocaleString("pt-BR")} />
-                <Kpi titulo="Registros históricos" valor={loading ? "..." : registrosHistoricos.toLocaleString("pt-BR")} href={!loading ? realizadoHref : undefined} />
-                <Kpi titulo="Clientes relacionados" valor={loading ? "..." : implementadoras.reduce((s, i) => s + Number(i.clientes || 0), 0).toLocaleString("pt-BR")} />
-                <Kpi titulo="Valor registrado na base" valor={loading ? "..." : moeda(valorHistorico)} href={!loading ? realizadoHref : undefined} />
-              </div>
-            </PainelTempo>
-
-            <PainelTempo titulo="EM CURSO" subtitulo="O que está operacionalmente vinculado agora." destaque="Ciclo atual">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Kpi titulo="Implementadoras definidas" valor={loading ? "..." : implementadorasComCiclo.toLocaleString("pt-BR")} />
-                <Kpi titulo="Pedidos/ciclos em curso" valor={loading ? "..." : ciclosEmCurso.length.toLocaleString("pt-BR")} />
-                <Kpi titulo="Aguardando implementadora" valor={loading ? "..." : semImplementadora.length.toLocaleString("pt-BR")} />
-                <Kpi titulo="Valor aguardando definição" valor={loading ? "..." : moeda(valorSemImplementadora)} />
-              </div>
-              {!loading && semImplementadora.length > 0 && (
-                <div className="mt-4 rounded-xl border border-amber-700/70 bg-amber-950/20 p-4 text-sm text-amber-200">
-                  Existem {semImplementadora.length} ciclo(s) comercial(is), totalizando {moeda(valorSemImplementadora)}, ainda sem implementadora vinculada no dado canônico. O CTI sinaliza a pendência; não atribui uma empresa por inferência.
-                </div>
-              )}
-            </PainelTempo>
-          </section>
-
-          <section className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5 sm:p-6">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <h2 className="text-xl font-bold">Implementadoras — histórico e situação atual</h2>
-                <p className="mt-1 text-sm text-slate-400">Cada linha confronta presença histórica com vínculos operacionais realmente existentes hoje. O realizado pode ser aberto até os registros ANFIR que formam o total.</p>
-              </div>
-              <input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Buscar implementadora, estado ou linha" className="rounded-xl border border-[#13203f] bg-[#071028] px-4 py-3 text-white" />
-            </div>
-
-            {loading ? <p className="mt-8 text-slate-400">Carregando dados reais...</p> : lista.length === 0 ? <p className="mt-8 text-slate-400">Nenhuma implementadora encontrada.</p> : (
-              <div className="mt-6 overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead><tr className="border-b border-[#13203f] text-slate-400"><th className="p-3">Implementadora</th><th className="p-3">REALIZADO</th><th className="p-3">EM CURSO</th><th className="p-3">Linhas</th></tr></thead>
-                  <tbody>{lista.map((item) => {
-                    const atual = emCursoPorImplementadora.get(normalizar(item.nome))
-                    const itemHref = drill(contexto, `Implementadora · ${item.nome} · realizado`, item.nome)
-                    return <tr key={item.nome} className="border-b border-[#13203f] align-top text-slate-200 hover:bg-cyan-500/5">
-                      <td className="p-3"><p className="font-semibold text-white">{item.nome}</p><p className="text-xs text-slate-500">{item.aliases?.slice(0, 3).join(", ") || "Sem aliases operacionais"}</p></td>
-                      <td className="p-3"><Link href={itemHref} className="block rounded-lg p-2 transition hover:bg-cyan-500/10"><p className="font-semibold text-cyan-200">{item.quantidade_registros ?? 0} registros</p><p className="text-xs text-slate-500">{moeda(Number(item.valor_total || 0))} na base • {item.estados?.join(", ") || "-"}</p><p className="mt-1 text-[11px] text-cyan-400">Clique para detalhar</p></Link></td>
-                      <td className="p-3">{atual ? <><p>{atual.quantidade} ciclo(s)</p><p className="text-xs text-emerald-300">{moeda(atual.valor)} • {atual.equipamentos.join(", ") || "Equipamento não identificado"}</p></> : <><p>0 ciclos vinculados</p><p className="text-xs text-slate-500">Sem vínculo operacional atual</p></>}</td>
-                      <td className="p-3">{item.linhas_produto?.join(", ") || "-"}</td>
-                    </tr>
-                  })}</tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        </div>
-      </section>
-    </main>
-  )
-}
-
-function PainelTempo({ titulo, subtitulo, destaque, children }: { titulo: string; subtitulo: string; destaque: string; children: React.ReactNode }) {
-  return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">{titulo}</p><h3 className="mt-1 text-xl font-bold text-white">{subtitulo}</h3></div><span className="rounded-full border border-[#24466f] px-3 py-1 text-xs text-slate-300">{destaque}</span></div>{children}</section>
-}
-
-function Kpi({ titulo, valor, href }: { titulo: string; valor: string; href?: string }) {
-  const body = <><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-xl font-bold text-cyan-300">{valor}</p>{href && <p className="mt-2 text-[11px] text-cyan-400">Clique para detalhar</p>}</>
-  return href ? <Link href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4 transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</Link> : <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">{body}</div>
-}
+function PainelTempo({titulo,subtitulo,destaque,children}:{titulo:string;subtitulo:string;destaque:string;children:React.ReactNode}){return <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-5 sm:p-6"><div className="mb-5 flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-400">{titulo}</p><h3 className="mt-1 text-xl font-bold text-white">{subtitulo}</h3></div><span className="rounded-full border border-[#24466f] px-3 py-1 text-xs text-slate-300">{destaque}</span></div>{children}</section>}
+function Kpi({titulo,valor,href}:{titulo:string;valor:string;href?:string}){const body=<><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-xl font-bold text-cyan-300">{valor}</p></>;return href?<Link href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">{body}</Link>:<div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">{body}</div>}
