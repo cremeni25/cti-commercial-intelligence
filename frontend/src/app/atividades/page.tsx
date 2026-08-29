@@ -5,253 +5,73 @@ import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
 import { useAuth } from "@/core/auth"
+import { useOperationalI18n } from "@/core/i18n/operational"
 import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type SituacaoCalendario = "ATRASADA" | "HOJE" | "FUTURA" | "SEM_DATA"
+type Atividade = { id:string; titulo?:string; descricao?:string; tipo:string; cliente_id?:string; cliente_nome?:string; parceiro_nome?:string; parceiro_tipo?:string; parceiro_organizacao?:string; oportunidade_id?:string; oportunidade_titulo?:string; responsavel_id?:string; responsavel_nome?:string; usuario_id?:string; status:string; situacao:"ATRASADA"|"HOJE"|"FUTURA"|"SEM_DATA"|"CONCLUIDA"|"CANCELADA"; situacao_calendario?:SituacaoCalendario; data?:string; horario?:string }
+type AgendaResponse = { itens:Atividade[]; resumo:{ total:number; atrasadas:number; hoje:number; futuras:number; sem_data:number; concluidas:number } }
+type ClienteMestre = { id?:string; nome:string }
+type Oportunidade = { id:string; titulo:string; cliente_id?:string; responsavel_id?:string }
+type Registro = Record<string,unknown>
 
-type Atividade = {
-  id: string
-  titulo?: string
-  descricao?: string
-  tipo: string
-  cliente_id?: string
-  cliente_nome?: string
-  parceiro_nome?: string
-  parceiro_tipo?: string
-  parceiro_organizacao?: string
-  oportunidade_id?: string
-  oportunidade_titulo?: string
-  responsavel_id?: string
-  responsavel_nome?: string
-  usuario_id?: string
-  status: string
-  situacao: "ATRASADA" | "HOJE" | "FUTURA" | "SEM_DATA" | "CONCLUIDA" | "CANCELADA"
-  situacao_calendario?: SituacaoCalendario
-  data?: string
-  horario?: string
+const tipos=["FOLLOW_UP","LIGACAO","VISITA_COMERCIAL","VISITA_TECNICA","REUNIAO","EMAIL","WHATSAPP","TAREFA","LEMBRETE"] as const
+const filtrosAgenda=["ABERTAS","ATRASADA","HOJE","FUTURA","SEM_DATA","CONCLUIDA","TODAS"] as const
+
+const textos={
+ "pt-BR":{title:"CRM • Agenda e Follow-up",subtitle:"Próximos contatos, visitas, reuniões e tarefas com identificação clara de cliente, contato ou parceiro envolvido.",newActivity:"Nova atividade",schedule:"Agendar atividade comercial",scheduleSub:"A atividade é registrada para o usuário autenticado e passa a integrar seu histórico comercial.",baseClient:"Cliente da base",opportunity:"Oportunidade",noLink:"Sem vínculo específico",client:"Cliente",owner:"Responsável comercial",authenticated:"Usuário autenticado",type:"Tipo",subject:"Assunto",date:"Data",time:"Horário",notes:"Orientação / observação",save:"Salvar atividade",cancel:"Cancelar",total:"Total",overdue:"Atrasadas",today:"Hoje",upcoming:"Futuras",noDate:"Sem data",completed:"Concluídas",loading:"Carregando agenda...",empty:"Nenhuma atividade encontrada neste filtro.",composition:"Composição exata: {count} atividade(s) no filtro {filter}. Clique em qualquer linha para abrir o histórico da atividade.",situation:"Situação",dateTime:"Data/Hora",activity:"Atividade",withWhom:"Com quem",deal:"Negociação",ctiOwner:"Responsável CTI",action:"Ação",noDeal:"Sem negociação vinculada",details:"Detalhes",complete:"Concluir",dialogLabel:"Detalhes da atividade comercial",history:"Histórico da atividade",historySub:"Registro comercial completo da atividade selecionada.",close:"Fechar",updating:"Atualizando dados da atividade...",calendar:"Calendário",relatedDeal:"Negociação relacionada",conversation:"Observações / histórico da conversa",noNotes:"Nenhuma observação foi registrada nesta atividade.",registeredClient:"Cliente cadastrado",externalContact:"Contato externo",unidentified:"Não identificado",reviewRegistration:"Revisar cadastro da atividade",loginUser:"Usuário do login",linkedUser:"Usuário CTI vinculado",loadError:"Não foi possível carregar a agenda comercial e seus vínculos.",createError:"Não foi possível criar a atividade. Informe cliente, tipo e data do próximo contato.",completeError:"Não foi possível concluir a atividade.",detailError:"Não foi possível atualizar os detalhes desta atividade. Os dados já carregados continuam disponíveis.",genericOpportunity:"Oportunidade comercial",click:"Clique para detalhar",filters:{ABERTAS:"Abertas",ATRASADA:"Atrasadas",HOJE:"Hoje",FUTURA:"Futuras",SEM_DATA:"Sem data",CONCLUIDA:"Concluídas",TODAS:"Todas"},types:{FOLLOW_UP:"Follow-up",LIGACAO:"Ligação",VISITA_COMERCIAL:"Visita comercial",VISITA_TECNICA:"Visita técnica",REUNIAO:"Reunião",EMAIL:"E-mail",WHATSAPP:"WhatsApp",TAREFA:"Tarefa",LEMBRETE:"Lembrete"}},
+ en:{title:"CRM • Agenda & Follow-up",subtitle:"Upcoming contacts, field visits, meetings and tasks with clear identification of the account, contact or partner involved.",newActivity:"New activity",schedule:"Schedule sales activity",scheduleSub:"The activity is recorded for the authenticated user and becomes part of their commercial history.",baseClient:"Account",opportunity:"Opportunity",noLink:"No specific link",client:"Account",owner:"Sales owner",authenticated:"Authenticated user",type:"Type",subject:"Subject",date:"Date",time:"Time",notes:"Guidance / notes",save:"Save activity",cancel:"Cancel",total:"Total",overdue:"Overdue",today:"Today",upcoming:"Upcoming",noDate:"No date",completed:"Completed",loading:"Loading agenda...",empty:"No activities found for this filter.",composition:"Exact composition: {count} activity(ies) under {filter}. Select any row to open the activity history.",situation:"Status",dateTime:"Date/Time",activity:"Activity",withWhom:"With whom",deal:"Deal",ctiOwner:"CTI owner",action:"Action",noDeal:"No linked deal",details:"Details",complete:"Complete",dialogLabel:"Sales activity details",history:"Activity history",historySub:"Complete commercial record for the selected activity.",close:"Close",updating:"Refreshing activity data...",calendar:"Calendar",relatedDeal:"Related deal",conversation:"Notes / conversation history",noNotes:"No notes were recorded for this activity.",registeredClient:"Registered account",externalContact:"External contact",unidentified:"Not identified",reviewRegistration:"Review activity registration",loginUser:"Signed-in user",linkedUser:"Linked CTI user",loadError:"We couldn't load the sales agenda and its links.",createError:"We couldn't create the activity. Provide an account, activity type and next-contact date.",completeError:"We couldn't complete the activity.",detailError:"We couldn't refresh this activity's details. The data already loaded remains available.",genericOpportunity:"Commercial opportunity",click:"Click to view details",filters:{ABERTAS:"Open",ATRASADA:"Overdue",HOJE:"Today",FUTURA:"Upcoming",SEM_DATA:"No date",CONCLUIDA:"Completed",TODAS:"All"},types:{FOLLOW_UP:"Follow-up",LIGACAO:"Call",VISITA_COMERCIAL:"Sales visit",VISITA_TECNICA:"Technical visit",REUNIAO:"Meeting",EMAIL:"Email",WHATSAPP:"WhatsApp",TAREFA:"Task",LEMBRETE:"Reminder"}},
+ es:{title:"CRM • Agenda y Seguimiento",subtitle:"Próximos contactos, visitas, reuniones y tareas con identificación clara del cliente, contacto o socio involucrado.",newActivity:"Nueva actividad",schedule:"Programar actividad comercial",scheduleSub:"La actividad se registra para el usuario autenticado y pasa a formar parte de su historial comercial.",baseClient:"Cliente de la base",opportunity:"Oportunidad",noLink:"Sin vínculo específico",client:"Cliente",owner:"Responsable comercial",authenticated:"Usuario autenticado",type:"Tipo",subject:"Asunto",date:"Fecha",time:"Hora",notes:"Orientación / observación",save:"Guardar actividad",cancel:"Cancelar",total:"Total",overdue:"Atrasadas",today:"Hoy",upcoming:"Próximas",noDate:"Sin fecha",completed:"Concluidas",loading:"Cargando agenda...",empty:"No se encontraron actividades para este filtro.",composition:"Composición exacta: {count} actividad(es) en el filtro {filter}. Seleccione cualquier fila para abrir el historial de la actividad.",situation:"Situación",dateTime:"Fecha/Hora",activity:"Actividad",withWhom:"Con quién",deal:"Negociación",ctiOwner:"Responsable CTI",action:"Acción",noDeal:"Sin negociación vinculada",details:"Detalles",complete:"Concluir",dialogLabel:"Detalles de la actividad comercial",history:"Historial de la actividad",historySub:"Registro comercial completo de la actividad seleccionada.",close:"Cerrar",updating:"Actualizando datos de la actividad...",calendar:"Calendario",relatedDeal:"Negociación relacionada",conversation:"Observaciones / historial de la conversación",noNotes:"No se registraron observaciones en esta actividad.",registeredClient:"Cliente registrado",externalContact:"Contacto externo",unidentified:"No identificado",reviewRegistration:"Revisar registro de la actividad",loginUser:"Usuario conectado",linkedUser:"Usuario CTI vinculado",loadError:"No fue posible cargar la agenda comercial y sus vínculos.",createError:"No fue posible crear la actividad. Informe cliente, tipo y fecha del próximo contacto.",completeError:"No fue posible concluir la actividad.",detailError:"No fue posible actualizar los detalles de esta actividad. Los datos ya cargados continúan disponibles.",genericOpportunity:"Oportunidad comercial",click:"Haga clic para ver detalles",filters:{ABERTAS:"Abiertas",ATRASADA:"Atrasadas",HOJE:"Hoy",FUTURA:"Próximas",SEM_DATA:"Sin fecha",CONCLUIDA:"Concluidas",TODAS:"Todas"},types:{FOLLOW_UP:"Seguimiento",LIGACAO:"Llamada",VISITA_COMERCIAL:"Visita comercial",VISITA_TECNICA:"Visita técnica",REUNIAO:"Reunión",EMAIL:"Correo electrónico",WHATSAPP:"WhatsApp",TAREFA:"Tarea",LEMBRETE:"Recordatorio"}}
+} as const
+
+function estaConcluida(item:Atividade){const status=String(item.status||"").toUpperCase();return status==="CONCLUIDA"||status==="CONCLUÍDA"||item.situacao==="CONCLUIDA"}
+function situacaoCalendario(item:Atividade):SituacaoCalendario{if(item.situacao_calendario)return item.situacao_calendario;if(!item.data)return"SEM_DATA";const[ano,mes,dia]=item.data.slice(0,10).split("-").map(Number);if(!ano||!mes||!dia)return"SEM_DATA";const hoje=new Date(),referencia=new Date(hoje.getFullYear(),hoje.getMonth(),hoje.getDate()).getTime(),atividade=new Date(ano,mes-1,dia).getTime();if(atividade<referencia)return"ATRASADA";if(atividade===referencia)return"HOJE";return"FUTURA"}
+function resumir(itens:Atividade[]):AgendaResponse["resumo"]{return{total:itens.length,atrasadas:itens.filter(i=>situacaoCalendario(i)==="ATRASADA").length,hoje:itens.filter(i=>situacaoCalendario(i)==="HOJE").length,futuras:itens.filter(i=>situacaoCalendario(i)==="FUTURA").length,sem_data:itens.filter(i=>situacaoCalendario(i)==="SEM_DATA").length,concluidas:itens.filter(estaConcluida).length}}
+function interpolar(texto:string,count:number|string,filter:string){return texto.replace("{count}",String(count)).replace("{filter}",filter)}
+
+export default function AtividadesPage(){
+ const {usuario}=useAuth();const{locale,formatDate,formatNumber}=useOperationalI18n();const tx=textos[locale]
+ const[agenda,setAgenda]=useState<AgendaResponse>({itens:[],resumo:{total:0,atrasadas:0,hoje:0,futuras:0,sem_data:0,concluidas:0}}),[clientes,setClientes]=useState<ClienteMestre[]>([]),[oportunidades,setOportunidades]=useState<Oportunidade[]>([]),[loading,setLoading]=useState(true),[mostrarFormulario,setMostrarFormulario]=useState(false),[erro,setErro]=useState(""),[filtro,setFiltro]=useState<(typeof filtrosAgenda)[number]>("ABERTAS"),[detalhe,setDetalhe]=useState<Atividade|null>(null),[carregandoDetalhe,setCarregandoDetalhe]=useState(false)
+ async function carregar(){setLoading(true);try{const[agendaResponse,clientesResponse,nucleoResponse]=await Promise.all([fetchCrmSeguroProxy("crm-seguro/agenda",{cache:"no-store"}),fetch(`${API_URL}/modulos/clientes?contexto=brasil&periodo=TODO_HISTORICO`),fetchCrmSeguroProxy("crm-seguro/nucleo-comercial",{cache:"no-store"})]);if(!agendaResponse.ok||!clientesResponse.ok||!nucleoResponse.ok)throw new Error(tx.loadError);const[agendaJson,clientesJson,nucleoJson]=await Promise.all([agendaResponse.json(),clientesResponse.json(),nucleoResponse.json()]);setAgenda(agendaJson);setClientes(Array.isArray(clientesJson)?clientesJson:[]);const nucleo=Array.isArray(nucleoJson)?nucleoJson as Registro[]:[],mapa=new Map<string,Oportunidade>();nucleo.forEach(item=>{const id=String(item.oportunidade_id||item.id||"").trim();if(!id||mapa.has(id))return;mapa.set(id,{id,titulo:String(item.titulo||tx.genericOpportunity),cliente_id:item.cliente_id?String(item.cliente_id):undefined,responsavel_id:item.responsavel_id?String(item.responsavel_id):undefined})});setOportunidades([...mapa.values()])}catch{setErro(tx.loadError)}finally{setLoading(false)}}
+ useEffect(()=>{queueMicrotask(()=>{if(new URLSearchParams(window.location.search).get("novo")==="1")setMostrarFormulario(true);void carregar()})},[])
+ const agendaEscopada=useMemo<AgendaResponse>(()=>{const itens=agenda.itens.filter(item=>pertenceAoEscopoDoUsuario(item.usuario_id||item.responsavel_id,usuario));return{itens,resumo:resumir(itens)}},[agenda.itens,usuario])
+ const oportunidadesEscopadas=useMemo(()=>oportunidades.filter(item=>pertenceAoEscopoDoUsuario(item.responsavel_id,usuario)),[oportunidades,usuario])
+ async function criarAtividade(event:FormEvent<HTMLFormElement>){event.preventDefault();setErro("");const form=new FormData(event.currentTarget),clienteInformado=String(form.get("cliente_id")||"").trim(),clienteSelecionado=clientes.find(cliente=>cliente.nome.trim()===clienteInformado),payload={cliente_id:clienteSelecionado?.id||clienteInformado,oportunidade_id:String(form.get("oportunidade_id")||"")||undefined,usuario_id:String(usuario?.id||form.get("usuario_id")||""),tipo:String(form.get("tipo")||"FOLLOW_UP"),titulo:String(form.get("titulo")||"")||undefined,descricao:String(form.get("descricao")||"")||undefined,data:String(form.get("data")||"")||undefined,horario:String(form.get("horario")||"")||undefined,status:"PENDENTE"};try{const response=await fetchCrmSeguroProxy("crm-seguro/atividades",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});if(!response.ok)throw new Error();setMostrarFormulario(false);await carregar()}catch{setErro(tx.createError)}}
+ async function concluir(id:string){try{const response=await fetchCrmSeguroProxy(`crm-seguro/atividades/${id}/concluir`,{method:"PUT"});if(!response.ok)throw new Error();await carregar()}catch{setErro(tx.completeError)}}
+ async function abrirDetalhe(item:Atividade){setDetalhe(item);setCarregandoDetalhe(true);try{const response=await fetchCrmSeguroProxy(`crm-seguro/atividades/${item.id}`,{cache:"no-store"});if(!response.ok)throw new Error();const registro=await response.json() as Atividade;setDetalhe({...item,...registro})}catch{setErro(tx.detailError)}finally{setCarregandoDetalhe(false)}}
+ function clienteLegivel(item:Atividade){if(item.cliente_nome)return item.cliente_nome;const encontrado=clientes.find(cliente=>(cliente.id&&cliente.id===item.cliente_id)||cliente.nome===item.cliente_id);return encontrado?.nome||""}
+ function comQuem(item:Atividade){const cliente=clienteLegivel(item);if(cliente)return{nome:cliente,organizacao:tx.registeredClient};if(item.parceiro_nome)return{nome:item.parceiro_nome,organizacao:item.parceiro_organizacao||item.parceiro_tipo||tx.externalContact};return{nome:tx.unidentified,organizacao:tx.reviewRegistration}}
+ function responsavelLegivel(item:Atividade){if(item.responsavel_nome)return item.responsavel_nome;const idRegistro=item.usuario_id||item.responsavel_id||"";if(idRegistro&&usuario?.id&&idRegistro===usuario.id)return usuario.nome||usuario.email||tx.loginUser;return idRegistro?tx.linkedUser:"-"}
+ const itensFiltrados=agendaEscopada.itens.filter(item=>{if(filtro==="TODAS")return true;if(filtro==="ABERTAS")return!estaConcluida(item)&&item.situacao!=="CANCELADA";if(filtro==="CONCLUIDA")return estaConcluida(item);if(["ATRASADA","HOJE","FUTURA","SEM_DATA"].includes(filtro))return situacaoCalendario(item)===filtro;return false})
+ function abrirComposicao(novoFiltro:(typeof filtrosAgenda)[number]){setFiltro(novoFiltro);window.setTimeout(()=>document.getElementById("composicao-agenda")?.scrollIntoView({behavior:"smooth",block:"start"}),0)}
+ const contextoDetalhe=detalhe?comQuem(detalhe):null
+ const tipoLabel=(valor:string)=>tx.types[valor as keyof typeof tx.types]||valor.replaceAll("_"," ")
+ const filtroLabel=(valor:(typeof filtrosAgenda)[number])=>tx.filters[valor]
+ const situacaoLabel=(valor:string)=>valor==="CANCELADA"?(locale==="en"?"Cancelled":locale==="es"?"Cancelada":"Cancelada"):tx.filters[(valor==="CONCLUIDA"?"CONCLUIDA":valor) as keyof typeof tx.filters]||valor.replaceAll("_"," ")
+ const dataLocal=(valor?:string)=>valor?formatDate(`${valor.slice(0,10)}T12:00:00`):"-"
+ return <main className="flex min-h-screen bg-[#020817]"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="space-y-6 p-8">
+  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-4xl font-bold text-white">{tx.title}</h1><p className="mt-2 text-gray-400">{tx.subtitle}</p></div><button type="button" onClick={()=>setMostrarFormulario(true)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">{tx.newActivity}</button></div>
+  {erro&&<div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
+  {mostrarFormulario&&<form onSubmit={criarAtividade} className="rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200"><h2 className="text-xl font-bold text-white">{tx.schedule}</h2><p className="mt-2 text-sm text-gray-400">{tx.scheduleSub}</p><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
+   <label className="text-sm text-gray-300">{tx.baseClient}<input name="cliente_id" list="clientes-agenda" required className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"/><datalist id="clientes-agenda">{clientes.map(cliente=><option key={cliente.nome} value={cliente.nome}/>)}</datalist></label>
+   <label className="text-sm text-gray-300">{tx.opportunity}<select name="oportunidade_id" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"><option value="">{tx.noLink}</option>{oportunidadesEscopadas.map(item=><option key={item.id} value={item.id}>{item.titulo} • {item.cliente_id||tx.client}</option>)}</select></label>
+   <div className="rounded-lg border border-[#13203f] bg-[#020817] p-3 text-sm text-gray-300"><span className="block text-xs text-gray-500">{tx.owner}</span><strong className="mt-1 block text-cyan-200">{usuario?.nome||tx.authenticated}</strong></div>
+   <label className="text-sm text-gray-300">{tx.type}<select name="tipo" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white">{tipos.map(tipo=><option key={tipo} value={tipo}>{tipoLabel(tipo)}</option>)}</select></label>
+   <Campo nome="titulo" label={tx.subject} obrigatorio/><Campo nome="data" label={tx.date} tipo="date" obrigatorio/><Campo nome="horario" label={tx.time} tipo="time"/><Campo nome="descricao" label={tx.notes}/>
+  </div><div className="mt-5 flex gap-3"><button className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">{tx.save}</button><button type="button" onClick={()=>setMostrarFormulario(false)} className="rounded-xl border border-cyan-500 px-5 py-3 font-semibold text-cyan-300">{tx.cancel}</button></div></form>}
+  <section className="grid grid-cols-2 gap-4 md:grid-cols-6"><Kpi titulo={tx.total} valor={formatNumber(agendaEscopada.resumo.total)} onOpen={()=>abrirComposicao("TODAS")} click={tx.click}/><Kpi titulo={tx.overdue} valor={formatNumber(agendaEscopada.resumo.atrasadas)} destaque="text-red-400" onOpen={()=>abrirComposicao("ATRASADA")} click={tx.click}/><Kpi titulo={tx.today} valor={formatNumber(agendaEscopada.resumo.hoje)} destaque="text-yellow-400" onOpen={()=>abrirComposicao("HOJE")} click={tx.click}/><Kpi titulo={tx.upcoming} valor={formatNumber(agendaEscopada.resumo.futuras)} onOpen={()=>abrirComposicao("FUTURA")} click={tx.click}/><Kpi titulo={tx.noDate} valor={formatNumber(agendaEscopada.resumo.sem_data)} onOpen={()=>abrirComposicao("SEM_DATA")} click={tx.click}/><Kpi titulo={tx.completed} valor={formatNumber(agendaEscopada.resumo.concluidas)} destaque="text-green-400" onOpen={()=>abrirComposicao("CONCLUIDA")} click={tx.click}/></section>
+  <div className="flex flex-wrap gap-2">{filtrosAgenda.map(item=><button key={item} type="button" onClick={()=>setFiltro(item)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${filtro===item?"bg-cyan-500 text-slate-950":"border border-[#20345e] text-gray-300"}`}>{filtroLabel(item)}</button>)}</div>
+  <div id="composicao-agenda" className="scroll-mt-24 overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading?<div className="p-10 text-gray-400">{tx.loading}</div>:itensFiltrados.length===0?<div className="p-10 text-gray-300">{tx.empty}</div>:<><div className="border-b border-[#13203f] px-5 py-3 text-xs text-cyan-300">{interpolar(tx.composition,formatNumber(itensFiltrados.length),filtroLabel(filtro))}</div><table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">{tx.situation}</th><th className="p-4">{tx.dateTime}</th><th className="p-4">{tx.activity}</th><th className="p-4">{tx.withWhom}</th><th className="p-4">{tx.deal}</th><th className="p-4">{tx.ctiOwner}</th><th className="p-4">{tx.action}</th></tr></thead><tbody>{itensFiltrados.map(item=>{const contexto=comQuem(item);return <tr key={item.id} role="button" tabIndex={0} onClick={()=>void abrirDetalhe(item)} onKeyDown={event=>{if(event.key==="Enter"||event.key===" ")void abrirDetalhe(item)}} className="cursor-pointer border-b border-[#13203f] text-gray-200 transition hover:bg-[#0d2342]"><td className="p-4"><Situacao valor={item.situacao} label={situacaoLabel(item.situacao)}/></td><td className="p-4 text-yellow-300">{dataLocal(item.data)} {item.horario||""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo||tipoLabel(item.tipo)}</div><div className="text-xs text-gray-400">{tipoLabel(item.tipo)}</div></td><td className="p-4"><div className="font-semibold text-cyan-200">{contexto.nome}</div><div className="mt-1 text-xs text-gray-400">{contexto.organizacao}</div></td><td className="p-4">{item.oportunidade_titulo||tx.noDeal}</td><td className="p-4">{responsavelLegivel(item)}</td><td className="p-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={event=>{event.stopPropagation();void abrirDetalhe(item)}} className="rounded-lg border border-cyan-500 px-3 py-2 text-xs font-semibold text-cyan-300">{tx.details}</button>{!estaConcluida(item)&&item.situacao!=="CANCELADA"&&<button type="button" onClick={event=>{event.stopPropagation();void concluir(item.id)}} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">{tx.complete}</button>}</div></td></tr>})}</tbody></table></>}</div>
+ </div></section>
+ {detalhe&&contextoDetalhe&&<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={()=>setDetalhe(null)}><section role="dialog" aria-modal="true" aria-label={tx.dialogLabel} onClick={event=>event.stopPropagation()} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">{tx.history}</p><h2 className="mt-2 text-2xl font-bold text-white">{detalhe.titulo||tipoLabel(detalhe.tipo)}</h2><p className="mt-1 text-sm text-gray-400">{tx.historySub}</p></div><button type="button" onClick={()=>setDetalhe(null)} className="rounded-lg border border-[#20345e] px-3 py-2 text-sm text-gray-300">{tx.close}</button></div>
+  {carregandoDetalhe&&<div className="mt-4 text-sm text-cyan-300">{tx.updating}</div>}
+  <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"><DetalheCampo label={tx.situation} valor={situacaoLabel(detalhe.situacao)}/><DetalheCampo label={tx.calendar} valor={situacaoLabel(situacaoCalendario(detalhe))}/><DetalheCampo label={tx.dateTime} valor={`${dataLocal(detalhe.data)} ${detalhe.horario||""}`.trim()}/><DetalheCampo label={tx.type} valor={tipoLabel(detalhe.tipo)}/><DetalheCampo label={tx.withWhom} valor={contextoDetalhe.nome} complemento={contextoDetalhe.organizacao}/><DetalheCampo label={tx.ctiOwner} valor={responsavelLegivel(detalhe)}/><DetalheCampo label={tx.relatedDeal} valor={detalhe.oportunidade_titulo||tx.noDeal}/></div>
+  <div className="mt-6 rounded-xl border border-[#20345e] bg-[#020817] p-5"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-400">{tx.conversation}</p><div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-200">{detalhe.descricao?.trim()||tx.noNotes}</div></div>
+ </section></div>}
+ </main>
 }
-
-type AgendaResponse = {
-  itens: Atividade[]
-  resumo: { total: number; atrasadas: number; hoje: number; futuras: number; sem_data: number; concluidas: number }
-}
-
-type ClienteMestre = { id?: string; nome: string }
-type Oportunidade = { id: string; titulo: string; cliente_id?: string; responsavel_id?: string }
-type Registro = Record<string, unknown>
-
-const tipos = ["FOLLOW_UP", "LIGACAO", "VISITA_COMERCIAL", "VISITA_TECNICA", "REUNIAO", "EMAIL", "WHATSAPP", "TAREFA", "LEMBRETE"]
-const filtrosAgenda = ["ABERTAS", "ATRASADA", "HOJE", "FUTURA", "SEM_DATA", "CONCLUIDA", "TODAS"]
-
-function estaConcluida(item: Atividade) {
-  const status = String(item.status || "").toUpperCase()
-  return status === "CONCLUIDA" || status === "CONCLUÍDA" || item.situacao === "CONCLUIDA"
-}
-
-function situacaoCalendario(item: Atividade): SituacaoCalendario {
-  if (item.situacao_calendario) return item.situacao_calendario
-  if (!item.data) return "SEM_DATA"
-  const [ano, mes, dia] = item.data.slice(0, 10).split("-").map(Number)
-  if (!ano || !mes || !dia) return "SEM_DATA"
-  const hoje = new Date()
-  const referencia = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate()).getTime()
-  const atividade = new Date(ano, mes - 1, dia).getTime()
-  if (atividade < referencia) return "ATRASADA"
-  if (atividade === referencia) return "HOJE"
-  return "FUTURA"
-}
-
-function resumir(itens: Atividade[]): AgendaResponse["resumo"] {
-  return {
-    total: itens.length,
-    atrasadas: itens.filter((i) => situacaoCalendario(i) === "ATRASADA").length,
-    hoje: itens.filter((i) => situacaoCalendario(i) === "HOJE").length,
-    futuras: itens.filter((i) => situacaoCalendario(i) === "FUTURA").length,
-    sem_data: itens.filter((i) => situacaoCalendario(i) === "SEM_DATA").length,
-    concluidas: itens.filter(estaConcluida).length,
-  }
-}
-
-export default function AtividadesPage() {
-  const { usuario } = useAuth()
-  const [agenda, setAgenda] = useState<AgendaResponse>({ itens: [], resumo: { total: 0, atrasadas: 0, hoje: 0, futuras: 0, sem_data: 0, concluidas: 0 } })
-  const [clientes, setClientes] = useState<ClienteMestre[]>([])
-  const [oportunidades, setOportunidades] = useState<Oportunidade[]>([])
-  const [loading, setLoading] = useState(true)
-  const [mostrarFormulario, setMostrarFormulario] = useState(false)
-  const [erro, setErro] = useState("")
-  const [filtro, setFiltro] = useState("ABERTAS")
-  const [detalhe, setDetalhe] = useState<Atividade | null>(null)
-  const [carregandoDetalhe, setCarregandoDetalhe] = useState(false)
-
-  async function carregar() {
-    setLoading(true)
-    try {
-      const [agendaResponse, clientesResponse, nucleoResponse] = await Promise.all([
-        fetchCrmSeguroProxy("crm-seguro/agenda", { cache: "no-store" }),
-        fetch(`${API_URL}/modulos/clientes?contexto=brasil&periodo=TODO_HISTORICO`),
-        fetchCrmSeguroProxy("crm-seguro/nucleo-comercial", { cache: "no-store" }),
-      ])
-      if (!agendaResponse.ok || !clientesResponse.ok || !nucleoResponse.ok) throw new Error("Falha de carregamento")
-      const [agendaJson, clientesJson, nucleoJson] = await Promise.all([agendaResponse.json(), clientesResponse.json(), nucleoResponse.json()])
-      setAgenda(agendaJson)
-      setClientes(Array.isArray(clientesJson) ? clientesJson : [])
-      const nucleo = Array.isArray(nucleoJson) ? nucleoJson as Registro[] : []
-      const mapa = new Map<string, Oportunidade>()
-      nucleo.forEach((item) => {
-        const id = String(item.oportunidade_id || item.id || "").trim()
-        if (!id || mapa.has(id)) return
-        mapa.set(id, {
-          id,
-          titulo: String(item.titulo || "Oportunidade comercial"),
-          cliente_id: item.cliente_id ? String(item.cliente_id) : undefined,
-          responsavel_id: item.responsavel_id ? String(item.responsavel_id) : undefined,
-        })
-      })
-      setOportunidades([...mapa.values()])
-    } catch {
-      setErro("Não foi possível carregar a agenda comercial e seus vínculos.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    queueMicrotask(() => {
-      if (new URLSearchParams(window.location.search).get("novo") === "1") setMostrarFormulario(true)
-      void carregar()
-    })
-  }, [])
-
-  const agendaEscopada = useMemo<AgendaResponse>(() => {
-    const itens = agenda.itens.filter((item) => pertenceAoEscopoDoUsuario(item.usuario_id || item.responsavel_id, usuario))
-    return { itens, resumo: resumir(itens) }
-  }, [agenda.itens, usuario])
-
-  const oportunidadesEscopadas = useMemo(
-    () => oportunidades.filter((item) => pertenceAoEscopoDoUsuario(item.responsavel_id, usuario)),
-    [oportunidades, usuario],
-  )
-
-  async function criarAtividade(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setErro("")
-    const form = new FormData(event.currentTarget)
-    const clienteInformado = String(form.get("cliente_id") || "").trim()
-    const clienteSelecionado = clientes.find((cliente) => cliente.nome.trim() === clienteInformado)
-    const payload = {
-      cliente_id: clienteSelecionado?.id || clienteInformado,
-      oportunidade_id: String(form.get("oportunidade_id") || "") || undefined,
-      usuario_id: String(usuario?.id || form.get("usuario_id") || ""),
-      tipo: String(form.get("tipo") || "FOLLOW_UP"),
-      titulo: String(form.get("titulo") || "") || undefined,
-      descricao: String(form.get("descricao") || "") || undefined,
-      data: String(form.get("data") || "") || undefined,
-      horario: String(form.get("horario") || "") || undefined,
-      status: "PENDENTE",
-    }
-    try {
-      const response = await fetchCrmSeguroProxy("crm-seguro/atividades", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) })
-      if (!response.ok) throw new Error("Falha ao criar atividade")
-      setMostrarFormulario(false)
-      await carregar()
-    } catch {
-      setErro("Não foi possível criar a atividade. Informe cliente, tipo e data do próximo contato.")
-    }
-  }
-
-  async function concluir(id: string) {
-    try {
-      const response = await fetchCrmSeguroProxy(`crm-seguro/atividades/${id}/concluir`, { method: "PUT" })
-      if (!response.ok) throw new Error("Falha ao concluir")
-      await carregar()
-    } catch {
-      setErro("Não foi possível concluir a atividade.")
-    }
-  }
-
-  async function abrirDetalhe(item: Atividade) {
-    setDetalhe(item)
-    setCarregandoDetalhe(true)
-    try {
-      const response = await fetchCrmSeguroProxy(`crm-seguro/atividades/${item.id}`, { cache: "no-store" })
-      if (!response.ok) throw new Error("Falha ao carregar detalhe")
-      const registro = await response.json() as Atividade
-      setDetalhe({ ...item, ...registro })
-    } catch {
-      setErro("Não foi possível atualizar os detalhes desta atividade. Os dados já carregados continuam disponíveis.")
-    } finally {
-      setCarregandoDetalhe(false)
-    }
-  }
-
-  function clienteLegivel(item: Atividade) {
-    if (item.cliente_nome) return item.cliente_nome
-    const encontrado = clientes.find((cliente) => (cliente.id && cliente.id === item.cliente_id) || cliente.nome === item.cliente_id)
-    return encontrado?.nome || ""
-  }
-
-  function comQuem(item: Atividade) {
-    const cliente = clienteLegivel(item)
-    if (cliente) return { nome: cliente, organizacao: "Cliente cadastrado" }
-    if (item.parceiro_nome) return { nome: item.parceiro_nome, organizacao: item.parceiro_organizacao || item.parceiro_tipo || "Contato externo" }
-    return { nome: "Não identificado", organizacao: "Revisar cadastro da atividade" }
-  }
-
-  function responsavelLegivel(item: Atividade) {
-    if (item.responsavel_nome) return item.responsavel_nome
-    const idRegistro = item.usuario_id || item.responsavel_id || ""
-    if (idRegistro && usuario?.id && idRegistro === usuario.id) return usuario.nome || usuario.email || "Usuário do login"
-    return idRegistro ? "Usuário CTI vinculado" : "-"
-  }
-
-  const itensFiltrados = agendaEscopada.itens.filter((item) => {
-    if (filtro === "TODAS") return true
-    if (filtro === "ABERTAS") return !estaConcluida(item) && item.situacao !== "CANCELADA"
-    if (filtro === "CONCLUIDA") return estaConcluida(item)
-    if (["ATRASADA", "HOJE", "FUTURA", "SEM_DATA"].includes(filtro)) return situacaoCalendario(item) === filtro
-    return false
-  })
-
-  function abrirComposicao(novoFiltro: string) {
-    setFiltro(novoFiltro)
-    window.setTimeout(() => document.getElementById("composicao-agenda")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
-  }
-
-  const contextoDetalhe = detalhe ? comQuem(detalhe) : null
-
-  return (
-    <main className="flex min-h-screen bg-[#020817]"><Sidebar /><section className="min-w-0 flex-1"><Topbar /><div className="space-y-6 p-8">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between"><div><h1 className="text-4xl font-bold text-white">CRM • Agenda e Follow-up</h1><p className="mt-2 text-gray-400">Próximos contatos, visitas, reuniões e tarefas com identificação clara de cliente, contato ou parceiro envolvido.</p></div><button type="button" onClick={() => setMostrarFormulario(true)} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Nova atividade</button></div>
-      {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
-
-      {mostrarFormulario && <form onSubmit={criarAtividade} className="rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200"><h2 className="text-xl font-bold text-white">Agendar atividade comercial</h2><p className="mt-2 text-sm text-gray-400">A atividade é registrada para o usuário autenticado e passa a integrar seu histórico comercial.</p><div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-3">
-        <label className="text-sm text-gray-300">Cliente da base<input name="cliente_id" list="clientes-agenda" required className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white" /><datalist id="clientes-agenda">{clientes.map((cliente) => <option key={cliente.nome} value={cliente.nome} />)}</datalist></label>
-        <label className="text-sm text-gray-300">Oportunidade<select name="oportunidade_id" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"><option value="">Sem vínculo específico</option>{oportunidadesEscopadas.map((item) => <option key={item.id} value={item.id}>{item.titulo} • {item.cliente_id || "Cliente"}</option>)}</select></label>
-        <div className="rounded-lg border border-[#13203f] bg-[#020817] p-3 text-sm text-gray-300"><span className="block text-xs text-gray-500">Responsável comercial</span><strong className="mt-1 block text-cyan-200">{usuario?.nome || "Usuário autenticado"}</strong></div>
-        <label className="text-sm text-gray-300">Tipo<select name="tipo" className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white">{tipos.map((tipo) => <option key={tipo}>{tipo}</option>)}</select></label>
-        <Campo nome="titulo" label="Assunto" obrigatorio /><Campo nome="data" label="Data" tipo="date" obrigatorio /><Campo nome="horario" label="Horário" tipo="time" /><Campo nome="descricao" label="Orientação / observação" />
-      </div><div className="mt-5 flex gap-3"><button className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950">Salvar atividade</button><button type="button" onClick={() => setMostrarFormulario(false)} className="rounded-xl border border-cyan-500 px-5 py-3 font-semibold text-cyan-300">Cancelar</button></div></form>}
-
-      <section className="grid grid-cols-2 gap-4 md:grid-cols-6"><Kpi titulo="Total" valor={agendaEscopada.resumo.total} onOpen={() => abrirComposicao("TODAS")} /><Kpi titulo="Atrasadas" valor={agendaEscopada.resumo.atrasadas} destaque="text-red-400" onOpen={() => abrirComposicao("ATRASADA")} /><Kpi titulo="Hoje" valor={agendaEscopada.resumo.hoje} destaque="text-yellow-400" onOpen={() => abrirComposicao("HOJE")} /><Kpi titulo="Futuras" valor={agendaEscopada.resumo.futuras} onOpen={() => abrirComposicao("FUTURA")} /><Kpi titulo="Sem data" valor={agendaEscopada.resumo.sem_data} onOpen={() => abrirComposicao("SEM_DATA")} /><Kpi titulo="Concluídas" valor={agendaEscopada.resumo.concluidas} destaque="text-green-400" onOpen={() => abrirComposicao("CONCLUIDA")} /></section>
-
-      <div className="flex flex-wrap gap-2">{filtrosAgenda.map((item) => <button key={item} type="button" onClick={() => setFiltro(item)} className={`rounded-lg px-4 py-2 text-sm font-semibold ${filtro === item ? "bg-cyan-500 text-slate-950" : "border border-[#20345e] text-gray-300"}`}>{item}</button>)}</div>
-
-      <div id="composicao-agenda" className="scroll-mt-24 overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <div className="p-10 text-gray-400">Carregando agenda...</div> : itensFiltrados.length === 0 ? <div className="p-10 text-gray-300">Nenhuma atividade encontrada neste filtro.</div> : <><div className="border-b border-[#13203f] px-5 py-3 text-xs text-cyan-300">Composição exata: {itensFiltrados.length.toLocaleString("pt-BR")} atividade(s) no filtro {filtro}. Clique em qualquer linha para abrir o histórico da atividade.</div><table className="w-full text-left"><thead><tr className="border-b border-[#13203f] text-gray-400"><th className="p-4">Situação</th><th className="p-4">Data/Hora</th><th className="p-4">Atividade</th><th className="p-4">Com quem</th><th className="p-4">Negociação</th><th className="p-4">Responsável CTI</th><th className="p-4">Ação</th></tr></thead><tbody>{itensFiltrados.map((item) => { const contexto = comQuem(item); return <tr key={item.id} role="button" tabIndex={0} onClick={() => void abrirDetalhe(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") void abrirDetalhe(item) }} className="cursor-pointer border-b border-[#13203f] text-gray-200 transition hover:bg-[#0d2342]"><td className="p-4"><Situacao valor={item.situacao} /></td><td className="p-4 text-yellow-300">{formatarData(item.data)} {item.horario || ""}</td><td className="p-4"><div className="font-semibold text-white">{item.titulo || item.tipo}</div><div className="text-xs text-gray-400">{item.tipo}</div></td><td className="p-4"><div className="font-semibold text-cyan-200">{contexto.nome}</div><div className="mt-1 text-xs text-gray-400">{contexto.organizacao}</div></td><td className="p-4">{item.oportunidade_titulo || "Sem negociação vinculada"}</td><td className="p-4">{responsavelLegivel(item)}</td><td className="p-4"><div className="flex flex-wrap gap-2"><button type="button" onClick={(event) => { event.stopPropagation(); void abrirDetalhe(item) }} className="rounded-lg border border-cyan-500 px-3 py-2 text-xs font-semibold text-cyan-300">Detalhes</button>{!estaConcluida(item) && item.situacao !== "CANCELADA" && <button type="button" onClick={(event) => { event.stopPropagation(); void concluir(item.id) }} className="rounded-lg border border-green-500 px-3 py-2 text-xs font-semibold text-green-300">Concluir</button>}</div></td></tr> })}</tbody></table></>}</div>
-    </div></section>
-
-    {detalhe && contextoDetalhe && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setDetalhe(null)}><section role="dialog" aria-modal="true" aria-label="Detalhes da atividade comercial" onClick={(event) => event.stopPropagation()} className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-cyan-700 bg-[#071226] p-6 text-gray-200 shadow-2xl"><div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-cyan-400">Histórico da atividade</p><h2 className="mt-2 text-2xl font-bold text-white">{detalhe.titulo || detalhe.tipo}</h2><p className="mt-1 text-sm text-gray-400">Registro comercial completo da atividade selecionada.</p></div><button type="button" onClick={() => setDetalhe(null)} className="rounded-lg border border-[#20345e] px-3 py-2 text-sm text-gray-300">Fechar</button></div>
-      {carregandoDetalhe && <div className="mt-4 text-sm text-cyan-300">Atualizando dados da atividade...</div>}
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"><DetalheCampo label="Status" valor={detalhe.situacao} /><DetalheCampo label="Calendário" valor={situacaoCalendario(detalhe)} /><DetalheCampo label="Data / hora" valor={`${formatarData(detalhe.data)} ${detalhe.horario || ""}`.trim()} /><DetalheCampo label="Tipo" valor={detalhe.tipo} /><DetalheCampo label="Com quem" valor={contextoDetalhe.nome} complemento={contextoDetalhe.organizacao} /><DetalheCampo label="Responsável CTI" valor={responsavelLegivel(detalhe)} /><DetalheCampo label="Negociação relacionada" valor={detalhe.oportunidade_titulo || "Sem negociação vinculada"} /></div>
-      <div className="mt-6 rounded-xl border border-[#20345e] bg-[#020817] p-5"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-400">Observações / histórico da conversa</p><div className="mt-3 whitespace-pre-wrap text-sm leading-6 text-gray-200">{detalhe.descricao?.trim() || "Nenhuma observação foi registrada nesta atividade."}</div></div>
-    </section></div>}
-    </main>
-  )
-}
-
-function formatarData(valor?: string) { if (!valor) return "-"; const [ano, mes, dia] = valor.slice(0, 10).split("-"); return `${dia}/${mes}/${ano}` }
-function Campo({ nome, label, tipo = "text", obrigatorio = false }: { nome: string; label: string; tipo?: string; obrigatorio?: boolean }) { return <label className="text-sm text-gray-300">{label}<input name={nome} type={tipo} required={obrigatorio} className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white" /></label> }
-function Kpi({ titulo, valor, destaque = "text-cyan-400", onOpen }: { titulo: string; valor: number; destaque?: string; onOpen?: () => void }) { const body = <><p className="text-sm text-gray-400">{titulo}</p><p className={`mt-2 text-3xl font-bold ${destaque}`}>{valor}</p>{onOpen && <p className="mt-2 text-[11px] text-cyan-400">Clique para detalhar</p>}</>; return onOpen ? <button type="button" onClick={onOpen} className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5 text-left transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</button> : <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5">{body}</div> }
-function Situacao({ valor }: { valor: Atividade["situacao"] }) { const classe = valor === "ATRASADA" ? "border-red-500 text-red-300" : valor === "HOJE" ? "border-yellow-500 text-yellow-300" : valor === "CONCLUIDA" ? "border-green-500 text-green-300" : "border-cyan-700 text-cyan-300"; return <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${classe}`}>{valor}</span> }
-function DetalheCampo({ label, valor, complemento }: { label: string; valor: string; complemento?: string }) { return <div className="rounded-xl border border-[#20345e] bg-[#091a33] p-4"><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 font-semibold text-white">{valor || "-"}</p>{complemento && <p className="mt-1 text-xs text-gray-400">{complemento}</p>}</div> }
+function Campo({nome,label,tipo="text",obrigatorio=false}:{nome:string;label:string;tipo?:string;obrigatorio?:boolean}){return <label className="text-sm text-gray-300">{label}<input name={nome} type={tipo} required={obrigatorio} className="mt-1 w-full rounded-lg border border-[#13203f] bg-[#020817] p-3 text-white"/></label>}
+function Kpi({titulo,valor,destaque="text-cyan-400",onOpen,click}:{titulo:string;valor:string;destaque?:string;onOpen?:()=>void;click:string}){const body=<><p className="text-sm text-gray-400">{titulo}</p><p className={`mt-2 text-3xl font-bold ${destaque}`}>{valor}</p>{onOpen&&<p className="mt-2 text-[11px] text-cyan-400">{click}</p>}</>;return onOpen?<button type="button" onClick={onOpen} className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5 text-left transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</button>:<div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5">{body}</div>}
+function Situacao({valor,label}:{valor:Atividade["situacao"];label:string}){const classe=valor==="ATRASADA"?"border-red-500 text-red-300":valor==="HOJE"?"border-yellow-500 text-yellow-300":valor==="CONCLUIDA"?"border-green-500 text-green-300":"border-cyan-700 text-cyan-300";return <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${classe}`}>{label}</span>}
+function DetalheCampo({label,valor,complemento}:{label:string;valor:string;complemento?:string}){return <div className="rounded-xl border border-[#20345e] bg-[#091a33] p-4"><p className="text-xs uppercase tracking-wide text-gray-500">{label}</p><p className="mt-2 font-semibold text-white">{valor||"-"}</p>{complemento&&<p className="mt-1 text-xs text-gray-400">{complemento}</p>}</div>}

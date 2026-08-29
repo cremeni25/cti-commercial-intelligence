@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import re
 
 from routers import crm_scope_atividades_router as modulo
 
@@ -52,5 +53,5 @@ def test_frontend_nao_exibe_fallback_generico_cliente_vinculado():
     codigo = (root / "frontend" / "src" / "app" / "atividades" / "page.tsx").read_text(encoding="utf-8")
 
     assert '"Cliente vinculado"' not in codigo
-    assert "clienteSelecionado?.id || clienteInformado" in codigo
-    assert "cliente.nome === item.cliente_id" in codigo
+    assert re.search(r"clienteSelecionado\?\.id\s*\|\|\s*clienteInformado", codigo)
+    assert re.search(r"cliente\.nome\s*===\s*item\.cliente_id", codigo)
