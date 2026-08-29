@@ -29,6 +29,52 @@ def _preparar_registro_anfir(registro):
     return payload
 
 
+def _tendencia_trimestral_comparavel(registros):
+    """Compara os dois últimos trimestres completos da mesma competência anual.
+
+    ANFIR é uma fotografia mensal de mercado. Um trimestre ainda em formação não
+    deve ser comparado a um trimestre completo, e a fotografia corrente não deve
+    ser comparada automaticamente a snapshots históricos metodologicamente
+    distintos. Por isso, a tendência executiva usa apenas trimestres completos
+    dentro do mesmo ano/fonte quando houver dois deles disponíveis.
+    """
+    datas = [data_registro(registro) for registro in registros]
+    datas = [data for data in datas if data]
+    if not datas:
+        return None
+
+    ultima = max(datas)
+    trimestre_ultima = (ultima.month - 1) // 3 + 1
+    trimestre_completo = trimestre_ultima if ultima.month % 3 == 0 else trimestre_ultima - 1
+    if trimestre_completo < 2:
+        return None
+
+    trimestre_anterior = trimestre_completo - 1
+    ano = ultima.year
+
+    def no_trimestre(data, trimestre):
+        return data.year == ano and ((data.month - 1) // 3 + 1) == trimestre
+
+    atual = sum(1 for data in datas if no_trimestre(data, trimestre_completo))
+    anterior = sum(1 for data in datas if no_trimestre(data, trimestre_anterior))
+    if not anterior:
+        return None
+
+    diferenca = atual - anterior
+    percentual = round(diferenca / anterior * 100, 2)
+    return {
+        "atual": atual,
+        "anterior": anterior,
+        "diferenca": diferenca,
+        "percentual": percentual,
+        "direcao": "alta" if diferenca > 0 else "queda" if diferenca < 0 else "estavel",
+        "periodo_atual": f"{ano}-Q{trimestre_completo}",
+        "periodo_anterior": f"{ano}-Q{trimestre_anterior}",
+        "metodo": "TRIMESTRES_COMPLETOS_MESMA_FONTE",
+        "comparavel": True,
+    }
+
+
 def opcoes_filtros(registros, filtros):
     base = [_preparar_registro_anfir(item) for item in (registros or [])]
     return _opcoes_filtros_v18(base, filtros)
@@ -97,6 +143,15 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
 
     resultado["inteligencia_mercado"] = consolidar_inteligencia_mercado(analisados, anteriores)
     mercado = resultado["inteligencia_mercado"]["mercado"]
+
+    # Quando não há uma comparação histórica explicitamente aplicável, usamos
+    # uma tendência interna comparável da própria fotografia ANFIR. Isso evita
+    # afirmar crescimento/queda a partir de janelas históricas incompatíveis.
+    if not anteriores:
+        tendencia = _tendencia_trimestral_comparavel(analisados)
+        if tendencia:
+            mercado["comparacao"] = tendencia
+
     for chave in ("competencia_min", "competencia_max"):
         if mercado.get(chave):
             mercado[chave] = mercado[chave].isoformat()
