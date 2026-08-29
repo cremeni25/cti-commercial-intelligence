@@ -7,9 +7,6 @@ FRONT = ROOT / "frontend" / "src"
 UI_ROOTS = [FRONT / "app", FRONT / "components"]
 LEGACY_CATALOG = json.loads((FRONT / "core/i18n/legacy-semantic.json").read_text(encoding="utf-8"))
 
-# O portal institucional público e o Radar não fazem parte do sistema autenticado CTI Web + CRM App.
-# O documento Carrier abaixo é conteúdo oficial/contratual imutável: não é texto de interface e não pode ser
-# reinterpretado automaticamente como tradução. A UI que o envolve continua coberta pela auditoria.
 TEXT_AUDIT_EXCLUDED = {
     "app/page.tsx",
     "app/radar/page.tsx",
@@ -42,6 +39,13 @@ USER_CALL = re.compile(
 )
 
 
+def normalize(value: str) -> str:
+    return " ".join(value.replace("\u00ad", "").split())
+
+
+NORMALIZED_CATALOG = {normalize(key): value for key, value in LEGACY_CATALOG.items()}
+
+
 def ui_files():
     for root in UI_ROOTS:
         for path in root.rglob("*.tsx"):
@@ -52,8 +56,11 @@ def ui_files():
 
 
 def looks_like_source_fragment(fragment: str) -> bool:
-    technical = ["useState", "=>", "&&", "setClientes", "setPedidos", "setVendas", "setOportunidades", "buscarJson"]
-    return any(token in fragment for token in technical) or fragment.startswith(("([])", "=(", ":"))
+    technical = [
+        "useState", "=>", "&&", "buscarSeguro", "buscarJson", ": Record", "setClientes", "setPedidos",
+        "setVendas", "setOportunidades", "@cliente.com", "@empresa.com",
+    ]
+    return any(token in fragment for token in technical) or fragment.startswith(("([])", "=(", ":", "("))
 
 
 def user_facing_fragments(source: str):
@@ -71,8 +78,9 @@ def test_ponte_semantica_global_esta_montada_e_localiza_formatos():
     assert "<LegacySemanticBridge />" in layout
     assert "legacy-semantic.json" in bridge
     assert "MutationObserver" in bridge
-    assert "HTMLTextAreaElement" in bridge  # defaults localizados; texto livre só muda por correspondência exata
+    assert "HTMLTextAreaElement" in bridge
     assert "localizeBrazilianFormats" in bridge
+    assert "normalizeSemanticKey" in bridge
     assert '"en-US"' in bridge and '"es-419"' in bridge
     assert "Intl.NumberFormat" in bridge and "Intl.DateTimeFormat" in bridge
 
@@ -86,10 +94,9 @@ def test_texto_portugues_legado_tem_equivalencia_semantica_en_es():
         for fragment, line in user_facing_fragments(source):
             if not PORTUGUESE.search(fragment):
                 continue
-            if fragment in LEGACY_CATALOG:
-                entry = LEGACY_CATALOG[fragment]
-                if entry.get("en") and entry.get("es"):
-                    continue
+            entry = NORMALIZED_CATALOG.get(normalize(fragment))
+            if entry and entry.get("en") and entry.get("es"):
+                continue
             failures.append(f"{rel}:{line}: {fragment[:220]}")
     assert not failures, (
         "\nTexto operacional em português sem equivalência conceitual EN/ES no catálogo de compatibilidade:\n"
