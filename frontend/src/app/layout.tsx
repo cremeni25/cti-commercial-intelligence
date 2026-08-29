@@ -5,6 +5,7 @@ import "./globals.css"
 import { AuthProvider } from "@/core/auth"
 import { I18nProvider } from "@/core/i18n"
 import { OperationalContextProvider } from "@/context/OperationalContext"
+import LegacySemanticBridge from "@/components/i18n/LegacySemanticBridge"
 
 export const metadata: Metadata = {
   title: {
@@ -37,6 +38,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <I18nProvider>
+            <LegacySemanticBridge />
             <OperationalContextProvider>{children}</OperationalContextProvider>
           </I18nProvider>
         </AuthProvider>
