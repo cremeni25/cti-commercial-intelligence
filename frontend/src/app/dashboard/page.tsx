@@ -5,6 +5,7 @@ import { useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import AnfirWorkbookPanel from "@/components/AnfirWorkbookPanel"
+import AnfirWorkbookCharts from "@/components/AnfirWorkbookCharts"
 
 const links = [
   ["Histórico Comercial", "/historico-comercial", "Consultar histórico consolidado e períodos anteriores."],
@@ -31,6 +32,7 @@ export default function DashboardHub(){
         </header>
 
         <AnfirWorkbookPanel/>
+        <AnfirWorkbookCharts/>
 
         <section className="rounded-2xl border border-[#17304d] bg-[#071427] p-5">
           <button type="button" onClick={()=>setMostrarContexto(v=>!v)} className="flex w-full items-center justify-between gap-4 text-left">
