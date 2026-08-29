@@ -2,6 +2,7 @@
 
 import Image, { type StaticImageData } from "next/image"
 import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
+import logoViena from "@/assets/logo/Logo Viena.png"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -97,8 +98,16 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
-      <div className="p-4 border-b border-[#13203f] flex justify-center">
+      <div className="p-4 border-b border-[#13203f] flex flex-col items-center">
         <Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain" />
+        <div className="mt-3 flex w-full items-center justify-center gap-2">
+          <span className="h-px w-7 bg-[#24466f]" aria-hidden="true" />
+          <span className="text-[8px] uppercase tracking-[0.22em] text-slate-500">Operação atendida</span>
+          <span className="h-px w-7 bg-[#24466f]" aria-hidden="true" />
+        </div>
+        <div className="mt-2 rounded-lg bg-white px-3 py-1.5 shadow-sm">
+          <Image src={logoViena} alt="Refrigeração Viena" width={120} height={48} className="h-auto w-[96px] object-contain" />
+        </div>
       </div>
 
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
