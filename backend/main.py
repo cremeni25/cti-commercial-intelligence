@@ -180,3 +180,16 @@ def insights():
             ],
         },
     }
+
+
+@app.get("/pipeline/status")
+def pipeline_status():
+    resposta = (
+        supabase.table("cti_anfir")
+        .select("id", count="exact")
+        .eq("ativo", True)
+        .limit(1)
+        .execute()
+    )
+    total = resposta.count or 0
+    return {"linhas_brutas": total, "linhas_processadas": total, "pipeline": "ativo"}
