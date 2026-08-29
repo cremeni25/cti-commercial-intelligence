@@ -1,6 +1,7 @@
 from collections import Counter
 from datetime import date, timedelta
 from io import BytesIO, StringIO
+from time import monotonic
 import csv
 
 from fastapi import APIRouter, Query, Request
@@ -14,6 +15,25 @@ from services.product_line_classifier import classificar_linha, modelo_linha
 
 router = APIRouter()
 CONTEXT_PATTERN = r"^(brasil|viena-sp|outros-dealers|uf-[a-z]{2}|ddd-\d{3})$"
+_ANFIR_CACHE_TTL_SECONDS = 10.0
+_anfir_cache = {"expires_at": 0.0, "registros": None}
+
+
+def _fonte_anfir():
+    """Reutiliza por poucos segundos a mesma leitura bruta durante uma rajada da UI.
+
+    O cache é somente de leitura, em memória do processo, e não altera filtros nem
+    persistência. O TTL curto evita repetir a consulta ao Supabase para GERAL,
+    opções e segmentos carregados quase simultaneamente pela mesma tela.
+    """
+    agora = monotonic()
+    registros = _anfir_cache.get("registros")
+    if registros is not None and agora < float(_anfir_cache.get("expires_at") or 0):
+        return registros
+    registros = repository.buscar_cti_anfir()
+    _anfir_cache["registros"] = registros
+    _anfir_cache["expires_at"] = agora + _ANFIR_CACHE_TTL_SECONDS
+    return registros
 
 
 def _datas(periodo: str, inicio: date | None, fim: date | None):
@@ -33,7 +53,7 @@ def _datas(periodo: str, inicio: date | None, fim: date | None):
 
 def _registros(contexto: str, periodo: str = "TODO_HISTORICO", inicio: date | None = None, fim: date | None = None, uf: str | None = None, ddd: str | None = None):
     inicio, fim = _datas(periodo, inicio, fim)
-    return filtrar_registros(repository.buscar_cti_anfir(), contexto=contexto, uf=uf, ddd=ddd, inicio=inicio, fim=fim), inicio, fim
+    return filtrar_registros(_fonte_anfir(), contexto=contexto, uf=uf, ddd=ddd, inicio=inicio, fim=fim), inicio, fim
 
 
 def _comparacao(modo, inicio, fim, comp_inicio, comp_fim, filtros):
@@ -77,7 +97,7 @@ def _variacao(atual: int, anterior: int):
 
 @router.get("/analytics/context-options")
 def context_options():
-    return opcoes_contexto(repository.buscar_cti_anfir())
+    return opcoes_contexto(_fonte_anfir())
 
 
 @router.get("/analytics/dashboard")
@@ -122,16 +142,13 @@ def product_lines(
         em_periodo_anterior = anterior_inicio <= data <= anterior_fim
         if not em_periodo_atual and not em_periodo_anterior:
             continue
-
         if em_periodo_atual:
             total_periodo += 1
-
         codigo = classificar_linha(registro)
         if not codigo:
             if em_periodo_atual:
                 sem_linha_periodo += 1
             continue
-
         if em_periodo_atual:
             classificados_periodo += 1
             atuais[codigo].append(registro)
@@ -143,18 +160,13 @@ def product_lines(
         f"{descricao}. Base territorial no período: {total_periodo} registros; "
         f"{classificados_periodo} classificados em TR, DT ou DD ({cobertura}% de cobertura)"
     )
-
     nomes = {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}
     linhas = []
     for codigo in ("TR", "DT", "DD"):
         atual = len(atuais[codigo])
         anterior = len(anteriores[codigo])
         percentual, direcao = _variacao(atual, anterior)
-        modelos_identificados = [
-            modelo
-            for registro in atuais[codigo]
-            if (modelo := modelo_linha(registro)) != "NÃO INFORMADO"
-        ]
+        modelos_identificados = [modelo for registro in atuais[codigo] if (modelo := modelo_linha(registro)) != "NÃO INFORMADO"]
         modelos = Counter(modelos_identificados)
         linhas.append({
             "codigo": codigo,
@@ -212,7 +224,7 @@ def filter_options(
 ):
     base, _, _ = _registros(contexto, "TODO_HISTORICO", uf=uf, ddd=ddd)
     filtros = _filtros(segmento, periodo, inicio, fim, regiao, uf, dealer, implementadora, cliente, linha, familia, produto)
-    return {"opcoes": opcoes_filtros(base, filtros), "contextos": opcoes_contexto(repository.buscar_cti_anfir())}
+    return {"opcoes": opcoes_filtros(base, filtros), "contextos": opcoes_contexto(_fonte_anfir())}
 
 
 @router.get("/analytics/intelligence/export")
@@ -227,7 +239,8 @@ def export_intelligence(request: Request, formato: str = Query("csv", pattern="^
         uf=qp.get("uf"), ddd=qp.get("ddd"), dealer=qp.get("dealer"), implementadora=qp.get("implementadora"),
         cliente=qp.get("cliente"), linha=qp.get("linha"), familia=qp.get("familia"), produto=qp.get("produto"),
     )
-    registros = payload["registros"]; colunas = sorted({chave for registro in registros for chave in registro})
+    registros = payload["registros"]
+    colunas = sorted({chave for registro in registros for chave in registro})
     if formato == "xlsx":
         from openpyxl import Workbook
         arquivo = BytesIO(); wb = Workbook(); ws = wb.active; ws.title = "Inteligencia"; ws.append(colunas)
