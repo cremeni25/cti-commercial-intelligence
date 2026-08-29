@@ -1,9 +1,48 @@
 from __future__ import annotations
 
+import unicodedata
 from datetime import date, datetime, timedelta
 from typing import Iterable
 
 VIENA_DDDS = {"011", "012", "013", "014", "015", "018"}
+
+# Municípios efetivamente observados na fonte Carrier/JOV 2026 e reconciliados
+# na auditoria ANFIR. A fonte bruta não fornece DDD, então o recorte territorial
+# precisa ser resolvido antes de publicar inteligência Viena. O mapa é apenas
+# territorial: não atribui vendedor quando o DDD 011 é compartilhado.
+MUNICIPIO_DDD_SP = {
+    "ANDRADINA": "018", "ANGATUBA": "015", "APARECIDA": "012", "ARACARIGUAMA": "011",
+    "ARACATUBA": "018", "ARUJA": "011", "ATIBAIA": "011", "BARIRI": "014",
+    "BARUERI": "011", "BAURU": "014", "BERNARDINO DE CAMPOS": "014", "BIRIGUI": "018",
+    "BOITUVA": "015", "BOM JESUS DOS PERDOES": "011", "BORACEIA": "014", "CABREUVA": "011",
+    "CAJAMAR": "011", "CANDIDO MOTA": "018", "CAPAO BONITO": "015", "CARAGUATATUBA": "012",
+    "CARAPICUIBA": "011", "CONCHAS": "014", "COTIA": "011", "CUBATAO": "013",
+    "DIADEMA": "011", "EMBU DAS ARTES": "011", "EMBU-GUACU": "011", "FRANCO DA ROCHA": "011",
+    "GALIA": "014", "GARCA": "014", "GUARAREMA": "011", "GUARATINGUETA": "012",
+    "GUARUJA": "013", "GUARULHOS": "011", "IACRI": "014", "IBIUNA": "015",
+    "ITANHAEM": "013", "ITAPECERICA DA SERRA": "011", "ITAPETININGA": "015", "ITAPEVA": "015",
+    "ITAPEVI": "011", "ITAPUI": "014", "ITAQUAQUECETUBA": "011", "ITATIBA": "011",
+    "ITU": "011", "ITUPEVA": "011", "JACAREI": "012", "JANDIRA": "011",
+    "JARINU": "011", "JAU": "014", "JUNDIAI": "011", "LENCOIS PAULISTA": "014",
+    "LINS": "014", "LOUVEIRA": "019", "MARILIA": "014", "MAUA": "011",
+    "MOGI DAS CRUZES": "011", "MONTE CASTELO": "018", "OSASCO": "011", "OURINHOS": "014",
+    "PARAGUACU PAULISTA": "018", "PARANAPANEMA": "014", "PEDERNEIRAS": "014", "PEREIRA BARRETO": "018",
+    "PIEDADE": "015", "PRAIA GRANDE": "013", "PRESIDENTE BERNARDES": "018", "PRESIDENTE EPITACIO": "018",
+    "RANCHARIA": "018", "REGISTRO": "013", "SANTA CRUZ DO RIO PARDO": "014", "SANTANA DE PARNAIBA": "011",
+    "SANTO ANDRE": "011", "SANTOS": "013", "SAO BERNARDO DO CAMPO": "011", "SAO CAETANO DO SUL": "011",
+    "SAO JOSE DOS CAMPOS": "012", "SAO PAULO": "011", "SAO VICENTE": "013", "SOROCABA": "015",
+    "SUZANO": "011", "TAGUAI": "014", "TATUI": "015", "TAUBATE": "012",
+    "TREMEMBE": "012", "TUPA": "014", "UBATUBA": "012", "VARZEA PAULISTA": "011",
+    "VOTORANTIM": "015",
+}
+
+
+def _sem_acento(valor) -> str:
+    texto = str(valor or "").strip().upper()
+    return "".join(
+        caractere for caractere in unicodedata.normalize("NFD", texto)
+        if unicodedata.category(caractere) != "Mn"
+    )
 
 
 def normalizar_ddd(valor) -> str | None:
@@ -13,6 +52,17 @@ def normalizar_ddd(valor) -> str | None:
     if not digitos:
         return None
     return digitos[-3:].zfill(3)
+
+
+def resolver_ddd_registro(registro: dict) -> str | None:
+    explicito = normalizar_ddd(registro.get("ddd") or registro.get("codigo_ddd"))
+    if explicito:
+        return explicito
+    estado = str(registro.get("estado") or registro.get("uf") or "").strip().upper()
+    if estado != "SP":
+        return None
+    cidade = _sem_acento(registro.get("cidade") or registro.get("municipio"))
+    return MUNICIPIO_DDD_SP.get(cidade)
 
 
 def resolver_periodo(periodo: str = "TODO_HISTORICO", inicio: date | None = None, fim: date | None = None):
@@ -31,7 +81,9 @@ def resolver_periodo(periodo: str = "TODO_HISTORICO", inicio: date | None = None
 
 
 def data_registro(registro: dict) -> date | None:
-    for campo in ("data_venda", "data", "created_at", "updated_at", "data_emissao", "data_pedido"):
+    # Datas comerciais reais têm prioridade. created_at é apenas data técnica de
+    # ingestão e não pode substituir a competência ANFIR quando ano/mês existem.
+    for campo in ("data_venda", "data", "data_emissao", "data_pedido"):
         valor = registro.get(campo)
         if not valor:
             continue
@@ -44,11 +96,39 @@ def data_registro(registro: dict) -> date | None:
         for formato in ("%d/%m/%Y", "%d-%m-%Y"):
             try: return datetime.strptime(texto[:10], formato).date()
             except ValueError: pass
+
+    try:
+        ano = int(registro.get("ano") or registro.get("ano_referencia") or 0)
+        mes = int(registro.get("mes") or 0)
+        if ano >= 2000 and 1 <= mes <= 12:
+            return date(ano, mes, 1)
+    except (TypeError, ValueError):
+        pass
+
+    for campo in ("created_at", "updated_at"):
+        valor = registro.get(campo)
+        if not valor:
+            continue
+        if isinstance(valor, datetime): return valor.date()
+        if isinstance(valor, date): return valor
+        try: return date.fromisoformat(str(valor).strip()[:10])
+        except ValueError: pass
     return None
 
 
-def _registro_viena(origem: str, autorizado: str) -> bool:
-    return origem == "VIENA_SP" or autorizado == "VIENA"
+def _registro_viena(registro: dict, origem: str, autorizado: str) -> bool:
+    if origem != "VIENA_SP" and autorizado != "VIENA":
+        return False
+    estado = str(registro.get("estado") or registro.get("uf") or "").strip().upper()
+    if estado and estado != "SP":
+        return False
+    ddd = resolver_ddd_registro(registro)
+    if ddd:
+        return ddd in VIENA_DDDS
+    # Compatibilidade com registros legados Viena sem município/DDD. Fontes novas
+    # Carrier/JOV com município SP não mapeado ficam fora até classificação segura.
+    cidade = str(registro.get("cidade") or registro.get("municipio") or "").strip()
+    return not cidade
 
 
 def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None) -> list[dict]:
@@ -59,11 +139,9 @@ def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: s
         estado = str(registro.get("estado") or registro.get("uf") or "").strip().upper()
         origem = str(registro.get("origem_base") or "").strip().upper()
         autorizado = str(registro.get("autorizado") or registro.get("dealer") or "").strip().upper()
-        registro_ddd = normalizar_ddd(registro.get("ddd") or registro.get("codigo_ddd"))
-        pertence_viena = _registro_viena(origem, autorizado)
+        registro_ddd = resolver_ddd_registro(registro)
+        pertence_viena = _registro_viena(registro, origem, autorizado)
 
-        # Brasil é a visão total de todas as origens. UFs são o recorte total da
-        # respectiva unidade federativa. Viena e seus DDDs permanecem exclusivos.
         if contexto == "viena-sp" and not pertence_viena: continue
         if contexto.startswith("uf-") and estado != contexto[3:].upper(): continue
         if contexto.startswith("ddd-"):
@@ -75,7 +153,10 @@ def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: s
         data = data_registro(registro)
         if inicio and (not data or data < inicio): continue
         if fim and (not data or data > fim): continue
-        resultado.append(registro)
+        registro_saida = dict(registro)
+        if registro_ddd and not registro_saida.get("ddd"):
+            registro_saida["ddd"] = registro_ddd
+        resultado.append(registro_saida)
 
     return resultado
 
@@ -83,5 +164,5 @@ def filtrar_registros(registros: Iterable[dict], contexto: str = "brasil", uf: s
 def opcoes_contexto(registros: Iterable[dict]) -> dict:
     base = list(registros or [])
     ufs = sorted({str(r.get("estado") or r.get("uf") or "").strip().upper() for r in base if r.get("estado") or r.get("uf")})
-    ddds = sorted({d for r in base if (d := normalizar_ddd(r.get("ddd") or r.get("codigo_ddd")))})
+    ddds = sorted({d for r in base if (d := resolver_ddd_registro(r))})
     return {"ufs": ufs, "ddds": ddds, "viena_ddds": sorted(VIENA_DDDS)}
