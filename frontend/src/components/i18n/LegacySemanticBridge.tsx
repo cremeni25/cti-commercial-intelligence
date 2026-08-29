@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import { useI18n } from "@/core/i18n/I18nContext"
 import legacy from "@/core/i18n/legacy-semantic.json"
+import legacyExtra from "@/core/i18n/legacy-semantic-extra.json"
 
 type LegacyEntry = { en: string; es: string }
 type LegacyLocale = "en" | "es"
@@ -12,7 +13,7 @@ const originalText = new WeakMap<Text, string>()
 const originalAttributes = new WeakMap<Element, Map<string, string>>()
 const attributeNames = ["placeholder", "title", "aria-label", "alt"] as const
 const excludedTags = new Set(["SCRIPT", "STYLE", "CODE", "PRE"])
-const catalog = legacy as Record<string, LegacyEntry>
+const catalog = { ...(legacy as Record<string, LegacyEntry>), ...(legacyExtra as Record<string, LegacyEntry>) }
 const semanticCatalog = new Map(Object.entries(catalog).map(([key, value]) => [normalizeSemanticKey(key), value]))
 
 function normalizeSemanticKey(value: string) {
