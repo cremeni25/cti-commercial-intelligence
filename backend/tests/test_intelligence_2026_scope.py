@@ -1,7 +1,8 @@
 from datetime import date
 
 from routers.analytics_router import _datas
-from services.commercial_intelligence import consolidar_inteligencia
+from services.commercial_intelligence import consolidar_inteligencia, opcoes_filtros
+from services.operational_filters import data_registro, filtrar_registros
 
 
 def _registro(ano, mes, linha, status, motivo="", ocorrencia="", cliente="CLIENTE"):
@@ -25,6 +26,48 @@ def test_ano_atual_comeca_em_janeiro_do_ano_corrente():
     inicio, fim = _datas("ANO_ATUAL", None, None)
     assert inicio == date(date.today().year, 1, 1)
     assert fim == date.today()
+
+
+def test_competencia_anfir_prevalece_sobre_data_venda_conflitante():
+    registro = _registro(2026, 7, "DIRECT DRIVE", "TK", cliente="LEGADO-2025")
+    registro.update({
+        "ano_referencia": 2025,
+        "aba_origem": "Viena SP 2025",
+        "data_venda": "2026-01-01",
+    })
+
+    assert data_registro(registro) == date(2025, 7, 1)
+    assert filtrar_registros(
+        [registro],
+        contexto="viena-sp",
+        inicio=date(2026, 1, 1),
+        fim=date(2026, 12, 31),
+    ) == []
+
+
+def test_motor_e_opcoes_excluem_legado_2025_com_data_venda_2026():
+    legado = _registro(2026, 7, "DIRECT DRIVE", "TK", ocorrencia="OBSERVAÇÃO: preço antigo", cliente="LEGADO-2025")
+    legado.update({
+        "ano_referencia": 2025,
+        "aba_origem": "Viena SP 2025",
+        "data_venda": "2026-01-01",
+    })
+    atual = _registro(2026, 3, "DIRECT DRIVE", "TK", ocorrencia="OBSERVAÇÃO: preço atual", cliente="ATUAL-2026")
+    atual["data_venda"] = "2026-03-15"
+    filtros = {
+        "inicio": date(2026, 1, 1), "fim": date(2026, 12, 31), "segmento": "DD",
+        "regiao": None, "uf": None, "dealer": None, "implementadora": None,
+        "cliente": None, "linha": None, "familia": None, "produto": None,
+    }
+
+    resultado = consolidar_inteligencia([legado, atual], contexto="viena-sp", segmento="DD", filtros=filtros, comparacao=None)
+    assert resultado["kpis"]["volume"] == 1
+    assert resultado["registros"][0]["cliente"] == "ATUAL-2026"
+    assert resultado["registros"][0]["data_venda"] == "2026-03-01"
+
+    opcoes = opcoes_filtros([legado, atual], filtros)
+    clientes = {item["valor"] for item in opcoes["cliente"]}
+    assert clientes == {"ATUAL-2026"}
 
 
 def test_inteligencia_2026_exclui_historico_e_respeita_segmento_e_observacao():
