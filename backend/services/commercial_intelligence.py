@@ -48,7 +48,14 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
     analisados = _filtrar(base, filtros_efetivos)
     anteriores = _filtrar(base, comparacao) if comparacao else []
     kpis = resultado["kpis"]
-    segmentos = Counter(_segmento(registro) for registro in base)
+
+    # O comparativo de segmentos precisa refletir exatamente o mesmo recorte
+    # temporal e dimensional da leitura geral. Removemos apenas o filtro de
+    # segmento para contar TR/DT/DD dentro do universo ativo, sem voltar à base
+    # histórica completa.
+    filtros_segmentos = {**(filtros or {}), "segmento": "GERAL"}
+    universo_segmentos = _filtrar(base, filtros_segmentos)
+    segmentos = Counter(_segmento(registro) for registro in universo_segmentos)
 
     clientes_unicos = len({_dimensao(registro, "cliente") for registro in analisados})
     implementadoras_unicas = len({_dimensao(registro, "implementadora") for registro in analisados})
