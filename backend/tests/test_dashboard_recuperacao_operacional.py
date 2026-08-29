@@ -1,24 +1,23 @@
 from pathlib import Path
-import re
 
 
 ROOT = Path(__file__).resolve().parents[2]
 DASHBOARD = ROOT / "frontend" / "src" / "app" / "dashboard" / "page.tsx"
 HISTORICO = ROOT / "frontend" / "src" / "app" / "historico-comercial" / "page.tsx"
-CATALOGO_OPERACIONAL = ROOT / "frontend" / "src" / "core" / "i18n" / "operational.ts"
 CATALOGO_ESTRATEGICO = ROOT / "frontend" / "src" / "core" / "i18n" / "strategic.ts"
 
 
-def test_dashboard_nao_converte_indisponibilidade_em_zero():
+def test_dashboard_executivo_nao_repete_operacao_crm_e_mantem_anfir_2026():
     fonte = DASHBOARD.read_text(encoding="utf-8")
-    catalogo = CATALOGO_OPERACIONAL.read_text(encoding="utf-8")
 
-    assert re.search(r"RETRY_MS\s*=\s*5_000", fonte)
-    assert 'tOp("dashboard.connection")' in fonte
-    assert "nenhum indicador indisponível será mostrado como zero" in catalogo
-    assert re.search(r"historicoDisponivel\?formatNumber\(historico\.metadata\?\.total_registros_filtrados\?\?0\):[\"']—[\"']", fonte)
-    assert re.search(r"nucleoDisponivel\?formatNumber\(abertos\.length\):[\"']—[\"']", fonte)
-    assert re.search(r"window\.addEventListener\([\"']online[\"'],\s*aoReconectar\)", fonte)
+    assert "AnfirWorkbookPanel" in fonte
+    assert "AnfirWorkbookCharts" in fonte
+    assert "/dashboard/anfir-historico" in fonte
+    assert "crm/nucleo-comercial" not in fonte
+    assert "crm/oportunidades" not in fonte
+    assert "pipelineAberto" not in fonte
+    assert "negociacoesAtivas" not in fonte
+    assert "RETRY_MS" not in fonte
 
 
 def test_historico_explicita_que_e_somente_consulta():
