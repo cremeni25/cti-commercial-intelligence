@@ -90,3 +90,48 @@ def test_comparacao_de_mercado_retorna_crescimento_real():
     assert variacao["anterior"] == 2
     assert variacao["percentual"] == 50.0
     assert variacao["direcao"] == "alta"
+
+
+def test_ano_atual_nao_afirma_queda_com_snapshot_historico_incomparavel():
+    registros = []
+    registros += [_registro(mes=1, cliente=f"Q1-{i}", status="Carrier") for i in range(224)]
+    registros += [_registro(mes=4, cliente=f"Q2-{i}", status="TK") for i in range(284)]
+    registros += [_registro(mes=7, cliente=f"Q3-{i}", status="Nacional") for i in range(89)]
+    registros += [
+        _registro(ano=2025, mes=6, cliente=f"HIST-{i}", status="TK", aba_origem="Viena SP 2025")
+        for i in range(1336)
+    ]
+    filtros = {"segmento": "GERAL", "inicio": date(2026, 1, 1), "fim": date(2026, 8, 29)}
+    comparacao = {"segmento": "GERAL", "inicio": date(2025, 5, 5), "fim": date(2025, 12, 31)}
+
+    resultado = consolidar_inteligencia(registros, "viena-sp", "GERAL", filtros, comparacao)
+    mercado = resultado["inteligencia_mercado"]["mercado"]
+
+    assert mercado["volume"] == 597
+    assert mercado["comparacao"]["atual"] == 284
+    assert mercado["comparacao"]["anterior"] == 224
+    assert mercado["comparacao"]["percentual"] == 26.79
+    assert mercado["comparacao"]["direcao"] == "alta"
+    assert mercado["comparacao"]["periodo_atual"] == "2026-Q2"
+    assert mercado["comparacao"]["periodo_anterior"] == "2026-Q1"
+    assert mercado["comparacao"]["metodo"] == "TRIMESTRES_COMPLETOS_MESMA_FONTE"
+
+
+def test_comparacao_explicita_ano_anterior_continua_disponivel():
+    registros = [
+        _registro(ano=2025, mes=6, cliente="2025-A", status="TK", aba_origem="Viena SP 2025"),
+        _registro(ano=2025, mes=7, cliente="2025-B", status="TK", aba_origem="Viena SP 2025"),
+        _registro(ano=2026, mes=6, cliente="2026-A", status="Carrier"),
+        _registro(ano=2026, mes=7, cliente="2026-B", status="Carrier"),
+        _registro(ano=2026, mes=7, cliente="2026-C", status="Carrier"),
+    ]
+    filtros = {"segmento": "GERAL", "inicio": date(2026, 1, 1), "fim": date(2026, 8, 29)}
+    comparacao = {"segmento": "GERAL", "inicio": date(2025, 1, 1), "fim": date(2025, 8, 29)}
+
+    resultado = consolidar_inteligencia(registros, "viena-sp", "GERAL", filtros, comparacao)
+    variacao = resultado["inteligencia_mercado"]["mercado"]["comparacao"]
+
+    assert variacao["atual"] == 3
+    assert variacao["anterior"] == 2
+    assert variacao["percentual"] == 50.0
+    assert "metodo" not in variacao
