@@ -28,14 +28,16 @@ function interpolate(template: string, params?: Params) {
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
   const { usuario } = useAuth()
+  const userId = usuario?.id || null
   const [locale, setLocaleState] = useState<Locale>("pt-BR")
 
   useEffect(() => {
-    const userPreference = usuario?.id ? window.localStorage.getItem(storageKey(usuario.id)) : null
+    const userPreference = userId ? window.localStorage.getItem(storageKey(userId)) : null
     const sharedPreference = window.localStorage.getItem(storageKey(null))
     const browser = typeof navigator !== "undefined" ? navigator.language : "pt-BR"
-    setLocaleState(normalizeLocale(userPreference || sharedPreference || browser))
-  }, [usuario?.id])
+    const resolved = normalizeLocale(userPreference || sharedPreference || browser)
+    queueMicrotask(() => setLocaleState(resolved))
+  }, [userId])
 
   useEffect(() => {
     document.documentElement.lang = locale
@@ -43,10 +45,10 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)
-    if (usuario?.id) window.localStorage.setItem(storageKey(usuario.id), next)
+    if (userId) window.localStorage.setItem(storageKey(userId), next)
     // Preferência compartilhada entre login, CTI Web e CRM App no mesmo dispositivo.
     window.localStorage.setItem(storageKey(null), next)
-  }, [usuario?.id])
+  }, [userId])
 
   const t = useCallback((key: MessageKey, params?: Params) => {
     const dictionary = messages[locale] as Record<string, string>
