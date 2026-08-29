@@ -7,97 +7,28 @@ import { ArrowLeft, Clock3, ExternalLink, FilePenLine, FileText, Loader2, Messag
 import ResumoFinanceiroOportunidade from "@/components/crm-app/negociacao/ResumoFinanceiroOportunidade"
 import PropostasProcessoSection from "@/components/crm-app/negociacao/PropostasProcessoSection"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
+import { useClosureI18n } from "@/core/i18n/closure"
 
-type Registro = Record<string, unknown>
-type Evento = { tipo: string; data_hora: string; titulo: string; status: string; responsavel_id: string; registro_id: string }
+type Registro=Record<string,unknown>
+type Evento={tipo:string;data_hora:string;titulo:string;status:string;responsavel_id:string;registro_id:string}
+type Locale="pt-BR"|"en"|"es"
+const TITULOS_GENERICOS=new Set(["","PROPOSTA COMERCIAL","OPORTUNIDADE","NOVA OPORTUNIDADE","OPORTUNIDADE SEM TÍTULO"])
+const copy={
+ "pt-BR":{noDate:"Data não informada",deal:"Oportunidade comercial",history:"Histórico comercial",subtitle:"Negociação, proposta e próximas ações no mesmo fluxo",account:"Cliente",accountMissing:"Cliente vinculado não localizado",opportunity:"Oportunidade",closing:"Fechamento",edit:"Editar cabeçalho",interaction:"Nova interação",load:"Não foi possível carregar o histórico.",empty:"Nenhum evento registrado nesta negociação.",record:"Registro comercial",openProposal:"Abrir proposta, envio, aceite e pedido",typePrefix:"TIPO DA OPORTUNIDADE:"},
+ en:{noDate:"Date not provided",deal:"Sales opportunity",history:"Commercial history",subtitle:"Deal, proposal and next actions in one continuous workflow",account:"Account",accountMissing:"Linked account not found",opportunity:"Opportunity",closing:"Expected close",edit:"Edit opportunity details",interaction:"New interaction",load:"We couldn't load the commercial history.",empty:"No events have been recorded for this deal.",record:"Commercial record",openProposal:"Open proposal, delivery, acceptance and order",typePrefix:"TIPO DA OPORTUNIDADE:"},
+ es:{noDate:"Fecha no informada",deal:"Oportunidad comercial",history:"Historial comercial",subtitle:"Negocio, propuesta y próximas acciones en un mismo flujo",account:"Cliente",accountMissing:"No se encontró el cliente vinculado",opportunity:"Oportunidad",closing:"Cierre previsto",edit:"Editar datos de la oportunidad",interaction:"Nueva interacción",load:"No fue posible cargar el historial comercial.",empty:"No hay eventos registrados en este negocio.",record:"Registro comercial",openProposal:"Abrir propuesta, envío, aceptación y pedido",typePrefix:"TIPO DA OPORTUNIDADE:"}
+} satisfies Record<Locale,Record<string,string>>
+function texto(v:unknown){return String(v||"").trim()}
+function nomeCliente(i:Registro){return texto(i.razao_social||i.nome||i.nome_fantasia||i.empresa||i.cliente)}
+function tituloCanonico(o:Registro,t:Record<string,string>){const titulo=texto(o.titulo);if(titulo&&!TITULOS_GENERICOS.has(titulo.toUpperCase()))return titulo;for(const linha of texto(o.descricao).split(/\r?\n/)){const limpa=linha.trim();if(limpa.toUpperCase().startsWith(t.typePrefix)){const tipo=limpa.split(":",2)[1]?.trim();if(tipo)return tipo}}return t.deal}
 
-const TITULOS_GENERICOS = new Set(["", "PROPOSTA COMERCIAL", "OPORTUNIDADE", "NOVA OPORTUNIDADE", "OPORTUNIDADE SEM TÍTULO"])
-
-function texto(v: unknown) { return String(v || "").trim() }
-function data(v: string) { if (!v) return "Data não informada"; const d = new Date(v); return Number.isNaN(d.getTime()) ? v : d.toLocaleString("pt-BR") }
-function nomeCliente(item: Registro) { return texto(item.razao_social || item.nome || item.nome_fantasia || item.empresa || item.cliente) }
-function tituloCanonico(oportunidade: Registro) {
-  const titulo = texto(oportunidade.titulo)
-  if (titulo && !TITULOS_GENERICOS.has(titulo.toLocaleUpperCase("pt-BR"))) return titulo
-
-  const descricao = texto(oportunidade.descricao)
-  for (const linha of descricao.split(/\r?\n/)) {
-    const limpa = linha.trim()
-    if (limpa.toLocaleUpperCase("pt-BR").startsWith("TIPO DA OPORTUNIDADE:")) {
-      const tipo = limpa.split(":", 2)[1]?.trim()
-      if (tipo) return tipo
-    }
-  }
-  return "Oportunidade comercial"
-}
-
-export default function Historico() {
-  const p = useParams<{ oportunidadeId: string }>()
-  const sp = useSearchParams()
-  const id = String(p.oportunidadeId || "")
-  const origem = sp.get("origem") || "clientes"
-  const voltar = origem === "pipeline" ? "/crm-app/pipeline" : origem === "oportunidades" ? "/crm-app/oportunidades" : "/crm-app/clientes"
-  const [o, setO] = useState<Registro>({})
-  const [eventos, setEventos] = useState<Evento[]>([])
-  const [clienteResolvido, setClienteResolvido] = useState("")
-  const [load, setLoad] = useState(true)
-  const [erro, setErro] = useState("")
-
-  useEffect(() => {
-    let ativo = true
-    void (async () => {
-      try {
-        const resposta = await fetchCrmSeguroProxy(`crm-seguro/timeline/${encodeURIComponent(id)}`, { cache: "no-store" })
-        const x = await resposta.json().catch(() => ({})) as Registro
-        if (!resposta.ok) throw new Error(String(x.detail || `Falha ${resposta.status}`))
-        if (!ativo) return
-
-        const oportunidade = x.oportunidade && typeof x.oportunidade === "object" ? x.oportunidade as Registro : {}
-        setO(oportunidade)
-        setEventos((Array.isArray(x.eventos) ? x.eventos : []).map((i: Registro) => {
-          const reg = i.registro && typeof i.registro === "object" ? i.registro as Registro : {}
-          return {
-            tipo: texto(i.tipo || "EVENTO"),
-            data_hora: texto(i.data_hora),
-            titulo: texto(i.titulo || "Registro comercial"),
-            status: texto(i.status),
-            responsavel_id: texto(i.responsavel_id),
-            registro_id: texto(reg.id || i.registro_id),
-          }
-        }))
-
-        const clienteDireto = texto(oportunidade.cliente_nome || oportunidade.razao_social || oportunidade.nome_cliente)
-        if (clienteDireto) {
-          setClienteResolvido(clienteDireto)
-          return
-        }
-
-        const clienteId = texto(oportunidade.cliente_id)
-        if (!clienteId) return
-
-        const clientesResposta = await fetch("/api/crm-proxy/crm-app/clientes", { cache: "no-store" })
-        const clientesPayload = await clientesResposta.json().catch(() => [])
-        if (!clientesResposta.ok || !Array.isArray(clientesPayload) || !ativo) return
-        const encontrado = clientesPayload.find((item: Registro) => texto(item.id || item.cliente_id || item.uuid) === clienteId) as Registro | undefined
-        if (encontrado) setClienteResolvido(nomeCliente(encontrado))
-      } catch (e) {
-        if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar o histórico.")
-      } finally {
-        if (ativo) setLoad(false)
-      }
-    })()
-    return () => { ativo = false }
-  }, [id])
-
-  const cliente = clienteResolvido || texto(o.cliente_nome || o.razao_social || o.nome_cliente)
-  const oportunidadeTitulo = tituloCanonico(o)
-
-  return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6"><div className="mx-auto max-w-4xl">
-    <header className="mb-5 flex items-center gap-3"><Link href={voltar} className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Histórico comercial</h1><p className="text-sm text-slate-400">Negociação, proposta e próximas ações no mesmo fluxo</p></div></header>
-    <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5"><p className="text-sm text-slate-400">Cliente</p><h2 className="mt-1 text-xl font-bold text-cyan-200">{cliente || "Cliente vinculado não localizado"}</h2><p className="mt-3 text-xs uppercase tracking-[.16em] text-slate-500">Oportunidade</p><h3 className="mt-1 text-lg font-semibold">{oportunidadeTitulo}</h3><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-cyan-900 bg-cyan-950/40 px-3 py-1 text-cyan-200">{texto(o.status) || "OPORTUNIDADE"}</span>{texto(o.data_fechamento_prevista) && <span className="rounded-full border border-[#24466f] px-3 py-1 text-slate-300">Fechamento: {data(texto(o.data_fechamento_prevista))}</span>}</div><div className="mt-4 grid gap-2 sm:grid-cols-2"><Link href={`/crm-app/oportunidades/${id}/editar?origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><FilePenLine size={16}/>Editar cabeçalho</Link><Link href={`/crm-app/atividades/nova?oportunidade=${id}&origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>Nova interação</Link></div></section>
-    <ResumoFinanceiroOportunidade oportunidadeId={id}/>
-    <PropostasProcessoSection oportunidadeId={id}/>
-    {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
-    <div id="timeline">{load ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : eventos.length === 0 ? <div className="rounded-3xl border border-dashed border-[#24466f] p-8 text-center text-slate-400">Nenhum evento registrado nesta negociação.</div> : <div className="relative space-y-4 before:absolute before:bottom-4 before:left-[19px] before:top-4 before:w-px before:bg-[#24466f]">{eventos.map((e, n) => <article key={`${e.tipo}-${e.data_hora}-${n}`} className="relative pl-12"><span className="absolute left-0 top-1 grid size-10 place-items-center rounded-2xl border border-[#24466f] bg-[#07162b] text-cyan-300">{e.tipo === "ATIVIDADE" ? <Clock3 size={18}/> : <FileText size={18}/>}</span><div className="rounded-3xl border border-[#16325c] bg-[#07162b] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{e.titulo}</strong><span className="text-xs text-slate-500">{data(e.data_hora)}</span></div><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-cyan-950/50 px-2 py-1 text-cyan-200">{e.tipo}</span>{e.status && <span className="rounded-full bg-slate-800 px-2 py-1 text-slate-300">{e.status}</span>}</div>{e.tipo === "PROPOSTA" && e.registro_id ? <Link href={`/crm-app/propostas/${e.registro_id}`} className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><ExternalLink size={16}/>Abrir proposta, envio, aceite e pedido</Link> : null}</div></article>)}</div>}</div>
-  </div></main>
+export default function Historico(){
+ const p=useParams<{oportunidadeId:string}>(),sp=useSearchParams(),id=String(p.oportunidadeId||""),origem=sp.get("origem")||"clientes",voltar=origem==="pipeline"?"/crm-app/pipeline":origem==="oportunidades"?"/crm-app/oportunidades":"/crm-app/clientes";const {locale,formatDate}=useClosureI18n(),t=copy[locale as Locale]||copy["pt-BR"]
+ const[o,setO]=useState<Registro>({}),[eventos,setEventos]=useState<Evento[]>([]),[clienteResolvido,setClienteResolvido]=useState(""),[load,setLoad]=useState(true),[erro,setErro]=useState("")
+ const data=(v:string)=>!v?t.noDate:formatDate(v,{dateStyle:"short",timeStyle:"short"})
+ useEffect(()=>{let ativo=true;void(async()=>{try{const r=await fetchCrmSeguroProxy(`crm-seguro/timeline/${encodeURIComponent(id)}`,{cache:"no-store"}),x=await r.json().catch(()=>({})) as Registro;if(!r.ok)throw new Error(String(x.detail||`HTTP ${r.status}`));if(!ativo)return;const op=x.oportunidade&&typeof x.oportunidade==="object"?x.oportunidade as Registro:{};setO(op);setEventos((Array.isArray(x.eventos)?x.eventos:[]).map((i:Registro)=>{const reg=i.registro&&typeof i.registro==="object"?i.registro as Registro:{};return{tipo:texto(i.tipo||"EVENTO"),data_hora:texto(i.data_hora),titulo:texto(i.titulo||t.record),status:texto(i.status),responsavel_id:texto(i.responsavel_id),registro_id:texto(reg.id||i.registro_id)}}));const direto=texto(op.cliente_nome||op.razao_social||op.nome_cliente);if(direto){setClienteResolvido(direto);return}const clienteId=texto(op.cliente_id);if(!clienteId)return;const cr=await fetch("/api/crm-proxy/crm-app/clientes",{cache:"no-store"}),cp=await cr.json().catch(()=>[]);if(!cr.ok||!Array.isArray(cp)||!ativo)return;const achado=cp.find((i:Registro)=>texto(i.id||i.cliente_id||i.uuid)===clienteId) as Registro|undefined;if(achado)setClienteResolvido(nomeCliente(achado))}catch(e){if(ativo)setErro(e instanceof Error?e.message:t.load)}finally{if(ativo)setLoad(false)}})();return()=>{ativo=false}},[id,t.load,t.record])
+ const cliente=clienteResolvido||texto(o.cliente_nome||o.razao_social||o.nome_cliente),titulo=tituloCanonico(o,t)
+ return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6"><div className="mx-auto max-w-4xl"><header className="mb-5 flex items-center gap-3"><Link href={voltar} className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{t.history}</h1><p className="text-sm text-slate-400">{t.subtitle}</p></div></header>
+ <section className="mb-4 rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5"><p className="text-sm text-slate-400">{t.account}</p><h2 className="mt-1 text-xl font-bold text-cyan-200">{cliente||t.accountMissing}</h2><p className="mt-3 text-xs uppercase tracking-[.16em] text-slate-500">{t.opportunity}</p><h3 className="mt-1 text-lg font-semibold">{titulo}</h3><div className="mt-3 flex flex-wrap gap-2 text-xs"><span className="rounded-full border border-cyan-900 bg-cyan-950/40 px-3 py-1 text-cyan-200">{texto(o.status)||"OPPORTUNITY"}</span>{texto(o.data_fechamento_prevista)&&<span className="rounded-full border border-[#24466f] px-3 py-1 text-slate-300">{t.closing}: {data(texto(o.data_fechamento_prevista))}</span>}</div><div className="mt-4 grid gap-2 sm:grid-cols-2"><Link href={`/crm-app/oportunidades/${id}/editar?origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-4 py-3 text-sm font-semibold"><FilePenLine size={16}/>{t.edit}</Link><Link href={`/crm-app/atividades/nova?oportunidade=${id}&origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>{t.interaction}</Link></div></section>
+ <ResumoFinanceiroOportunidade oportunidadeId={id}/><PropostasProcessoSection oportunidadeId={id}/>{erro&&<div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}<div id="timeline">{load?<div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>:eventos.length===0?<div className="rounded-3xl border border-dashed border-[#24466f] p-8 text-center text-slate-400">{t.empty}</div>:<div className="relative space-y-4 before:absolute before:bottom-4 before:left-[19px] before:top-4 before:w-px before:bg-[#24466f]">{eventos.map((e,n)=><article key={`${e.tipo}-${e.data_hora}-${n}`} className="relative pl-12"><span className="absolute left-0 top-1 grid size-10 place-items-center rounded-2xl border border-[#24466f] bg-[#07162b] text-cyan-300">{e.tipo==="ATIVIDADE"?<Clock3 size={18}/>:<FileText size={18}/>}</span><div className="rounded-3xl border border-[#16325c] bg-[#07162b] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{e.titulo}</strong><span className="text-xs text-slate-500">{data(e.data_hora)}</span></div><div className="mt-2 flex flex-wrap gap-2 text-xs"><span className="rounded-full bg-cyan-950/50 px-2 py-1 text-cyan-200">{e.tipo}</span>{e.status&&<span className="rounded-full bg-slate-800 px-2 py-1 text-slate-300">{e.status}</span>}</div>{e.tipo==="PROPOSTA"&&e.registro_id?<Link href={`/crm-app/propostas/${e.registro_id}`} className="mt-4 flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><ExternalLink size={16}/>{t.openProposal}</Link>:null}</div></article>)}</div>}</div></div></main>
 }
