@@ -58,7 +58,7 @@ def ui_files():
 
 def looks_like_source_fragment(fragment: str) -> bool:
     technical = [
-        "useState", "=>", "&&", "buscarSeguro", "buscarJson", ": Record", "setClientes", "setPedidos",
+        "useState", "=>", "&&", "buscarSeguro", "buscarJson", ": Record", ": Array", "setClientes", "setPedidos",
         "setVendas", "setOportunidades", "@cliente.com", "@empresa.com",
     ]
     return any(token in fragment for token in technical) or fragment.startswith(("([])", "=(", ":", "("))
