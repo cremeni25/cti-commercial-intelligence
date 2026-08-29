@@ -15,6 +15,10 @@ def _registro(**kwargs):
         "linha": "Direct Drive",
         "cliente": "CLIENTE TESTE",
         "implementadora": "IBIPORA",
+        "aba_origem": "Relatorio Performance 2026",
+        "versao_parser": "3.1.0",
+        "pipeline": "UPLOAD_ANFIR_OPERACIONAL",
+        "ocorrencia": "REPRESENTAÇÃO: JOV",
         "created_at": "2026-08-29T12:00:00",
     }
     base.update(kwargs)
