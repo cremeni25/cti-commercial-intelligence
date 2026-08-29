@@ -8,12 +8,14 @@ def _root() -> Path:
 def test_importacao_unificada_e_unico_ponto_visivel():
     page = (_root() / "frontend/src/app/upload/page.tsx").read_text(encoding="utf-8")
     sidebar = (_root() / "frontend/src/components/ui/Sidebar.tsx").read_text(encoding="utf-8")
+    catalog = (_root() / "frontend/src/core/i18n/catalog.ts").read_text(encoding="utf-8")
     service = (_root() / "frontend/src/services/cti-api.ts").read_text(encoding="utf-8")
     backoffice = (_root() / "frontend/src/app/backoffice-fontes/page.tsx").read_text(encoding="utf-8")
 
     assert "Importar Dados" in page
     assert "importarDados" in page
-    assert "Importar Dados" in sidebar
+    assert 'labelKey: "nav.import"' in sidebar
+    assert '"nav.import": "Importar Dados"' in catalog
     assert "Upload Operacional" not in sidebar
     assert "SEM_REGISTROS_PROCESSADOS" in service
     assert 'BACKOFFICE_URL = "/api/crm-proxy/backoffice-fontes"' in service
