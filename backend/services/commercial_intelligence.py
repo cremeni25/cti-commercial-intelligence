@@ -1,4 +1,5 @@
 from collections import Counter
+from datetime import timedelta
 
 from core.data_semantics import contrato_dashboard, contrato_fonte
 from services.anfir_market_intelligence import consolidar_inteligencia_mercado
@@ -30,14 +31,7 @@ def _preparar_registro_anfir(registro):
 
 
 def _tendencia_trimestral_comparavel(registros):
-    """Compara os dois últimos trimestres completos da mesma competência anual.
-
-    ANFIR é uma fotografia mensal de mercado. Um trimestre ainda em formação não
-    deve ser comparado a um trimestre completo, e a fotografia corrente não deve
-    ser comparada automaticamente a snapshots históricos metodologicamente
-    distintos. Por isso, a tendência executiva usa apenas trimestres completos
-    dentro do mesmo ano/fonte quando houver dois deles disponíveis.
-    """
+    """Compara os dois últimos trimestres completos da mesma competência anual."""
     datas = [data_registro(registro) for registro in registros]
     datas = [data for data in datas if data]
     if not datas:
@@ -73,6 +67,29 @@ def _tendencia_trimestral_comparavel(registros):
         "metodo": "TRIMESTRES_COMPLETOS_MESMA_FONTE",
         "comparavel": True,
     }
+
+
+def _periodo_anterior_cruza_snapshot_historico(filtros, comparacao):
+    """Identifica o default Ano atual × período anterior que mistura snapshots.
+
+    Ex.: 01/01–29/08/2026 vira 05/05–31/12/2025. Isso não é uma base
+    metodologicamente equivalente para afirmar tendência ANFIR. Comparações
+    explícitas de Ano anterior ou personalizadas não atendem a esta assinatura.
+    """
+    if not filtros or not comparacao:
+        return False
+    inicio = filtros.get("inicio")
+    fim = filtros.get("fim")
+    comp_inicio = comparacao.get("inicio")
+    comp_fim = comparacao.get("fim")
+    if not all((inicio, fim, comp_inicio, comp_fim)):
+        return False
+    if inicio.month != 1 or inicio.day != 1:
+        return False
+    if comp_fim != inicio - timedelta(days=1):
+        return False
+    inicio_ano_anterior = inicio.replace(year=inicio.year - 1)
+    return comp_inicio > inicio_ano_anterior
 
 
 def opcoes_filtros(registros, filtros):
@@ -141,13 +158,14 @@ def consolidar_inteligencia(registros, contexto="brasil", segmento="GERAL", filt
     ]
     resultado["clientes_inativos"] = []
 
-    resultado["inteligencia_mercado"] = consolidar_inteligencia_mercado(analisados, anteriores)
+    # A comparação genérica continua disponível no motor legado. Para o bloco
+    # de mercado, porém, o default Ano atual × período anterior não pode cruzar
+    # snapshots históricos incomparáveis e ser rotulado como tendência.
+    anteriores_mercado = [] if _periodo_anterior_cruza_snapshot_historico(filtros, comparacao) else anteriores
+    resultado["inteligencia_mercado"] = consolidar_inteligencia_mercado(analisados, anteriores_mercado)
     mercado = resultado["inteligencia_mercado"]["mercado"]
 
-    # Quando não há uma comparação histórica explicitamente aplicável, usamos
-    # uma tendência interna comparável da própria fotografia ANFIR. Isso evita
-    # afirmar crescimento/queda a partir de janelas históricas incompatíveis.
-    if not anteriores:
+    if not anteriores_mercado:
         tendencia = _tendencia_trimestral_comparavel(analisados)
         if tendencia:
             mercado["comparacao"] = tendencia
