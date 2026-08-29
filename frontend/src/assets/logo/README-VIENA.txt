@@ -1,0 +1,1 @@
+Asset oficial da Refrigeração Viena para uso institucional no preview de co-branding CTI + Viena. Não alterar cores, proporções ou composição da marca.
