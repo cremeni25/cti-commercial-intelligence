@@ -2,155 +2,37 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
-import {
-  ArrowLeft,
-  BriefcaseBusiness,
-  CalendarDays,
-  FilePenLine,
-  FileText,
-  History,
-  Loader2,
-  MessageSquarePlus,
-  PackageCheck,
-  Search,
-  TrendingUp,
-} from "lucide-react"
+import { ArrowLeft, BriefcaseBusiness, CalendarDays, FilePenLine, FileText, History, Loader2, MessageSquarePlus, PackageCheck, Search, TrendingUp } from "lucide-react"
 import { useAuth } from "@/core/auth/AuthContext"
+import { useOperationalI18n } from "@/core/i18n/operational"
 import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
 
 type Registro = Record<string, unknown>
-type Negocio = {
-  id: string
-  responsavelId: string
-  cliente: string
-  titulo: string
-  etapa: string
-  valor: number
-  probabilidade: number
-  fechamento: string
-  propostaId: string
-  propostaNumero: string
-  statusProposta: string
-  pedidoId: string
-  pedidoNumero: string
-}
-
+type Negocio = { id:string; responsavelId:string; cliente:string; titulo:string; etapa:string; valor:number; probabilidade:number; fechamento:string; propostaId:string; propostaNumero:string; statusProposta:string; pedidoId:string; pedidoNumero:string }
+type Locale = "pt-BR" | "en" | "es"
 const finais = new Set(["GANHO", "PERDIDO", "CANCELADO", "FATURADO", "ENCERRADO"])
-
-function lista(payload: unknown): Registro[] {
-  if (Array.isArray(payload)) return payload as Registro[]
-  if (payload && typeof payload === "object") {
-    const o = payload as Registro
-    for (const k of ["dados", "itens", "oportunidades", "resultado"]) {
-      if (Array.isArray(o[k])) return o[k] as Registro[]
-    }
-  }
-  return []
+const textos = {
+  "pt-BR": { pipeline:"Pipeline comercial", opportunities:"Oportunidades", pipelineDesc:"Posição por etapa dos mesmos negócios. Use o Forecast para enxergar a projeção por competência.", oppDesc:"Negócios abertos com o próximo passo comercial visível: interação, proposta, aceite e pedido.", openForecast:"Abrir Forecast", dealsPipeline:"Negócios no pipeline", openOpp:"Oportunidades abertas", total:"Valor total", weighted:"Valor ponderado", stageDistribution:"Distribuição por etapa", search:"Buscar cliente, equipamento, proposta, pedido ou etapa", empty:"Nenhum negócio encontrado nesta visão.", accountIdentifying:"Cliente em identificação", deal:"Negociação comercial", load:"Não foi possível carregar os negócios.", noForecast:"Sem previsão", next:"Próximo passo", history:"Histórico", openOrder:"Abrir pedido", openProposal:"Abrir proposta", openDeal:"Abrir negócio", interaction:"Nova interação", proposal:"PROPOSTA", orderGenerated:"Pedido já gerado. Acompanhe a execução pelo pedido.", prepareProposal:"Abra o negócio e prepare a proposta quando a negociação estiver pronta.", accepted:"Proposta aceita. Abra a proposta e converta em pedido.", converted:"A proposta já foi convertida em pedido.", registerAcceptance:"Abra a proposta, registre o aceite do cliente e então converta em pedido.", reviewProposal:"Abra a proposta para revisar, emitir ou enviar antes do aceite." },
+  en: { pipeline:"Sales pipeline", opportunities:"Opportunities", pipelineDesc:"Stage view of the same deals. Use Forecast to see the projection by forecast period.", oppDesc:"Open deals with the next commercial step visible: interaction, proposal, acceptance and order.", openForecast:"Open Forecast", dealsPipeline:"Deals in pipeline", openOpp:"Open opportunities", total:"Total value", weighted:"Weighted value", stageDistribution:"Distribution by stage", search:"Search account, equipment, proposal, order or stage", empty:"No deals found in this view.", accountIdentifying:"Account being identified", deal:"Sales opportunity", load:"We couldn't load the deals.", noForecast:"No forecast date", next:"Next step", history:"History", openOrder:"Open order", openProposal:"Open proposal", openDeal:"Open deal", interaction:"New interaction", proposal:"PROPOSAL", orderGenerated:"Order already created. Track execution from the order.", prepareProposal:"Open the deal and prepare a proposal when the negotiation is ready.", accepted:"Proposal accepted. Open it and convert it into an order.", converted:"The proposal has already been converted into an order.", registerAcceptance:"Open the proposal, record customer acceptance, then convert it into an order.", reviewProposal:"Open the proposal to review, issue or send it before acceptance." },
+  es: { pipeline:"Pipeline comercial", opportunities:"Oportunidades", pipelineDesc:"Vista por etapa de los mismos negocios. Use Forecast para ver la proyección por período previsto.", oppDesc:"Negocios abiertos con el próximo paso comercial visible: interacción, propuesta, aceptación y pedido.", openForecast:"Abrir Forecast", dealsPipeline:"Negocios en pipeline", openOpp:"Oportunidades abiertas", total:"Valor total", weighted:"Valor ponderado", stageDistribution:"Distribución por etapa", search:"Buscar cliente, equipo, propuesta, pedido o etapa", empty:"No se encontraron negocios en esta vista.", accountIdentifying:"Cliente en identificación", deal:"Negocio comercial", load:"No fue posible cargar los negocios.", noForecast:"Sin previsión", next:"Próximo paso", history:"Historial", openOrder:"Abrir pedido", openProposal:"Abrir propuesta", openDeal:"Abrir negocio", interaction:"Nueva interacción", proposal:"PROPUESTA", orderGenerated:"El pedido ya fue generado. Acompañe la ejecución desde el pedido.", prepareProposal:"Abra el negocio y prepare la propuesta cuando la negociación esté lista.", accepted:"Propuesta aceptada. Ábrala y conviértala en pedido.", converted:"La propuesta ya fue convertida en pedido.", registerAcceptance:"Abra la propuesta, registre la aceptación del cliente y luego conviértala en pedido.", reviewProposal:"Abra la propuesta para revisar, emitir o enviar antes de la aceptación." },
+} satisfies Record<Locale, Record<string,string>>
+function lista(payload:unknown):Registro[]{ if(Array.isArray(payload)) return payload as Registro[]; if(payload&&typeof payload==="object"){const o=payload as Registro; for(const k of ["dados","itens","oportunidades","resultado"]) if(Array.isArray(o[k])) return o[k] as Registro[]} return [] }
+function texto(v:unknown){ return String(v||"").trim() }
+function etapaLegivel(valor:string, locale:Locale){ const m:Record<Locale,Record<string,string>>={"pt-BR":{OPORTUNIDADE:"Oportunidade",ATIVIDADES:"Atividades",PROPOSTA:"Proposta",NEGOCIACAO:"Negociação",PEDIDO:"Pedido",GANHO:"Ganho",PERDIDO:"Perdido"},en:{OPORTUNIDADE:"Opportunity",ATIVIDADES:"Activities",PROPOSTA:"Proposal",NEGOCIACAO:"Negotiation",PEDIDO:"Order",GANHO:"Won",PERDIDO:"Lost"},es:{OPORTUNIDADE:"Oportunidad",ATIVIDADES:"Actividades",PROPOSTA:"Propuesta",NEGOCIACAO:"Negociación",PEDIDO:"Pedido",GANHO:"Ganado",PERDIDO:"Perdido"}}; return m[locale][valor]||valor.replaceAll("_"," ") }
+export default function NegociosNativos({ modo }:{ modo:"oportunidades"|"pipeline" }){
+ const {usuario}=useAuth(); const {locale,formatCurrency,formatDate}=useOperationalI18n(); const idioma=locale as Locale; const t=textos[idioma]||textos["pt-BR"]
+ const[dados,setDados]=useState<Negocio[]>([]),[busca,setBusca]=useState(""),[carregando,setCarregando]=useState(true),[erro,setErro]=useState("")
+ useEffect(()=>{fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(String((p as Registro).detail||`HTTP ${r.status}`));setDados(lista(p).map(i=>({id:texto(i.oportunidade_id||i.id),responsavelId:texto(i.responsavel_id),cliente:texto(i.cliente_nome||i.razao_social||i.cliente)||t.accountIdentifying,titulo:texto(i.titulo||i.equipamento)||t.deal,etapa:texto(i.etapa||i.status_oportunidade||i.status).toUpperCase()||"OPORTUNIDADE",valor:Number(i.valor||i.valor_estimado||0),probabilidade:Number(i.probabilidade||i.probabilidade_fechamento||0),fechamento:texto(i.data_fechamento_prevista||i.fechamento_previsto),propostaId:texto(i.proposta_id),propostaNumero:texto(i.proposta_numero),statusProposta:texto(i.status_proposta),pedidoId:texto(i.pedido_id),pedidoNumero:texto(i.pedido_numero)})).filter(i=>i.id))}).catch(e=>setErro(e instanceof Error?e.message:t.load)).finally(()=>setCarregando(false))},[t.accountIdentifying,t.deal,t.load])
+ const visiveis=useMemo(()=>{const esc=dados.filter(i=>pertenceAoEscopoDoUsuario(i.responsavelId,usuario));const base=modo==="oportunidades"?esc.filter(i=>!finais.has(i.etapa)):esc;const termo=busca.trim().toLocaleLowerCase(locale);return termo?base.filter(i=>`${i.cliente} ${i.titulo} ${i.etapa} ${i.propostaNumero} ${i.pedidoNumero}`.toLocaleLowerCase(locale).includes(termo)):base},[busca,dados,modo,usuario,locale])
+ const total=visiveis.reduce((s,i)=>s+i.valor,0),ponderado=visiveis.reduce((s,i)=>s+i.valor*(i.probabilidade>1?i.probabilidade/100:i.probabilidade),0)
+ const etapas=useMemo(()=>Array.from(new Set(visiveis.map(i=>i.etapa))).map(etapa=>({etapa,total:visiveis.filter(i=>i.etapa===etapa).length})),[visiveis])
+ function proximoPasso(n:Negocio){if(n.pedidoId)return n.pedidoNumero?`${t.orderGenerated} (${n.pedidoNumero})`:t.orderGenerated;if(!n.propostaId)return t.prepareProposal;const s=n.statusProposta.toUpperCase().replaceAll(" ","_");if(["ACEITA","APROVADA"].includes(s))return t.accepted;if(s==="CONVERTIDA_PEDIDO")return t.converted;if(["EMITIDA","ENVIADA","VISUALIZADA","EM_NEGOCIACAO"].includes(s))return t.registerAcceptance;return t.reviewProposal}
+ return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-5xl">
+ <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><Link href="/crm-app" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{modo==="pipeline"?t.pipeline:t.opportunities}</h1><p className="max-w-2xl text-sm text-slate-400">{modo==="pipeline"?t.pipelineDesc:t.oppDesc}</p></div></div>{modo==="pipeline"&&<Link href="/crm-app/forecast" className="flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><TrendingUp size={17}/>{t.openForecast}</Link>}</header>
+ <div className="mb-4 grid gap-3 sm:grid-cols-3"><Kpi label={modo==="pipeline"?t.dealsPipeline:t.openOpp} valor={String(visiveis.length)}/><Kpi label={t.total} valor={formatCurrency(total)}/><Kpi label={t.weighted} valor={formatCurrency(ponderado)}/></div>
+ {modo==="pipeline"&&etapas.length>0&&<section className="mb-4 rounded-2xl border border-[#16325c] bg-[#07162b] p-4"><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-400">{t.stageDistribution}</p><div className="mt-3 flex flex-wrap gap-2">{etapas.map(item=><span key={item.etapa} className="rounded-full border border-[#24466f] bg-[#020817] px-3 py-2 text-xs text-slate-300">{etapaLegivel(item.etapa,idioma)} <strong className="ml-1 text-cyan-300">{item.total}</strong></span>)}</div></section>}
+ <div className="relative mb-4"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder={t.search} className="h-12 w-full rounded-2xl border border-[#16325c] bg-[#07162b] pl-11 pr-4"/></div>
+ {erro&&<div className="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}{carregando?<div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>:visiveis.length===0?<div className="rounded-3xl border border-dashed border-[#24466f] p-8 text-center text-slate-400">{t.empty}</div>:<div className="space-y-3">{visiveis.map(i=><article key={i.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-4"><div className="flex items-start gap-4"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><BriefcaseBusiness size={22}/></span><div className="min-w-0 flex-1"><strong className="block">{i.cliente} · {i.titulo}</strong><div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400"><span>{etapaLegivel(i.etapa,idioma)}</span><span>{formatCurrency(i.valor)}</span><span className="inline-flex items-center gap-1"><CalendarDays size={13}/>{i.fechamento?formatDate(i.fechamento):t.noForecast}</span>{i.propostaNumero&&<span className="rounded-full border border-cyan-900 px-2 py-0.5 text-cyan-300">{i.propostaNumero} · {i.statusProposta||t.proposal}</span>}{i.pedidoNumero&&<span className="rounded-full border border-emerald-900 px-2 py-0.5 text-emerald-300">{i.pedidoNumero}</span>}</div></div></div><div className="mt-4 rounded-2xl border border-[#24466f] bg-[#020817]/60 px-4 py-3 text-sm text-slate-300"><strong className="text-cyan-300">{t.next}: </strong>{proximoPasso(i)}</div><div className="mt-4 grid gap-2 sm:grid-cols-3"><Link href={`/crm-app/historico/${i.id}?origem=${modo}`} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 px-3 py-3 text-sm font-semibold text-cyan-200"><History size={16}/>{t.history}</Link>{i.pedidoId?<Link href={`/crm-app/pedidos/${encodeURIComponent(i.pedidoId)}`} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-700 px-3 py-3 text-sm font-semibold text-emerald-300"><PackageCheck size={16}/>{t.openOrder}</Link>:i.propostaId?<Link href={`/crm-app/propostas/${encodeURIComponent(i.propostaId)}`} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white"><FileText size={16}/>{t.openProposal}</Link>:<Link href={`/crm-app/historico/${i.id}?origem=${modo}#negociacao`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-3 py-3 text-sm font-semibold"><FilePenLine size={16}/>{t.openDeal}</Link>}<Link href={`/crm-app/atividades/nova?oportunidade=${i.id}&origem=${modo}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-3 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>{t.interaction}</Link></div></article>)}</div>}
+ </div></main>
 }
-
-function texto(v: unknown) { return String(v || "").trim() }
-function dataBR(v: string) {
-  if (!v) return "Sem previsão"
-  const d = new Date(v)
-  return Number.isNaN(d.getTime()) ? v : d.toLocaleDateString("pt-BR")
-}
-
-function proximoPasso(negocio: Negocio) {
-  if (negocio.pedidoId) {
-    return negocio.pedidoNumero
-      ? `Pedido ${negocio.pedidoNumero} já gerado. Acompanhe a execução pelo pedido.`
-      : "Pedido já gerado. Acompanhe a execução pelo pedido."
-  }
-  if (!negocio.propostaId) return "Próximo passo: abra o negócio e prepare a proposta quando a negociação estiver pronta."
-  const status = negocio.statusProposta.toUpperCase().replaceAll(" ", "_")
-  if (["ACEITA", "APROVADA"].includes(status)) return "Proposta aceita. Próximo passo: abrir a proposta e converter em pedido."
-  if (status === "CONVERTIDA_PEDIDO") return "A proposta já foi convertida em pedido."
-  if (["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)) return "Próximo passo: abrir a proposta, registrar o aceite do cliente e então converter em pedido."
-  return "Proposta existente. Abra a proposta para revisar, emitir ou enviar antes do aceite."
-}
-
-export default function NegociosNativos({ modo }: { modo: "oportunidades" | "pipeline" }) {
-  const { usuario } = useAuth()
-  const [dados, setDados] = useState<Negocio[]>([])
-  const [busca, setBusca] = useState("")
-  const [carregando, setCarregando] = useState(true)
-  const [erro, setErro] = useState("")
-
-  useEffect(() => {
-    fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" })
-      .then(async (r) => {
-        const p = await r.json().catch(() => ({}))
-        if (!r.ok) throw new Error(String((p as Registro).detail || `Falha ${r.status}`))
-        setDados(lista(p).map((i) => ({
-          id: texto(i.oportunidade_id || i.id),
-          responsavelId: texto(i.responsavel_id),
-          cliente: texto(i.cliente_nome || i.razao_social || i.cliente) || "Cliente em identificação",
-          titulo: texto(i.titulo || i.equipamento) || "Negociação comercial",
-          etapa: texto(i.etapa || i.status_oportunidade || i.status).toUpperCase() || "OPORTUNIDADE",
-          valor: Number(i.valor || i.valor_estimado || 0),
-          probabilidade: Number(i.probabilidade || i.probabilidade_fechamento || 0),
-          fechamento: texto(i.data_fechamento_prevista || i.fechamento_previsto),
-          propostaId: texto(i.proposta_id),
-          propostaNumero: texto(i.proposta_numero),
-          statusProposta: texto(i.status_proposta),
-          pedidoId: texto(i.pedido_id),
-          pedidoNumero: texto(i.pedido_numero),
-        })).filter((i) => i.id))
-      })
-      .catch((e) => setErro(e instanceof Error ? e.message : "Não foi possível carregar os negócios."))
-      .finally(() => setCarregando(false))
-  }, [])
-
-  const visiveis = useMemo(() => {
-    const escopados = dados.filter((i) => pertenceAoEscopoDoUsuario(i.responsavelId, usuario))
-    const base = modo === "oportunidades" ? escopados.filter((i) => !finais.has(i.etapa)) : escopados
-    const termo = busca.trim().toLocaleLowerCase("pt-BR")
-    return termo
-      ? base.filter((i) => `${i.cliente} ${i.titulo} ${i.etapa} ${i.propostaNumero} ${i.pedidoNumero}`.toLocaleLowerCase("pt-BR").includes(termo))
-      : base
-  }, [busca, dados, modo, usuario])
-
-  const total = visiveis.reduce((s, i) => s + i.valor, 0)
-  const ponderado = visiveis.reduce((s, i) => s + i.valor * (i.probabilidade > 1 ? i.probabilidade / 100 : i.probabilidade), 0)
-  const titulo = modo === "pipeline" ? "Pipeline comercial" : "Oportunidades"
-  const origem = modo === "pipeline" ? "pipeline" : "oportunidades"
-  const descricao = modo === "pipeline"
-    ? "Posição por etapa dos mesmos negócios. Use o Forecast para enxergar a projeção por competência."
-    : "Negócios abertos com o próximo passo comercial visível: interação, proposta, aceite e pedido."
-  const etapas = useMemo(
-    () => Array.from(new Set(visiveis.map((i) => i.etapa))).map((etapa) => ({ etapa, total: visiveis.filter((i) => i.etapa === etapa).length })),
-    [visiveis],
-  )
-
-  return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-5xl">
-    <header className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3"><Link href="/crm-app" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[0.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{titulo}</h1><p className="max-w-2xl text-sm text-slate-400">{descricao}</p></div></div>
-      {modo === "pipeline" && <Link href="/crm-app/forecast" className="flex items-center justify-center gap-2 rounded-xl border border-cyan-700 px-4 py-3 text-sm font-semibold text-cyan-200"><TrendingUp size={17}/>Abrir Forecast</Link>}
-    </header>
-
-    <div className="mb-4 grid gap-3 sm:grid-cols-3">
-      <Kpi label={modo === "pipeline" ? "Negócios no pipeline" : "Oportunidades abertas"} valor={String(visiveis.length)}/>
-      <Kpi label="Valor total" valor={total.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/>
-      <Kpi label="Valor ponderado" valor={ponderado.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}/>
-    </div>
-
-    {modo === "pipeline" && etapas.length > 0 && <section className="mb-4 rounded-2xl border border-[#16325c] bg-[#07162b] p-4"><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-400">Distribuição por etapa</p><div className="mt-3 flex flex-wrap gap-2">{etapas.map((item) => <span key={item.etapa} className="rounded-full border border-[#24466f] bg-[#020817] px-3 py-2 text-xs text-slate-300">{item.etapa.replaceAll("_", " ")} <strong className="ml-1 text-cyan-300">{item.total}</strong></span>)}</div></section>}
-
-    <div className="relative mb-4"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={18}/><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente, equipamento, proposta, pedido ou etapa" className="h-12 w-full rounded-2xl border border-[#16325c] bg-[#07162b] pl-11 pr-4"/></div>
-
-    {erro && <div className="rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
-    {carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : visiveis.length === 0 ? <div className="rounded-3xl border border-dashed border-[#24466f] p-8 text-center text-slate-400">Nenhum negócio encontrado nesta visão.</div> : <div className="space-y-3">{visiveis.map((i) => <article key={i.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-4">
-      <div className="flex items-start gap-4"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><BriefcaseBusiness size={22}/></span><div className="min-w-0 flex-1"><strong className="block">{i.cliente} · {i.titulo}</strong><div className="mt-1 flex flex-wrap gap-2 text-xs text-slate-400"><span>{i.etapa}</span><span>{i.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</span><span className="inline-flex items-center gap-1"><CalendarDays size={13}/>{dataBR(i.fechamento)}</span>{i.propostaNumero && <span className="rounded-full border border-cyan-900 px-2 py-0.5 text-cyan-300">{i.propostaNumero} · {i.statusProposta || "PROPOSTA"}</span>}{i.pedidoNumero && <span className="rounded-full border border-emerald-900 px-2 py-0.5 text-emerald-300">{i.pedidoNumero}</span>}</div></div></div>
-      <div className="mt-4 rounded-2xl border border-[#24466f] bg-[#020817]/60 px-4 py-3 text-sm text-slate-300"><strong className="text-cyan-300">Próximo passo: </strong>{proximoPasso(i).replace(/^Próximo passo:\s*/i, "")}</div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        <Link href={`/crm-app/historico/${i.id}?origem=${origem}#timeline`} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 px-3 py-3 text-sm font-semibold text-cyan-200"><History size={16}/>Histórico</Link>
-        {i.pedidoId ? <Link href={`/crm-app/pedidos/${encodeURIComponent(i.pedidoId)}`} className="flex items-center justify-center gap-2 rounded-xl border border-emerald-700 px-3 py-3 text-sm font-semibold text-emerald-300"><PackageCheck size={16}/>Abrir pedido</Link> : i.propostaId ? <Link href={`/crm-app/propostas/${encodeURIComponent(i.propostaId)}`} className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-3 py-3 text-sm font-bold text-white"><FileText size={16}/>Abrir proposta</Link> : <Link href={`/crm-app/historico/${i.id}?origem=${origem}#negociacao`} className="flex items-center justify-center gap-2 rounded-xl border border-[#24466f] px-3 py-3 text-sm font-semibold"><FilePenLine size={16}/>Abrir negócio</Link>}
-        <Link href={`/crm-app/atividades/nova?oportunidade=${i.id}&origem=${origem}`} className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-3 py-3 text-sm font-bold text-slate-950"><MessageSquarePlus size={16}/>Nova interação</Link>
-      </div>
-    </article>)}</div>}
-  </div></main>
-}
-
-function Kpi({ label, valor }: { label: string; valor: string }) {
-  return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-xs text-slate-400">{label}</p><strong className="mt-1 block text-lg text-cyan-300">{valor}</strong></div>
-}
+function Kpi({label,valor}:{label:string;valor:string}){return <div className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><p className="text-xs text-slate-400">{label}</p><strong className="mt-1 block text-lg text-cyan-300">{valor}</strong></div>}
