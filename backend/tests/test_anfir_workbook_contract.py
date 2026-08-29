@@ -47,8 +47,9 @@ def test_priorizacao_mantem_score_transparente_da_planilha():
     payload = consolidar_workbook_anfir_2026(registros)
     item = payload["oportunidades_prioritarias"][0]
 
-    # não Carrier=2 + 2*(não participou=1 + sem contato=1) + preço=1
-    assert item["score_transparente"] == 7
+    # não Carrier=2 + 2*(não participou=1 + sem contato=1); preço não soma aqui
+    # porque a causa estruturada da primeira ocorrência é COBERTURA_COMERCIAL.
+    assert item["score_transparente"] == 6
     assert item["criterio_score"] == "não Carrier + 2×(não participou + sem contato) + preço + relacionamento + gap técnico"
 
 
