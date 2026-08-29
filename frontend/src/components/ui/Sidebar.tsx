@@ -22,7 +22,6 @@ const menuGroups: MenuGroup[] = [
     tituloKey: "nav.main",
     itens: [
       { labelKey: "nav.dashboard", href: "/dashboard", icon: "📊", type: "emoji" },
-      { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📡", type: "emoji" },
       { labelKey: "nav.history", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
       { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
