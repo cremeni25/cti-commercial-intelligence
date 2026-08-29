@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 import { AuthProvider } from "@/core/auth"
+import { I18nProvider } from "@/core/i18n"
 import { OperationalContextProvider } from "@/context/OperationalContext"
 
 export const metadata: Metadata = {
@@ -35,7 +36,9 @@ export default function RootLayout({
     <html lang="pt-BR" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <OperationalContextProvider>{children}</OperationalContextProvider>
+          <I18nProvider>
+            <OperationalContextProvider>{children}</OperationalContextProvider>
+          </I18nProvider>
         </AuthProvider>
       </body>
     </html>
