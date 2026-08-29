@@ -1,8 +1,8 @@
 "use client"
 
 import Image, { type StaticImageData } from "next/image"
-import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
-import logoViena from "@/assets/logo/Logo Viena.png"
+import logoCTI from "@/assets/logo/Logo CTI - sem fundo.png"
+import logoViena from "@/assets/logo/Logo Viena - transparente.png"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -98,15 +98,15 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
-      <div className="p-4 border-b border-[#13203f] flex flex-col items-center">
-        <Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain" />
-        <div className="mt-3 flex w-full items-center justify-center gap-2">
-          <span className="h-px w-7 bg-[#24466f]" aria-hidden="true" />
-          <span className="text-[8px] uppercase tracking-[0.22em] text-slate-500">Operação atendida</span>
-          <span className="h-px w-7 bg-[#24466f]" aria-hidden="true" />
-        </div>
-        <div className="mt-2 rounded-lg bg-white px-3 py-1.5 shadow-sm">
-          <Image src={logoViena} alt="Refrigeração Viena" width={120} height={48} className="h-auto w-[96px] object-contain" />
+      <div className="border-b border-[#13203f] px-4 pb-4 pt-4">
+        <div className="flex flex-col items-center">
+          <Image src={logoCTI} alt="CTI — Centro de Tecnologia e Inteligência Comercial" width={230} height={94} priority className="h-auto w-[210px] object-contain" />
+          <div className="mt-3 flex w-full items-center gap-3">
+            <span className="h-px flex-1 bg-gradient-to-r from-transparent to-[#36567c]" aria-hidden="true" />
+            <span className="text-[8px] uppercase tracking-[0.28em] text-slate-500">Operação atendida</span>
+            <span className="h-px flex-1 bg-gradient-to-l from-transparent to-[#36567c]" aria-hidden="true" />
+          </div>
+          <Image src={logoViena} alt="Refrigeração Viena" width={150} height={60} className="mt-2 h-auto w-[118px] object-contain opacity-95" />
         </div>
       </div>
 
