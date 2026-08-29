@@ -132,3 +132,44 @@ def test_cada_segmento_e_subconjunto_do_mesmo_periodo_2026():
 
     assert volumes == {"GERAL": 3, "TR": 1, "DT": 1, "DD": 1}
     assert sum(volumes[codigo] for codigo in ("TR", "DT", "DD")) == volumes["GERAL"]
+
+
+def test_segmentos_auxiliares_respeitam_periodo_sem_alterar_demais_blocos():
+    registros = [
+        _registro(2025, 1, "TRAILER", "CARRIER", ocorrencia="OBSERVAÇÃO: histórico antigo", cliente="TR-2025"),
+        _registro(2026, 1, "TRAILER", "CARRIER", ocorrencia="OBSERVAÇÃO: relacionamento atual", cliente="TR-2026"),
+        _registro(2026, 2, "DIESEL TRUCK", "NACIONAL", motivo="Não participamos da proposta", ocorrencia="OBSERVAÇÃO: implementadora fabrica o equipamento", cliente="DT-2026"),
+        _registro(2026, 3, "DIRECT DRIVE", "TK", motivo="Preço Carrier mais alto", ocorrencia="OBSERVAÇÃO: Thermo King com manutenção e preço", cliente="DD-2026"),
+    ]
+    filtros = {
+        "inicio": date(2026, 1, 1),
+        "fim": date(2026, 12, 31),
+        "segmento": "GERAL",
+        "regiao": None,
+        "uf": None,
+        "dealer": None,
+        "implementadora": None,
+        "cliente": None,
+        "linha": None,
+        "familia": None,
+        "produto": None,
+    }
+
+    resultado = consolidar_inteligencia(registros, contexto="viena-sp", segmento="GERAL", filtros=filtros, comparacao=None)
+    mercado = resultado["inteligencia_mercado"]
+
+    assert resultado["segmentos"] == {"TR": 1, "DT": 1, "DD": 1, "UNKNOWN": 0}
+    assert resultado["kpis"]["volume"] == 3
+    assert mercado["mercado"]["volume"] == 3
+    assert mercado["competitividade"]["carrier_observado"]["quantidade"] == 1
+    assert mercado["cobertura_comercial"]["nao_participamos_proposta"] == 1
+
+    motivos = {item["motivo"]: item["quantidade"] for item in mercado["motivos_originais"]}
+    assert motivos["Não participamos da proposta"] == 1
+    assert motivos["Preço Carrier mais alto"] == 1
+
+    temas = {item["tema"] for item in mercado["inteligencia_observacoes"]["temas"]}
+    assert "CONCORRENTE_TK" in temas
+    assert "PRECO_VALOR" in temas
+    assert "IMPLEMENTADORA_INTEGRADA" in temas
+    assert all("TR-2025" != item["cliente"] for item in mercado["prioridades_recuperacao"])
