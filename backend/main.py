@@ -14,6 +14,7 @@ load_dotenv()
 from core.supabase_client import supabase
 from core.transient_http import is_transient_http_error
 from routers.analytics_router import router as analytics_router
+from routers.anfir_workbook_router import router as anfir_workbook_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
 from routers.clientes_router import router as clientes_router
@@ -101,6 +102,7 @@ app.include_router(crm_scope_vendas_router)
 app.include_router(crm_scope_negocio_historico_router)
 app.include_router(primeiro_acesso_scope_router)
 app.include_router(analytics_router)
+app.include_router(anfir_workbook_router)
 app.include_router(engine_router)
 app.include_router(negociacoes_router)
 app.include_router(clientes_router)
@@ -178,16 +180,3 @@ def insights():
             ],
         },
     }
-
-
-@app.get("/pipeline/status")
-def pipeline_status():
-    resposta = (
-        supabase.table("cti_anfir")
-        .select("id", count="exact")
-        .eq("ativo", True)
-        .limit(1)
-        .execute()
-    )
-    total = resposta.count or 0
-    return {"linhas_brutas": total, "linhas_processadas": total, "pipeline": "ativo"}
