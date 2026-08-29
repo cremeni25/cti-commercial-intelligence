@@ -13,6 +13,11 @@ const originalAttributes = new WeakMap<Element, Map<string, string>>()
 const attributeNames = ["placeholder", "title", "aria-label", "alt"] as const
 const excludedTags = new Set(["SCRIPT", "STYLE", "CODE", "PRE"])
 const catalog = legacy as Record<string, LegacyEntry>
+const semanticCatalog = new Map(Object.entries(catalog).map(([key, value]) => [normalizeSemanticKey(key), value]))
+
+function normalizeSemanticKey(value: string) {
+  return value.normalize("NFC").replace(/\u00ad/g, "").replace(/\s+/g, " ").trim()
+}
 
 function intlLocale(locale: Locale) {
   return locale === "en" ? "en-US" : locale === "es" ? "es-419" : "pt-BR"
@@ -29,19 +34,16 @@ function localizeBrazilianFormats(value: string, locale: Locale) {
   const target = intlLocale(locale)
   let result = value
 
-  // Moeda formada por chamadas legadas de toLocaleString("pt-BR").
   result = result.replace(/R\$\s*((?:\d{1,3}(?:\.\d{3})*|\d+)(?:,\d+)?)/g, (match, raw: string) => {
     const number = brNumberToNumber(raw)
     return number === null ? match : new Intl.NumberFormat(target, { style: "currency", currency: "BRL" }).format(number)
   })
 
-  // Data brasileira gerada por toLocaleDateString("pt-BR").
   result = result.replace(/\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/g, (match, day: string, month: string, year: string) => {
     const date = new Date(Number(year), Number(month) - 1, Number(day))
     return Number.isNaN(date.getTime()) ? match : new Intl.DateTimeFormat(target).format(date)
   })
 
-  // Números com separador brasileiro. IDs, telefones, códigos e números simples sem separador não são tocados.
   result = result.replace(/(?<![\w/.-])((?:\d{1,3}(?:\.\d{3})+)(?:,\d+)?|\d+,\d+)(?![\w/.-])/g, (match, raw: string) => {
     const number = brNumberToNumber(raw)
     return number === null ? match : new Intl.NumberFormat(target).format(number)
@@ -52,7 +54,7 @@ function localizeBrazilianFormats(value: string, locale: Locale) {
 
 function translateCore(value: string, locale: Locale) {
   if (locale === "pt-BR") return value
-  const exact = catalog[value]
+  const exact = semanticCatalog.get(normalizeSemanticKey(value))
   return localizeBrazilianFormats(exact?.[locale as LegacyLocale] || value, locale)
 }
 
@@ -99,8 +101,6 @@ export default function LegacySemanticBridge() {
         if (current !== translated) element.setAttribute(attribute, translated)
       }
 
-      // Alguns fluxos legados possuem uma mensagem-padrão controlada em textarea.
-      // Só traduzimos quando o conteúdo é exatamente um conceito conhecido; texto livre do usuário nunca é alterado.
       if (element instanceof HTMLTextAreaElement) {
         const rawValue = element.value
         const translated = translateCore(rawValue, locale)
@@ -136,7 +136,6 @@ export default function LegacySemanticBridge() {
           const text = mutation.target as Text
           const current = text.nodeValue || ""
           const knownOriginal = originalText.get(text)
-          // React pode recriar o texto original; nesse caso o original legítimo é atualizado antes de traduzir.
           if (knownOriginal !== undefined && current !== preserveWhitespace(knownOriginal, locale)) {
             originalText.set(text, current)
           }
