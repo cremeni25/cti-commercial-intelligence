@@ -4,241 +4,45 @@ import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useState } from "react"
 import { Archive, ArrowLeft, CalendarClock, CheckCircle2, CircleAlert, ClipboardCheck, Filter, Loader2, Pencil, Plus, RefreshCw, X } from "lucide-react"
 import { useAuth } from "@/core/auth"
+import { useOperationalI18n } from "@/core/i18n/operational"
 
-type Registro = Record<string, unknown>
-type ClienteOpcao = { id: string; nome: string }
-type Atividade = {
-  id: string
-  titulo: string
-  tipo: string
-  status: string
-  data: string
-  horario: string
-  clienteId: string
-  cliente: string
-  oportunidadeId: string
-  descricao: string
-  arquivada: boolean
-  motivoArquivamento: string
+type Registro=Record<string,unknown>
+type ClienteOpcao={id:string;nome:string}
+type Atividade={id:string;titulo:string;tipo:string;status:string;data:string;horario:string;clienteId:string;cliente:string;oportunidadeId:string;descricao:string;arquivada:boolean;motivoArquivamento:string}
+type Locale="pt-BR"|"en"|"es"
+const textos={
+ "pt-BR":{title:"Central de Atividades",subtitle:"Histórico, pendências e interações comerciais",archived:"Arquivadas",backActive:"Voltar às ativas",refresh:"Atualizar",new:"Nova atividade",adminView:"Visão administrativa: estes registros não contam em atividades, pendências, atrasadas ou histórico operacional. Permanecem somente para rastreabilidade.",pending:"Pendentes",completed:"Concluídas",overdue:"Atrasadas",search:"Buscar por cliente, título, tipo ou descrição",allStatus:"Todos os status",allTypes:"Todos os tipos",empty:"Nenhuma atividade encontrada para os filtros selecionados.",archivedBadge:"ARQUIVADA",overdueBadge:"ATRASADA",noAccount:"Cliente não informado",reason:"Motivo",openDeal:"Abrir negociação",openAccount:"Abrir cliente",complete:"Concluir atividade",correct:"Corrigir",archive:"Arquivar",correctTitle:"Corrigir atividade",linkedAccount:"Cliente vinculado",noLinkedAccount:"Sem cliente",type:"Tipo",status:"Status",fieldTitle:"Título",date:"Data",time:"Horário",description:"Descrição",correctionHelp:"A correção atualiza este mesmo registro e fica registrada na auditoria. Não cria nova atividade.",saving:"Salvando...",saveCorrection:"Salvar correção",archiveTitle:"Arquivar atividade",requiredReason:"Motivo obrigatório",reasonPlaceholder:"Ex.: lançamento duplicado durante correção do registro anterior",archiveHelp:"O registro não será apagado. Ele deixará de contar operacionalmente e ficará disponível em Arquivadas.",archiving:"Arquivando...",confirmArchive:"Confirmar arquivamento",activityFallback:"Atividade comercial",load:"Não foi possível carregar as atividades.",completeFail:"Não foi possível concluir a atividade.",completeSuccess:"Atividade concluída e preservada no histórico comercial.",correctSuccess:"Atividade corrigida no mesmo registro. Nenhuma nova atividade foi criada.",correctFail:"Não foi possível corrigir a atividade.",archiveSuccess:"Atividade arquivada: saiu dos indicadores operacionais e permaneceu preservada para auditoria.",archiveFail:"Não foi possível arquivar a atividade."},
+ en:{title:"Activity Center",subtitle:"History, pending items and sales interactions",archived:"Archived",backActive:"Back to active",refresh:"Refresh",new:"New activity",adminView:"Administrative view: these records do not count in activities, pending items, overdue items or operational history. They remain only for traceability.",pending:"Pending",completed:"Completed",overdue:"Overdue",search:"Search by account, title, type or description",allStatus:"All statuses",allTypes:"All types",empty:"No activities found for the selected filters.",archivedBadge:"ARCHIVED",overdueBadge:"OVERDUE",noAccount:"Account not provided",reason:"Reason",openDeal:"Open deal",openAccount:"Open account",complete:"Complete activity",correct:"Correct",archive:"Archive",correctTitle:"Correct activity",linkedAccount:"Linked account",noLinkedAccount:"No account",type:"Type",status:"Status",fieldTitle:"Title",date:"Date",time:"Time",description:"Description",correctionHelp:"The correction updates this same record and is preserved in the audit trail. It does not create a new activity.",saving:"Saving...",saveCorrection:"Save correction",archiveTitle:"Archive activity",requiredReason:"Required reason",reasonPlaceholder:"Example: duplicate entry while correcting the previous record",archiveHelp:"The record will not be deleted. It will stop counting operationally and remain available under Archived.",archiving:"Archiving...",confirmArchive:"Confirm archive",activityFallback:"Sales activity",load:"We couldn't load the activities.",completeFail:"We couldn't complete the activity.",completeSuccess:"Activity completed and preserved in sales history.",correctSuccess:"Activity corrected in the same record. No new activity was created.",correctFail:"We couldn't correct the activity.",archiveSuccess:"Activity archived: removed from operational indicators and preserved for audit.",archiveFail:"We couldn't archive the activity."},
+ es:{title:"Centro de Actividades",subtitle:"Historial, pendientes e interacciones comerciales",archived:"Archivadas",backActive:"Volver a activas",refresh:"Actualizar",new:"Nueva actividad",adminView:"Vista administrativa: estos registros no cuentan en actividades, pendientes, atrasadas ni historial operativo. Permanecen solo para trazabilidad.",pending:"Pendientes",completed:"Completadas",overdue:"Atrasadas",search:"Buscar por cliente, título, tipo o descripción",allStatus:"Todos los estados",allTypes:"Todos los tipos",empty:"No se encontraron actividades para los filtros seleccionados.",archivedBadge:"ARCHIVADA",overdueBadge:"ATRASADA",noAccount:"Cliente no informado",reason:"Motivo",openDeal:"Abrir negocio",openAccount:"Abrir cliente",complete:"Completar actividad",correct:"Corregir",archive:"Archivar",correctTitle:"Corregir actividad",linkedAccount:"Cliente vinculado",noLinkedAccount:"Sin cliente",type:"Tipo",status:"Estado",fieldTitle:"Título",date:"Fecha",time:"Hora",description:"Descripción",correctionHelp:"La corrección actualiza este mismo registro y queda registrada en la auditoría. No crea una nueva actividad.",saving:"Guardando...",saveCorrection:"Guardar corrección",archiveTitle:"Archivar actividad",requiredReason:"Motivo obligatorio",reasonPlaceholder:"Ej.: registro duplicado durante la corrección del registro anterior",archiveHelp:"El registro no será eliminado. Dejará de contar operativamente y quedará disponible en Archivadas.",archiving:"Archivando...",confirmArchive:"Confirmar archivo",activityFallback:"Actividad comercial",load:"No fue posible cargar las actividades.",completeFail:"No fue posible completar la actividad.",completeSuccess:"Actividad completada y preservada en el historial comercial.",correctSuccess:"Actividad corregida en el mismo registro. No se creó una nueva actividad.",correctFail:"No fue posible corregir la actividad.",archiveSuccess:"Actividad archivada: salió de los indicadores operativos y quedó preservada para auditoría.",archiveFail:"No fue posible archivar la actividad."}
+} satisfies Record<Locale,Record<string,string>>
+function texto(v:unknown){return String(v??"").trim()}
+function lista(p:unknown):Registro[]{if(Array.isArray(p))return p as Registro[];if(p&&typeof p==="object"){const o=p as Registro;for(const k of["atividades","itens","dados","resultado"])if(Array.isArray(o[k]))return o[k] as Registro[]}return[]}
+function normalizarStatus(v:unknown){return texto(v).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")||"PENDENTE"}
+function concluida(s:string){return["CONCLUIDA","CONCLUIDO","REALIZADA","FINALIZADA"].includes(s)}
+function cancelada(s:string){return["CANCELADA","CANCELADO"].includes(s)}
+function hojeIso(){return new Date().toISOString().slice(0,10)}
+function tipoLegivel(v:string,l:Locale){const m:Record<Locale,Record<string,string>>={"pt-BR":{VISITA_PRESENCIAL:"Visita presencial",VISITA_REMOTA:"Visita remota",LIGACAO:"Ligação",REUNIAO:"Reunião",APRESENTACAO:"Apresentação",PROSPECCAO:"Prospecção",POS_VENDA:"Pós-venda",FOLLOW_UP:"Follow-up",EMAIL:"E-mail",WHATSAPP:"WhatsApp",ATIVIDADE:"Atividade"},en:{VISITA_PRESENCIAL:"On-site visit",VISITA_REMOTA:"Remote visit",LIGACAO:"Phone call",REUNIAO:"Meeting",APRESENTACAO:"Presentation",PROSPECCAO:"Prospecting",POS_VENDA:"After-sales",FOLLOW_UP:"Follow-up",EMAIL:"Email",WHATSAPP:"WhatsApp",ATIVIDADE:"Activity"},es:{VISITA_PRESENCIAL:"Visita presencial",VISITA_REMOTA:"Visita remota",LIGACAO:"Llamada",REUNIAO:"Reunión",APRESENTACAO:"Presentación",PROSPECCAO:"Prospección",POS_VENDA:"Posventa",FOLLOW_UP:"Seguimiento",EMAIL:"Correo electrónico",WHATSAPP:"WhatsApp",ATIVIDADE:"Actividad"}};return m[l][v]||v.replaceAll("_"," ")}
+function statusLegivel(v:string,l:Locale){const c=normalizarStatus(v),m:Record<Locale,Record<string,string>>={"pt-BR":{PENDENTE:"Pendente",CONCLUIDA:"Concluída",CONCLUIDO:"Concluído",REALIZADA:"Realizada",FINALIZADA:"Finalizada",CANCELADA:"Cancelada",CANCELADO:"Cancelado"},en:{PENDENTE:"Pending",CONCLUIDA:"Completed",CONCLUIDO:"Completed",REALIZADA:"Completed",FINALIZADA:"Completed",CANCELADA:"Cancelled",CANCELADO:"Cancelled"},es:{PENDENTE:"Pendiente",CONCLUIDA:"Completada",CONCLUIDO:"Completado",REALIZADA:"Realizada",FINALIZADA:"Finalizada",CANCELADA:"Cancelada",CANCELADO:"Cancelado"}};return m[l][c]||v.replaceAll("_"," ")}
+export default function AtividadesPage(){
+ const {usuario}=useAuth();const {locale,formatDate}=useOperationalI18n();const idioma=locale as Locale,t=textos[idioma]||textos["pt-BR"],master=String(usuario?.tipo_usuario||"").toUpperCase()==="ADMIN_MASTER"
+ const[atividades,setAtividades]=useState<Atividade[]>([]),[clientes,setClientes]=useState<ClienteOpcao[]>([]),[carregando,setCarregando]=useState(true),[erro,setErro]=useState(""),[sucesso,setSucesso]=useState(""),[statusFiltro,setStatusFiltro]=useState("TODAS"),[tipoFiltro,setTipoFiltro]=useState("TODOS"),[busca,setBusca]=useState(""),[mostrarArquivadas,setMostrarArquivadas]=useState(false),[editando,setEditando]=useState<Atividade|null>(null),[arquivando,setArquivando]=useState<Atividade|null>(null),[salvando,setSalvando]=useState(false)
+ function normalizar(i:Registro):Atividade{return{id:texto(i.id||i.atividade_id),titulo:texto(i.titulo||i.assunto||i.descricao)||t.activityFallback,tipo:texto(i.tipo||i.tipo_atividade).toUpperCase()||"ATIVIDADE",status:normalizarStatus(i.status),data:texto(i.data||i.data_atividade||i.inicio).slice(0,10),horario:texto(i.horario||i.hora||i.inicio).slice(11,16),clienteId:texto(i.cliente_id),cliente:texto(i.cliente_nome||i.cliente),oportunidadeId:texto(i.oportunidade_id),descricao:texto(i.descricao),arquivada:Boolean(i.arquivado_em),motivoArquivamento:texto(i.motivo_arquivamento)}}
+ async function carregar(arquivadas=mostrarArquivadas){setCarregando(true);setErro("");try{const ep=arquivadas?`/api/crm-proxy/crm/atividades/arquivadas?usuario_id=${encodeURIComponent(usuario?.id||"")}`:"/api/crm-proxy/crm/atividades",[ar,cr]=await Promise.all([fetch(ep,{cache:"no-store"}),fetch("/api/crm-proxy/crm-app/clientes",{cache:"no-store"})]),p=await ar.json().catch(()=>[]);if(!ar.ok)throw new Error(texto((p as Registro).detail)||`HTTP ${ar.status}`);setAtividades(lista(p).map(normalizar).filter(i=>i.id).sort((a,b)=>`${b.data}${b.horario}`.localeCompare(`${a.data}${a.horario}`)));const cp=cr.ok?await cr.json().catch(()=>[]):[];setClientes(lista(cp).map(i=>({id:texto(i.id||i.cliente_id),nome:texto(i.nome||i.razao_social||i.nome_fantasia||i.cliente)})).filter(i=>i.id&&i.nome).sort((a,b)=>a.nome.localeCompare(b.nome,locale)))}catch(f){setErro(f instanceof Error?f.message:t.load)}finally{setCarregando(false)}}
+ useEffect(()=>{if(!mostrarArquivadas||usuario?.id)void carregar(mostrarArquivadas)},[mostrarArquivadas,usuario?.id,t.load,t.activityFallback,locale])
+ const resumo=useMemo(()=>{const h=hojeIso();return{pendentes:atividades.filter(a=>!a.arquivada&&!concluida(a.status)&&!cancelada(a.status)).length,concluidas:atividades.filter(a=>!a.arquivada&&concluida(a.status)).length,atrasadas:atividades.filter(a=>!a.arquivada&&!concluida(a.status)&&!cancelada(a.status)&&a.data&&a.data<h).length}},[atividades]),tipos=useMemo(()=>[...new Set(atividades.map(a=>a.tipo).filter(Boolean))].sort(),[atividades]),filtradas=useMemo(()=>{const termo=busca.trim().toLocaleLowerCase(locale),h=hojeIso();return atividades.filter(a=>{if(!mostrarArquivadas&&a.arquivada)return false;if(statusFiltro==="PENDENTES"&&(concluida(a.status)||cancelada(a.status)))return false;if(statusFiltro==="CONCLUIDAS"&&!concluida(a.status))return false;if(statusFiltro==="ATRASADAS"&&(concluida(a.status)||cancelada(a.status)||!a.data||a.data>=h))return false;if(tipoFiltro!=="TODOS"&&a.tipo!==tipoFiltro)return false;if(termo&&!`${a.titulo} ${a.cliente} ${a.tipo} ${a.descricao}`.toLocaleLowerCase(locale).includes(termo))return false;return true})},[atividades,busca,statusFiltro,tipoFiltro,mostrarArquivadas,locale])
+ async function concluirAtividade(id:string){setErro("");setSucesso("");const r=await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(id)}/concluir`,{method:"PUT"});if(!r.ok)return setErro(t.completeFail);setSucesso(t.completeSuccess);await carregar(false)}
+ async function salvarEdicao(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!editando||!usuario?.id)return;setSalvando(true);setErro("");setSucesso("");const d=new FormData(e.currentTarget);try{const r=await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(editando.id)}/administrar`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({administrador_id:usuario.id,cliente_id:texto(d.get("cliente_id"))||null,tipo:texto(d.get("tipo")),titulo:texto(d.get("titulo")),descricao:texto(d.get("descricao")),data:texto(d.get("data"))||null,horario:texto(d.get("horario"))||null,status:texto(d.get("status"))})}),p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(texto((p as Registro).detail)||`HTTP ${r.status}`);setEditando(null);setSucesso(t.correctSuccess);await carregar(false)}catch(f){setErro(f instanceof Error?f.message:t.correctFail)}finally{setSalvando(false)}}
+ async function confirmarArquivamento(e:FormEvent<HTMLFormElement>){e.preventDefault();if(!arquivando||!usuario?.id)return;setSalvando(true);setErro("");setSucesso("");const d=new FormData(e.currentTarget);try{const r=await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(arquivando.id)}/arquivar`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({administrador_id:usuario.id,motivo:texto(d.get("motivo"))})}),p=await r.json().catch(()=>({}));if(!r.ok)throw new Error(texto((p as Registro).detail)||`HTTP ${r.status}`);setArquivando(null);setSucesso(t.archiveSuccess);await carregar(false)}catch(f){setErro(f instanceof Error?f.message:t.archiveFail)}finally{setSalvando(false)}}
+ return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6"><div className="mx-auto max-w-5xl"><header className="mb-5 flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><Link href="/crm-app" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{t.title}</h1><p className="text-sm text-slate-400">{t.subtitle}</p></div></div><div className="flex flex-wrap gap-2">{master&&<button onClick={()=>{setMostrarArquivadas(v=>!v);setStatusFiltro("TODAS");setBusca("")}} className="flex items-center gap-2 rounded-2xl border border-amber-800 px-3 py-3 text-sm text-amber-200"><Archive size={17}/>{mostrarArquivadas?t.backActive:t.archived}</button>}<button onClick={()=>void carregar(mostrarArquivadas)} className="grid size-12 place-items-center rounded-2xl border border-[#24466f] text-cyan-300" aria-label={t.refresh}><RefreshCw size={18}/></button>{!mostrarArquivadas&&<Link href="/crm-app/atividades/nova" className="flex items-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 font-bold text-slate-950"><Plus size={18}/>{t.new}</Link>}</div></header>
+ {erro&&<div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}{sucesso&&<div className="mb-4 rounded-2xl border border-emerald-900 bg-emerald-950/40 p-4 text-emerald-200">{sucesso}</div>}{mostrarArquivadas&&<div className="mb-4 rounded-2xl border border-amber-900 bg-amber-950/20 p-4 text-sm text-amber-100">{t.adminView}</div>}
+ {!mostrarArquivadas&&<section className="mb-5 grid grid-cols-3 gap-3"><Indicador icone={<ClipboardCheck size={18}/>} valor={resumo.pendentes} rotulo={t.pending}/><Indicador icone={<CheckCircle2 size={18}/>} valor={resumo.concluidas} rotulo={t.completed}/><Indicador icone={<CircleAlert size={18}/>} valor={resumo.atrasadas} rotulo={t.overdue}/></section>}
+ <section className="mb-5 grid gap-3 rounded-3xl border border-[#16325c] bg-[#07162b] p-4 sm:grid-cols-[1fr_auto_auto]"><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder={t.search} className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] px-4"/><label className="relative"><Filter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16}/><select value={statusFiltro} onChange={e=>setStatusFiltro(e.target.value)} className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] pl-9 pr-8"><option value="TODAS">{t.allStatus}</option><option value="PENDENTES">{t.pending}</option><option value="CONCLUIDAS">{t.completed}</option><option value="ATRASADAS">{t.overdue}</option></select></label><select value={tipoFiltro} onChange={e=>setTipoFiltro(e.target.value)} className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] px-4"><option value="TODOS">{t.allTypes}</option>{tipos.map(tipo=><option key={tipo} value={tipo}>{tipoLegivel(tipo,idioma)}</option>)}</select></section>
+ {carregando?<div className="grid min-h-52 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>:filtradas.length===0?<div className="rounded-3xl border border-dashed border-[#24466f] p-10 text-center text-slate-400">{t.empty}</div>:<div className="space-y-3">{filtradas.map(a=>{const aberta=!a.arquivada&&!concluida(a.status)&&!cancelada(a.status),atrasada=aberta&&Boolean(a.data)&&a.data<hojeIso();return <article key={a.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-[#24466f] px-3 py-1 text-[11px] text-cyan-200">{tipoLegivel(a.tipo,idioma)}</span>{atrasada&&<span className="rounded-full border border-amber-700 bg-amber-950/30 px-3 py-1 text-[11px] text-amber-200">{t.overdueBadge}</span>}{a.arquivada&&<span className="rounded-full border border-amber-700 bg-amber-950/30 px-3 py-1 text-[11px] text-amber-200">{t.archivedBadge}</span>}</div><h2 className="mt-3 text-lg font-bold">{a.titulo}</h2><p className="mt-1 text-sm text-slate-400">{a.cliente||t.noAccount}</p>{a.descricao&&<p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">{a.descricao}</p>}{a.arquivada&&a.motivoArquivamento&&<p className="mt-3 rounded-xl border border-amber-900 bg-amber-950/20 p-3 text-sm text-amber-100">{t.reason}: {a.motivoArquivamento}</p>}</div><span className={`shrink-0 rounded-full px-3 py-1 text-xs ${a.arquivada?"bg-amber-950/50 text-amber-300":concluida(a.status)?"bg-emerald-950/50 text-emerald-300":cancelada(a.status)?"bg-slate-800 text-slate-400":"bg-cyan-950/50 text-cyan-300"}`}>{statusLegivel(a.status,idioma)}</span></div><div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">{a.data&&<span className="inline-flex items-center gap-1"><CalendarClock size={14}/>{formatDate(a.data)}{a.horario?` · ${a.horario}`:""}</span>}{a.oportunidadeId&&<Link href={`/crm-app/oportunidades/${encodeURIComponent(a.oportunidadeId)}`} className="rounded-lg border border-[#24466f] px-2 py-1 text-cyan-300">{t.openDeal}</Link>}{a.clienteId&&<Link href={`/crm-app/clientes/${encodeURIComponent(a.clienteId)}`} className="rounded-lg border border-[#24466f] px-2 py-1 text-cyan-300">{t.openAccount}</Link>}</div>{!a.arquivada&&<div className="mt-4 flex flex-wrap gap-2">{aberta&&<button onClick={()=>void concluirAtividade(a.id)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold"><CheckCircle2 size={16}/>{t.complete}</button>}{master&&<button onClick={()=>setEditando(a)} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 px-4 py-3 text-sm font-semibold text-cyan-200"><Pencil size={16}/>{t.correct}</button>}{master&&<button onClick={()=>setArquivando(a)} className="flex items-center justify-center gap-2 rounded-xl border border-amber-800 px-4 py-3 text-sm font-semibold text-amber-200"><Archive size={16}/>{t.archive}</button>}</div>}</article>})}</div>}
+ </div>
+ {editando&&<Modal titulo={t.correctTitle} fechar={()=>setEditando(null)}><form onSubmit={salvarEdicao} className="grid gap-3 sm:grid-cols-2"><label className="sm:col-span-2"><span className="mb-1 block text-xs text-slate-400">{t.linkedAccount}</span><select name="cliente_id" defaultValue={editando.clienteId} className="h-11 w-full rounded-xl border border-[#24466f] bg-[#020817] px-3"><option value="">{t.noLinkedAccount}</option>{clientes.map(c=><option key={c.id} value={c.id}>{c.nome}</option>)}</select></label><CampoEdicao name="tipo" label={t.type} valor={editando.tipo}/><CampoEdicao name="status" label={t.status} valor={editando.status}/><CampoEdicao name="titulo" label={t.fieldTitle} valor={editando.titulo} classe="sm:col-span-2"/><CampoEdicao name="data" label={t.date} valor={editando.data} type="date"/><CampoEdicao name="horario" label={t.time} valor={editando.horario} type="time"/><label className="sm:col-span-2"><span className="mb-1 block text-xs text-slate-400">{t.description}</span><textarea name="descricao" defaultValue={editando.descricao} rows={4} className="w-full rounded-xl border border-[#24466f] bg-[#020817] p-3"/></label><p className="sm:col-span-2 text-xs text-slate-400">{t.correctionHelp}</p><button disabled={salvando} className="sm:col-span-2 h-11 rounded-xl bg-cyan-500 font-bold text-slate-950 disabled:opacity-60">{salvando?t.saving:t.saveCorrection}</button></form></Modal>}
+ {arquivando&&<Modal titulo={t.archiveTitle} fechar={()=>setArquivando(null)}><form onSubmit={confirmarArquivamento} className="grid gap-3"><p className="text-sm text-slate-300"><strong>{arquivando.titulo}</strong><br/>{arquivando.cliente||t.noAccount}</p><label><span className="mb-1 block text-xs text-slate-400">{t.requiredReason}</span><textarea name="motivo" required minLength={5} rows={4} placeholder={t.reasonPlaceholder} className="w-full rounded-xl border border-amber-800 bg-[#020817] p-3"/></label><p className="text-xs text-amber-100">{t.archiveHelp}</p><button disabled={salvando} className="h-11 rounded-xl bg-amber-600 font-bold text-slate-950 disabled:opacity-60">{salvando?t.archiving:t.confirmArchive}</button></form></Modal>}
+ </main>
 }
-
-function texto(valor: unknown): string { return String(valor ?? "").trim() }
-function lista(payload: unknown): Registro[] {
-  if (Array.isArray(payload)) return payload as Registro[]
-  if (payload && typeof payload === "object") {
-    const objeto = payload as Registro
-    for (const chave of ["atividades", "itens", "dados", "resultado"]) {
-      if (Array.isArray(objeto[chave])) return objeto[chave] as Registro[]
-    }
-  }
-  return []
-}
-function normalizarStatus(valor: unknown): string {
-  return texto(valor).toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "") || "PENDENTE"
-}
-function concluida(status: string): boolean { return ["CONCLUIDA", "CONCLUIDO", "REALIZADA", "FINALIZADA"].includes(status) }
-function cancelada(status: string): boolean { return ["CANCELADA", "CANCELADO"].includes(status) }
-function hojeIso(): string { return new Date().toISOString().slice(0, 10) }
-
-export default function AtividadesPage() {
-  const { usuario } = useAuth()
-  const master = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-  const [atividades, setAtividades] = useState<Atividade[]>([])
-  const [clientes, setClientes] = useState<ClienteOpcao[]>([])
-  const [carregando, setCarregando] = useState(true)
-  const [erro, setErro] = useState("")
-  const [sucesso, setSucesso] = useState("")
-  const [statusFiltro, setStatusFiltro] = useState("TODAS")
-  const [tipoFiltro, setTipoFiltro] = useState("TODOS")
-  const [busca, setBusca] = useState("")
-  const [mostrarArquivadas, setMostrarArquivadas] = useState(false)
-  const [editando, setEditando] = useState<Atividade | null>(null)
-  const [arquivando, setArquivando] = useState<Atividade | null>(null)
-  const [salvando, setSalvando] = useState(false)
-
-  function normalizar(item: Registro): Atividade {
-    return {
-      id: texto(item.id || item.atividade_id),
-      titulo: texto(item.titulo || item.assunto || item.descricao) || "Atividade comercial",
-      tipo: texto(item.tipo || item.tipo_atividade).toUpperCase() || "ATIVIDADE",
-      status: normalizarStatus(item.status),
-      data: texto(item.data || item.data_atividade || item.inicio).slice(0, 10),
-      horario: texto(item.horario || item.hora || item.inicio).slice(11, 16),
-      clienteId: texto(item.cliente_id),
-      cliente: texto(item.cliente_nome || item.cliente),
-      oportunidadeId: texto(item.oportunidade_id),
-      descricao: texto(item.descricao),
-      arquivada: Boolean(item.arquivado_em),
-      motivoArquivamento: texto(item.motivo_arquivamento),
-    }
-  }
-
-  async function carregar(arquivadas = mostrarArquivadas) {
-    setCarregando(true); setErro("")
-    try {
-      const endpoint = arquivadas
-        ? `/api/crm-proxy/crm/atividades/arquivadas?usuario_id=${encodeURIComponent(usuario?.id || "")}`
-        : "/api/crm-proxy/crm/atividades"
-      const [atividadesResposta, clientesResposta] = await Promise.all([
-        fetch(endpoint, { cache: "no-store" }),
-        fetch("/api/crm-proxy/crm-app/clientes", { cache: "no-store" }),
-      ])
-      const payload = await atividadesResposta.json().catch(() => ([]))
-      if (!atividadesResposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${atividadesResposta.status}`)
-      const dados = lista(payload).map(normalizar).filter((item) => item.id)
-      setAtividades(dados.sort((a, b) => `${b.data}${b.horario}`.localeCompare(`${a.data}${a.horario}`)))
-
-      const clientesPayload = clientesResposta.ok ? await clientesResposta.json().catch(() => []) : []
-      setClientes(lista(clientesPayload).map((item) => ({
-        id: texto(item.id || item.cliente_id),
-        nome: texto(item.nome || item.razao_social || item.nome_fantasia || item.cliente),
-      })).filter((item) => item.id && item.nome).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")))
-    } catch (falha) {
-      setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as atividades.")
-    } finally { setCarregando(false) }
-  }
-
-  useEffect(() => { if (!mostrarArquivadas || usuario?.id) void carregar(mostrarArquivadas) }, [mostrarArquivadas, usuario?.id])
-
-  const resumo = useMemo(() => {
-    const hoje = hojeIso()
-    return {
-      pendentes: atividades.filter((a) => !a.arquivada && !concluida(a.status) && !cancelada(a.status)).length,
-      concluidas: atividades.filter((a) => !a.arquivada && concluida(a.status)).length,
-      atrasadas: atividades.filter((a) => !a.arquivada && !concluida(a.status) && !cancelada(a.status) && a.data && a.data < hoje).length,
-    }
-  }, [atividades])
-
-  const tipos = useMemo(() => [...new Set(atividades.map((a) => a.tipo).filter(Boolean))].sort(), [atividades])
-  const filtradas = useMemo(() => {
-    const termo = busca.trim().toLocaleLowerCase("pt-BR")
-    const hoje = hojeIso()
-    return atividades.filter((a) => {
-      if (!mostrarArquivadas && a.arquivada) return false
-      if (statusFiltro === "PENDENTES" && (concluida(a.status) || cancelada(a.status))) return false
-      if (statusFiltro === "CONCLUIDAS" && !concluida(a.status)) return false
-      if (statusFiltro === "ATRASADAS" && (concluida(a.status) || cancelada(a.status) || !a.data || a.data >= hoje)) return false
-      if (tipoFiltro !== "TODOS" && a.tipo !== tipoFiltro) return false
-      if (termo && !`${a.titulo} ${a.cliente} ${a.tipo} ${a.descricao}`.toLocaleLowerCase("pt-BR").includes(termo)) return false
-      return true
-    })
-  }, [atividades, busca, statusFiltro, tipoFiltro, mostrarArquivadas])
-
-  async function concluirAtividade(id: string) {
-    setErro(""); setSucesso("")
-    const resposta = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(id)}/concluir`, { method: "PUT" })
-    if (!resposta.ok) return setErro("Não foi possível concluir a atividade.")
-    setSucesso("Atividade concluída e preservada no histórico comercial.")
-    await carregar(false)
-  }
-
-  async function salvarEdicao(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault()
-    if (!editando || !usuario?.id) return
-    setSalvando(true); setErro(""); setSucesso("")
-    const dados = new FormData(evento.currentTarget)
-    try {
-      const resposta = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(editando.id)}/administrar`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          administrador_id: usuario.id,
-          cliente_id: texto(dados.get("cliente_id")) || null,
-          tipo: texto(dados.get("tipo")),
-          titulo: texto(dados.get("titulo")),
-          descricao: texto(dados.get("descricao")),
-          data: texto(dados.get("data")) || null,
-          horario: texto(dados.get("horario")) || null,
-          status: texto(dados.get("status")),
-        }),
-      })
-      const payload = await resposta.json().catch(() => ({}))
-      if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
-      setEditando(null)
-      setSucesso("Atividade corrigida no mesmo registro. Nenhuma nova atividade foi criada.")
-      await carregar(false)
-    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Não foi possível corrigir a atividade.") }
-    finally { setSalvando(false) }
-  }
-
-  async function confirmarArquivamento(evento: FormEvent<HTMLFormElement>) {
-    evento.preventDefault()
-    if (!arquivando || !usuario?.id) return
-    setSalvando(true); setErro(""); setSucesso("")
-    const dados = new FormData(evento.currentTarget)
-    try {
-      const resposta = await fetch(`/api/crm-proxy/crm/atividades/${encodeURIComponent(arquivando.id)}/arquivar`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ administrador_id: usuario.id, motivo: texto(dados.get("motivo")) }),
-      })
-      const payload = await resposta.json().catch(() => ({}))
-      if (!resposta.ok) throw new Error(texto((payload as Registro).detail) || `Falha ${resposta.status}`)
-      setArquivando(null)
-      setSucesso("Atividade arquivada: saiu dos indicadores operacionais e permaneceu preservada para auditoria.")
-      await carregar(false)
-    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Não foi possível arquivar a atividade.") }
-    finally { setSalvando(false) }
-  }
-
-  return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-28 text-white sm:px-6">
-    <div className="mx-auto max-w-5xl">
-      <header className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3"><Link href="/crm-app" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">Central de Atividades</h1><p className="text-sm text-slate-400">Histórico, pendências e interações comerciais</p></div></div>
-        <div className="flex flex-wrap gap-2">
-          {master && <button onClick={() => { setMostrarArquivadas((valor) => !valor); setStatusFiltro("TODAS"); setBusca("") }} className="flex items-center gap-2 rounded-2xl border border-amber-800 px-3 py-3 text-sm text-amber-200"><Archive size={17}/>{mostrarArquivadas ? "Voltar às ativas" : "Arquivadas"}</button>}
-          <button onClick={() => void carregar(mostrarArquivadas)} className="grid size-12 place-items-center rounded-2xl border border-[#24466f] text-cyan-300" aria-label="Atualizar"><RefreshCw size={18}/></button>
-          {!mostrarArquivadas && <Link href="/crm-app/atividades/nova" className="flex items-center gap-2 rounded-2xl bg-cyan-500 px-4 py-3 font-bold text-slate-950"><Plus size={18}/>Nova atividade</Link>}
-        </div>
-      </header>
-
-      {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}
-      {sucesso && <div className="mb-4 rounded-2xl border border-emerald-900 bg-emerald-950/40 p-4 text-emerald-200">{sucesso}</div>}
-      {mostrarArquivadas && <div className="mb-4 rounded-2xl border border-amber-900 bg-amber-950/20 p-4 text-sm text-amber-100">Visão administrativa: estes registros não contam em atividades, pendências, atrasadas ou histórico operacional. Permanecem somente para rastreabilidade.</div>}
-
-      {!mostrarArquivadas && <section className="mb-5 grid grid-cols-3 gap-3">
-        <Indicador icone={<ClipboardCheck size={18}/>} valor={resumo.pendentes} rotulo="Pendentes"/>
-        <Indicador icone={<CheckCircle2 size={18}/>} valor={resumo.concluidas} rotulo="Concluídas"/>
-        <Indicador icone={<CircleAlert size={18}/>} valor={resumo.atrasadas} rotulo="Atrasadas"/>
-      </section>}
-
-      <section className="mb-5 grid gap-3 rounded-3xl border border-[#16325c] bg-[#07162b] p-4 sm:grid-cols-[1fr_auto_auto]">
-        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por cliente, título, tipo ou descrição" className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] px-4"/>
-        <label className="relative"><Filter className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16}/><select value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value)} className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] pl-9 pr-8"><option value="TODAS">Todos os status</option><option value="PENDENTES">Pendentes</option><option value="CONCLUIDAS">Concluídas</option><option value="ATRASADAS">Atrasadas</option></select></label>
-        <select value={tipoFiltro} onChange={(e) => setTipoFiltro(e.target.value)} className="h-12 rounded-2xl border border-[#24466f] bg-[#020817] px-4"><option value="TODOS">Todos os tipos</option>{tipos.map((tipo) => <option key={tipo} value={tipo}>{tipo.replaceAll("_", " ")}</option>)}</select>
-      </section>
-
-      {carregando ? <div className="grid min-h-52 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : filtradas.length === 0 ? <div className="rounded-3xl border border-dashed border-[#24466f] p-10 text-center text-slate-400">Nenhuma atividade encontrada para os filtros selecionados.</div> : <div className="space-y-3">{filtradas.map((atividade) => {
-        const aberta = !atividade.arquivada && !concluida(atividade.status) && !cancelada(atividade.status)
-        const atrasada = aberta && Boolean(atividade.data) && atividade.data < hojeIso()
-        return <article key={atividade.id} className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-          <div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-[#24466f] px-3 py-1 text-[11px] text-cyan-200">{atividade.tipo.replaceAll("_", " ")}</span>{atrasada && <span className="rounded-full border border-amber-700 bg-amber-950/30 px-3 py-1 text-[11px] text-amber-200">ATRASADA</span>}{atividade.arquivada && <span className="rounded-full border border-amber-700 bg-amber-950/30 px-3 py-1 text-[11px] text-amber-200">ARQUIVADA</span>}</div><h2 className="mt-3 text-lg font-bold">{atividade.titulo}</h2><p className="mt-1 text-sm text-slate-400">{atividade.cliente || "Cliente não informado"}</p>{atividade.descricao && <p className="mt-3 line-clamp-3 text-sm leading-6 text-slate-300">{atividade.descricao}</p>}{atividade.arquivada && atividade.motivoArquivamento && <p className="mt-3 rounded-xl border border-amber-900 bg-amber-950/20 p-3 text-sm text-amber-100">Motivo: {atividade.motivoArquivamento}</p>}</div><span className={`shrink-0 rounded-full px-3 py-1 text-xs ${atividade.arquivada ? "bg-amber-950/50 text-amber-300" : concluida(atividade.status) ? "bg-emerald-950/50 text-emerald-300" : cancelada(atividade.status) ? "bg-slate-800 text-slate-400" : "bg-cyan-950/50 text-cyan-300"}`}>{atividade.status}</span></div>
-          <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-slate-400">{atividade.data && <span className="inline-flex items-center gap-1"><CalendarClock size={14}/>{new Date(`${atividade.data}T12:00:00`).toLocaleDateString("pt-BR")}{atividade.horario ? ` · ${atividade.horario}` : ""}</span>}{atividade.oportunidadeId && <Link href={`/crm-app/oportunidades/${encodeURIComponent(atividade.oportunidadeId)}`} className="rounded-lg border border-[#24466f] px-2 py-1 text-cyan-300">Abrir negociação</Link>}{atividade.clienteId && <Link href={`/crm-app/clientes/${encodeURIComponent(atividade.clienteId)}`} className="rounded-lg border border-[#24466f] px-2 py-1 text-cyan-300">Abrir cliente</Link>}</div>
-          {!atividade.arquivada && <div className="mt-4 flex flex-wrap gap-2">{aberta && <button onClick={() => void concluirAtividade(atividade.id)} className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold"><CheckCircle2 size={16}/>Concluir atividade</button>}{master && <button onClick={() => setEditando(atividade)} className="flex items-center justify-center gap-2 rounded-xl border border-cyan-800 px-4 py-3 text-sm font-semibold text-cyan-200"><Pencil size={16}/>Corrigir</button>}{master && <button onClick={() => setArquivando(atividade)} className="flex items-center justify-center gap-2 rounded-xl border border-amber-800 px-4 py-3 text-sm font-semibold text-amber-200"><Archive size={16}/>Arquivar</button>}</div>}
-        </article>
-      })}</div>}
-    </div>
-
-    {editando && <Modal titulo="Corrigir atividade" fechar={() => setEditando(null)}><form onSubmit={salvarEdicao} className="grid gap-3 sm:grid-cols-2">
-      <label className="sm:col-span-2"><span className="mb-1 block text-xs text-slate-400">Cliente vinculado</span><select name="cliente_id" defaultValue={editando.clienteId} className="h-11 w-full rounded-xl border border-[#24466f] bg-[#020817] px-3"><option value="">Sem cliente</option>{clientes.map((cliente) => <option key={cliente.id} value={cliente.id}>{cliente.nome}</option>)}</select></label>
-      <CampoEdicao name="tipo" label="Tipo" valor={editando.tipo}/><CampoEdicao name="status" label="Status" valor={editando.status}/>
-      <CampoEdicao name="titulo" label="Título" valor={editando.titulo} classe="sm:col-span-2"/>
-      <CampoEdicao name="data" label="Data" valor={editando.data} type="date"/><CampoEdicao name="horario" label="Horário" valor={editando.horario} type="time"/>
-      <label className="sm:col-span-2"><span className="mb-1 block text-xs text-slate-400">Descrição</span><textarea name="descricao" defaultValue={editando.descricao} rows={4} className="w-full rounded-xl border border-[#24466f] bg-[#020817] p-3"/></label>
-      <p className="sm:col-span-2 text-xs text-slate-400">A correção atualiza este mesmo registro e fica registrada na auditoria. Não cria nova atividade.</p>
-      <button disabled={salvando} className="sm:col-span-2 h-11 rounded-xl bg-cyan-500 font-bold text-slate-950 disabled:opacity-60">{salvando ? "Salvando..." : "Salvar correção"}</button>
-    </form></Modal>}
-
-    {arquivando && <Modal titulo="Arquivar atividade" fechar={() => setArquivando(null)}><form onSubmit={confirmarArquivamento} className="grid gap-3"><p className="text-sm text-slate-300"><strong>{arquivando.titulo}</strong><br/>{arquivando.cliente || "Cliente não informado"}</p><label><span className="mb-1 block text-xs text-slate-400">Motivo obrigatório</span><textarea name="motivo" required minLength={5} rows={4} placeholder="Ex.: lançamento duplicado durante correção do registro anterior" className="w-full rounded-xl border border-amber-800 bg-[#020817] p-3"/></label><p className="text-xs text-amber-100">O registro não será apagado. Ele deixará de contar operacionalmente e ficará disponível em “Arquivadas”.</p><button disabled={salvando} className="h-11 rounded-xl bg-amber-600 font-bold text-slate-950 disabled:opacity-60">{salvando ? "Arquivando..." : "Confirmar arquivamento"}</button></form></Modal>}
-  </main>
-}
-
-function Indicador({icone, valor, rotulo}:{icone:React.ReactNode;valor:number;rotulo:string}) {
-  return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4"><div className="text-cyan-300">{icone}</div><strong className="mt-2 block text-2xl text-white">{valor}</strong><span className="text-xs text-slate-400">{rotulo}</span></div>
-}
-function Modal({titulo, fechar, children}:{titulo:string;fechar:()=>void;children:React.ReactNode}) {
-  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><section className="max-h-[90dvh] w-full max-w-xl overflow-auto rounded-3xl border border-[#24466f] bg-[#07162b] p-5 shadow-2xl"><header className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{titulo}</h2><button type="button" onClick={fechar} className="grid size-9 place-items-center rounded-xl border border-[#24466f] text-slate-300"><X size={18}/></button></header>{children}</section></div>
-}
-function CampoEdicao({name,label,valor,type="text",classe=""}:{name:string;label:string;valor:string;type?:string;classe?:string}) {
-  return <label className={classe}><span className="mb-1 block text-xs text-slate-400">{label}</span><input name={name} type={type} defaultValue={valor} className="h-11 w-full rounded-xl border border-[#24466f] bg-[#020817] px-3"/></label>
-}
+function Indicador({icone,valor,rotulo}:{icone:React.ReactNode;valor:number;rotulo:string}){return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4"><div className="text-cyan-300">{icone}</div><strong className="mt-2 block text-2xl text-white">{valor}</strong><span className="text-xs text-slate-400">{rotulo}</span></div>}
+function Modal({titulo,fechar,children}:{titulo:string;fechar:()=>void;children:React.ReactNode}){return <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4"><section className="max-h-[90dvh] w-full max-w-xl overflow-auto rounded-3xl border border-[#24466f] bg-[#07162b] p-5 shadow-2xl"><header className="mb-4 flex items-center justify-between gap-3"><h2 className="text-lg font-bold">{titulo}</h2><button type="button" onClick={fechar} className="grid size-9 place-items-center rounded-xl border border-[#24466f] text-slate-300"><X size={18}/></button></header>{children}</section></div>}
+function CampoEdicao({name,label,valor,type="text",classe=""}:{name:string;label:string;valor:string;type?:string;classe?:string}){return <label className={classe}><span className="mb-1 block text-xs text-slate-400">{label}</span><input name={name} type={type} defaultValue={valor} className="h-11 w-full rounded-xl border border-[#24466f] bg-[#020817] px-3"/></label>}
