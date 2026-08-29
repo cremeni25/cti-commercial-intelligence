@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,5 +36,5 @@ def test_frontend_master_corrige_sem_criar_nova_atividade():
 
 
 def test_dossie_nao_faz_fallback_do_codigo_para_uuid():
-    assert "codigo: texto(cadastro?.codigo || cadastro?.codigo_cliente)," in CLIENTE
-    assert "{cliente.codigo &&" in CLIENTE
+    assert re.search(r"codigo\s*:\s*texto\(cadastro\?\.codigo\s*\|\|\s*cadastro\?\.codigo_cliente\)", CLIENTE)
+    assert re.search(r"\{\s*cliente\.codigo\s*&&", CLIENTE)
