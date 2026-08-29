@@ -1,8 +1,11 @@
 "use client"
 
+import Image from "next/image"
 import Link from "next/link"
 import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
+import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
+import logoViena from "@/assets/logo/Logo Viena.png"
 import { getSupabaseClient } from "@/core/database/supabase"
 import { API_URL } from "@/lib/api"
 
@@ -174,8 +177,19 @@ export default function LoginPage() {
     <main className="min-h-screen bg-[#020817] flex items-center justify-center p-5">
       <section className="w-full max-w-xl rounded-3xl border border-[#16325c] bg-[#091a33] p-6 shadow-2xl sm:p-8">
         <div className="mb-7 text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">CTI Inteligência Comercial</p>
-          <h1 className="mt-3 text-3xl font-bold text-white">{modoCadastro ? "Configuração inicial" : "Acesso ao sistema"}</h1>
+          <div className="flex flex-col items-center">
+            <Image src={logoCTI} alt="CTI — Centro de Tecnologia e Inteligência Comercial" width={270} height={105} priority className="h-auto w-[235px] object-contain" />
+            <div className="mt-4 flex items-center gap-3">
+              <span className="h-8 w-px bg-[#24466f]" aria-hidden="true" />
+              <div className="text-left">
+                <p className="mb-1 text-[9px] uppercase tracking-[0.24em] text-slate-500">Operação atendida</p>
+                <div className="rounded-lg bg-white px-3 py-1.5 shadow-sm">
+                  <Image src={logoViena} alt="Refrigeração Viena" width={128} height={50} className="h-auto w-[108px] object-contain" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <h1 className="mt-6 text-3xl font-bold text-white">{modoCadastro ? "Configuração inicial" : "Acesso ao sistema"}</h1>
           <p className="mt-2 text-sm text-slate-400">
             {modoCadastro ? "Crie o primeiro ADMIN_MASTER responsável pela governança do CTI." : "Entre com as credenciais autorizadas do CTI."}
           </p>
