@@ -5,6 +5,7 @@ import { useAuth } from "@/core/auth/AuthContext"
 import { messages, normalizeLocale, type Locale, type MessageKey } from "./catalog"
 
 type Params = Record<string, string | number>
+type CurrencyOptions = Intl.NumberFormatOptions | string
 
 type I18nContextValue = {
   locale: Locale
@@ -12,7 +13,7 @@ type I18nContextValue = {
   t: (key: MessageKey, params?: Params) => string
   formatDate: (value: string | Date, options?: Intl.DateTimeFormatOptions) => string
   formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string
-  formatCurrency: (value: number, currency?: string) => string
+  formatCurrency: (value: number, options?: CurrencyOptions) => string
 }
 
 const I18nContext = createContext<I18nContextValue | null>(null)
@@ -46,7 +47,6 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const setLocale = useCallback((next: Locale) => {
     setLocaleState(next)
     if (userId) window.localStorage.setItem(storageKey(userId), next)
-    // Preferência compartilhada entre login, CTI Web e CRM App no mesmo dispositivo.
     window.localStorage.setItem(storageKey(null), next)
   }, [userId])
 
@@ -67,7 +67,12 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       return Number.isNaN(date.getTime()) ? String(input) : new Intl.DateTimeFormat(intlLocale, options).format(date)
     },
     formatNumber: (number, options) => new Intl.NumberFormat(intlLocale, options).format(number),
-    formatCurrency: (number, currency = "BRL") => new Intl.NumberFormat(intlLocale, { style: "currency", currency }).format(number),
+    formatCurrency: (number, options = "BRL") => {
+      const config = typeof options === "string"
+        ? { style: "currency" as const, currency: options }
+        : { ...options, style: "currency" as const, currency: options.currency || "BRL" }
+      return new Intl.NumberFormat(intlLocale, config).format(number)
+    },
   }), [intlLocale, locale, setLocale, t])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>

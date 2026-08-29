@@ -8,6 +8,7 @@ MAIN = ROOT / "backend" / "main.py"
 SERVICE = ROOT / "frontend" / "src" / "services" / "modulos-api.ts"
 EQUIPMENT = ROOT / "frontend" / "src" / "components" / "EquipamentoPage.tsx"
 MAP = ROOT / "frontend" / "src" / "app" / "mapa-estrategico" / "page.tsx"
+STRATEGIC_I18N = ROOT / "frontend" / "src" / "core" / "i18n" / "strategic.ts"
 
 
 def test_router_preserva_tres_camadas_sem_fusao():
@@ -44,13 +45,18 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     service = SERVICE.read_text(encoding="utf-8")
     equipment = EQUIPMENT.read_text(encoding="utf-8")
     mapa = MAP.read_text(encoding="utf-8")
+    catalogo = STRATEGIC_I18N.read_text(encoding="utf-8")
 
     assert 'fetchCrmSeguroProxy(`crm-seguro/estrategia/${caminho}`' in service
     assert '`equipamentos/${slug}?${normalizarQuery(query)}`' in service
     assert '`mapa?${normalizarQuery(query)}`' in service
-    assert "REALIZADO · ANFIR" in equipment
-    assert "HISTÓRICO COMERCIAL" in equipment
-    assert "EM CURSO · CRM" in equipment
+    assert 't("equipment.realized")' in equipment
+    assert 't("equipment.history")' in equipment
+    assert 't("equipment.live")' in equipment
+    assert "REALIZADO · ANFIR" in catalogo
+    assert "COMPLETED · ANFIR" in catalogo
+    assert "REALIZADO · ANFIR" in catalogo
     assert "getMapaEstrategico" in mapa
-    assert "Cruzamento por família" in mapa
-    assert "A correlação é estratégica, não uma fusão de registros." in mapa
+    assert 't("map.familyCross")' in mapa
+    assert 't("map.note")' in mapa
+    assert "A correlação é estratégica, não uma fusão de registros." in catalogo
