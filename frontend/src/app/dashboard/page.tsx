@@ -18,6 +18,7 @@ export default function DashboardExecutivo(){
 
  useEffect(()=>{let ativo=true;if(!master){setResponsaveis([]);setResponsavelId("");return()=>{ativo=false}};void getResponsaveisComerciaisSeguros().then(lista=>{if(ativo)setResponsaveis(lista)}).catch(()=>{if(ativo)setResponsaveis([])});return()=>{ativo=false}},[master])
  const responsavelSelecionado=useMemo(()=>responsaveis.find(item=>item.id===responsavelId),[responsaveis,responsavelId])
+ const visao=master?(responsavelSelecionado?.nome||"Toda a equipe comercial"):(usuario?.nome||"Meu território")
 
  return <main className="flex min-h-screen bg-[#020817] text-white">
   <Sidebar/>
@@ -29,10 +30,11 @@ export default function DashboardExecutivo(){
       <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">Leitura estratégica ANFIR</p>
       <h1 className="mt-2 text-3xl font-bold">Dashboard Executivo</h1>
       <p className="mt-2 max-w-4xl text-sm text-slate-400">Fotografia estratégica Viena SP 2026 construída a partir do workbook auditado Carrier/JOV.</p>
-      <p className="mt-2 text-sm font-semibold text-emerald-300">Visão: {responsavelSelecionado?.nome||usuario?.nome||"Equipe comercial"}</p>
+      <p className="mt-2 text-sm font-semibold text-emerald-300">Visão comercial: {visao}</p>
      </div>
-     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+     <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
       {master&&<label className="flex min-w-[260px] flex-col gap-1 text-xs font-semibold text-slate-400"><span>Responsável comercial</span><select value={responsavelId} onChange={e=>setResponsavelId(e.target.value)} className="rounded-xl border border-cyan-500/40 bg-[#071427] px-3 py-2.5 text-sm text-white"><option value="">Toda a equipe comercial</option>{responsaveis.map(item=><option key={item.id} value={item.id}>{item.nome}</option>)}</select></label>}
+      {master&&<Link href="/dashboard/carteiras-comerciais" className="inline-flex shrink-0 items-center justify-center rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2.5 text-sm font-semibold text-emerald-200 transition hover:bg-emerald-500/20">Gerenciar carteiras</Link>}
       <Link href="/dashboard/anfir-historico" className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-500/20">Abrir histórico ANFIR</Link>
      </div>
     </header>
