@@ -11,6 +11,14 @@ from fastapi import APIRouter, HTTPException
 
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
+from services.anfir_workbook_contract import _ddd_workbook
+from services.anfir_workbook_semantics import (
+    categoria_workbook_2026,
+    causa_workbook_2026,
+    extrair_observacao_workbook,
+    temas_workbook_2026,
+)
+from services.operational_filters import data_registro
 from routers.strategic_layers_router import (
     _anfir,
     _data_no_intervalo,
@@ -28,6 +36,14 @@ CAMPOS: dict[str, dict[str, tuple[str, ...]]] = {
         "implementadora": ("implementadora", "implementador"),
         "empresa": ("cliente", "empresa", "transportadora"),
         "equipamento": ("modelo", "linha", "produto"),
+        # Campos semânticos do workbook 2026. São filtrados pelas mesmas regras
+        # usadas na consolidação do Dashboard, não por texto bruto.
+        "categoria": (),
+        "causa": (),
+        "mes": (),
+        "trimestre": (),
+        "tema": (),
+        "observacao": (),
     },
     "historico": {
         "aba": ("aba_origem",),
@@ -51,7 +67,7 @@ CAMPOS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 COLUNAS = {
-    "anfir": ["cliente", "empresa", "transportadora", "estado", "cidade", "municipio", "ddd", "implementadora", "modelo", "linha", "produto", "valor", "data", "created_at"],
+    "anfir": ["cliente", "empresa", "transportadora", "estado", "cidade", "municipio", "ddd", "implementadora", "modelo", "linha", "produto", "valor", "data", "created_at", "observacao"],
     "historico": ["aba_origem", "linha_origem", "data", "ano", "cliente", "equipamento", "quantidade", "valor_unitario", "valor_total", "representante_original", "representante_atual", "status", "motivo_perda", "canal_venda", "implementadora", "previsao", "probabilidade", "observacao"],
     "crm": ["id", "titulo", "cliente_nome", "status", "equipamentos", "linhas_equipamentos", "quantidade_total", "valor_estimado", "estado", "municipio", "ddd", "data_fechamento_prevista", "created_at"],
 }
@@ -100,6 +116,16 @@ def _ordenar(registros: list[dict[str, Any]], campo: str | None, direcao: str) -
 def _projetar(registro: dict[str, Any], camada: str) -> dict[str, Any]:
     chaves = COLUNAS[camada]
     projetado = {chave: registro.get(chave) for chave in chaves if registro.get(chave) not in (None, "", [], {})}
+    if camada == "anfir":
+        observacao = extrair_observacao_workbook(registro)
+        projetado["categoria_workbook"] = categoria_workbook_2026(registro)
+        projetado["causa_workbook"] = causa_workbook_2026(registro)
+        projetado["ddd_workbook"] = _ddd_workbook(registro)
+        temas = temas_workbook_2026(registro)
+        if temas:
+            projetado["temas_workbook"] = temas
+        if observacao:
+            projetado["observacao"] = observacao
     if not projetado:
         projetado = {chave: valor for chave, valor in registro.items() if valor not in (None, "", [], {})}
     return projetado
@@ -129,6 +155,34 @@ def _numero(valor: Any) -> float:
         return float(valor or 0)
     except (TypeError, ValueError):
         return 0.0
+
+
+def _filtrar_anfir_semantico(registros: list[dict[str, Any]], campo: str, valor: str) -> list[dict[str, Any]]:
+    alvo = str(valor or "").strip()
+    if campo == "categoria":
+        return [item for item in registros if categoria_workbook_2026(item) == alvo]
+    if campo == "causa":
+        return [item for item in registros if causa_workbook_2026(item) == alvo]
+    if campo == "mes":
+        return [item for item in registros if (d := data_registro(item)) and d.strftime("%Y-%m") == alvo]
+    if campo == "trimestre":
+        try:
+            ano_texto, trimestre_texto = alvo.upper().split("-Q", 1)
+            ano, trimestre = int(ano_texto), int(trimestre_texto)
+        except (TypeError, ValueError):
+            return []
+        return [item for item in registros if (d := data_registro(item)) and d.year == ano and ((d.month - 1) // 3 + 1) == trimestre]
+    if campo == "tema":
+        return [item for item in registros if alvo in temas_workbook_2026(item)]
+    if campo == "observacao":
+        if alvo == "COM_OBSERVACAO":
+            return [item for item in registros if extrair_observacao_workbook(item)]
+        if alvo == "SEM_OBSERVACAO":
+            return [item for item in registros if not extrair_observacao_workbook(item)]
+        return []
+    if campo == "ddd":
+        return [item for item in registros if _ddd_workbook(item) == alvo]
+    return [item for item in registros if _corresponde(item, CAMPOS["anfir"][campo], alvo)]
 
 
 @router.get("/detalhamento/resumo-historico")
@@ -199,7 +253,10 @@ def detalhamento_indicador(
         else:
             registros = [item for item in registros if familia_alvo in familias_registro(item)]
     elif campo and valor:
-        registros = [item for item in registros if _corresponde(item, CAMPOS[camada][campo], valor)]
+        if camada == "anfir":
+            registros = _filtrar_anfir_semantico(list(registros), campo, valor)
+        else:
+            registros = [item for item in registros if _corresponde(item, CAMPOS[camada][campo], valor)]
 
     registros = _buscar(list(registros), busca)
     registros = _ordenar(registros, ordenar, direcao)

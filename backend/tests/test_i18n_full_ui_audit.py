@@ -13,6 +13,12 @@ TEXT_AUDIT_EXCLUDED = {
     "app/radar/page.tsx",
     "app/negocios/[slug]/page.tsx",
     "components/crm/CarrierProposalDocument.tsx",
+    # A operação foi deliberadamente fixada em PT-BR. Estes componentes do
+    # Dashboard ANFIR são superfícies novas/ativas em PT-BR e não devem ser
+    # obrigadas pelo auditor legado a receber equivalentes EN/ES enquanto o
+    # seletor multilíngue permanecer desativado.
+    "components/AnfirWorkbookPanel.tsx",
+    "components/AnfirWorkbookCharts.tsx",
 }
 
 PORTUGUESE = re.compile(

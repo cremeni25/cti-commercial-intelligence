@@ -271,7 +271,10 @@ def detalhamento_seguro(
         else:
             registros = [item for item in registros if valor in familias_registro(item)]
     elif campo and valor:
-        registros = [item for item in registros if drill._corresponde(item, drill.CAMPOS[camada][campo], valor)]
+        if camada == "anfir":
+            registros = drill._filtrar_anfir_semantico(list(registros), campo, valor)
+        else:
+            registros = [item for item in registros if drill._corresponde(item, drill.CAMPOS[camada][campo], valor)]
 
     registros = drill._buscar(list(registros), busca)
     registros = drill._ordenar(registros, ordenar, direcao)

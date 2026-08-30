@@ -36,6 +36,10 @@ const ROTULOS: Record<string, string> = {
   cidade: "Cidade",
   municipio: "Município",
   ddd: "DDD",
+  ddd_workbook: "DDD auditado",
+  categoria_workbook: "Categoria ANFIR",
+  causa_workbook: "Causa estratégica",
+  temas_workbook: "Temas da observação",
   previsao: "Previsão",
   probabilidade: "Probabilidade",
   observacao: "Observação",
@@ -80,7 +84,7 @@ function DetalhamentoContent() {
   const subtitulo = params.get("subtitulo") || "Registros que formam o total selecionado"
 
   const queryBase = useMemo(() => {
-    const permitido = ["camada", "campo", "valor", "familia", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao"]
+    const permitido = ["camada", "campo", "valor", "familia", "empresa", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao"]
     const destino = new URLSearchParams()
     permitido.forEach((chave) => {
       const valor = params.get(chave)
