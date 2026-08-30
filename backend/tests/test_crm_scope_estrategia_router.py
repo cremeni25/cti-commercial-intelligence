@@ -36,15 +36,16 @@ def test_historico_regional_usa_representante_atual(monkeypatch):
     assert [item["id"] for item in retorno] == ["h1"]
 
 
-def test_anfir_regional_respeita_ddds_cadastrados(monkeypatch):
+def test_anfir_regional_respeita_ddds_e_nao_expoe_011_ambiguo(monkeypatch):
     monkeypatch.setattr(modulo, "_perfil_regional", lambda _: {"nome": "MONICA ALMEIDA", "ddds": ["011", "012"]})
     monkeypatch.setattr(modulo.estrategia, "_anfir", lambda *args, **kwargs: ([
         {"id": "a1", "ddd": "011"},
+        {"id": "a1-regiao", "ddd": "011", "sub_regiao": "REGIAO 01"},
         {"id": "a2", "ddd": "012"},
         {"id": "a3", "ddd": "013"},
     ], None, None))
     retorno, _, _ = modulo._anfir_do_usuario(usuario(), "brasil", "TODO_HISTORICO", None, None, None, None)
-    assert [item["id"] for item in retorno] == ["a1", "a2"]
+    assert [item["id"] for item in retorno] == ["a1-regiao", "a2"]
 
 
 def test_anfir_bloqueia_ddd_fora_do_permitido(monkeypatch):
