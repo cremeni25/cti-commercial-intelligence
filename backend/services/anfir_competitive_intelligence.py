@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import Counter, defaultdict
+from collections import Counter
 from typing import Any
 
 from services.operational_filters import data_registro
@@ -21,7 +21,6 @@ ALIASES_FIXOS = {
     "PALACIO": "PALACIO",
     "PALÁCIO": "PALACIO",
 }
-
 STATUS_DOCUMENTACAO = {"DOCUMENTACAO", "DOCUMENTAÇÃO"}
 
 
@@ -46,6 +45,10 @@ def _linha(registro: dict[str, Any]) -> str:
     return classificar_linha(registro) or "UNKNOWN"
 
 
+def _contem(texto: str, chave: str) -> bool:
+    return bool(re.search(rf"(?<![A-Z0-9]){re.escape(chave)}(?![A-Z0-9])", texto))
+
+
 def _fabricante_e_status(registro: dict[str, Any], taxonomia: dict[str, str]) -> tuple[str | None, str | None, str]:
     bruto = str(registro.get("fabricante_equipamento") or "").strip()
     bruto_norm = _sem_acento(bruto)
@@ -57,11 +60,21 @@ def _fabricante_e_status(registro: dict[str, Any], taxonomia: dict[str, str]) ->
         if canonico:
             return canonico, None, bruto
 
+    # CARRIER só é inferida de campos estruturados fortes. Uma observação como
+    # “cliente possui Carrier, mas está testando...” descreve histórico/frota e não
+    # prova que a ocorrência atual seja Carrier.
+    texto_forte = _sem_acento(" ".join(str(registro.get(c) or "") for c in ("motivo", "status")))
+    for chave, canonico in sorted(taxonomia.items(), key=lambda item: len(item[0]), reverse=True):
+        if canonico == "CARRIER" and len(chave) >= 3 and _contem(texto_forte, chave):
+            return canonico, None, bruto
+
+    # Concorrentes podem ser recuperados de observações explícitas, preservando a
+    # taxonomia oficial. Ausência de evidência permanece A_IDENTIFICAR.
     texto_contexto = _sem_acento(" ".join(str(registro.get(c) or "") for c in ("ocorrencia", "motivo", "status")))
     for chave, canonico in sorted(taxonomia.items(), key=lambda item: len(item[0]), reverse=True):
-        if len(chave) < 3:
+        if canonico == "CARRIER" or len(chave) < 3:
             continue
-        if re.search(rf"(?<![A-Z0-9]){re.escape(chave)}(?![A-Z0-9])", texto_contexto):
+        if _contem(texto_contexto, chave):
             return canonico, None, bruto
     return None, None, bruto
 
