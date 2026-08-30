@@ -41,6 +41,7 @@ CAMPOS: dict[str, dict[str, tuple[str, ...]]] = {
         "categoria": (),
         "causa": (),
         "mes": (),
+        "trimestre": (),
         "tema": (),
         "observacao": (),
     },
@@ -164,6 +165,13 @@ def _filtrar_anfir_semantico(registros: list[dict[str, Any]], campo: str, valor:
         return [item for item in registros if causa_workbook_2026(item) == alvo]
     if campo == "mes":
         return [item for item in registros if (d := data_registro(item)) and d.strftime("%Y-%m") == alvo]
+    if campo == "trimestre":
+        try:
+            ano_texto, trimestre_texto = alvo.upper().split("-Q", 1)
+            ano, trimestre = int(ano_texto), int(trimestre_texto)
+        except (TypeError, ValueError):
+            return []
+        return [item for item in registros if (d := data_registro(item)) and d.year == ano and ((d.month - 1) // 3 + 1) == trimestre]
     if campo == "tema":
         return [item for item in registros if alvo in temas_workbook_2026(item)]
     if campo == "observacao":
