@@ -2,5 +2,41 @@
   "Pipeline, Atividades, Forecast e Carteira são executados em conversas novas e independentes. O relatório é processado antes de abrir a IA Comercial, eliminando visualmente e factual­mente qualquer reaproveitamento da conversa anterior.": {
     "en": "Pipeline, Activities, Forecast and Account Portfolio run in new, independent conversations. The report is processed before Sales AI opens, preventing any visual or factual reuse of the previous conversation.",
     "es": "Pipeline, Actividades, Forecast y Cartera se ejecutan en conversaciones nuevas e independientes. El informe se procesa antes de abrir la IA Comercial, evitando cualquier reutilización visual o factual de la conversación anterior."
+  },
+  "Evolução mensal 2026": {
+    "en": "Monthly evolution 2026",
+    "es": "Evolución mensual 2026"
+  },
+  "Tema": {
+    "en": "Topic",
+    "es": "Tema"
+  },
+  "Direct Drive é o maior mercado elegível e também o maior espaço competitivo: forte presença de fabricantes nacionais, baixa presença Carrier observada e grande incidência de não participação nas propostas.": {
+    "en": "Direct Drive is the largest eligible market and also the largest competitive gap: strong presence of domestic manufacturers, low observed Carrier presence and a high incidence of non-participation in proposals.",
+    "es": "Direct Drive es el mayor mercado elegible y también el mayor espacio competitivo: fuerte presencia de fabricantes nacionales, baja presencia Carrier observada y alta incidencia de no participación en propuestas."
+  },
+  "Trailer possui a posição competitiva mais forte da Carrier na ANFIR elegível. A defesa da base e o tratamento de TK devem ser prioridade, sem atribuir todas as perdas a preço.": {
+    "en": "Trailer has Carrier's strongest competitive position in the eligible ANFIR base. Protecting the installed base and addressing TK should be priorities, without attributing every loss to price.",
+    "es": "Trailer posee la posición competitiva más fuerte de Carrier en la ANFIR elegible. La defensa de la base y el tratamiento de TK deben ser prioridad, sin atribuir todas las pérdidas al precio."
+  },
+  "Diesel Truck apresenta mercado mais fragmentado: nacionais, usados, sem contato e equipamentos Carrier usados indicam oportunidade de renovação e reconquista, além da disputa tradicional com TK.": {
+    "en": "Diesel Truck has a more fragmented market: domestic brands, used units, no-contact accounts and used Carrier equipment indicate renewal and win-back opportunities, in addition to the traditional competition with TK.",
+    "es": "Diesel Truck presenta un mercado más fragmentado: marcas nacionales, usados, cuentas sin contacto y equipos Carrier usados indican oportunidades de renovación y reconquista, además de la competencia tradicional con TK."
+  },
+  "O DDD 011 concentra a maior parte do mercado. Como há sobreposição comercial interna, esta leitura não atribui arbitrariamente os registros a uma única vendedora.": {
+    "en": "Area code 011 concentrates most of the market. Because there is internal commercial overlap, this reading does not arbitrarily assign records to a single sales representative.",
+    "es": "El código de área 011 concentra la mayor parte del mercado. Como existe superposición comercial interna, esta lectura no asigna arbitrariamente los registros a una sola vendedora."
+  },
+  "Sem contato e não participamos da proposta são indicadores de cobertura comercial e devem virar fila de ação no CTI, não apenas estatística histórica.": {
+    "en": "No contact and we did not participate are commercial coverage indicators and must become an action queue in CTI, not merely historical statistics.",
+    "es": "Sin contacto y no participamos en la propuesta son indicadores de cobertura comercial y deben convertirse en una cola de acción en CTI, no solo en estadística histórica."
+  },
+  "A presença Carrier é classificação observada na ANFIR. Market share oficial só deve ser publicado após reconciliação com vendas/instalações Carrier na mesma competência e território.": {
+    "en": "Carrier presence is an observed classification in ANFIR. Official market share should only be published after reconciliation with Carrier sales/installations for the same period and territory.",
+    "es": "La presencia Carrier es una clasificación observada en ANFIR. El market share oficial solo debe publicarse después de reconciliarlo con ventas/instalaciones Carrier de la misma competencia y territorio."
+  },
+  "COMPARTILHADO — REGRA INTERNA CTI": {
+    "en": "SHARED — INTERNAL CTI RULE",
+    "es": "COMPARTIDO — REGLA INTERNA CTI"
   }
 }
