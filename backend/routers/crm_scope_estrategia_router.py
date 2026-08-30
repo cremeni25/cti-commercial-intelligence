@@ -91,14 +91,13 @@ def _registro_anfir_no_escopo(
     ddd_item = _ddd_workbook(item)
     if ddd_item not in permitidos:
         return False
+    if ddd_item not in DDDS_COMPARTILHADOS:
+        return True
 
     perfil_efetivo = perfil or _perfil_regional(usuario)
     codigo_regional = _fold(perfil_efetivo.get("codigo_regional"))
-    if ddd_item not in DDDS_COMPARTILHADOS or not codigo_regional:
-        return True
-
     sub_regiao = _fold(item.get("sub_regiao"))
-    if sub_regiao:
+    if codigo_regional and sub_regiao:
         return sub_regiao == codigo_regional
 
     nome = _fold(perfil_efetivo.get("nome") or usuario.nome)
@@ -164,6 +163,8 @@ def _metadata_escopo(usuario: UsuarioAutenticado) -> dict[str, Any]:
     if perfil.get("codigo_regional"):
         metadata["codigo_regional"] = perfil["codigo_regional"]
         metadata["regra_territorial"] = "DDD compartilhado: restringir pela subdivisão comercial cadastrada"
+    elif any(ddd in DDDS_COMPARTILHADOS for ddd in perfil["ddds"]):
+        metadata["regra_territorial"] = "DDD compartilhado sem subdivisão: somente registros explicitamente atribuídos ao usuário"
     return metadata
 
 
