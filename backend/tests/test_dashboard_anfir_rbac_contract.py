@@ -82,6 +82,13 @@ def test_ddd_auditado_por_municipio_prevalece_tambem_na_seguranca():
     assert _registro_anfir_no_escopo(registro, monica, {"011", "012"})
 
 
+def test_equipamento_seguro_preserva_camadas_existentes():
+    source = ESTRATEGIA.read_text(encoding="utf-8")
+    assert '"realizado": estrategia._camada_anfir(anf)' in source
+    assert '"historico_comercial": estrategia._camada_historico(historico)' in source
+    assert '"em_curso": estrategia._camada_crm(crm)' in source
+
+
 def test_frontend_autentica_as_leituras_existentes_sem_reescrever_dashboard():
     layout = LAYOUT.read_text(encoding="utf-8")
     bridge = BRIDGE.read_text(encoding="utf-8")
