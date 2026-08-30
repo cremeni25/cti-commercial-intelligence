@@ -83,10 +83,12 @@ def test_ddd_nao_compartilhado_respeita_apenas_lista_autorizada():
     assert not _registro_anfir_no_escopo(_anfir(ddd="013"), usuario, {"012"}, perfil)
 
 
-def test_usuario_sem_subdivisao_mantem_ddd_integral_quando_assim_cadastrado():
+def test_ddd_compartilhado_sem_subdivisao_nao_e_liberado_inteiro():
     usuario = _usuario(nome="GESTOR TERRITORIAL")
     perfil = {"nome": "GESTOR TERRITORIAL", "ddds": ["011"], "codigo_regional": ""}
-    assert _registro_anfir_no_escopo(_anfir(sub_regiao="QUALQUER REGIAO"), usuario, {"011"}, perfil)
+    assert _registro_anfir_no_escopo(_anfir(responsavel="GESTOR TERRITORIAL"), usuario, {"011"}, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(sub_regiao="REGIAO 01"), usuario, {"011"}, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(), usuario, {"011"}, perfil)
 
 
 def test_ddd_auditado_por_municipio_prevalece_tambem_na_seguranca():
