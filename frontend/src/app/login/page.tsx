@@ -35,9 +35,79 @@ const bootstrapInicial: BootstrapForm = {
   ddds: "011, 012, 013, 014, 015, 018",
 }
 
+const ui = {
+  "pt-BR": {
+    brand: "CTI Inteligência Comercial",
+    sessionMissing: "Sessão autenticada não foi criada.",
+    signInFailed: "Não foi possível entrar no CTI.",
+    emailRequired: "Informe o e-mail cadastrado antes de solicitar a recuperação de senha.",
+    recoverySent: "Enviamos um link de recuperação para o e-mail informado. Abra a mensagem e defina uma nova senha.",
+    recoveryFailed: "Não foi possível enviar o e-mail de recuperação.",
+    passwordMismatch: "A confirmação da senha não corresponde.",
+    bootstrapFailed: "Não foi possível configurar o primeiro acesso.",
+    bootstrapCreated: "ADMIN_MASTER criado. Entre com o e-mail e a senha definidos.",
+    fullName: "Nome completo",
+    company: "Empresa",
+    role: "Cargo institucional",
+    territory: "Território",
+    ddds: "DDDs autorizados",
+    confirmPassword: "Confirmar senha",
+    fixedProfile: "Perfil fixo:",
+    fixedProfileDetail: "Este cadastro será bloqueado automaticamente após a primeira criação.",
+    configuring: "Configurando...",
+    createFirstAccess: "Criar primeiro acesso",
+    backToLogin: "Voltar ao login",
+  },
+  en: {
+    brand: "CTI Commercial Intelligence",
+    sessionMissing: "The authenticated session could not be created.",
+    signInFailed: "We couldn't sign you in to CTI.",
+    emailRequired: "Enter your registered email before requesting password recovery.",
+    recoverySent: "We sent a recovery link to the email provided. Open the message and set a new password.",
+    recoveryFailed: "We couldn't send the password recovery email.",
+    passwordMismatch: "Password confirmation does not match.",
+    bootstrapFailed: "We couldn't configure the initial access.",
+    bootstrapCreated: "ADMIN_MASTER created. Sign in with the email and password you defined.",
+    fullName: "Full name",
+    company: "Company",
+    role: "Institutional role",
+    territory: "Territory",
+    ddds: "Authorized area codes",
+    confirmPassword: "Confirm password",
+    fixedProfile: "Fixed profile:",
+    fixedProfileDetail: "This registration will be automatically locked after the first account is created.",
+    configuring: "Configuring...",
+    createFirstAccess: "Create first access",
+    backToLogin: "Back to sign in",
+  },
+  es: {
+    brand: "CTI Inteligencia Comercial",
+    sessionMissing: "No se pudo crear la sesión autenticada.",
+    signInFailed: "No fue posible ingresar a CTI.",
+    emailRequired: "Ingrese el correo electrónico registrado antes de solicitar la recuperación de contraseña.",
+    recoverySent: "Enviamos un enlace de recuperación al correo informado. Abra el mensaje y defina una nueva contraseña.",
+    recoveryFailed: "No fue posible enviar el correo de recuperación.",
+    passwordMismatch: "La confirmación de la contraseña no coincide.",
+    bootstrapFailed: "No fue posible configurar el primer acceso.",
+    bootstrapCreated: "ADMIN_MASTER creado. Ingrese con el correo y la contraseña definidos.",
+    fullName: "Nombre completo",
+    company: "Empresa",
+    role: "Cargo institucional",
+    territory: "Territorio",
+    ddds: "Códigos de área autorizados",
+    confirmPassword: "Confirmar contraseña",
+    fixedProfile: "Perfil fijo:",
+    fixedProfileDetail: "Este registro se bloqueará automáticamente después de crear la primera cuenta.",
+    configuring: "Configurando...",
+    createFirstAccess: "Crear primer acceso",
+    backToLogin: "Volver al acceso",
+  },
+} as const
+
 export default function LoginPage() {
   const router = useRouter()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
+  const tx = ui[locale]
   const [email, setEmail] = useState("")
   const [senha, setSenha] = useState("")
   const [erro, setErro] = useState("")
@@ -80,7 +150,7 @@ export default function LoginPage() {
         password: senha,
       })
       if (error) throw error
-      if (!data.session?.access_token) throw new Error("Sessão autenticada não foi criada.")
+      if (!data.session?.access_token) throw new Error(tx.sessionMissing)
 
       let statusPrimeiroAcesso: PrimeiroAcessoStatus | null = null
       try {
@@ -100,7 +170,7 @@ export default function LoginPage() {
       }
       router.refresh()
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível entrar no CTI.")
+      setErro(error instanceof Error ? error.message : tx.signInFailed)
     } finally {
       setEnviando(false)
     }
@@ -110,7 +180,7 @@ export default function LoginPage() {
     setErro("")
     setMensagem("")
     if (!email.trim()) {
-      setErro("Informe o e-mail cadastrado antes de solicitar a recuperação de senha.")
+      setErro(tx.emailRequired)
       return
     }
     setEnviando(true)
@@ -120,9 +190,9 @@ export default function LoginPage() {
         redirectTo: `${window.location.origin}/redefinir-senha`,
       })
       if (error) throw error
-      setMensagem("Enviamos um link de recuperação para o e-mail informado. Abra a mensagem e defina uma nova senha.")
+      setMensagem(tx.recoverySent)
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível enviar o e-mail de recuperação.")
+      setErro(error instanceof Error ? error.message : tx.recoveryFailed)
     } finally {
       setEnviando(false)
     }
@@ -133,7 +203,7 @@ export default function LoginPage() {
     setErro("")
     setMensagem("")
     if (cadastro.senha !== cadastro.confirmarSenha) {
-      setErro("A confirmação da senha não corresponde.")
+      setErro(tx.passwordMismatch)
       return
     }
     setEnviando(true)
@@ -148,14 +218,14 @@ export default function LoginPage() {
         }),
       })
       const payload = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(payload?.detail || "Não foi possível configurar o primeiro acesso.")
+      if (!response.ok) throw new Error(payload?.detail || tx.bootstrapFailed)
       setEmail(cadastro.email.trim())
       setSenha("")
       setBootstrapDisponivel(false)
       setModoCadastro(false)
-      setMensagem("ADMIN_MASTER criado. Entre com o e-mail e a senha definidos.")
+      setMensagem(tx.bootstrapCreated)
     } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível configurar o primeiro acesso.")
+      setErro(error instanceof Error ? error.message : tx.bootstrapFailed)
     } finally {
       setEnviando(false)
     }
@@ -166,7 +236,7 @@ export default function LoginPage() {
       <section className="w-full max-w-xl rounded-3xl border border-[#16325c] bg-[#091a33] p-6 shadow-2xl sm:p-8">
         <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
         <div className="mb-7 text-center">
-          <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">CTI Inteligência Comercial</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-cyan-400">{tx.brand}</p>
           <h1 className="mt-3 text-3xl font-bold text-white">{modoCadastro ? t("login.initialSetup") : t("login.title")}</h1>
           <p className="mt-2 text-sm text-slate-400">{modoCadastro ? t("login.initialSetupDescription") : t("login.subtitle")}</p>
         </div>
@@ -176,17 +246,17 @@ export default function LoginPage() {
 
         {modoCadastro ? (
           <form onSubmit={criarPrimeiroAcesso} className="grid gap-4 sm:grid-cols-2">
-            <Campo label="Nome completo" value={cadastro.nome} onChange={(value) => setCadastro({ ...cadastro, nome: value })} />
+            <Campo label={tx.fullName} value={cadastro.nome} onChange={(value) => setCadastro({ ...cadastro, nome: value })} />
             <Campo label={t("common.email")} type="email" value={cadastro.email} onChange={(value) => setCadastro({ ...cadastro, email: value })} />
-            <Campo label="Empresa" value={cadastro.empresa} onChange={(value) => setCadastro({ ...cadastro, empresa: value })} />
-            <Campo label="Cargo institucional" value={cadastro.cargo} onChange={(value) => setCadastro({ ...cadastro, cargo: value })} />
-            <Campo label="Território" value={cadastro.territorio} onChange={(value) => setCadastro({ ...cadastro, territorio: value })} />
-            <Campo label="DDDs autorizados" value={cadastro.ddds} onChange={(value) => setCadastro({ ...cadastro, ddds: value })} />
+            <Campo label={tx.company} value={cadastro.empresa} onChange={(value) => setCadastro({ ...cadastro, empresa: value })} />
+            <Campo label={tx.role} value={cadastro.cargo} onChange={(value) => setCadastro({ ...cadastro, cargo: value })} />
+            <Campo label={tx.territory} value={cadastro.territorio} onChange={(value) => setCadastro({ ...cadastro, territorio: value })} />
+            <Campo label={tx.ddds} value={cadastro.ddds} onChange={(value) => setCadastro({ ...cadastro, ddds: value })} />
             <Campo label={t("common.password")} type="password" value={cadastro.senha} onChange={(value) => setCadastro({ ...cadastro, senha: value })} />
-            <Campo label="Confirmar senha" type="password" value={cadastro.confirmarSenha} onChange={(value) => setCadastro({ ...cadastro, confirmarSenha: value })} />
-            <div className="sm:col-span-2 rounded-xl border border-cyan-900/70 bg-cyan-950/20 px-4 py-3 text-xs leading-5 text-cyan-200">Perfil fixo: <strong>ADMIN_MASTER</strong>. Este cadastro será bloqueado automaticamente após a primeira criação.</div>
-            <button disabled={enviando} className="sm:col-span-2 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">{enviando ? "Configurando..." : "Criar primeiro acesso"}</button>
-            <button type="button" onClick={() => setModoCadastro(false)} className="sm:col-span-2 text-sm text-slate-400 hover:text-white">Voltar ao login</button>
+            <Campo label={tx.confirmPassword} type="password" value={cadastro.confirmarSenha} onChange={(value) => setCadastro({ ...cadastro, confirmarSenha: value })} />
+            <div className="sm:col-span-2 rounded-xl border border-cyan-900/70 bg-cyan-950/20 px-4 py-3 text-xs leading-5 text-cyan-200">{tx.fixedProfile} <strong>ADMIN_MASTER</strong>. {tx.fixedProfileDetail}</div>
+            <button disabled={enviando} className="sm:col-span-2 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">{enviando ? tx.configuring : tx.createFirstAccess}</button>
+            <button type="button" onClick={() => setModoCadastro(false)} className="sm:col-span-2 text-sm text-slate-400 hover:text-white">{tx.backToLogin}</button>
           </form>
         ) : (
           <form onSubmit={entrar} className="space-y-5">
