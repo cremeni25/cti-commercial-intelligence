@@ -11,7 +11,7 @@ BRIDGE = ROOT / "frontend" / "src" / "components" / "security" / "AuthenticatedA
 ESTRATEGIA = ROOT / "backend" / "routers" / "crm_scope_estrategia_router.py"
 
 
-def _usuario(tipo: str, nome: str) -> UsuarioAutenticado:
+def _usuario(tipo: str = "USUARIO_CTI", nome: str = "USUARIO TESTE") -> UsuarioAutenticado:
     return UsuarioAutenticado(
         id=f"id-{tipo}",
         auth_id=f"auth-{tipo}",
@@ -41,45 +41,59 @@ def test_workbook_anfir_exige_usuario_e_reutiliza_escopo_territorial():
     assert "_metadata_escopo(usuario)" in source
 
 
-def test_escopo_regional_usa_ddds_cadastrados_e_semantica_auditada():
+def test_escopo_anfir_e_orientado_ao_cadastro_e_nao_ao_nome_do_usuario():
     source = ESTRATEGIA.read_text(encoding="utf-8")
     assert 'supabase.table("cti_users")' in source
-    assert '.select("nome,ddds")' in source
+    assert '.select("nome,ddds,codigo_regional")' in source
     assert "permitidos = set(perfil[\"ddds\"])" in source
+    assert "codigo_regional" in source
     assert "ddd_item = _ddd_workbook(item)" in source
-    assert 'DDD_011_COMPARTILHADO = "011"' in source
+    assert 'DDDS_COMPARTILHADOS = {"011"}' in source
+    assert "RESPONSAVEIS_011_POR_PERFIL" not in source
+    assert "SUBREGIAO_011_POR_PERFIL" not in source
 
 
-def test_monica_recebe_regiao_01_e_continuidade_historica_da_carla_no_011():
-    monica = _usuario("REPRES_REGIAO_01", "Monica Almeida")
+def test_usuario_com_subdivisao_recebe_sua_regiao_no_ddd_compartilhado():
+    usuario = _usuario(nome="NOVA REPRESENTANTE")
+    perfil = {"nome": "NOVA REPRESENTANTE", "ddds": ["011", "012"], "codigo_regional": "REGIAO 03"}
     permitidos = {"011", "012"}
-    assert _registro_anfir_no_escopo(_anfir(sub_regiao="REGIAO 01"), monica, permitidos)
-    assert _registro_anfir_no_escopo(_anfir(responsavel="CARLA"), monica, permitidos)
-    assert _registro_anfir_no_escopo(_anfir(responsavel="MÔNICA ALMEIDA"), monica, permitidos)
-    assert not _registro_anfir_no_escopo(_anfir(sub_regiao="REGIAO 02", responsavel="MICHELE"), monica, permitidos)
-    assert not _registro_anfir_no_escopo(_anfir(), monica, permitidos)
+    assert _registro_anfir_no_escopo(_anfir(sub_regiao="REGIÃO 03"), usuario, permitidos, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(sub_regiao="REGIAO 02"), usuario, permitidos, perfil)
 
 
-def test_monica_recebe_ddd_012_integral_e_michele_nao_recebe_012():
-    monica = _usuario("REPRES_REGIAO_01", "Monica Almeida")
-    michele = _usuario("REPRES_REGIAO_02", "Michele Santos")
-    registro = _anfir(ddd="012", cidade="TAUBATE")
-    assert _registro_anfir_no_escopo(registro, monica, {"011", "012"})
-    assert not _registro_anfir_no_escopo(registro, michele, {"011", "013"})
+def test_continuidade_historica_ocorre_pela_regiao_sem_hardcode_de_pessoa():
+    usuario = _usuario(nome="NOVA RESPONSAVEL")
+    perfil = {"nome": "NOVA RESPONSAVEL", "ddds": ["011"], "codigo_regional": "REGIAO 01"}
+    registro_antigo = _anfir(sub_regiao="REGIAO 01", responsavel="RESPONSAVEL ANTERIOR")
+    assert _registro_anfir_no_escopo(registro_antigo, usuario, {"011"}, perfil)
 
 
-def test_michele_recebe_regiao_02_e_nao_regiao_01_no_011():
-    michele = _usuario("REPRES_REGIAO_02", "Michele Santos")
-    permitidos = {"011", "013"}
-    assert _registro_anfir_no_escopo(_anfir(sub_regiao="REGIÃO 02"), michele, permitidos)
-    assert _registro_anfir_no_escopo(_anfir(responsavel="MICHELE SANTOS"), michele, permitidos)
-    assert not _registro_anfir_no_escopo(_anfir(sub_regiao="REGIAO 01", responsavel="CARLA"), michele, permitidos)
+def test_registro_sem_subregiao_no_ddd_compartilhado_exige_responsavel_atual():
+    usuario = _usuario(nome="NOVA RESPONSAVEL")
+    perfil = {"nome": "NOVA RESPONSAVEL", "ddds": ["011"], "codigo_regional": "REGIAO 01"}
+    assert _registro_anfir_no_escopo(_anfir(responsavel="NOVA RESPONSAVEL"), usuario, {"011"}, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(responsavel="OUTRA PESSOA"), usuario, {"011"}, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(), usuario, {"011"}, perfil)
+
+
+def test_ddd_nao_compartilhado_respeita_apenas_lista_autorizada():
+    usuario = _usuario(nome="USUARIO REGIONAL")
+    perfil = {"nome": "USUARIO REGIONAL", "ddds": ["012"], "codigo_regional": "REGIAO 99"}
+    assert _registro_anfir_no_escopo(_anfir(ddd="012"), usuario, {"012"}, perfil)
+    assert not _registro_anfir_no_escopo(_anfir(ddd="013"), usuario, {"012"}, perfil)
+
+
+def test_usuario_sem_subdivisao_mantem_ddd_integral_quando_assim_cadastrado():
+    usuario = _usuario(nome="GESTOR TERRITORIAL")
+    perfil = {"nome": "GESTOR TERRITORIAL", "ddds": ["011"], "codigo_regional": ""}
+    assert _registro_anfir_no_escopo(_anfir(sub_regiao="QUALQUER REGIAO"), usuario, {"011"}, perfil)
 
 
 def test_ddd_auditado_por_municipio_prevalece_tambem_na_seguranca():
-    monica = _usuario("REPRES_REGIAO_01", "Monica Almeida")
+    usuario = _usuario(nome="USUARIO REGIONAL")
+    perfil = {"nome": "USUARIO REGIONAL", "ddds": ["011"], "codigo_regional": "REGIAO 01"}
     registro = _anfir(ddd="015", cidade="SAO PAULO", sub_regiao="REGIAO 01")
-    assert _registro_anfir_no_escopo(registro, monica, {"011", "012"})
+    assert _registro_anfir_no_escopo(registro, usuario, {"011"}, perfil)
 
 
 def test_equipamento_seguro_preserva_camadas_existentes():
