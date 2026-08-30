@@ -11,10 +11,11 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers import drilldown_router as drill
 from routers import strategic_layers_router as estrategia
+from services.anfir_workbook_contract import _ddd_workbook
 from services.base_analytics import valor_float
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, equipamentos_registro, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
-from services.operational_filters import normalizar_ddd, resolver_ddd_registro, resolver_periodo
+from services.operational_filters import normalizar_ddd, resolver_periodo
 
 router = APIRouter(prefix="/crm-seguro/estrategia", tags=["crm-seguro-estrategia"])
 
@@ -93,7 +94,7 @@ def _responsavel_anfir(item: dict[str, Any]) -> str:
 
 
 def _registro_anfir_no_escopo(item: dict[str, Any], usuario: UsuarioAutenticado, permitidos: set[str]) -> bool:
-    ddd_item = resolver_ddd_registro(item)
+    ddd_item = _ddd_workbook(item)
     if ddd_item not in permitidos:
         return False
     if usuario.tipo_usuario not in PERFIS_REPRESENTANTES or ddd_item != DDD_011_COMPARTILHADO:
@@ -236,7 +237,7 @@ def equipamento_seguro(
             "escopo_usuario": _metadata_escopo(usuario),
         },
         "realizado": estrategia._camada_anfir(anf),
-        "historico_comercial": estrategia._camada_historico(historico),
+        "historico_comercial": historico_cam,
         "em_curso": estrategia._camada_crm(crm),
     }
 
