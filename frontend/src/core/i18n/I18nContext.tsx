@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo } from "react"
 import { messages, type Locale, type MessageKey } from "./catalog"
 
 type Params = Record<string, string | number>
@@ -24,16 +24,13 @@ function interpolate(template: string, params?: Params) {
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(FIXED_LOCALE)
-
   useEffect(() => {
-    setLocaleState(FIXED_LOCALE)
     document.documentElement.lang = FIXED_LOCALE
     document.documentElement.dataset.locale = FIXED_LOCALE
   }, [])
 
-  const setLocale = useCallback((_next: Locale) => {
-    setLocaleState(FIXED_LOCALE)
+  const setLocale = useCallback((next: Locale) => {
+    void next
     document.documentElement.lang = FIXED_LOCALE
     document.documentElement.dataset.locale = FIXED_LOCALE
   }, [])
@@ -44,7 +41,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo<I18nContextValue>(() => ({
-    locale,
+    locale: FIXED_LOCALE,
     setLocale,
     t,
     formatDate: (input, options) => {
@@ -58,7 +55,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         : { ...options, style: "currency" as const, currency: options.currency || "BRL" }
       return new Intl.NumberFormat(FIXED_LOCALE, config).format(number)
     },
-  }), [locale, setLocale, t])
+  }), [setLocale, t])
 
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>
 }
