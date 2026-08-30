@@ -13,9 +13,9 @@ function drill(titulo:string,campo?:string,valor?:string){
  return `/detalhamento?${q.toString()}`
 }
 
-export default function AnfirWorkbookCharts(){
+export default function AnfirWorkbookCharts({responsavelId}:{responsavelId?:string}){
  const[data,setData]=useState<Payload|null>(null)
- useEffect(()=>{let active=true;fetch("/api/cti/analytics/anfir-workbook-2026",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()).then(p=>{if(active)setData(p)}).catch(()=>{});return()=>{active=false}},[])
+ useEffect(()=>{let active=true;const qs=responsavelId?`?responsavel_id=${encodeURIComponent(responsavelId)}`:"";fetch(`/api/cti/analytics/anfir-workbook-2026${qs}`,{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()).then(p=>{if(active)setData(p)}).catch(()=>{});return()=>{active=false}},[responsavelId])
  if(!data)return null
  const mensal=data.inteligencia_viena.mensal,segmentos=data.inteligencia_viena.segmentos
  return <section className="grid gap-5 xl:grid-cols-2">

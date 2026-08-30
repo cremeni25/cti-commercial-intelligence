@@ -7,12 +7,13 @@ from fastapi import APIRouter, Depends
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from routers.crm_scope_atividades_router import _filtrar_agenda
-from routers.crm_scope_estrategia_router import _anfir_do_usuario, _metadata_escopo
+from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
 from routers.crm_scope_router import _filtrar_por_usuario
 from routers.crm_router import listar_oportunidades
 from routers.documentos_comerciais_listagem_router import listar_pedidos_operacionais, listar_propostas_operacionais
 from routers.negociacoes_router import agenda_comercial
 from services.base_analytics import valor_float
+from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
 from routers.modulos_router import _nome_empresa, _valor_texto
 
 router = APIRouter(prefix="/crm-seguro/empresas", tags=["crm-seguro-empresas"])
@@ -77,6 +78,8 @@ def listar_empresas_seguras(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     registros, inicio_efetivo, fim_efetivo = _anfir_do_usuario(usuario, contexto, periodo, uf, ddd, inicio, fim)
+    if not _consolidado(usuario):
+        registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario.id))
     return {
         "itens": _consolidar(registros),
         "metadata": {

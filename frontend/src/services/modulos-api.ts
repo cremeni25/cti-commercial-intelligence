@@ -150,6 +150,22 @@ export type ClienteCanonicoSeguro = {
   segmento?: string
   categoria?: string
   status?: string
+  ddd?: string
+  sub_regiao?: string
+  responsavel_comercial_id?: string
+  responsavel_comercial_nome?: string
+  responsavel_comercial_tipo?: string
+  responsabilidade_tipo?: "TERRITORIO" | "ATRIBUICAO_MASTER" | "CONTA_DIRETA_MASTER" | string
+}
+
+export type ResponsavelComercialSeguro = {
+  id: string
+  nome: string
+  email?: string
+  tipo_usuario?: string
+  codigo_regional?: string
+  ddds?: string[]
+  ativo?: boolean
 }
 
 export type CrmResumoEmpresaSeguro = {
@@ -161,8 +177,8 @@ export type CrmResumoEmpresaSeguro = {
 
 function normalizarQuery(query: string) { return query.includes("=") ? query : `contexto=${encodeURIComponent(query)}` }
 
-async function apiSeguro<T>(caminho: string): Promise<T> {
-  const resposta = await fetchCrmSeguroProxy(caminho, { cache: "no-store" })
+async function apiSeguro<T>(caminho: string, init?: RequestInit): Promise<T> {
+  const resposta = await fetchCrmSeguroProxy(caminho, { cache: "no-store", ...init })
   const payload = await resposta.json().catch(() => null)
   if (!resposta.ok) {
     const detalhe = payload && typeof payload === "object" && "detail" in payload
@@ -191,7 +207,18 @@ export async function getEmpresas(query: string) {
 }
 export function getClientes(query: string) { return getEmpresas(query) }
 export function getClienteDetalhe(nome: string, query: string) { return apiGet(`/modulos/clientes/${encodeURIComponent(nome)}?${normalizarQuery(query)}`) as Promise<ClienteDetalheComercial> }
-export function getClientesCanonicosSeguros() { return apiSeguro<ClienteCanonicoSeguro[]>("crm-seguro/clientes") }
+export function getClientesCanonicosSeguros(responsavelId?: string) {
+  const qs = responsavelId ? `?responsavel_id=${encodeURIComponent(responsavelId)}` : ""
+  return apiSeguro<ClienteCanonicoSeguro[]>(`crm-seguro/clientes${qs}`)
+}
+export function getResponsaveisComerciaisSeguros() { return apiSeguro<ResponsavelComercialSeguro[]>("crm-seguro/clientes/responsaveis") }
+export function definirResponsavelClienteSeguro(clienteId: string, dados: { responsavel_id?: string; conta_direta_master?: boolean; restaurar_territorio?: boolean; motivo?: string }) {
+  return apiSeguro<ClienteCanonicoSeguro>(`crm-seguro/clientes/${encodeURIComponent(clienteId)}/responsavel`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(dados),
+  })
+}
 export function getCrmResumoEmpresasSeguro() { return apiSeguro<CrmResumoEmpresaSeguro>("crm-seguro/empresas/crm-resumo") }
 export function getTransportadoras(query: string) { return getEmpresas(query) }
 export function getEquipamento(slug: string, query: string) { return apiEstrategiaSegura<EquipamentoEstrategico>(`equipamentos/${slug}?${normalizarQuery(query)}`) }
