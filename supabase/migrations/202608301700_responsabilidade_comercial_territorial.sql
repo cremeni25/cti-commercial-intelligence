@@ -30,3 +30,20 @@ insert into public.cti_territorio_regras(ddd,codigo_regional,nome_humano,regra_t
 ('011','REGIAO 01','Região Leste','BAIRRO','PENHA',5),('011','REGIAO 01','Região Leste','BAIRRO','CIDADE LIDER',5),('011','REGIAO 01','Região Leste','BAIRRO','CIDADE TIRADENTES',5),('011','REGIAO 01','Região Leste','BAIRRO','ITAQUERA',5),('011','REGIAO 01','Região Leste','BAIRRO','JD GUAIANAZES',5),('011','REGIAO 01','Região Leste','BAIRRO','MOOCA',5),('011','REGIAO 01','Região Leste','BAIRRO','PARQUE DA MOOCA',5),('011','REGIAO 01','Região Leste','BAIRRO','QUARTA PARADA',5),('011','REGIAO 01','Região Leste','BAIRRO','VILA BERTIOGA',5),('011','REGIAO 01','Região Leste','BAIRRO','VILA GOMES CARDIM',5),('011','REGIAO 01','Região Leste','BAIRRO','VILA PRUDENTE',5),('011','REGIAO 01','Região Leste','BAIRRO','PQ NOVO MUNDO',5),
 ('011','REGIAO 02','Região Oeste','BAIRRO','JAGUARE',5),('011','REGIAO 02','Região Oeste','BAIRRO','VILA LEOPOLDINA',5),('011','REGIAO 02','Região Oeste','BAIRRO','BUTANTA',5),('011','REGIAO 02','Região Oeste','BAIRRO','VILA BUTANTA',5),('011','REGIAO 02','Região Oeste','BAIRRO','JARDIM IPANEMA  ZONA OESTE',5),('011','REGIAO 02','Região Oeste','BAIRRO','PARQUE SAO DOMINGOS',5),('011','REGIAO 02','Região Oeste','BAIRRO','PINHEIROS',5),('011','REGIAO 02','Região Oeste','BAIRRO','PRQ DOS PRINCIPES',5),('011','REGIAO 02','Região Oeste','BAIRRO','JARAGUA',5),('011','REGIAO 02','Região Oeste','BAIRRO','JARDIM JARAGUA',5),('011','REGIAO 02','Região Oeste','BAIRRO','JARDIM JARAGUA  SAO DOMINGOS',5),('011','REGIAO 02','Região Oeste','BAIRRO','VILA CLARICE',5),('011','REGIAO 02','Região Oeste','BAIRRO','PERUS',5),('011','REGIAO 02','Região Oeste','BAIRRO','VILA OLIMPIA',5),('011','REGIAO 02','Região Oeste','BAIRRO','BROOKLIN PAULISTA',5),('011','REGIAO 02','Região Oeste','BAIRRO','PARAISOPOLIS',5),('011','REGIAO 02','Região Oeste','BAIRRO','PARQUE REBOUCAS',5)
 on conflict do nothing;
+
+create or replace function public.cti_sync_responsabilidade_cliente()
+returns trigger language plpgsql security definer set search_path=public as $$
+begin
+  if new.responsavel_comercial_id is distinct from old.responsavel_comercial_id and new.responsavel_comercial_id is not null then
+    update public.cti_oportunidades set responsavel_id=new.responsavel_comercial_id,updated_at=now()
+     where cliente_id=new.id and arquivado_em is null;
+    update public.cti_atividades set usuario_id=new.responsavel_comercial_id,updated_at=now()
+     where cliente_id=new.id or oportunidade_id in (select id from public.cti_oportunidades where cliente_id=new.id);
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists trg_cti_sync_responsabilidade_cliente on public.clientes;
+create trigger trg_cti_sync_responsabilidade_cliente after update of responsavel_comercial_id on public.clientes
+for each row execute function public.cti_sync_responsabilidade_cliente();
