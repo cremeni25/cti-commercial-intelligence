@@ -16,8 +16,9 @@ export default function DashboardExecutivo(){
  const[responsaveis,setResponsaveis]=useState<ResponsavelComercialSeguro[]>([])
  const[responsavelId,setResponsavelId]=useState("")
 
- useEffect(()=>{let ativo=true;if(!master){setResponsaveis([]);setResponsavelId("");return()=>{ativo=false}};void getResponsaveisComerciaisSeguros().then(lista=>{if(ativo)setResponsaveis(lista)}).catch(()=>{if(ativo)setResponsaveis([])});return()=>{ativo=false}},[master])
- const responsavelSelecionado=useMemo(()=>responsaveis.find(item=>item.id===responsavelId),[responsaveis,responsavelId])
+ useEffect(()=>{if(!master)return;let ativo=true;void getResponsaveisComerciaisSeguros().then(lista=>{if(ativo)setResponsaveis(lista)}).catch(()=>{if(ativo)setResponsaveis([])});return()=>{ativo=false}},[master])
+ const responsavelEfetivo=master?responsavelId:""
+ const responsavelSelecionado=useMemo(()=>responsaveis.find(item=>item.id===responsavelEfetivo),[responsaveis,responsavelEfetivo])
  const visao=master?(responsavelSelecionado?.nome||"Toda a equipe comercial"):(usuario?.nome||"Meu território")
 
  return <main className="flex min-h-screen bg-[#020817] text-white">
@@ -38,8 +39,8 @@ export default function DashboardExecutivo(){
       <Link href="/dashboard/anfir-historico" className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-500/20">Abrir histórico ANFIR</Link>
      </div>
     </header>
-    <AnfirWorkbookPanel responsavelId={responsavelId||undefined}/>
-    <AnfirWorkbookCharts responsavelId={responsavelId||undefined}/>
+    <AnfirWorkbookPanel responsavelId={responsavelEfetivo||undefined}/>
+    <AnfirWorkbookCharts responsavelId={responsavelEfetivo||undefined}/>
    </div>
   </section>
  </main>
