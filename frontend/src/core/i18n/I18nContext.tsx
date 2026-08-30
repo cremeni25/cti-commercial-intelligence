@@ -33,8 +33,7 @@ function readStoredLocale(userId?: string | null): Locale {
   const currentPreference = window.localStorage.getItem(CURRENT_LOCALE_KEY)
   const userPreference = userId ? window.localStorage.getItem(storageKey(userId)) : null
   const sharedPreference = window.localStorage.getItem(storageKey(null))
-  const browser = typeof navigator !== "undefined" ? navigator.language : "pt-BR"
-  return normalizeLocale(currentPreference || userPreference || sharedPreference || browser)
+  return normalizeLocale(currentPreference || userPreference || sharedPreference || "pt-BR")
 }
 
 export function I18nProvider({ children }: { children: React.ReactNode }) {
@@ -44,7 +43,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const resolved = readStoredLocale(userId)
-    queueMicrotask(() => setLocaleState(resolved))
+    setLocaleState(resolved)
   }, [userId])
 
   useEffect(() => {
@@ -56,7 +55,9 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     const syncFromStorage = (event: StorageEvent) => {
       const relevantKeys = new Set([CURRENT_LOCALE_KEY, storageKey(null), userId ? storageKey(userId) : ""])
       if (!event.key || !relevantKeys.has(event.key)) return
-      setLocaleState(readStoredLocale(userId))
+      const resolved = readStoredLocale(userId)
+      setLocaleState(resolved)
+      window.location.reload()
     }
     const syncFromWindow = (event: Event) => {
       const requested = (event as CustomEvent<string>).detail
@@ -71,11 +72,15 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, [userId])
 
   const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next)
-    window.localStorage.setItem(CURRENT_LOCALE_KEY, next)
-    if (userId) window.localStorage.setItem(storageKey(userId), next)
-    window.localStorage.setItem(storageKey(null), next)
-    window.dispatchEvent(new CustomEvent<string>(LOCALE_EVENT, { detail: next }))
+    const normalized = normalizeLocale(next)
+    window.localStorage.setItem(CURRENT_LOCALE_KEY, normalized)
+    if (userId) window.localStorage.setItem(storageKey(userId), normalized)
+    window.localStorage.setItem(storageKey(null), normalized)
+    document.documentElement.lang = normalized
+    document.documentElement.dataset.locale = normalized
+    setLocaleState(normalized)
+    window.dispatchEvent(new CustomEvent<string>(LOCALE_EVENT, { detail: normalized }))
+    window.location.reload()
   }, [userId])
 
   const t = useCallback((key: MessageKey, params?: Params) => {
