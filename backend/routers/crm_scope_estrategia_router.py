@@ -237,7 +237,7 @@ def equipamento_seguro(
             "escopo_usuario": _metadata_escopo(usuario),
         },
         "realizado": estrategia._camada_anfir(anf),
-        "historico_comercial": historico_cam,
+        "historico_comercial": estrategia._camada_historico(historico),
         "em_curso": estrategia._camada_crm(crm),
     }
 
