@@ -6,6 +6,7 @@ import { AuthProvider } from "@/core/auth"
 import { I18nProvider } from "@/core/i18n"
 import { OperationalContextProvider } from "@/context/OperationalContext"
 import LegacySemanticBridge from "@/components/i18n/LegacySemanticBridge"
+import AuthenticatedAnfirFetchBridge from "@/components/security/AuthenticatedAnfirFetchBridge"
 
 export const metadata: Metadata = {
   title: {
@@ -39,6 +40,7 @@ export default function RootLayout({
         <AuthProvider>
           <I18nProvider>
             <LegacySemanticBridge />
+            <AuthenticatedAnfirFetchBridge />
             <OperationalContextProvider>{children}</OperationalContextProvider>
           </I18nProvider>
         </AuthProvider>
