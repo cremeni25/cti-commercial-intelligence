@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
+from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
 from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
 
@@ -37,12 +38,7 @@ def _usuario_alvo(responsavel_id: str, solicitante: UsuarioAutenticado) -> Usuar
     )
 
 
-@router.get("/analytics/anfir-workbook-2026")
-def anfif_workbook_2026(
-    responsavel_id: str | None = Query(default=None),
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
-    """Contrato funcional e seguro da auditoria ANFIR Carrier/JOV 2026."""
+def _registros_2026(responsavel_id: str | None, usuario: UsuarioAutenticado):
     usuario_efetivo = _usuario_alvo(responsavel_id, usuario) if responsavel_id else usuario
     registros, _, _ = _anfir_do_usuario(
         usuario_efetivo,
@@ -55,7 +51,37 @@ def anfif_workbook_2026(
     )
     if not _consolidado(usuario_efetivo):
         registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario_efetivo.id))
+    return list(registros), usuario_efetivo
+
+
+def _fabricantes_ativos() -> list[str]:
+    dados = supabase.table("cti_fabricantes").select("nome,ativo").eq("ativo", True).execute().data or []
+    return sorted({str(item.get("nome") or "").strip().upper() for item in dados if str(item.get("nome") or "").strip()})
+
+
+@router.get("/analytics/anfir-workbook-2026")
+def anfif_workbook_2026(
+    responsavel_id: str | None = Query(default=None),
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    """Contrato funcional e seguro da auditoria ANFIR Carrier/JOV 2026."""
+    registros, usuario_efetivo = _registros_2026(responsavel_id, usuario)
     payload = consolidar_workbook_anfir_2026(registros)
+    metadata = payload.setdefault("metadata", {})
+    metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
+    metadata["filtro_responsavel_id"] = responsavel_id
+    metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
+    return payload
+
+
+@router.get("/analytics/anfir-competitividade-2026")
+def anfir_competitividade_2026(
+    responsavel_id: str | None = Query(default=None),
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    """Inteligência competitiva por fabricante, segmento e mês, respeitando o mesmo RBAC do Dashboard ANFIR."""
+    registros, usuario_efetivo = _registros_2026(responsavel_id, usuario)
+    payload = consolidar_competitividade_anfir_2026(registros, _fabricantes_ativos())
     metadata = payload.setdefault("metadata", {})
     metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
