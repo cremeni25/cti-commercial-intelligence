@@ -6,6 +6,7 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
+from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
 
 
 router = APIRouter()
@@ -45,6 +46,8 @@ def anfif_workbook_2026(
 
     Usuários regionais recebem apenas seu escopo. Usuários Master podem alternar
     a fotografia para um responsável humano específico sem perder o acesso total.
+    A responsabilidade comercial explícita prevalece sobre a geografia quando
+    uma conta é atribuída diretamente por um Master.
     """
     usuario_efetivo = _usuario_alvo(responsavel_id, usuario) if responsavel_id else usuario
     registros, _, _ = _anfir_do_usuario(
@@ -56,6 +59,8 @@ def anfif_workbook_2026(
         inicio=date(2026, 1, 1),
         fim=date(2026, 12, 31),
     )
+    if not _consolidado(usuario_efetivo):
+        registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario_efetivo.id))
     payload = consolidar_workbook_anfir_2026(registros)
     metadata = payload.setdefault("metadata", {})
     metadata["escopo_usuario"] = _metadata_escopo(usuario_efetivo)
