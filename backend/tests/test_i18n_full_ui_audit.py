@@ -18,6 +18,7 @@ TEXT_AUDIT_EXCLUDED = {
     # equivalentes EN/ES enquanto o seletor multilíngue permanecer desativado.
     "app/dashboard/page.tsx",
     "app/dashboard/carteiras-comerciais/page.tsx",
+    "app/dashboard/anfir-competitividade-relatorio/page.tsx",
     "components/AnfirWorkbookPanel.tsx",
     "components/AnfirWorkbookCharts.tsx",
 }
