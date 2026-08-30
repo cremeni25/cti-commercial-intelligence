@@ -14,12 +14,22 @@ from routers import strategic_layers_router as estrategia
 from services.base_analytics import valor_float
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, equipamentos_registro, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
-from services.operational_filters import normalizar_ddd, resolver_periodo
+from services.operational_filters import normalizar_ddd, resolver_ddd_registro, resolver_periodo
 
 router = APIRouter(prefix="/crm-seguro/estrategia", tags=["crm-seguro-estrategia"])
 
 PERFIS_REGIONAIS = {"REPRES_REGIAO_01", "REPRES_REGIAO_02", "INDICADOR_VIENA_SP"}
+PERFIS_REPRESENTANTES = {"REPRES_REGIAO_01", "REPRES_REGIAO_02"}
 FECHADOS = {"GANHO", "PERDIDO", "CANCELADO", "CANCELADA", "CONCLUIDO", "CONCLUIDA"}
+DDD_011_COMPARTILHADO = "011"
+SUBREGIAO_011_POR_PERFIL = {
+    "REPRES_REGIAO_01": "REGIAO 01",
+    "REPRES_REGIAO_02": "REGIAO 02",
+}
+RESPONSAVEIS_011_POR_PERFIL = {
+    "REPRES_REGIAO_01": {"MONICA", "CARLA"},
+    "REPRES_REGIAO_02": {"MICHELE"},
+}
 
 
 def _fold(valor: Any) -> str:
@@ -74,6 +84,31 @@ def _hist_do_usuario(usuario: UsuarioAutenticado, inicio: date | None, fim: date
     ]
 
 
+def _responsavel_anfir(item: dict[str, Any]) -> str:
+    for campo in ("responsavel", "vendedor", "consultor"):
+        valor = _fold(item.get(campo))
+        if valor:
+            return valor
+    return ""
+
+
+def _registro_anfir_no_escopo(item: dict[str, Any], usuario: UsuarioAutenticado, permitidos: set[str]) -> bool:
+    ddd_item = resolver_ddd_registro(item)
+    if ddd_item not in permitidos:
+        return False
+    if usuario.tipo_usuario not in PERFIS_REPRESENTANTES or ddd_item != DDD_011_COMPARTILHADO:
+        return True
+
+    sub_regiao = _fold(item.get("sub_regiao"))
+    sub_regiao_permitida = SUBREGIAO_011_POR_PERFIL.get(usuario.tipo_usuario, "")
+    if sub_regiao_permitida and sub_regiao == sub_regiao_permitida:
+        return True
+
+    responsavel = _responsavel_anfir(item)
+    primeiro_nome = responsavel.split(" ", 1)[0] if responsavel else ""
+    return primeiro_nome in RESPONSAVEIS_011_POR_PERFIL.get(usuario.tipo_usuario, set())
+
+
 def _anfir_do_usuario(
     usuario: UsuarioAutenticado,
     contexto: str,
@@ -93,10 +128,7 @@ def _anfir_do_usuario(
     solicitado = normalizar_ddd(ddd)
     if solicitado and solicitado not in permitidos:
         return [], inicio_efetivo, fim_efetivo
-    filtrados = [
-        item for item in registros
-        if normalizar_ddd(item.get("ddd") or item.get("codigo_ddd")) in permitidos
-    ]
+    filtrados = [item for item in registros if _registro_anfir_no_escopo(item, usuario, permitidos)]
     return filtrados, inicio_efetivo, fim_efetivo
 
 
@@ -119,7 +151,11 @@ def _metadata_escopo(usuario: UsuarioAutenticado) -> dict[str, Any]:
         return {"modo": "CONSOLIDADO_GESTAO", "usuario": usuario.nome}
     if usuario.tipo_usuario in PERFIS_REGIONAIS:
         perfil = _perfil_regional(usuario)
-        return {"modo": "REGIONAL", "usuario": perfil["nome"], "ddds_autorizados": perfil["ddds"]}
+        metadata = {"modo": "REGIONAL", "usuario": perfil["nome"], "ddds_autorizados": perfil["ddds"]}
+        if usuario.tipo_usuario in PERFIS_REPRESENTANTES and DDD_011_COMPARTILHADO in perfil["ddds"]:
+            metadata["sub_regiao_011"] = SUBREGIAO_011_POR_PERFIL.get(usuario.tipo_usuario)
+            metadata["regra_011"] = "DDD compartilhado: somente registros atribuídos à região comercial do usuário"
+        return metadata
     return {"modo": "PERFIL_ATUAL", "usuario": usuario.nome}
 
 
