@@ -74,18 +74,13 @@ def _cliente_no_escopo(cliente: dict[str, Any], usuario: UsuarioAutenticado) -> 
         return True
     if usuario.tipo_usuario not in PERFIS_REGIONAIS:
         return True
-
     responsavel = str(cliente.get("responsavel_comercial_id") or "")
     if responsavel:
         return responsavel == str(usuario.id)
-
     perfil = _perfil_usuario(str(usuario.id))
     codigo_usuario = _codigo_regional(perfil.get("codigo_regional"))
     codigo_cliente = _codigo_regional(cliente.get("sub_regiao"))
-    if codigo_usuario and codigo_cliente:
-        return codigo_usuario == codigo_cliente
-
-    return False
+    return bool(codigo_usuario and codigo_cliente and codigo_usuario == codigo_cliente)
 
 
 def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None = None) -> list[dict[str, Any]]:
@@ -102,11 +97,7 @@ def _anotar_responsavel(item: dict[str, Any]) -> dict[str, Any]:
     if not responsavel_id:
         return item
     perfil = _perfil_usuario(responsavel_id)
-    return {
-        **item,
-        "responsavel_comercial_nome": perfil.get("nome"),
-        "responsavel_comercial_tipo": perfil.get("tipo_usuario"),
-    }
+    return {**item,"responsavel_comercial_nome": perfil.get("nome"),"responsavel_comercial_tipo": perfil.get("tipo_usuario")}
 
 
 def _responsavel_territorial(cliente: dict[str, Any]) -> dict[str, Any] | None:
@@ -127,60 +118,23 @@ def _responsavel_territorial(cliente: dict[str, Any]) -> dict[str, Any] | None:
     return dados[0] if dados else None
 
 
-def _registrar_historico(
-    cliente_id: str,
-    anterior_id: str | None,
-    novo_id: str | None,
-    tipo_anterior: str | None,
-    tipo_novo: str,
-    motivo: str | None,
-    alterado_por: str,
-) -> None:
+def _registrar_historico(cliente_id: str, anterior_id: str | None, novo_id: str | None, tipo_anterior: str | None, tipo_novo: str, motivo: str | None, alterado_por: str) -> None:
     supabase.table("cti_cliente_responsabilidade_historico").insert({
-        "cliente_id": cliente_id,
-        "responsavel_anterior_id": anterior_id,
-        "responsavel_novo_id": novo_id,
-        "tipo_anterior": tipo_anterior,
-        "tipo_novo": tipo_novo,
-        "motivo": motivo,
-        "alterado_por": alterado_por,
+        "cliente_id": cliente_id,"responsavel_anterior_id": anterior_id,"responsavel_novo_id": novo_id,
+        "tipo_anterior": tipo_anterior,"tipo_novo": tipo_novo,"motivo": motivo,"alterado_por": alterado_por,
     }).execute()
 
 
 @router.get("/responsaveis")
 def listar_responsaveis_comerciais(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
-    usuarios = (
-        supabase.table("cti_users")
-        .select("id,nome,email,tipo_usuario,codigo_regional,ddds,ativo")
-        .eq("ativo", True)
-        .execute()
-        .data
-        or []
-    )
-    permitidos = {
-        "ADMIN_MASTER",
-        "DIRETOR_VIENA_SP",
-        "REPRES_REGIAO_01",
-        "REPRES_REGIAO_02",
-        "INDICADOR_VIENA_SP",
-    }
-    return sorted(
-        [item for item in usuarios if str(item.get("tipo_usuario") or "").upper() in permitidos],
-        key=lambda item: str(item.get("nome") or "").casefold(),
-    )
+    usuarios = supabase.table("cti_users").select("id,nome,email,tipo_usuario,codigo_regional,ddds,ativo").eq("ativo", True).execute().data or []
+    permitidos = {"ADMIN_MASTER","DIRETOR_VIENA_SP","REPRES_REGIAO_01","REPRES_REGIAO_02","INDICADOR_VIENA_SP"}
+    return sorted([item for item in usuarios if str(item.get("tipo_usuario") or "").upper() in permitidos], key=lambda item: str(item.get("nome") or "").casefold())
 
 
 @router.get("")
-def listar_clientes_seguro(
-    responsavel_id: str | None = Query(default=None),
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
-    """Catálogo cadastral já segregado pela responsabilidade comercial efetiva.
-
-    Master enxerga tudo e pode filtrar por responsável humano. Usuários regionais recebem
-    apenas clientes atribuídos diretamente a eles ou herdados da subdivisão territorial.
-    """
+def listar_clientes_seguro(responsavel_id: str | None = Query(default=None), usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_visualizar")
     if responsavel_id and not _visao_total(usuario):
         raise HTTPException(status_code=403, detail="Filtro por outro responsável disponível somente para usuários Master.")
@@ -188,31 +142,22 @@ def listar_clientes_seguro(
 
 
 @router.post("")
-def criar_cliente_seguro(
-    dados: ClienteCreate,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+def criar_cliente_seguro(dados: ClienteCreate, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_editar")
     resposta = criar_cliente_crm_app(dados)
     cliente = resposta.get("cliente") or {}
     cliente_id = str(cliente.get("id") or "")
     if cliente_id and usuario.tipo_usuario in PERFIS_REGIONAIS and not _visao_total(usuario):
         supabase.table("clientes").update({
-            "responsavel_comercial_id": str(usuario.id),
-            "responsabilidade_tipo": "TERRITORIO",
-            "responsabilidade_atualizada_em": _agora(),
-            "responsabilidade_atualizada_por": str(usuario.id),
+            "responsavel_comercial_id": str(usuario.id),"responsabilidade_tipo": "TERRITORIO",
+            "responsabilidade_atualizada_em": _agora(),"responsabilidade_atualizada_por": str(usuario.id),
         }).eq("id", cliente_id).execute()
-        cliente = obter_cliente_crm_app(cliente_id)
-        resposta["cliente"] = cliente
+        resposta["cliente"] = obter_cliente_crm_app(cliente_id)
     return resposta
 
 
 @router.get("/{cliente_id}")
-def obter_cliente_seguro(
-    cliente_id: str,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+def obter_cliente_seguro(cliente_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_visualizar")
     cliente = obter_cliente_crm_app(cliente_id)
     if not _cliente_no_escopo(cliente, usuario):
@@ -221,12 +166,10 @@ def obter_cliente_seguro(
 
 
 @router.put("/{cliente_id}")
-def atualizar_cliente_seguro(
-    cliente_id: str,
-    dados: ClienteEdicao,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+def atualizar_cliente_seguro(cliente_id: str, dados: ClienteEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_editar")
+    if _visao_total(usuario):
+        return atualizar_cliente_crm_app(cliente_id, dados)
     atual = obter_cliente_crm_app(cliente_id)
     if not _cliente_no_escopo(atual, usuario):
         raise HTTPException(status_code=403, detail="Cliente fora do seu escopo comercial.")
@@ -234,16 +177,11 @@ def atualizar_cliente_seguro(
 
 
 @router.put("/{cliente_id}/responsavel")
-def definir_responsabilidade_cliente(
-    cliente_id: str,
-    dados: ResponsabilidadeCliente,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
+def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCliente, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
     cliente = obter_cliente_crm_app(cliente_id)
     anterior_id = str(cliente.get("responsavel_comercial_id") or "") or None
     tipo_anterior = str(cliente.get("responsabilidade_tipo") or "TERRITORIO")
-
     if dados.restaurar_territorio:
         territorial = _responsavel_territorial(cliente)
         novo_id = str(territorial.get("id")) if territorial else None
@@ -256,22 +194,9 @@ def definir_responsabilidade_cliente(
             raise HTTPException(status_code=422, detail="Responsável comercial inválido ou inativo.")
         novo_id = str(perfil["id"])
         tipo_novo = "CONTA_DIRETA_MASTER" if dados.conta_direta_master else "ATRIBUICAO_MASTER"
-
     supabase.table("clientes").update({
-        "responsavel_comercial_id": novo_id,
-        "responsabilidade_tipo": tipo_novo,
-        "responsabilidade_atualizada_em": _agora(),
-        "responsabilidade_atualizada_por": str(usuario.id),
+        "responsavel_comercial_id": novo_id,"responsabilidade_tipo": tipo_novo,
+        "responsabilidade_atualizada_em": _agora(),"responsabilidade_atualizada_por": str(usuario.id),
     }).eq("id", cliente_id).execute()
-
-    _registrar_historico(
-        cliente_id,
-        anterior_id,
-        novo_id,
-        tipo_anterior,
-        tipo_novo,
-        dados.motivo,
-        str(usuario.id),
-    )
-    atualizado = obter_cliente_crm_app(cliente_id)
-    return _anotar_responsavel(atualizado)
+    _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id))
+    return _anotar_responsavel(obter_cliente_crm_app(cliente_id))
