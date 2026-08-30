@@ -42,13 +42,7 @@ def anfif_workbook_2026(
     responsavel_id: str | None = Query(default=None),
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    """Contrato funcional e seguro da auditoria ANFIR Carrier/JOV 2026.
-
-    Usuários regionais recebem apenas seu escopo. Usuários Master podem alternar
-    a fotografia para um responsável humano específico sem perder o acesso total.
-    A responsabilidade comercial explícita prevalece sobre a geografia quando
-    uma conta é atribuída diretamente por um Master.
-    """
+    """Contrato funcional e seguro da auditoria ANFIR Carrier/JOV 2026."""
     usuario_efetivo = _usuario_alvo(responsavel_id, usuario) if responsavel_id else usuario
     registros, _, _ = _anfir_do_usuario(
         usuario_efetivo,
@@ -63,7 +57,7 @@ def anfif_workbook_2026(
         registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario_efetivo.id))
     payload = consolidar_workbook_anfir_2026(registros)
     metadata = payload.setdefault("metadata", {})
-    metadata["escopo_usuario"] = _metadata_escopo(usuario_efetivo)
+    metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
     metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
     return payload
