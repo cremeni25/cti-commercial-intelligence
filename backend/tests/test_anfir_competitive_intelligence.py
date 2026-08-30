@@ -1,7 +1,7 @@
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 
 
-def _r(data, linha, fabricante="", ocorrencia="", cliente="Cliente"):
+def _r(data, linha, fabricante="", ocorrencia="", cliente="Cliente", status="", motivo=""):
     return {
         "id": f"{data}-{linha}-{fabricante}-{cliente}",
         "data_venda": data,
@@ -10,6 +10,8 @@ def _r(data, linha, fabricante="", ocorrencia="", cliente="Cliente"):
         "linha": linha,
         "fabricante_equipamento": fabricante,
         "ocorrencia": ocorrencia,
+        "status": status,
+        "motivo": motivo,
         "cliente": cliente,
         "estado": "SP",
         "cidade": "SAO PAULO",
@@ -62,3 +64,22 @@ def test_segmentos_tem_evolucao_mensal_carrier_concorrencia():
     assert dd["mensal"][0]["concorrencia"] == 1
     assert dd["mensal"][1]["carrier"] == 0
     assert dd["mensal"][1]["concorrencia"] == 1
+
+
+def test_mencao_historica_a_carrier_na_observacao_nao_vira_venda_carrier():
+    payload = consolidar_competitividade_anfir_2026(
+        [_r("2026-05-01", "DT", "", "Cliente possui Carrier, mas está testando pós-venda e custos de outra empresa")],
+        ["CARRIER", "THERMOFLEX"],
+    )
+    dt = next(s for s in payload["segmentos"] if s["codigo"] == "DT")
+    assert dt["carrier"] == 0
+    assert dt["a_identificar"] == 1
+
+
+def test_carrier_pode_ser_recuperada_de_status_estruturado():
+    payload = consolidar_competitividade_anfir_2026(
+        [_r("2026-06-01", "TR", "", status="Carrier", motivo="CARRIER")],
+        ["CARRIER", "THERMOKING"],
+    )
+    tr = next(s for s in payload["segmentos"] if s["codigo"] == "TR")
+    assert tr["carrier"] == 1
