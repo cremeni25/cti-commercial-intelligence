@@ -59,18 +59,50 @@ def test_nacional_entra_como_concorrencia_sem_inventar_marca():
     assert dd["fabricantes_concorrentes"] == [{"fabricante": "THERMOFLEX", "registros": 1, "percentual_mercado": 50.0}]
 
 
-def test_usados_nao_inflam_concorrencia_de_equipamento_novo():
+def test_classificacao_cti_identifica_nacional_sem_alterar_categoria_fonte():
+    registro = _r("2026-04-02", "DD", "", status="NACIONAL", cliente="Alvo")
     payload = consolidar_competitividade_anfir_2026(
-        [
-            _r("2026-05-01", "DT", status="USADOCONCORRENTE", ocorrencia="equipamento usado TK"),
-            _r("2026-05-02", "DT", status="USADOCARRIER"),
-        ],
+        [registro],
+        ["CARRIER", "THERMOKING", "THERMOFLEX"],
+        {registro["id"]: "THERMOFLEX"},
+    )
+    dd = next(s for s in payload["segmentos"] if s["codigo"] == "DD")
+    detalhe = payload["detalhes"][0]
+    assert dd["concorrencia"] == 1
+    assert dd["nacional"] == 1
+    assert dd["nacional_fabricante_nao_identificado"] == 0
+    assert dd["fabricantes_concorrentes"][0]["fabricante"] == "THERMOFLEX"
+    assert detalhe["status"] == "NACIONAL"
+    assert detalhe["fabricante"] == "THERMOFLEX"
+    assert detalhe["fabricante_cti"] == "THERMOFLEX"
+    assert detalhe["classificado_cti"] is True
+
+
+def test_classificacao_cti_nao_reclassifica_tk_oficial():
+    registro = _r("2026-03-01", "TR", "", status="TK")
+    payload = consolidar_competitividade_anfir_2026(
+        [registro],
+        ["CARRIER", "THERMOKING", "THERMOFLEX"],
+        {registro["id"]: "THERMOFLEX"},
+    )
+    detalhe = payload["detalhes"][0]
+    assert detalhe["status"] == "TK"
+    assert detalhe["fabricante"] == "THERMOKING"
+    assert detalhe["classificado_cti"] is False
+
+
+def test_usados_nao_inflam_concorrencia_de_equipamento_novo():
+    registro = _r("2026-05-01", "DT", status="USADOCONCORRENTE", ocorrencia="equipamento usado TK")
+    payload = consolidar_competitividade_anfir_2026(
+        [registro, _r("2026-05-02", "DT", status="USADOCARRIER")],
         ["CARRIER", "THERMOKING"],
+        {registro["id"]: "THERMOKING"},
     )
     dt = next(s for s in payload["segmentos"] if s["codigo"] == "DT")
     assert dt["concorrencia"] == 0
     assert dt["usado_concorrente"] == 1
     assert dt["usado_carrier"] == 1
+    assert payload["detalhes"][0]["fabricante"] == "THERMOKING"
 
 
 def test_documentacao_e_reaproveitamento_nao_fabricante():
