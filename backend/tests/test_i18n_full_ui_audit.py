@@ -19,6 +19,7 @@ TEXT_AUDIT_EXCLUDED = {
     "app/dashboard/page.tsx",
     "app/dashboard/carteiras-comerciais/page.tsx",
     "app/dashboard/anfir-competitividade-relatorio/page.tsx",
+    "app/upload/page.tsx",
     "components/AnfirWorkbookPanel.tsx",
     "components/AnfirWorkbookCharts.tsx",
 }
