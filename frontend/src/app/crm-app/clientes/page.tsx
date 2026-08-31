@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { AlertCircle, ArrowLeft, Building2, ChevronRight, Loader2, Plus, Search, X } from "lucide-react"
 import { useOperationalI18n } from "@/core/i18n/operational"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Cliente = { id: string; chave: string; nome: string; razaoSocial: string; nomeFantasia: string; cnpj: string; cidade: string; estado: string; negocios: number; responsavel:string }
@@ -19,7 +20,7 @@ export default function ClientesCrmAppPage() {
   const { locale, tOp, formatNumber } = useOperationalI18n()
   const [clientes,setClientes]=useState<Cliente[]>([]),[busca,setBusca]=useState(""),[letra,setLetra]=useState(""),[carregando,setCarregando]=useState(true),[erro,setErro]=useState("")
   useEffect(()=>{let ativo=true;void(async()=>{setCarregando(true);setErro("");try{
-    const [cadastro,nucleo]=await Promise.all([fetch("/api/crm-proxy/crm-seguro/clientes",{cache:"no-store"}),fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"})])
+    const [cadastro,nucleo]=await Promise.all([fetchCrmSeguroProxy("crm-seguro/clientes",{cache:"no-store"}),fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"})])
     const cadastroDados=await cadastro.json().catch(()=>[]), nucleoDados=await nucleo.json().catch(()=>[])
     if(!cadastro.ok)throw new Error(String((cadastroDados as Registro).detail||`Clientes: HTTP ${cadastro.status}`));if(!nucleo.ok)throw new Error(String((nucleoDados as Registro).detail||`Núcleo comercial: HTTP ${nucleo.status}`));if(!ativo)return
     const mapa=new Map<string,Cliente>()
