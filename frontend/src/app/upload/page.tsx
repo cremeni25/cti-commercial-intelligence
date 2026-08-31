@@ -26,13 +26,48 @@ type ResultadoAnfir = {
 
 type ResultadoGovernanca = {
   duplicado?: boolean
+  fluxo_operacional?: string
+  mensagem_fluxo?: string
   fonte?: {
     id?: string
     nome_arquivo?: string
     status_governanca?: string
     tipo_detectado?: string
+    classificacao_sugerida?: string
+  }
+  reconciliacao?: {
+    resumo?: {
+      total_itens?: number
+      total_validos?: number
+      total_conflitos?: number
+      naturezas?: Record<string, number>
+    }
+  }
+  promocao?: {
+    total_promovidos?: number
+    itens_restantes?: number
+    status?: string
   }
   mensagem?: string
+}
+
+function mensagemFluxo(resultado: ResultadoGovernanca) {
+  switch (resultado.fluxo_operacional) {
+    case "CLIENTES_PROMOVIDOS_COM_SEGURANCA":
+      return `Lista de clientes reconciliada e integrada com segurança ao CTI. ${resultado.promocao?.total_promovidos ?? 0} registro(s) processado(s).`
+    case "PROMOCAO_BLOQUEADA_DIVERGENCIA":
+      return "Lista de clientes identificada. A promoção foi interrompida ao encontrar divergência e nenhum dado conflitante foi sobrescrito. Revise em Governança."
+    case "RECONCILIACAO_REQUER_MASTER":
+      return "Fonte comercial reconciliada em staging. Existem conflitos ou naturezas mistas que exigem decisão Master antes da promoção."
+    case "GOVERNANCA_REQUER_REVISAO":
+      return "Fonte preservada e interpretada. O conteúdo não foi promovido automaticamente porque exige revisão de governança."
+    case "DUPLICADO_PRESERVADO":
+      return "Fonte já registrada. Nenhuma duplicação foi criada."
+    default:
+      return resultado.duplicado
+        ? "Fonte já registrada. Nenhuma duplicação foi criada."
+        : "Fonte recebida e preservada. O CTI aplicou o fluxo de governança correspondente ao conteúdo."
+  }
 }
 
 export default function UploadPage() {
@@ -67,7 +102,7 @@ export default function UploadPage() {
       setLoading(true)
       setResultadoAnfir(null)
       setResultadoGovernanca(null)
-      setStatusUpload("Identificando a natureza do arquivo e o destino correto...")
+      setStatusUpload("Identificando a natureza do arquivo, reconciliando e aplicando o destino seguro...")
 
       const resposta = await importarDados(arquivoAtual, contexto)
 
@@ -88,11 +123,11 @@ export default function UploadPage() {
       } else {
         const resultado = resposta.resultado as ResultadoGovernanca
         setResultadoGovernanca(resultado)
-        setStatusUpload(
-          resultado.duplicado
-            ? "Fonte já registrada. Nenhuma duplicação foi criada."
-            : "Fonte recebida e preservada. Ela seguirá pela governança e reconciliação adequadas ao seu conteúdo."
-        )
+        setStatusUpload(mensagemFluxo(resultado))
+        if (resultado.fluxo_operacional === "CLIENTES_PROMOVIDOS_COM_SEGURANCA") {
+          await carregarDados()
+          window.dispatchEvent(new Event("cti-upload-finalizado"))
+        }
       }
     } catch (error) {
       console.error(error)
@@ -112,7 +147,7 @@ export default function UploadPage() {
         <div className="mb-8">
           <h1 className="text-3xl sm:text-4xl font-bold">Importar Dados</h1>
           <p className="mt-2 max-w-3xl text-gray-400">
-            Um único ponto de entrada para ANFIR, Funil de Vendas, CRM, histórico comercial e demais fontes do CTI.
+            Um único ponto de entrada para ANFIR, listas de clientes, Funil de Vendas, CRM, histórico comercial e demais fontes do CTI.
           </p>
           <p className="mt-2 text-sm text-cyan-300">
             Contexto ativo: {contextoAtual.label}. O CTI identifica o tratamento correto sem misturar as fontes.
@@ -123,7 +158,7 @@ export default function UploadPage() {
         <section className="rounded-2xl border border-[#17345e] bg-[#071427] p-5">
           <h2 className="text-xl font-bold">Arquivo</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Planilhas ANFIR reconhecidas seguem para o domínio realizado. Outras fontes seguem automaticamente para classificação, governança e reconciliação.
+            ANFIR segue para mercado realizado. Listas cadastrais são reconciliadas por CNPJ e só enriquecem o CRM quando não houver divergência; conflitos ficam retidos para decisão Master.
           </p>
 
           <input
@@ -157,7 +192,7 @@ export default function UploadPage() {
             disabled={loading}
             className="mt-5 w-full rounded-xl bg-cyan-500 py-3 font-bold text-black disabled:opacity-50"
           >
-            {!file ? "Selecionar arquivo" : loading ? "Importando..." : "Importar novamente"}
+            {!file ? "Selecionar arquivo" : loading ? "Importando e reconciliando..." : "Importar novamente"}
           </button>
 
           {nomeArquivo && (
@@ -179,16 +214,24 @@ export default function UploadPage() {
         {resultadoGovernanca && (
           <section className="mt-6 rounded-2xl border border-violet-700/50 bg-violet-950/20 p-5">
             <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Destino definido pelo CTI</p>
-            <h2 className="mt-2 text-xl font-bold">Governança de fontes</h2>
+            <h2 className="mt-2 text-xl font-bold">Governança e reconciliação</h2>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Info label="Arquivo" value={resultadoGovernanca.fonte?.nome_arquivo || nomeArquivo || "-"} />
               <Info label="Tipo" value={resultadoGovernanca.fonte?.tipo_detectado || "A identificar"} />
-              <Info label="Status" value={resultadoGovernanca.fonte?.status_governanca || "RECEBIDO"} />
+              <Info label="Fluxo" value={resultadoGovernanca.fluxo_operacional || "GOVERNANÇA"} />
               <Info label="Duplicado" value={resultadoGovernanca.duplicado ? "Sim" : "Não"} />
             </div>
+            {resultadoGovernanca.reconciliacao?.resumo && (
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <Info label="Itens reconciliados" value={resultadoGovernanca.reconciliacao.resumo.total_itens ?? 0} />
+                <Info label="Válidos" value={resultadoGovernanca.reconciliacao.resumo.total_validos ?? 0} />
+                <Info label="Conflitos" value={resultadoGovernanca.reconciliacao.resumo.total_conflitos ?? 0} />
+              </div>
+            )}
             <p className="mt-4 text-sm text-slate-300">
-              O arquivo original foi preservado e não alterou automaticamente CRM, ANFIR, Pipeline ou Vendas.
+              O original permanece preservado. Clientes só são inseridos ou enriquecidos quando a identidade cadastral estiver segura; divergências não sobrescrevem o cadastro existente.
             </p>
+            {resultadoGovernanca.mensagem_fluxo && <p className="mt-3 text-sm text-amber-200">{resultadoGovernanca.mensagem_fluxo}</p>}
             <button onClick={() => { window.location.href = "/backoffice-fontes" }} className="mt-4 rounded-xl border border-violet-500 px-4 py-2 font-semibold text-violet-100 hover:bg-violet-500/10">Abrir governança</button>
           </section>
         )}
