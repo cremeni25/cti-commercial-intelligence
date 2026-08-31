@@ -99,6 +99,60 @@ def _evidencias_funil_historico(clientes: list[dict[str, Any]]) -> list[dict[str
     return saida
 
 
+def _evidencias_operacionais(clientes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    nomes = {str(c.get("id")): c.get("nome") for c in clientes if c.get("id")}
+    saida: list[dict[str, Any]] = []
+
+    for row in _paginar_tabela("cti_atividades"):
+        if row.get("arquivado_em") or bool(row.get("registro_teste")):
+            continue
+        cliente_id = row.get("cliente_id")
+        saida.append({
+            "id": f"CRM:{row.get('id')}", "fonte": "CRM", "fonte_registro_id": str(row.get("id")),
+            "cliente_id": cliente_id, "cliente_nome": nomes.get(str(cliente_id)) if cliente_id else None,
+            "temporalidade": "PRESENTE_OPERACIONAL", "evento": "ACAO_COMERCIAL",
+            "estado_comercial": str(row.get("status") or "REGISTRADA").upper(),
+            "data_evento": row.get("data") or row.get("data_atividade") or row.get("created_at"),
+            "segmento": None, "equipamento": None, "quantidade": None, "valor": None,
+            "responsavel_id": row.get("usuario_id"),
+            "metodo_reconciliacao": "CLIENTE_ID" if cliente_id else "SEM_RECONCILIACAO",
+            "confianca": 1 if cliente_id else 0,
+            "metadata": {"tipo": row.get("tipo"), "titulo": row.get("titulo"), "descricao": row.get("descricao"), "oportunidade_id": row.get("oportunidade_id")},
+        })
+
+    for row in _paginar_tabela("cti_oportunidades"):
+        if row.get("arquivado_em") or bool(row.get("registro_teste")):
+            continue
+        cliente_id = row.get("cliente_id")
+        status = str(row.get("status") or "ABERTA").upper()
+        temporalidade = "PASSADO_CONFIRMADO" if status in {"GANHO", "PERDIDO", "ENCERRADO", "FECHADO"} else "EM_CURSO_BACKLOG"
+        saida.append({
+            "id": f"FUNIL:{row.get('id')}", "fonte": "FUNIL", "fonte_registro_id": str(row.get("id")),
+            "cliente_id": cliente_id, "cliente_nome": nomes.get(str(cliente_id)) if cliente_id else None,
+            "temporalidade": temporalidade, "evento": "OPORTUNIDADE", "estado_comercial": status,
+            "data_evento": row.get("data_fechamento_real") or row.get("data_fechamento_prevista") or row.get("data_abertura") or row.get("created_at"),
+            "segmento": None, "equipamento": None, "quantidade": None, "valor": row.get("valor_estimado"),
+            "responsavel_id": row.get("responsavel_id"),
+            "metodo_reconciliacao": "CLIENTE_ID" if cliente_id else "SEM_RECONCILIACAO", "confianca": 1 if cliente_id else 0,
+            "metadata": {"titulo": row.get("titulo"), "origem": row.get("origem"), "probabilidade": row.get("probabilidade"), "data_abertura": row.get("data_abertura"), "data_fechamento_prevista": row.get("data_fechamento_prevista"), "data_fechamento_real": row.get("data_fechamento_real")},
+        })
+
+    for row in _paginar_tabela("vendas"):
+        if row.get("arquivado_em") or bool(row.get("registro_teste")):
+            continue
+        cliente_id = row.get("cliente_id")
+        saida.append({
+            "id": f"VENDA:{row.get('id')}", "fonte": "VENDA", "fonte_registro_id": str(row.get("id")),
+            "cliente_id": cliente_id, "cliente_nome": nomes.get(str(cliente_id)) if cliente_id else None,
+            "temporalidade": "PASSADO_CONFIRMADO", "evento": "VENDA_CONFIRMADA", "estado_comercial": "GANHO",
+            "data_evento": row.get("data_venda"), "segmento": None, "equipamento": row.get("equipamento_codigo"),
+            "quantidade": None, "valor": row.get("valor"), "responsavel_id": None,
+            "metodo_reconciliacao": "CLIENTE_ID" if cliente_id else "SEM_RECONCILIACAO", "confianca": 1 if cliente_id else 0,
+            "metadata": {"tipo_venda": row.get("tipo_venda"), "pedido_id": row.get("pedido_id"), "oportunidade_id": row.get("oportunidade_id"), "observacao": row.get("observacao")},
+        })
+    return saida
+
+
 def _ordem_temporal_valida(eventos: list[dict[str, Any]]) -> bool:
     crm = sorted(filter(None, (_data(e.get("data_evento")) for e in eventos if e.get("fonte") == "CRM")))
     funil = sorted(filter(None, (_data(e.get("data_evento")) for e in eventos if e.get("fonte") == "FUNIL")))
@@ -132,9 +186,10 @@ def _desfecho(eventos: list[dict[str, Any]]) -> str:
 
 
 def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool = False, responsavel_id: str | None = None, limite_clientes: int = 200) -> dict[str, Any]:
-    evidencias = _paginar_tabela("cti_evidencias_comerciais", "id,fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,segmento,equipamento,quantidade,valor,responsavel_id,metodo_reconciliacao,confianca,metadata")
+    evidencias = [e for e in _paginar_tabela("cti_evidencias_comerciais", "id,fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,segmento,equipamento,quantidade,valor,responsavel_id,metodo_reconciliacao,confianca,metadata") if e.get("fonte") == "ANFIR"]
     clientes = _paginar_tabela("clientes", "id,nome,cnpj,cidade,ddd,sub_regiao,responsavel_comercial_id,responsabilidade_tipo")
     evidencias.extend(_evidencias_funil_historico(clientes))
+    evidencias.extend(_evidencias_operacionais(clientes))
     mapa_clientes = {str(c.get("id")): c for c in clientes if c.get("id")}
 
     alvo = str(responsavel_id or usuario_id or "")
@@ -162,22 +217,12 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
         confianca_cadeia = _confianca_cadeia(eventos) if cadeia_completa else 0
         ordem_temporal = _ordem_temporal_valida(eventos) if cadeia_completa else False
         jornadas.append({
-            "cliente_id": cliente_id,
-            "cliente_nome": cliente.get("nome") or eventos[0].get("cliente_nome") or "Cliente",
-            "cnpj": cliente.get("cnpj"),
-            "cidade": cliente.get("cidade"),
-            "ddd": cliente.get("ddd"),
-            "sub_regiao": cliente.get("sub_regiao"),
-            "responsavel_comercial_id": cliente.get("responsavel_comercial_id"),
-            "origens": origens,
-            "quantidade_evidencias": len(eventos),
-            "primeiro_evento": datas[0].isoformat() if datas else None,
-            "ultimo_evento": datas[-1].isoformat() if datas else None,
-            "desfecho": desfecho,
-            "cadeia_crm_funil_realizado": cadeia_completa,
-            "ordem_temporal_confirmada": ordem_temporal,
-            "confianca_cadeia": confianca_cadeia,
-            "cadeia_confirmada": bool(cadeia_completa and ordem_temporal and confianca_cadeia >= 0.80),
+            "cliente_id": cliente_id, "cliente_nome": cliente.get("nome") or eventos[0].get("cliente_nome") or "Cliente",
+            "cnpj": cliente.get("cnpj"), "cidade": cliente.get("cidade"), "ddd": cliente.get("ddd"), "sub_regiao": cliente.get("sub_regiao"),
+            "responsavel_comercial_id": cliente.get("responsavel_comercial_id"), "origens": origens, "quantidade_evidencias": len(eventos),
+            "primeiro_evento": datas[0].isoformat() if datas else None, "ultimo_evento": datas[-1].isoformat() if datas else None,
+            "desfecho": desfecho, "cadeia_crm_funil_realizado": cadeia_completa, "ordem_temporal_confirmada": ordem_temporal,
+            "confianca_cadeia": confianca_cadeia, "cadeia_confirmada": bool(cadeia_completa and ordem_temporal and confianca_cadeia >= 0.80),
             "evidencias": sorted(eventos, key=lambda e: str(e.get("data_evento") or "")),
         })
 
@@ -194,26 +239,14 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
         por_desfecho[j["desfecho"]] += 1
 
     return {
-        "contrato": {
-            "principio": "MESMA_VERDADE_FACTUAL_LEITURAS_DIFERENTES",
-            "fontes_preservadas": True,
-            "fusao_dados_brutos": False,
-            "anfir": "PASSADO_CONFIRMADO",
-            "funil": "PASSADO_ENCERRADO_E_EM_CURSO_BACKLOG_E_PROSPECCAO",
-            "crm": "PRESENTE_OPERACIONAL_ACAO_DIARIA",
-            "regra_sucesso": "CRM/Funil/ANFIR ou Venda pertencem ao mesmo cliente reconciliado; a cadeia só é confirmada quando há ordem temporal coerente e confiança mínima.",
-        },
+        "contrato": {"principio": "MESMA_VERDADE_FACTUAL_LEITURAS_DIFERENTES", "fontes_preservadas": True, "fusao_dados_brutos": False,
+                     "anfir": "PASSADO_CONFIRMADO", "funil": "PASSADO_ENCERRADO_E_EM_CURSO_BACKLOG_E_PROSPECCAO", "crm": "PRESENTE_OPERACIONAL_ACAO_DIARIA",
+                     "regra_sucesso": "CRM/Funil/ANFIR ou Venda pertencem ao mesmo cliente reconciliado; a cadeia só é confirmada quando há ordem temporal coerente e confiança mínima."},
         "filtro_responsavel_id": responsavel_id,
-        "resumo": {
-            "evidencias": len(evidencias),
-            "clientes_reconciliados": len(jornadas),
-            "evidencias_sem_cliente_reconciliado": sem_cliente,
-            "por_fonte": dict(sorted(por_fonte.items())),
-            "por_temporalidade": dict(sorted(por_temporalidade.items())),
-            "por_desfecho": dict(sorted(por_desfecho.items())),
-            "cadeias_crm_funil_realizado": sum(1 for j in jornadas if j["cadeia_crm_funil_realizado"]),
-            "cadeias_temporais_confirmadas": sum(1 for j in jornadas if j["ordem_temporal_confirmada"]),
-            "cadeias_confirmadas": sum(1 for j in jornadas if j["cadeia_confirmada"]),
-        },
+        "resumo": {"evidencias": len(evidencias), "clientes_reconciliados": len(jornadas), "evidencias_sem_cliente_reconciliado": sem_cliente,
+                   "por_fonte": dict(sorted(por_fonte.items())), "por_temporalidade": dict(sorted(por_temporalidade.items())), "por_desfecho": dict(sorted(por_desfecho.items())),
+                   "cadeias_crm_funil_realizado": sum(1 for j in jornadas if j["cadeia_crm_funil_realizado"]),
+                   "cadeias_temporais_confirmadas": sum(1 for j in jornadas if j["ordem_temporal_confirmada"]),
+                   "cadeias_confirmadas": sum(1 for j in jornadas if j["cadeia_confirmada"])},
         "jornadas": jornadas[: max(1, min(limite_clientes, 500))],
     }
