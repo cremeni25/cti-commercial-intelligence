@@ -83,7 +83,19 @@ function objeto(valor: unknown): Record<string, unknown> {
 async function registrarFonteGovernada(file: File): Promise<Record<string, unknown>> {
   const formData = new FormData()
   formData.append("arquivo", file)
-  return backofficeRequest("/upload", { method: "POST", body: formData })
+  const response = await fetch(`${BACKOFFICE_URL}/upload`, {
+    method: "POST",
+    body: formData,
+    headers: await authHeaders(),
+  })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) {
+    const detalhe = payload && typeof payload === "object" && "detail" in payload
+      ? (payload as { detail?: unknown }).detail
+      : "Não foi possível registrar a fonte para governança."
+    throw new Error(typeof detalhe === "string" ? detalhe : JSON.stringify(detalhe))
+  }
+  return payload && typeof payload === "object" ? payload as Record<string, unknown> : {}
 }
 
 /**
