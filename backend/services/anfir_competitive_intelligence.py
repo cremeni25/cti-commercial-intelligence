@@ -45,38 +45,45 @@ def _linha(registro: dict[str, Any]) -> str:
     return classificar_linha(registro) or "UNKNOWN"
 
 
-def _contem(texto: str, chave: str) -> bool:
-    return bool(re.search(rf"(?<![A-Z0-9]){re.escape(chave)}(?![A-Z0-9])", texto))
+def _status_fonte(registro: dict[str, Any]) -> str:
+    return _sem_acento(registro.get("status")).replace(" ", "")
 
 
-def _fabricante_e_status(registro: dict[str, Any], taxonomia: dict[str, str]) -> tuple[str | None, str | None, str]:
-    bruto = str(registro.get("fabricante_equipamento") or "").strip()
-    bruto_norm = _sem_acento(bruto)
-    if bruto_norm in {_sem_acento(v) for v in STATUS_DOCUMENTACAO}:
-        return None, "DOCUMENTACAO_REAPROVEITAMENTO", bruto
+def _fabricante_estruturado(registro: dict[str, Any], taxonomia: dict[str, str]) -> str | None:
+    bruto = _sem_acento(registro.get("fabricante_equipamento"))
+    return taxonomia.get(bruto) if bruto else None
 
-    if bruto_norm:
-        canonico = taxonomia.get(bruto_norm)
-        if canonico:
-            return canonico, None, bruto
 
-    # CARRIER só é inferida de campos estruturados fortes. Uma observação como
-    # “cliente possui Carrier, mas está testando...” descreve histórico/frota e não
-    # prova que a ocorrência atual seja Carrier.
-    texto_forte = _sem_acento(" ".join(str(registro.get(c) or "") for c in ("motivo", "status")))
-    for chave, canonico in sorted(taxonomia.items(), key=lambda item: len(item[0]), reverse=True):
-        if canonico == "CARRIER" and len(chave) >= 3 and _contem(texto_forte, chave):
-            return canonico, None, bruto
+def _classificar_registro(registro: dict[str, Any], taxonomia: dict[str, str]) -> tuple[str, str | None, str | None]:
+    """Classifica a fotografia competitiva sem transformar menções textuais em fatos.
 
-    # Concorrentes podem ser recuperados de observações explícitas, preservando a
-    # taxonomia oficial. Ausência de evidência permanece A_IDENTIFICAR.
-    texto_contexto = _sem_acento(" ".join(str(registro.get(c) or "") for c in ("ocorrencia", "motivo", "status")))
-    for chave, canonico in sorted(taxonomia.items(), key=lambda item: len(item[0]), reverse=True):
-        if canonico == "CARRIER" or len(chave) < 3:
-            continue
-        if _contem(texto_contexto, chave):
-            return canonico, None, bruto
-    return None, None, bruto
+    A categoria/status da planilha Carrier/JOV é a verdade primária do resultado observado.
+    Campos de fabricante servem apenas para detalhar uma categoria já explicitamente concorrente.
+    Observação/ocorrência nunca promove sozinha Carrier/TK/fabricante para market share.
+    """
+    status = _status_fonte(registro)
+    fabricante_bruto = _sem_acento(registro.get("fabricante_equipamento"))
+    fabricante = _fabricante_estruturado(registro, taxonomia)
+
+    if fabricante_bruto in {_sem_acento(v) for v in STATUS_DOCUMENTACAO}:
+        return "REAPROVEITAMENTO_DOCUMENTACAO", None, "DOCUMENTACAO_REAPROVEITAMENTO"
+
+    if status == "CARRIER":
+        return "CARRIER", "CARRIER", None
+    if status == "TK":
+        return "CONCORRENCIA", "THERMOKING", None
+    if status == "NACIONAL":
+        if fabricante and fabricante not in {"CARRIER", "THERMOKING"}:
+            return "CONCORRENCIA", fabricante, None
+        return "CONCORRENCIA_NACIONAL_NAO_IDENTIFICADA", None, None
+    if status == "USADOCONCORRENTE":
+        return "USADO_CONCORRENTE", fabricante if fabricante and fabricante != "CARRIER" else None, None
+    if status == "USADOCARRIER":
+        return "USADO_CARRIER", "CARRIER", None
+    if status == "SEMCONTATO":
+        return "SEM_CONTATO", None, None
+
+    return "A_IDENTIFICAR", None, None
 
 
 def _percentual(parte: int, total: int) -> float:
@@ -90,21 +97,14 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
 
     enriquecidos: list[dict[str, Any]] = []
     for registro in registros_2026:
-        fabricante, status_especial, fabricante_bruto = _fabricante_e_status(registro, taxonomia)
+        grupo, fabricante, status_especial = _classificar_registro(registro, taxonomia)
         linha = _linha(registro)
         data = data_registro(registro)
-        grupo = "A_IDENTIFICAR"
-        if fabricante == "CARRIER":
-            grupo = "CARRIER"
-        elif fabricante:
-            grupo = "CONCORRENCIA"
-        elif status_especial == "DOCUMENTACAO_REAPROVEITAMENTO":
-            grupo = "REAPROVEITAMENTO"
         enriquecidos.append({
             **registro,
             "linha_competitiva": linha,
             "fabricante_competitivo": fabricante,
-            "fabricante_bruto": fabricante_bruto,
+            "fabricante_bruto": str(registro.get("fabricante_equipamento") or "").strip(),
             "grupo_competitivo": grupo,
             "status_competitivo": status_especial,
             "competencia": f"{data.year:04d}-{data.month:02d}" if data else None,
@@ -113,30 +113,49 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
     segmentos = []
     ranking_total: Counter[str] = Counter()
     documentacao_total = 0
+    nacional_nao_identificada_total = 0
+    usado_concorrente_total = 0
+    usado_carrier_total = 0
+    sem_contato_total = 0
+
     for codigo in SEGMENTOS:
         itens = [r for r in enriquecidos if r["linha_competitiva"] == codigo]
         mercado = len(itens)
         carrier = sum(1 for r in itens if r["grupo_competitivo"] == "CARRIER")
-        concorrencia = sum(1 for r in itens if r["grupo_competitivo"] == "CONCORRENCIA")
-        documentacao = sum(1 for r in itens if r["grupo_competitivo"] == "REAPROVEITAMENTO")
-        a_identificar = mercado - carrier - concorrencia - documentacao
+        concorrencia_identificada = sum(1 for r in itens if r["grupo_competitivo"] == "CONCORRENCIA")
+        nacional_nao_identificada = sum(1 for r in itens if r["grupo_competitivo"] == "CONCORRENCIA_NACIONAL_NAO_IDENTIFICADA")
+        concorrencia = concorrencia_identificada + nacional_nao_identificada
+        documentacao = sum(1 for r in itens if r["grupo_competitivo"] == "REAPROVEITAMENTO_DOCUMENTACAO")
+        usado_concorrente = sum(1 for r in itens if r["grupo_competitivo"] == "USADO_CONCORRENTE")
+        usado_carrier = sum(1 for r in itens if r["grupo_competitivo"] == "USADO_CARRIER")
+        sem_contato = sum(1 for r in itens if r["grupo_competitivo"] == "SEM_CONTATO")
+        a_identificar = sum(1 for r in itens if r["grupo_competitivo"] == "A_IDENTIFICAR")
         fabricantes = Counter(str(r["fabricante_competitivo"]) for r in itens if r["grupo_competitivo"] == "CONCORRENCIA" and r.get("fabricante_competitivo"))
         ranking_total.update(fabricantes)
         documentacao_total += documentacao
+        nacional_nao_identificada_total += nacional_nao_identificada
+        usado_concorrente_total += usado_concorrente
+        usado_carrier_total += usado_carrier
+        sem_contato_total += sem_contato
+
         mensal = []
         for mes_num in range(1, 13):
             mes_itens = [r for r in itens if r.get("competencia") == f"2026-{mes_num:02d}"]
             if not mes_itens:
                 continue
+            mes_concorrencia = sum(1 for r in mes_itens if r["grupo_competitivo"] in {"CONCORRENCIA", "CONCORRENCIA_NACIONAL_NAO_IDENTIFICADA"})
             mensal.append({
                 "mes": MESES[mes_num],
                 "competencia": f"2026-{mes_num:02d}",
                 "carrier": sum(1 for r in mes_itens if r["grupo_competitivo"] == "CARRIER"),
-                "concorrencia": sum(1 for r in mes_itens if r["grupo_competitivo"] == "CONCORRENCIA"),
-                "reaproveitamento": sum(1 for r in mes_itens if r["grupo_competitivo"] == "REAPROVEITAMENTO"),
+                "concorrencia": mes_concorrencia,
+                "thermoking": sum(1 for r in mes_itens if r.get("fabricante_competitivo") == "THERMOKING" and r["grupo_competitivo"] == "CONCORRENCIA"),
+                "nacional": sum(1 for r in mes_itens if r["grupo_competitivo"] in {"CONCORRENCIA_NACIONAL_NAO_IDENTIFICADA", "CONCORRENCIA"} and _status_fonte(r) == "NACIONAL"),
+                "reaproveitamento": sum(1 for r in mes_itens if r["grupo_competitivo"] in {"REAPROVEITAMENTO_DOCUMENTACAO", "USADO_CONCORRENTE", "USADO_CARRIER"}),
                 "a_identificar": sum(1 for r in mes_itens if r["grupo_competitivo"] == "A_IDENTIFICAR"),
                 "mercado": len(mes_itens),
             })
+
         segmentos.append({
             "codigo": codigo,
             "segmento": NOMES_SEGMENTOS[codigo],
@@ -145,6 +164,12 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
             "carrier_percentual": _percentual(carrier, mercado),
             "concorrencia": concorrencia,
             "concorrencia_percentual": _percentual(concorrencia, mercado),
+            "thermoking": fabricantes.get("THERMOKING", 0),
+            "nacional": sum(1 for r in itens if _status_fonte(r) == "NACIONAL"),
+            "nacional_fabricante_nao_identificado": nacional_nao_identificada,
+            "usado_concorrente": usado_concorrente,
+            "usado_carrier": usado_carrier,
+            "sem_contato": sem_contato,
             "reaproveitamento_documentacao": documentacao,
             "a_identificar": a_identificar,
             "fabricantes_concorrentes": [{"fabricante": nome, "registros": qtd, "percentual_mercado": _percentual(qtd, mercado)} for nome, qtd in fabricantes.most_common()],
@@ -153,7 +178,7 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
 
     total = len(enriquecidos)
     carrier_total = sum(1 for r in enriquecidos if r["grupo_competitivo"] == "CARRIER")
-    concorrencia_total = sum(1 for r in enriquecidos if r["grupo_competitivo"] == "CONCORRENCIA")
+    concorrencia_total = sum(1 for r in enriquecidos if r["grupo_competitivo"] in {"CONCORRENCIA", "CONCORRENCIA_NACIONAL_NAO_IDENTIFICADA"})
     a_identificar_total = sum(1 for r in enriquecidos if r["grupo_competitivo"] == "A_IDENTIFICAR")
 
     detalhes = []
@@ -182,7 +207,8 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
             "competencia": "2026",
             "fonte_taxonomia": "cti_fabricantes",
             "fabricantes_ativos": fabricantes_validos,
-            "regra_documentacao": "DOCUMENTAÇÃO não é fabricante. Representa regularização documental do reaproveitamento do conjunto baú/equipamento quando há troca do caminhão; deve ser lida como retenção/reaproveitamento de ativo, não como concorrência.",
+            "regra_competitividade": "A categoria/status Carrier/JOV é a fonte primária do resultado observado: CARRIER, TK e NACIONAL. Fabricante_equipamento detalha somente categorias concorrentes; textos de ocorrência/motivo não alteram market share.",
+            "regra_documentacao": "DOCUMENTAÇÃO não é fabricante. Representa regularização documental do reaproveitamento do conjunto baú/equipamento quando há troca do caminhão; deve ser lida como retenção/reaproveitamento de ativo, não como concorrência nova.",
         },
         "resumo": {
             "mercado": total,
@@ -190,16 +216,21 @@ def consolidar_competitividade_anfir_2026(registros: list[dict[str, Any]], fabri
             "carrier_percentual": _percentual(carrier_total, total),
             "concorrencia_identificada": concorrencia_total,
             "concorrencia_percentual": _percentual(concorrencia_total, total),
+            "thermoking": ranking_total.get("THERMOKING", 0),
+            "nacional_fabricante_nao_identificado": nacional_nao_identificada_total,
+            "usado_concorrente": usado_concorrente_total,
+            "usado_carrier": usado_carrier_total,
+            "sem_contato": sem_contato_total,
             "reaproveitamento_documentacao": documentacao_total,
             "a_identificar": a_identificar_total,
         },
         "ranking_concorrentes": [{"fabricante": nome, "registros": qtd, "percentual_mercado": _percentual(qtd, total)} for nome, qtd in ranking_total.most_common()],
         "segmentos": segmentos,
         "leituras_estrategicas": [
-            "Carrier deve ser comparada com a concorrência identificada por fabricante, usando a taxonomia oficial do CTI; Thermo King deixa de ser coluna fixa e passa a compor o ranking competitivo como qualquer outro fabricante.",
-            "TR, DT e DD possuem dinâmicas competitivas diferentes e são acompanhados separadamente, inclusive na evolução mensal Carrier × concorrência.",
-            "DOCUMENTAÇÃO é tratada como reaproveitamento do conjunto baú/equipamento com regularização do implemento (ex.: operação FWest), portanto representa retenção de ativo e adiamento/substituição da compra de equipamento, não fabricante concorrente.",
-            "Registros sem fabricante identificado permanecem em 'A identificar' e não são artificialmente atribuídos a concorrentes.",
+            "A leitura competitiva usa a categoria oficial Carrier/JOV como verdade primária do resultado observado; menções em texto não são convertidas em vendas ou market share.",
+            "Thermo King é contabilizada quando a categoria/status é TK, independentemente de o campo auxiliar fabricante_equipamento estar vazio.",
+            "NACIONAL compõe concorrência; a marca específica só é atribuída quando fabricante_equipamento contém fabricante válido da taxonomia CTI. O restante permanece como nacional com fabricante não identificado.",
+            "Usado concorrente, usado Carrier, sem contato e documentação permanecem indicadores estratégicos separados e não inflam a concorrência de equipamentos novos.",
         ],
         "detalhes": detalhes,
     }
