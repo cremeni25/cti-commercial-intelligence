@@ -3,11 +3,26 @@
 import Link from "next/link"
 import { useEffect, useState } from "react"
 import { Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
+import { getSupabaseClient } from "@/core/database/supabase"
 
 type WorkbookPayload={inteligencia_viena:{mensal:Array<{mes:string;trailer:number;diesel_truck:number;direct_drive:number;total:number}>;segmentos:Array<{segmento:string;mercado:number;carrier:number;carrier_percentual_observado:number}>}}
 type Competidor={fabricante:string;registros:number;percentual_mercado:number}
 type CompetitivoSegmento={codigo:string;segmento:string;mercado:number;carrier:number;carrier_percentual:number;concorrencia:number;concorrencia_percentual:number;reaproveitamento_documentacao:number;a_identificar:number;fabricantes_concorrentes:Competidor[];mensal:Array<{mes:string;competencia:string;carrier:number;concorrencia:number;reaproveitamento:number;a_identificar:number;mercado:number}>}
 type CompetitivoPayload={metadata:{regra_documentacao:string};resumo:{mercado:number;carrier:number;carrier_percentual:number;concorrencia_identificada:number;concorrencia_percentual:number;reaproveitamento_documentacao:number;a_identificar:number};ranking_concorrentes:Competidor[];segmentos:CompetitivoSegmento[];leituras_estrategicas:string[]}
+
+async function buscarSeguro<T>(url:string):Promise<T>{
+ const supabase=getSupabaseClient()
+ const {data,error}=await supabase.auth.getSession()
+ const token=data.session?.access_token
+ if(error||!token)throw new Error("Sessão CTI não autenticada.")
+ const resposta=await fetch(url,{cache:"no-store",headers:{Authorization:`Bearer ${token}`,Accept:"application/json"}})
+ if(!resposta.ok){
+  const payload=await resposta.json().catch(()=>null)
+  const detalhe=payload&&typeof payload==="object"&&"detail" in payload?String((payload as {detail?:unknown}).detail||""):""
+  throw new Error(detalhe||`Falha ${resposta.status}`)
+ }
+ return resposta.json() as Promise<T>
+}
 
 function drill(titulo:string,campo?:string,valor?:string){
  const q=new URLSearchParams({camada:"anfir",contexto:"viena-sp",periodo:"PERSONALIZADO",inicio:"2026-01-01",fim:"2026-12-31",titulo,subtitulo:"Registros individualizados que compõem a fotografia ANFIR 2026."})
@@ -19,16 +34,29 @@ function drill(titulo:string,campo?:string,valor?:string){
 export default function AnfirWorkbookCharts({responsavelId}:{responsavelId?:string}){
  const[data,setData]=useState<WorkbookPayload|null>(null)
  const[competitivo,setCompetitivo]=useState<CompetitivoPayload|null>(null)
+ const[loading,setLoading]=useState(true)
+ const[erroBase,setErroBase]=useState("")
+ const[erroCompetitivo,setErroCompetitivo]=useState("")
  useEffect(()=>{
    let active=true
    const qs=responsavelId?`?responsavel_id=${encodeURIComponent(responsavelId)}`:""
-   Promise.all([
-     fetch(`/api/cti/analytics/anfir-workbook-2026${qs}`,{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()),
-     fetch(`/api/cti/analytics/anfir-competitividade-2026${qs}`,{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()),
-   ]).then(([workbook,comp])=>{if(active){setData(workbook);setCompetitivo(comp)}}).catch(()=>{})
+   setLoading(true);setErroBase("");setErroCompetitivo("")
+   Promise.allSettled([
+     buscarSeguro<WorkbookPayload>(`/api/cti/analytics/anfir-workbook-2026${qs}`),
+     buscarSeguro<CompetitivoPayload>(`/api/cti/analytics/anfir-competitividade-2026${qs}`),
+   ]).then(resultados=>{
+     if(!active)return
+     const [base,comp]=resultados
+     if(base.status==="fulfilled")setData(base.value)
+     else{setData(null);setErroBase(base.reason instanceof Error?base.reason.message:"Falha ao carregar gráficos ANFIR.")}
+     if(comp.status==="fulfilled")setCompetitivo(comp.value)
+     else{setCompetitivo(null);setErroCompetitivo(comp.reason instanceof Error?comp.reason.message:"Falha ao carregar inteligência competitiva.")}
+   }).finally(()=>{if(active)setLoading(false)})
    return()=>{active=false}
  },[responsavelId])
- if(!data)return null
+
+ if(loading)return <section className="rounded-2xl border border-[#17304d] bg-[#071427] p-5 text-sm text-slate-400">Carregando gráficos e inteligência competitiva ANFIR...</section>
+ if(!data)return <section className="rounded-2xl border border-red-800/60 bg-red-950/20 p-5 text-sm text-red-200"><strong>Gráficos ANFIR indisponíveis.</strong><span className="ml-2">{erroBase||"A leitura base não respondeu."}</span></section>
  const mensal=data.inteligencia_viena.mensal,segmentos=data.inteligencia_viena.segmentos
  return <div className="space-y-5">
   <section className="grid gap-5 xl:grid-cols-2">
@@ -41,7 +69,7 @@ export default function AnfirWorkbookCharts({responsavelId}:{responsavelId?:stri
     <div className="h-[300px]"><ResponsiveContainer width="100%" height="100%"><BarChart data={segmentos} margin={{top:10,right:18,left:0,bottom:0}}><CartesianGrid stroke="#17304d" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="segmento" stroke="#8294ad"/><YAxis stroke="#8294ad"/><Tooltip contentStyle={tooltipStyle}/><Legend/><Bar dataKey="mercado" name="Mercado" fill="#64748b" radius={[6,6,0,0]}/><Bar dataKey="carrier" name="Carrier observada" fill="#22d3ee" radius={[6,6,0,0]}/></BarChart></ResponsiveContainer></div>
    </div>
   </section>
-  {competitivo&&<CompetitiveSection data={competitivo}/>} 
+  {competitivo?<CompetitiveSection data={competitivo}/>:<section className="rounded-2xl border border-amber-700/60 bg-amber-950/10 p-5 text-sm text-amber-200"><strong>Inteligência competitiva ainda não carregou.</strong><span className="ml-2">{erroCompetitivo||"O endpoint competitivo não respondeu."}</span></section>}
  </div>
 }
 
