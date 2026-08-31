@@ -1,14 +1,25 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from collections import defaultdict
 from datetime import date
 from typing import Any
 
 from core.supabase_client import supabase
+from services.historical_commercial_source import carregar_historico_comercial
 
 STATUS_CARRIER = {"CARRIER"}
 STATUS_CONCORRENTE = {"TK", "NACIONAL"}
-STATUS_FUNIL_ENCERRADO = {"GANHO", "PERDIDO", "ENCERRADO", "FECHADO"}
+STATUS_FUNIL_ENCERRADO = {"GANHO", "PERDIDO", "ENCERRADO", "FECHADO", "FATURADO", "VENDIDO", "CANCELADO", "CANCELADA"}
+STATUS_FUNIL_BACKLOG = {"BACKLOG", "EM ANDAMENTO", "ABERTO", "ABERTA", "PROPOSTA", "NEGOCIACAO", "NEGOCIAÇÃO"}
+STATUS_FUNIL_PROSPECCAO = {"PROSPECT", "PROSPECCAO", "PROSPECÇÃO", "LEAD"}
+
+
+def _fold(valor: Any) -> str:
+    texto = unicodedata.normalize("NFD", str(valor or "").strip().upper())
+    texto = "".join(ch for ch in texto if unicodedata.category(ch) != "Mn")
+    return re.sub(r"[^A-Z0-9]", "", texto)
 
 
 def _paginar_tabela(nome: str, campos: str = "*") -> list[dict[str, Any]]:
@@ -33,6 +44,61 @@ def _data(valor: Any) -> date | None:
         return None
 
 
+def _temporalidade_funil_historico(status: Any) -> str:
+    texto = str(status or "").strip().upper()
+    if any(chave in texto for chave in STATUS_FUNIL_ENCERRADO):
+        return "PASSADO_CONFIRMADO"
+    if any(chave in texto for chave in STATUS_FUNIL_BACKLOG):
+        return "EM_CURSO_BACKLOG"
+    if any(chave in texto for chave in STATUS_FUNIL_PROSPECCAO):
+        return "PROSPECCAO"
+    return "HISTORICO_INDETERMINADO"
+
+
+def _evidencias_funil_historico(clientes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    por_nome: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for cliente in clientes:
+        chave = _fold(cliente.get("nome"))
+        if chave:
+            por_nome[chave].append(cliente)
+
+    saida: list[dict[str, Any]] = []
+    for indice, row in enumerate(carregar_historico_comercial(), start=1):
+        chave = _fold(row.get("cliente"))
+        candidatos = por_nome.get(chave, []) if chave else []
+        cliente = candidatos[0] if len(candidatos) == 1 else None
+        origem_id = f"{row.get('arquivo_sha256')}:{row.get('aba_origem')}:{row.get('linha_origem') or indice}"
+        saida.append({
+            "id": origem_id,
+            "fonte": "FUNIL",
+            "fonte_registro_id": origem_id,
+            "cliente_id": cliente.get("id") if cliente else None,
+            "cliente_nome": row.get("cliente"),
+            "temporalidade": _temporalidade_funil_historico(row.get("status")),
+            "evento": "FUNIL_HISTORICO",
+            "estado_comercial": str(row.get("status") or "INDETERMINADO").strip().upper(),
+            "data_evento": row.get("data"),
+            "segmento": None,
+            "equipamento": row.get("equipamento"),
+            "quantidade": row.get("quantidade"),
+            "valor": row.get("valor_total"),
+            "responsavel_id": None,
+            "metodo_reconciliacao": "NOME_EXATO_UNICO" if cliente else "SEM_RECONCILIACAO",
+            "confianca": 0.80 if cliente else 0,
+            "metadata": {
+                "origem_funil": "HISTORICO_COMERCIAL_2023_2026",
+                "representante_original": row.get("representante_original"),
+                "representante_atual": row.get("representante_atual"),
+                "previsao": row.get("previsao"),
+                "probabilidade": row.get("probabilidade"),
+                "motivo_perda": row.get("motivo_perda"),
+                "observacao": row.get("observacao"),
+                "implementadora": row.get("implementadora"),
+            },
+        })
+    return saida
+
+
 def _ordem_temporal_valida(eventos: list[dict[str, Any]]) -> bool:
     crm = sorted(filter(None, (_data(e.get("data_evento")) for e in eventos if e.get("fonte") == "CRM")))
     funil = sorted(filter(None, (_data(e.get("data_evento")) for e in eventos if e.get("fonte") == "FUNIL")))
@@ -40,6 +106,11 @@ def _ordem_temporal_valida(eventos: list[dict[str, Any]]) -> bool:
     if not (crm and funil and fechamento):
         return False
     return crm[0] <= funil[-1] <= fechamento[-1]
+
+
+def _confianca_cadeia(eventos: list[dict[str, Any]]) -> float:
+    relevantes = [float(e.get("confianca") or 0) for e in eventos if e.get("fonte") in {"CRM", "FUNIL", "ANFIR", "VENDA"}]
+    return round(min(relevantes), 2) if relevantes else 0
 
 
 def _desfecho(eventos: list[dict[str, Any]]) -> str:
@@ -51,8 +122,10 @@ def _desfecho(eventos: list[dict[str, Any]]) -> str:
     if status_anfir & STATUS_CONCORRENTE:
         return "RESULTADO_CONCORRENTE_CONFIRMADO"
     funil = [e for e in eventos if e.get("fonte") == "FUNIL"]
-    if any(str(e.get("estado_comercial") or "").upper() not in STATUS_FUNIL_ENCERRADO for e in funil):
+    if any(str(e.get("temporalidade") or "") == "EM_CURSO_BACKLOG" for e in funil):
         return "EM_CURSO_BACKLOG"
+    if any(str(e.get("temporalidade") or "") == "PROSPECCAO" for e in funil):
+        return "PROSPECCAO_OU_ACAO_ATIVA"
     if any(e.get("fonte") == "CRM" for e in eventos):
         return "PROSPECCAO_OU_ACAO_ATIVA"
     return "SEM_DESFECHO_COMERCIAL"
@@ -61,6 +134,7 @@ def _desfecho(eventos: list[dict[str, Any]]) -> str:
 def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool = False, responsavel_id: str | None = None, limite_clientes: int = 200) -> dict[str, Any]:
     evidencias = _paginar_tabela("cti_evidencias_comerciais", "id,fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,segmento,equipamento,quantidade,valor,responsavel_id,metodo_reconciliacao,confianca,metadata")
     clientes = _paginar_tabela("clientes", "id,nome,cnpj,cidade,ddd,sub_regiao,responsavel_comercial_id,responsabilidade_tipo")
+    evidencias.extend(_evidencias_funil_historico(clientes))
     mapa_clientes = {str(c.get("id")): c for c in clientes if c.get("id")}
 
     alvo = str(responsavel_id or usuario_id or "")
@@ -85,6 +159,8 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
         datas = sorted(d for d in (_data(e.get("data_evento")) for e in eventos) if d)
         desfecho = _desfecho(eventos)
         cadeia_completa = {"CRM", "FUNIL"}.issubset(origens) and bool({"ANFIR", "VENDA"} & set(origens))
+        confianca_cadeia = _confianca_cadeia(eventos) if cadeia_completa else 0
+        ordem_temporal = _ordem_temporal_valida(eventos) if cadeia_completa else False
         jornadas.append({
             "cliente_id": cliente_id,
             "cliente_nome": cliente.get("nome") or eventos[0].get("cliente_nome") or "Cliente",
@@ -99,7 +175,9 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
             "ultimo_evento": datas[-1].isoformat() if datas else None,
             "desfecho": desfecho,
             "cadeia_crm_funil_realizado": cadeia_completa,
-            "ordem_temporal_confirmada": _ordem_temporal_valida(eventos) if cadeia_completa else False,
+            "ordem_temporal_confirmada": ordem_temporal,
+            "confianca_cadeia": confianca_cadeia,
+            "cadeia_confirmada": bool(cadeia_completa and ordem_temporal and confianca_cadeia >= 0.80),
             "evidencias": sorted(eventos, key=lambda e: str(e.get("data_evento") or "")),
         })
 
@@ -121,9 +199,9 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
             "fontes_preservadas": True,
             "fusao_dados_brutos": False,
             "anfir": "PASSADO_CONFIRMADO",
-            "funil": "PASSADO_ENCERRADO_E_EM_CURSO_BACKLOG",
+            "funil": "PASSADO_ENCERRADO_E_EM_CURSO_BACKLOG_E_PROSPECCAO",
             "crm": "PRESENTE_OPERACIONAL_ACAO_DIARIA",
-            "regra_sucesso": "CRM/FUNIL correlacionados ao mesmo cliente e desfecho CARRIER/VENDA confirmado por fonte realizada",
+            "regra_sucesso": "CRM/Funil/ANFIR ou Venda pertencem ao mesmo cliente reconciliado; a cadeia só é confirmada quando há ordem temporal coerente e confiança mínima.",
         },
         "filtro_responsavel_id": responsavel_id,
         "resumo": {
@@ -135,6 +213,7 @@ def consolidar_verdade_comercial(*, usuario_id: str | None = None, master: bool 
             "por_desfecho": dict(sorted(por_desfecho.items())),
             "cadeias_crm_funil_realizado": sum(1 for j in jornadas if j["cadeia_crm_funil_realizado"]),
             "cadeias_temporais_confirmadas": sum(1 for j in jornadas if j["ordem_temporal_confirmada"]),
+            "cadeias_confirmadas": sum(1 for j in jornadas if j["cadeia_confirmada"]),
         },
         "jornadas": jornadas[: max(1, min(limite_clientes, 500))],
     }
