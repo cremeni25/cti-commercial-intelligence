@@ -1,7 +1,6 @@
 create table if not exists public.cti_anfir_concorrente_classificacao (
   id uuid primary key default gen_random_uuid(),
-  anf
-ir_id uuid not null unique references public.cti_anfir(id) on delete cascade,
+  anf_ir_id uuid not null unique references public.cti_anfir(id) on delete cascade,
   fabricante_cti text not null,
   observacao text,
   alterado_por text,
