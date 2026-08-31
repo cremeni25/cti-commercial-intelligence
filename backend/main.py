@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 from collections import Counter
 from datetime import datetime, timezone
 import os
@@ -12,7 +11,6 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from core.supabase_client import supabase
-from core.transient_http import is_transient_http_error
 from routers.analytics_router import router as analytics_router
 from routers.anfir_workbook_router import router as anfir_workbook_router
 from routers.autorizados_router import router as autorizados_router
@@ -55,24 +53,14 @@ app = FastAPI(title="CTI Comercial Intelligence API")
 
 
 @app.middleware("http")
-async def retry_transient_read_failures(request: Request, call_next):
-    if request.method not in {"GET", "HEAD"}:
-        return await call_next(request)
+async def stable_request_dispatch(request: Request, call_next):
+    """Executa cada request ASGI exatamente uma vez.
 
-    atrasos = (0.0, 0.15, 0.45)
-    ultimo_erro: BaseException | None = None
-    for indice, atraso in enumerate(atrasos):
-        if atraso:
-            await asyncio.sleep(atraso)
-        try:
-            return await call_next(request)
-        except BaseException as exc:
-            ultimo_erro = exc
-            if not is_transient_http_error(exc) or indice == len(atrasos) - 1:
-                raise
-
-    assert ultimo_erro is not None
-    raise ultimo_erro
+    Retentativas do transporte/Supabase devem ocorrer nas camadas de cliente HTTP,
+    nunca repetindo ``call_next``: o stream ASGI não é reutilizável e a repetição
+    causava ``anyio.ClosedResourceError`` e 500 intermitentes em rotas GET.
+    """
+    return await call_next(request)
 
 
 app.add_middleware(
