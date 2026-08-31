@@ -24,7 +24,6 @@ async function seguro<T>(url:string,init?:RequestInit):Promise<T>{
 }
 
 export default function Page(){return <Suspense fallback={<Tela mensagem="Carregando inteligência competitiva..."/>}><Conteudo/></Suspense>}
-
 function Tela({mensagem}:{mensagem:string}){return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="p-6 text-slate-400">{mensagem}</div></section></main>}
 
 function Conteudo(){
@@ -33,7 +32,12 @@ function Conteudo(){
  const [dados,setDados]=useState<Payload|null>(null),[erro,setErro]=useState(""),[busca,setBusca]=useState(""),[salvando,setSalvando]=useState("")
  const [mensagem,setMensagem]=useState("")
  const carregar=async()=>{try{setErro("");const qs=responsavel?`?responsavel_id=${encodeURIComponent(responsavel)}`:"";setDados(await seguro<Payload>(`/api/cti/analytics/anfir-competitividade-2026${qs}`))}catch(e){setErro(e instanceof Error?e.message:"Falha ao carregar concorrência.")}}
- useEffect(()=>{void carregar()},[responsavel])
+ useEffect(()=>{
+   let ativo=true
+   const qs=responsavel?`?responsavel_id=${encodeURIComponent(responsavel)}`:""
+   queueMicrotask(()=>{seguro<Payload>(`/api/cti/analytics/anfir-competitividade-2026${qs}`).then(valor=>{if(ativo){setDados(valor);setErro("")}}).catch(e=>{if(ativo)setErro(e instanceof Error?e.message:"Falha ao carregar concorrência.")})})
+   return()=>{ativo=false}
+ },[responsavel])
  const registros=useMemo(()=>{
    const termo=busca.trim().toUpperCase()
    return (dados?.detalhes||[]).filter(r=>{
