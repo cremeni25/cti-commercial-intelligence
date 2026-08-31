@@ -40,16 +40,15 @@ export default function AnfirWorkbookCharts({responsavelId}:{responsavelId?:stri
  useEffect(()=>{
    let active=true
    const qs=responsavelId?`?responsavel_id=${encodeURIComponent(responsavelId)}`:""
-   setLoading(true);setErroBase("");setErroCompetitivo("")
    Promise.allSettled([
      buscarSeguro<WorkbookPayload>(`/api/cti/analytics/anfir-workbook-2026${qs}`),
      buscarSeguro<CompetitivoPayload>(`/api/cti/analytics/anfir-competitividade-2026${qs}`),
    ]).then(resultados=>{
      if(!active)return
      const [base,comp]=resultados
-     if(base.status==="fulfilled")setData(base.value)
+     if(base.status==="fulfilled"){setData(base.value);setErroBase("")}
      else{setData(null);setErroBase(base.reason instanceof Error?base.reason.message:"Falha ao carregar gráficos ANFIR.")}
-     if(comp.status==="fulfilled")setCompetitivo(comp.value)
+     if(comp.status==="fulfilled"){setCompetitivo(comp.value);setErroCompetitivo("")}
      else{setCompetitivo(null);setErroCompetitivo(comp.reason instanceof Error?comp.reason.message:"Falha ao carregar inteligência competitiva.")}
    }).finally(()=>{if(active)setLoading(false)})
    return()=>{active=false}
