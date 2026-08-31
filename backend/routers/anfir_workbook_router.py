@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
+from services.anfir_competitive_classification_store import remover_classificacao, salvar_classificacao
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
 from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
@@ -137,7 +138,7 @@ def classificar_fabricante_concorrente(
 
     fabricante = str(entrada.fabricante or "").strip().upper()
     if not fabricante:
-        supabase.table("cti_anfir_concorrente_classificacao").delete().eq("anf_ir_id", registro_id).execute()
+        remover_classificacao(registro_id)
         return {"ok": True, "registro_id": registro_id, "fabricante_cti": None, "acao": "CLASSIFICACAO_REMOVIDA"}
 
     fabricantes = set(_fabricantes_ativos())
@@ -156,17 +157,12 @@ def classificar_fabricante_concorrente(
     if not permitido:
         raise HTTPException(status_code=422, detail="Este status Carrier/JOV não aceita classificação complementar de fabricante.")
 
-    dados = {
-        "anf_ir_id": registro_id,
-        "fabricante_cti": fabricante,
-        "observacao": str(entrada.observacao or "").strip() or None,
-        "alterado_por": str(usuario.id),
-        "updated_at": "now()",
-    }
-    # Supabase não interpreta now() como expressão em payload; usa timestamp gerado pelo banco na criação
-    # e updated_at é preenchido abaixo por um valor ISO no cliente quando necessário. O upsert mantém a origem intacta.
-    dados.pop("updated_at")
-    supabase.table("cti_anfir_concorrente_classificacao").upsert(dados, on_conflict="anf_ir_id").execute()
+    salvar_classificacao(
+        registro_id,
+        fabricante,
+        str(entrada.observacao or "").strip() or None,
+        str(usuario.id),
+    )
     return {
         "ok": True,
         "registro_id": registro_id,
