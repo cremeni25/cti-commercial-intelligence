@@ -5,15 +5,30 @@ import { useEffect, useState } from "react"
 import { ArrowLeft, Printer } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import { getSupabaseClient } from "@/core/database/supabase"
 
 type Competidor={fabricante:string;registros:number;percentual_mercado:number}
 type Segmento={codigo:string;segmento:string;mercado:number;carrier:number;carrier_percentual:number;concorrencia:number;concorrencia_percentual:number;reaproveitamento_documentacao:number;a_identificar:number;fabricantes_concorrentes:Competidor[];mensal:Array<{mes:string;carrier:number;concorrencia:number;reaproveitamento:number;a_identificar:number;mercado:number}>}
 type Payload={metadata:{competencia:string;fonte_taxonomia:string;fabricantes_ativos:string[];regra_documentacao:string};resumo:{mercado:number;carrier:number;carrier_percentual:number;concorrencia_identificada:number;concorrencia_percentual:number;reaproveitamento_documentacao:number;a_identificar:number};ranking_concorrentes:Competidor[];segmentos:Segmento[];leituras_estrategicas:string[]}
 
+async function carregar():Promise<Payload>{
+ const supabase=getSupabaseClient()
+ const {data,error}=await supabase.auth.getSession()
+ const token=data.session?.access_token
+ if(error||!token)throw new Error("Sessão CTI não autenticada.")
+ const resposta=await fetch("/api/cti/analytics/anfir-competitividade-2026",{cache:"no-store",headers:{Authorization:`Bearer ${token}`,Accept:"application/json"}})
+ if(!resposta.ok){
+  const payload=await resposta.json().catch(()=>null)
+  const detalhe=payload&&typeof payload==="object"&&"detail" in payload?String((payload as {detail?:unknown}).detail||""):""
+  throw new Error(detalhe||`Falha ${resposta.status}`)
+ }
+ return resposta.json() as Promise<Payload>
+}
+
 export default function RelatorioCompetitividade(){
- const[data,setData]=useState<Payload|null>(null),[erro,setErro]=useState(false)
- useEffect(()=>{let active=true;fetch("/api/cti/analytics/anfir-competitividade-2026",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject()).then(p=>{if(active)setData(p)}).catch(()=>{if(active)setErro(true)});return()=>{active=false}},[])
- if(erro)return <div className="min-h-screen bg-[#020817] p-8 text-amber-200">Não foi possível carregar a inteligência competitiva ANFIR.</div>
+ const[data,setData]=useState<Payload|null>(null),[erro,setErro]=useState("")
+ useEffect(()=>{let active=true;carregar().then(p=>{if(active)setData(p)}).catch(e=>{if(active)setErro(e instanceof Error?e.message:"Falha ao carregar inteligência competitiva.")});return()=>{active=false}},[])
+ if(erro)return <div className="min-h-screen bg-[#020817] p-8 text-amber-200">Não foi possível carregar a inteligência competitiva ANFIR. {erro}</div>
  if(!data)return <div className="min-h-screen bg-[#020817] p-8 text-slate-300">Carregando inteligência competitiva ANFIR...</div>
  const r=data.resumo
  return <main className="flex min-h-screen bg-[#020817] text-white print:block print:bg-white print:text-black">
