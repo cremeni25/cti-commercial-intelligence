@@ -35,7 +35,7 @@ export default function PipelinePage(){
  const cicloPorPedido=useMemo(()=>new Map(ciclos.map(c=>[String(c.id),c])),[ciclos])
  const dadosEscopados=useMemo(()=>dados.filter(item=>pertenceAoEscopoDoUsuario(item.responsavel_id,usuario)),[dados,usuario])
  const consolidados=useMemo(()=>dadosEscopados.map(item=>{const ciclo=item.pedido_id?cicloPorPedido.get(String(item.pedido_id)):undefined;const etapaCiclo=String(ciclo?.status_ciclo||"").toUpperCase();return etapaCiclo&&ETAPAS_PIPELINE.includes(etapaCiclo)?{...item,etapa:etapaCiclo,encerrada:etapaCiclo==="ENCERRADO"}:item}),[dadosEscopados,cicloPorPedido])
- const filtrados=useMemo(()=>consolidados.filter(item=>{const data=dataIsoValida(item.data_fechamento_prevista)?String(item.data_fechamento_prevista):"";if(!data)return true;return data>=inicio&&data<=fim}),[consolidados,fim,inicio])
+ const filtrados=useMemo(()=>consolidados.filter(item=>{if(!item.encerrada)return true;const data=dataIsoValida(item.data_fechamento_prevista)?String(item.data_fechamento_prevista):"";if(!data)return false;return data>=inicio&&data<=fim}),[consolidados,fim,inicio])
  const valorTotal=filtrados.reduce((t,i)=>t+Number(i.valor||0),0),valorPonderado=filtrados.reduce((t,i)=>t+Number(i.valor_ponderado||0),0)
  const grafico=useMemo(()=>ETAPAS_PIPELINE.map(etapa=>{const itens=filtrados.filter(item=>item.etapa===etapa);return{etapa:etapa.replaceAll("_"," "),valor:itens.reduce((t,i)=>t+Number(i.valor||0),0),negociacoes:itens.length}}),[filtrados])
  const dataPrevista=(valor?:string|null)=>dataIsoValida(valor)?formatDate(`${valor}T12:00:00`):tx.noForecast
