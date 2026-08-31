@@ -16,6 +16,7 @@ from routers.anfir_workbook_router import router as anfir_workbook_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
 from routers.clientes_router import router as clientes_router
+from routers.commercial_truth_router import router as commercial_truth_router
 from routers.crm_atividades_governanca_router import router as crm_atividades_governanca_router
 from routers.crm_router import router as crm_router
 from routers.crm_scope_router import router as crm_scope_router
@@ -91,6 +92,7 @@ app.include_router(crm_scope_negocio_historico_router)
 app.include_router(primeiro_acesso_scope_router)
 app.include_router(analytics_router)
 app.include_router(anfir_workbook_router)
+app.include_router(commercial_truth_router)
 app.include_router(engine_router)
 app.include_router(negociacoes_router)
 app.include_router(clientes_router)
