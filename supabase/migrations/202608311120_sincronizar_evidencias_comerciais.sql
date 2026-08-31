@@ -1,5 +1,6 @@
--- Mantém a camada de evidências atualizada para novas cargas e alterações operacionais.
--- Nenhum gatilho altera as tabelas de origem.
+-- Mantém a camada ANFIR de evidências atualizada para novas cargas.
+-- CRM, Funil e Vendas são views no esquema atual e são lidos dinamicamente pelo motor transversal.
+-- Nenhum gatilho altera a tabela de origem.
 
 create or replace function public.cti_resolver_cliente_anfir(p_cnpj text,p_nome text,p_cidade text)
 returns table(cliente_id uuid, metodo text, confianca numeric)
@@ -45,49 +46,3 @@ end $$;
 
 drop trigger if exists trg_cti_sync_anfir_evidencia on public.cti_anfir;
 create trigger trg_cti_sync_anfir_evidencia after insert or update on public.cti_anfir for each row execute function public.cti_sync_anfir_evidencia();
-
-create or replace function public.cti_sync_atividade_evidencia()
-returns trigger language plpgsql security definer set search_path=public as $$
-declare v_nome text;
-begin
-  if new.arquivado_em is not null or coalesce(new.registro_teste,false) then
-    delete from public.cti_evidencias_comerciais where fonte='CRM' and fonte_registro_id=new.id::text and evento='ACAO_COMERCIAL'; return new;
-  end if;
-  select nome into v_nome from public.clientes where id=new.cliente_id;
-  insert into public.cti_evidencias_comerciais (fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,responsavel_id,metodo_reconciliacao,confianca,metadata)
-  values ('CRM',new.id::text,new.cliente_id,v_nome,'PRESENTE_OPERACIONAL','ACAO_COMERCIAL',upper(coalesce(new.status,'REGISTRADA')),coalesce(new.data,new.data_atividade::date,new.created_at::date),new.usuario_id,case when new.cliente_id is not null then 'CLIENTE_ID' else 'SEM_RECONCILIACAO' end,case when new.cliente_id is not null then 1 else 0 end,jsonb_build_object('tipo',new.tipo,'titulo',new.titulo,'descricao',new.descricao,'oportunidade_id',new.oportunidade_id))
-  on conflict (fonte,fonte_registro_id,evento) do update set cliente_id=excluded.cliente_id,cliente_nome=excluded.cliente_nome,estado_comercial=excluded.estado_comercial,data_evento=excluded.data_evento,responsavel_id=excluded.responsavel_id,metodo_reconciliacao=excluded.metodo_reconciliacao,confianca=excluded.confianca,metadata=excluded.metadata,updated_at=now(); return new;
-end $$;
-drop trigger if exists trg_cti_sync_atividade_evidencia on public.cti_atividades;
-create trigger trg_cti_sync_atividade_evidencia after insert or update on public.cti_atividades for each row execute function public.cti_sync_atividade_evidencia();
-
-create or replace function public.cti_sync_oportunidade_evidencia()
-returns trigger language plpgsql security definer set search_path=public as $$
-declare v_nome text; v_temporal text;
-begin
-  if new.arquivado_em is not null or coalesce(new.registro_teste,false) then
-    delete from public.cti_evidencias_comerciais where fonte='FUNIL' and fonte_registro_id=new.id::text and evento='OPORTUNIDADE'; return new;
-  end if;
-  select nome into v_nome from public.clientes where id=new.cliente_id;
-  v_temporal:=case when upper(coalesce(new.status,'')) in ('GANHO','PERDIDO','ENCERRADO','FECHADO') then 'PASSADO_CONFIRMADO' else 'EM_CURSO_BACKLOG' end;
-  insert into public.cti_evidencias_comerciais (fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,valor,responsavel_id,metodo_reconciliacao,confianca,metadata)
-  values ('FUNIL',new.id::text,new.cliente_id,v_nome,v_temporal,'OPORTUNIDADE',upper(coalesce(new.status,'ABERTA')),coalesce(new.data_fechamento_real::date,new.data_fechamento_prevista::date,new.data_abertura::date,new.created_at::date),new.valor_estimado,new.responsavel_id,case when new.cliente_id is not null then 'CLIENTE_ID' else 'SEM_RECONCILIACAO' end,case when new.cliente_id is not null then 1 else 0 end,jsonb_build_object('titulo',new.titulo,'origem',new.origem,'probabilidade',new.probabilidade,'data_abertura',new.data_abertura,'data_fechamento_prevista',new.data_fechamento_prevista,'data_fechamento_real',new.data_fechamento_real))
-  on conflict (fonte,fonte_registro_id,evento) do update set cliente_id=excluded.cliente_id,cliente_nome=excluded.cliente_nome,temporalidade=excluded.temporalidade,estado_comercial=excluded.estado_comercial,data_evento=excluded.data_evento,valor=excluded.valor,responsavel_id=excluded.responsavel_id,metodo_reconciliacao=excluded.metodo_reconciliacao,confianca=excluded.confianca,metadata=excluded.metadata,updated_at=now(); return new;
-end $$;
-drop trigger if exists trg_cti_sync_oportunidade_evidencia on public.cti_oportunidades;
-create trigger trg_cti_sync_oportunidade_evidencia after insert or update on public.cti_oportunidades for each row execute function public.cti_sync_oportunidade_evidencia();
-
-create or replace function public.cti_sync_venda_evidencia()
-returns trigger language plpgsql security definer set search_path=public as $$
-declare v_nome text;
-begin
-  if new.arquivado_em is not null or coalesce(new.registro_teste,false) then
-    delete from public.cti_evidencias_comerciais where fonte='VENDA' and fonte_registro_id=new.id::text and evento='VENDA_CONFIRMADA'; return new;
-  end if;
-  select nome into v_nome from public.clientes where id=new.cliente_id;
-  insert into public.cti_evidencias_comerciais (fonte,fonte_registro_id,cliente_id,cliente_nome,temporalidade,evento,estado_comercial,data_evento,equipamento,valor,metodo_reconciliacao,confianca,metadata)
-  values ('VENDA',new.id::text,new.cliente_id,v_nome,'PASSADO_CONFIRMADO','VENDA_CONFIRMADA','GANHO',new.data_venda,new.equipamento_codigo,new.valor,case when new.cliente_id is not null then 'CLIENTE_ID' else 'SEM_RECONCILIACAO' end,case when new.cliente_id is not null then 1 else 0 end,jsonb_build_object('tipo_venda',new.tipo_venda,'pedido_id',new.pedido_id,'oportunidade_id',new.oportunidade_id,'observacao',new.observacao))
-  on conflict (fonte,fonte_registro_id,evento) do update set cliente_id=excluded.cliente_id,cliente_nome=excluded.cliente_nome,estado_comercial=excluded.estado_comercial,data_evento=excluded.data_evento,equipamento=excluded.equipamento,valor=excluded.valor,metodo_reconciliacao=excluded.metodo_reconciliacao,confianca=excluded.confianca,metadata=excluded.metadata,updated_at=now(); return new;
-end $$;
-drop trigger if exists trg_cti_sync_venda_evidencia on public.vendas;
-create trigger trg_cti_sync_venda_evidencia after insert or update on public.vendas for each row execute function public.cti_sync_venda_evidencia();
