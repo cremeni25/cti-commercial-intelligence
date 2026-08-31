@@ -6,6 +6,7 @@ import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import AnfirWorkbookPanel from "@/components/AnfirWorkbookPanel"
 import AnfirWorkbookCharts from "@/components/AnfirWorkbookCharts"
+import CommercialTruthPanel from "@/components/CommercialTruthPanel"
 import { useAuth } from "@/core/auth/AuthContext"
 import { possuiVisaoConsolidada } from "@/core/rbac/commercial-scope"
 import { getResponsaveisComerciaisSeguros, type ResponsavelComercialSeguro } from "@/services/modulos-api"
@@ -41,6 +42,7 @@ export default function DashboardExecutivo(){
     </header>
     <AnfirWorkbookPanel responsavelId={responsavelEfetivo||undefined}/>
     <AnfirWorkbookCharts responsavelId={responsavelEfetivo||undefined}/>
+    <CommercialTruthPanel responsavelId={responsavelEfetivo||undefined}/>
    </div>
   </section>
  </main>
