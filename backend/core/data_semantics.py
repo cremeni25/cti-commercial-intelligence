@@ -35,7 +35,8 @@ DASHBOARDS = {
         "realizado": "ANFIR",
         "em_curso": "FUNIL",
         "operacional": "CRM",
-        "regra": "MESMA_VERDADE_FACTUAL_LEITURAS_DIFERENTES",
+        "regra": "CAMADAS_SEPARADAS_SEM_FUSAO",
+        "principio_transversal": "MESMA_VERDADE_FACTUAL_LEITURAS_DIFERENTES",
         "descricao": "ANFIR, Funil e CRM não são somados como universos independentes. São correlacionados por cliente/negócio mantendo cada fonte íntegra.",
     },
     "INTELIGENCIA_MERCADO": {
@@ -75,7 +76,8 @@ def validar_correlacao(origem: str, destino: str) -> dict[str, Any]:
     if origem in NATUREZAS and destino in NATUREZAS and origem != destino:
         return {
             "permitido": True,
-            "modo": "CORRELACAO_ANALITICA_TRANSVERSAL",
+            "modo": "CORRELACAO_ANALITICA",
+            "transversal": True,
             "fusao_registros": False,
             "promocao_automatica": False,
             "contrato": CORRELACAO_TRANSVERSAL,
