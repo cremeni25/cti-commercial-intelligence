@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import DossieFinanceiroCarrier from "@/components/crm/DossieFinanceiroCarrier"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 import { useClosureI18n } from "@/core/i18n/closure"
 
@@ -130,6 +131,7 @@ export default function PropostaPage() {
           {podePedido && <button disabled={processando} onClick={() => void executar("/converter-pedido", {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">{tc("proposal.generateOrder")}</button>}
         </div></article>
       </section>
+      <DossieFinanceiroCarrier propostaId={id} />
       {envioAberto && <section className="rounded-3xl border border-cyan-800 bg-cyan-950/15 p-6"><h2 className="text-xl font-bold">{jaEnviada ? "Reenviar proposta comercial" : "Enviar proposta comercial"}</h2><p className="mt-1 text-sm text-slate-400">Revise ou acrescente destinatários antes do envio. Separe vários e-mails por vírgula, ponto e vírgula ou nova linha.</p><div className="mt-5 grid gap-4"><CampoEmail titulo="Para" valor={para} alterar={setPara} obrigatorio/><CampoEmail titulo="CC — cópia" valor={cc} alterar={setCc}/><CampoEmail titulo="CCO — cópia oculta" valor={cco} alterar={setCco}/><label className="block"><span className="mb-2 block text-sm">Mensagem</span><textarea value={mensagemEmail} onChange={(evento) => setMensagemEmail(evento.target.value)} rows={4} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setEnvioAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando || !emails(para).length} onClick={() => void enviarProposta()} className="rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:opacity-40">{processando ? "Enviando..." : jaEnviada ? "Reenviar PDF oficial" : "Enviar PDF oficial"}</button></div></section>}
       <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">{tc("proposal.audit")}</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><Linha label={tc("proposal.hash")} valor={texto(dados.proposta.hash_documento)} /><Linha label={tc("proposal.model")} valor={texto(dados.proposta.modelo_proposta_id, tc("common.notDefined"))}/><Linha label={tc("proposal.issuedAt")} valor={dataHora(dados.proposta.emitida_em)} /><Linha label={tc("proposal.acceptedAt")} valor={dataHora(dados.proposta.aceita_em)} /></div><details className="mt-5 rounded-2xl border border-[#13203f] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-300">{tc("proposal.snapshot")}</summary><pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(snapshot, null, 2)}</pre></details></section>
     </>}
