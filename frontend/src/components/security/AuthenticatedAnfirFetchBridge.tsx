@@ -17,8 +17,8 @@ export default function AuthenticatedAnfirFetchBridge() {
           ? input.toString()
           : input.url
 
-      if (!url.includes(ANFIR_WORKBOOK_PATH) && !url.includes(CTI_ANALYTICS_PATH)) {
-        return originalFetch(input, init)
+      if (!url.includes(ANFIR_WORKBOOK_PATH)) {
+        if (!url.includes(CTI_ANALYTICS_PATH)) return originalFetch(input, init)
       }
 
       const metodo = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
