@@ -115,14 +115,37 @@ def _nomes_clientes(registros: list[dict[str, Any]]) -> dict[str, str]:
     return nomes
 
 
+def _nomes_usuarios(registros: list[dict[str, Any]]) -> dict[str, str]:
+    ids = sorted({str(item.get("usuario_id")) for item in registros if item.get("usuario_id")})
+    if not ids:
+        return {}
+    try:
+        usuarios = supabase.table("cti_users").select("id,nome,email").in_("id", ids).execute().data or []
+    except Exception:
+        return {}
+    nomes: dict[str, str] = {}
+    for item in usuarios:
+        usuario_id = str(item.get("id") or "")
+        if not usuario_id:
+            continue
+        nome = str(item.get("nome") or "").strip()
+        email = str(item.get("email") or "").strip()
+        nomes[usuario_id] = nome or email
+    return nomes
+
+
 def _enriquecer(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
     nomes = _nomes_clientes(registros)
+    responsaveis = _nomes_usuarios(registros)
     saida: list[dict[str, Any]] = []
     for item in registros:
         registro = dict(item)
         cliente_id = str(registro.get("cliente_id") or "")
+        usuario_id = str(registro.get("usuario_id") or "")
         parceiro = str(registro.get("parceiro_nome") or "").strip()
         registro["cliente_nome"] = nomes.get(cliente_id, "") or parceiro
+        registro["responsavel_id"] = usuario_id
+        registro["responsavel_nome"] = responsaveis.get(usuario_id, "")
         registro["contexto_atividade"] = "CLIENTE" if cliente_id else ("PARCEIRO" if parceiro else "GERAL")
         saida.append(registro)
     return saida
