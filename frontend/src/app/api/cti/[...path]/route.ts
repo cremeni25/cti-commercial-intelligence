@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 
+// Leituras analíticas ANFIR/CRM podem levar alguns segundos no backend porque
+// consolidam um volume alto de evidências. O limite explícito impede que a
+// função serverless encerre uma resposta saudável do Render prematuramente.
+export const maxDuration = 60
+
 const BACKEND_URL = "https://cti-backend-5ugf.onrender.com"
 const METODOS_COM_CORPO = new Set(["POST", "PUT", "PATCH", "DELETE"])
 const STATUS_TRANSITORIOS = new Set([502, 503, 504])
