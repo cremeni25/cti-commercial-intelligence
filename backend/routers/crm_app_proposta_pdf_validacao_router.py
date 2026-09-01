@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import base64
 from typing import Any
 
+import fitz
 from fastapi import APIRouter, HTTPException, Response
 
 from core.supabase_client import supabase
@@ -60,6 +62,25 @@ def _gerar_pdf_oficial(proposta_id: str):
     return proposta, preview, pdf
 
 
+def _renderizar_paginas(pdf_bytes: bytes) -> list[dict[str, Any]]:
+    """Renderiza o PDF oficial em imagens para visualização estável em mobile/Android."""
+    paginas: list[dict[str, Any]] = []
+    try:
+        documento = fitz.open(stream=pdf_bytes, filetype="pdf")
+        matriz = fitz.Matrix(1.6, 1.6)
+        for indice, pagina in enumerate(documento):
+            pixmap = pagina.get_pixmap(matrix=matriz, alpha=False)
+            png = pixmap.tobytes("png")
+            paginas.append({
+                "numero": indice + 1,
+                "imagem": "data:image/png;base64," + base64.b64encode(png).decode("ascii"),
+            })
+        documento.close()
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Não foi possível renderizar a proposta para visualização: {exc}") from exc
+    return paginas
+
+
 @router.get("/{proposta_id}/validar-pdf")
 def validar_pdf_oficial(proposta_id: str):
     """Gera e valida o PDF oficial sem persistir documento e sem enviar e-mail."""
@@ -81,7 +102,7 @@ def validar_pdf_oficial(proposta_id: str):
 
 @router.get("/{proposta_id}/visualizar-pdf")
 def visualizar_pdf_oficial(proposta_id: str):
-    """Entrega o PDF oficial para visualização inline no APP CRM, sem enviar ou alterar a proposta."""
+    """Entrega o PDF oficial para clientes que suportam visualização PDF inline."""
     proposta, _preview, pdf = _gerar_pdf_oficial(proposta_id)
     numero = str(proposta.get("numero") or proposta_id).replace('"', "")
     return Response(
@@ -93,3 +114,18 @@ def visualizar_pdf_oficial(proposta_id: str):
             "X-Content-Type-Options": "nosniff",
         },
     )
+
+
+@router.get("/{proposta_id}/visualizar-paginas")
+def visualizar_paginas_oficiais(proposta_id: str):
+    """Entrega as páginas do documento oficial como imagens para o visualizador interno do APP CRM."""
+    proposta, _preview, pdf = _gerar_pdf_oficial(proposta_id)
+    return {
+        "success": True,
+        "somente_leitura": True,
+        "proposta_id": proposta_id,
+        "numero": str(proposta.get("numero") or proposta_id),
+        "paginas": _renderizar_paginas(pdf.content),
+        "email_enviado": False,
+        "persistido": False,
+    }
