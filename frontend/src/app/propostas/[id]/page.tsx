@@ -19,6 +19,7 @@ interface PacoteProposta {
 }
 
 function texto(valor: unknown, padrao = "—") { const resultado = String(valor ?? "").trim(); return resultado || padrao }
+function emails(valor: string) { return valor.split(/[;,\n]+/).map((item) => item.trim()).filter(Boolean) }
 
 export default function PropostaPage() {
   const params = useParams<{ id: string }>()
@@ -29,6 +30,11 @@ export default function PropostaPage() {
   const [carregando, setCarregando] = useState(true)
   const [processando, setProcessando] = useState(false)
   const [mensagem, setMensagem] = useState("")
+  const [envioAberto, setEnvioAberto] = useState(false)
+  const [para, setPara] = useState("")
+  const [cc, setCc] = useState("")
+  const [cco, setCco] = useState("")
+  const [mensagemEmail, setMensagemEmail] = useState("Segue a proposta comercial para sua análise.")
 
   const moeda = (valor: unknown) => formatCurrency(Number(valor || 0))
   const dataHora = (valor: unknown) => !valor ? "—" : formatDate(String(valor), { dateStyle: "short", timeStyle: "short" })
@@ -48,14 +54,18 @@ export default function PropostaPage() {
       const payload = await resposta.json().catch(() => null)
       if (!resposta.ok) throw new Error(payload?.detail || tc("proposal.loadFailed"))
       setDados(payload)
+      const emailCliente = texto(payload?.cliente?.email, "")
+      if (emailCliente) setPara((atual) => atual || emailCliente)
     } catch (falha) { setErro(falha instanceof Error ? falha.message : tc("proposal.loadFailed")) }
     finally { setCarregando(false) }
   }
 
   useEffect(() => { if (id) void carregar() }, [id])
 
-  const status = texto(dados?.proposta.status_documento, "RASCUNHO")
+  const status = texto(dados?.proposta.status_documento, "RASCUNHO").toUpperCase()
   const podeEmitir = ["RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"].includes(status)
+  const podeEnviar = ["RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA", "EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)
+  const jaEnviada = ["ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)
   const podeAceite = ["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(status)
   const podePedido = status === "ACEITA"
   const encerrada = ["ACEITA", "CONVERTIDA_PEDIDO", "REJEITADA", "EXPIRADA", "CANCELADA", "SUBSTITUIDA"].includes(status)
@@ -71,6 +81,25 @@ export default function PropostaPage() {
       if (!resposta.ok) throw new Error(payload?.detail || tc("common.error"))
       setMensagem(tc("common.success")); await carregar(); return payload
     } catch (falha) { setErro(falha instanceof Error ? falha.message : tc("common.error")); return null }
+    finally { setProcessando(false) }
+  }
+
+  async function enviarProposta() {
+    const destinatarios = emails(para)
+    if (!destinatarios.length) { setErro("Informe ao menos um endereço no campo Para."); return }
+    setProcessando(true); setMensagem(""); setErro("")
+    try {
+      const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/enviar-email`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ destinatarios, cc: emails(cc), cco: emails(cco), mensagem: mensagemEmail.trim() || null }),
+      })
+      const payload = await resposta.json().catch(() => null)
+      if (!resposta.ok) throw new Error(payload?.detail || "Não foi possível enviar a proposta.")
+      setMensagem(`${jaEnviada ? "Proposta reenviada" : "Proposta enviada"} com sucesso. Protocolo: ${texto(payload?.message_id, "OK")}.`)
+      setEnvioAberto(false)
+      await carregar()
+    } catch (falha) { setErro(falha instanceof Error ? falha.message : "Não foi possível enviar a proposta.") }
     finally { setProcessando(false) }
   }
 
@@ -96,14 +125,17 @@ export default function PropostaPage() {
           <Link href={`/propostas/${id}/documento`} className="rounded-xl bg-cyan-500 px-4 py-3 text-center font-semibold text-slate-950">{tc("proposal.viewOfficial")}</Link>
           {pedido && <Link href={`/pedidos/${String(pedido.id)}`} className="rounded-xl border border-emerald-700 px-4 py-3 text-center font-semibold text-emerald-300">{tc("proposal.openOrder")}</Link>}
           {!encerrada && podeEmitir && <button disabled={processando} onClick={() => void executar("/emitir")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.issue")}</button>}
+          {podeEnviar && !envioAberto && <button disabled={processando} onClick={() => setEnvioAberto(true)} className="rounded-xl border border-cyan-700 px-4 py-3 font-semibold text-cyan-200 disabled:opacity-40">{jaEnviada ? "Reenviar proposta comercial" : "Enviar proposta por e-mail"}</button>}
           {!encerrada && podeAceite && <><button disabled={processando} onClick={() => void solicitarAceite("PRESENCIAL_TELA")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.inPersonAcceptance")}</button><button disabled={processando} onClick={() => void solicitarAceite("REMOTO_LINK")} className="rounded-xl border border-cyan-700 px-4 py-3 text-cyan-200 disabled:opacity-40">{tc("proposal.acceptanceLink")}</button></>}
           {podePedido && <button disabled={processando} onClick={() => void executar("/converter-pedido", {})} className="rounded-xl border border-emerald-700 px-4 py-3 text-emerald-300 disabled:opacity-40">{tc("proposal.generateOrder")}</button>}
         </div></article>
       </section>
+      {envioAberto && <section className="rounded-3xl border border-cyan-800 bg-cyan-950/15 p-6"><h2 className="text-xl font-bold">{jaEnviada ? "Reenviar proposta comercial" : "Enviar proposta comercial"}</h2><p className="mt-1 text-sm text-slate-400">Revise ou acrescente destinatários antes do envio. Separe vários e-mails por vírgula, ponto e vírgula ou nova linha.</p><div className="mt-5 grid gap-4"><CampoEmail titulo="Para" valor={para} alterar={setPara} obrigatorio/><CampoEmail titulo="CC — cópia" valor={cc} alterar={setCc}/><CampoEmail titulo="CCO — cópia oculta" valor={cco} alterar={setCco}/><label className="block"><span className="mb-2 block text-sm">Mensagem</span><textarea value={mensagemEmail} onChange={(evento) => setMensagemEmail(evento.target.value)} rows={4} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label></div><div className="mt-5 grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setEnvioAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-3">Cancelar</button><button type="button" disabled={processando || !emails(para).length} onClick={() => void enviarProposta()} className="rounded-xl bg-cyan-500 px-4 py-3 font-bold text-slate-950 disabled:opacity-40">{processando ? "Enviando..." : jaEnviada ? "Reenviar PDF oficial" : "Enviar PDF oficial"}</button></div></section>}
       <section className="rounded-3xl border border-[#13203f] bg-[#071427] p-6"><h2 className="text-xl font-bold">{tc("proposal.audit")}</h2><div className="mt-4 grid gap-3 text-sm sm:grid-cols-2"><Linha label={tc("proposal.hash")} valor={texto(dados.proposta.hash_documento)} /><Linha label={tc("proposal.model")} valor={texto(dados.proposta.modelo_proposta_id, tc("common.notDefined"))}/><Linha label={tc("proposal.issuedAt")} valor={dataHora(dados.proposta.emitida_em)} /><Linha label={tc("proposal.acceptedAt")} valor={dataHora(dados.proposta.aceita_em)} /></div><details className="mt-5 rounded-2xl border border-[#13203f] p-4"><summary className="cursor-pointer text-sm font-semibold text-cyan-300">{tc("proposal.snapshot")}</summary><pre className="mt-4 overflow-x-auto whitespace-pre-wrap text-xs text-slate-400">{JSON.stringify(snapshot, null, 2)}</pre></details></section>
     </>}
   </div></section></main>
 }
+function CampoEmail({titulo,valor,alterar,obrigatorio=false}:{titulo:string;valor:string;alterar:(valor:string)=>void;obrigatorio?:boolean}) { return <label className="block"><span className="mb-2 block text-sm">{titulo}{obrigatorio ? " *" : ""}</span><textarea value={valor} onChange={(evento) => alterar(evento.target.value)} rows={2} className="w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 py-3"/></label> }
 function Kpi({ titulo, valor }: { titulo: string; valor: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5"><p className="text-sm text-slate-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-300">{valor}</p></div> }
 function Linha({ label, valor }: { label: string; valor: string }) { return <div className="flex items-start justify-between gap-4 border-b border-[#13203f] pb-3"><dt className="text-slate-500">{label}</dt><dd className="max-w-[65%] text-right text-slate-200">{valor}</dd></div> }
 function Aviso({ children }: { children: React.ReactNode }) { return <div className="rounded-3xl border border-[#13203f] bg-[#071427] p-8 text-slate-300">{children}</div> }
