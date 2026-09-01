@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from core.supabase_client import supabase
 from routers.propostas_primeira_pagina_router import validar_documento_para_emissao
@@ -31,9 +31,7 @@ def _cliente(cliente_id: str) -> dict[str, Any]:
     return {}
 
 
-@router.get("/{proposta_id}/validar-pdf")
-def validar_pdf_oficial(proposta_id: str):
-    """Gera e valida o PDF oficial sem persistir documento e sem enviar e-mail."""
+def _gerar_pdf_oficial(proposta_id: str):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
     item_id = str(proposta.get("item_oportunidade_id") or "")
     oportunidade_id = str(proposta.get("oportunidade_id") or "")
@@ -58,8 +56,14 @@ def validar_pdf_oficial(proposta_id: str):
         )
         pdf = convert_docx_to_pdf(bytes(preview["content"]), str(preview["filename"]))
     except (ProposalDocumentRepositoryError, DocxPdfConversionError) as exc:
-        raise HTTPException(status_code=503, detail=f"Não foi possível validar o PDF oficial da proposta: {exc}") from exc
+        raise HTTPException(status_code=503, detail=f"Não foi possível gerar o PDF oficial da proposta: {exc}") from exc
+    return proposta, preview, pdf
 
+
+@router.get("/{proposta_id}/validar-pdf")
+def validar_pdf_oficial(proposta_id: str):
+    """Gera e valida o PDF oficial sem persistir documento e sem enviar e-mail."""
+    proposta, preview, pdf = _gerar_pdf_oficial(proposta_id)
     return {
         "success": True,
         "somente_leitura": True,
@@ -73,3 +77,19 @@ def validar_pdf_oficial(proposta_id: str):
         "email_enviado": False,
         "persistido": False,
     }
+
+
+@router.get("/{proposta_id}/visualizar-pdf")
+def visualizar_pdf_oficial(proposta_id: str):
+    """Entrega o PDF oficial para visualização inline no APP CRM, sem enviar ou alterar a proposta."""
+    proposta, _preview, pdf = _gerar_pdf_oficial(proposta_id)
+    numero = str(proposta.get("numero") or proposta_id).replace('"', "")
+    return Response(
+        content=pdf.content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'inline; filename="{numero}.pdf"',
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
