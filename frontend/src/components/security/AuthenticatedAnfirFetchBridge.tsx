@@ -5,14 +5,6 @@ import { getSupabaseClient } from "@/core/database/supabase"
 
 const ANFIR_WORKBOOK_PATH = "/api/cti/analytics/anfir-workbook-2026"
 const CTI_ANALYTICS_PATH = "/api/cti/analytics/"
-const CTI_BACKEND_URL = "https://cti-backend-5ugf.onrender.com"
-
-function destinoAnalyticsDireto(url: string) {
-  const marcador = "/api/cti/analytics/"
-  const indice = url.indexOf(marcador)
-  if (indice < 0) return url
-  return `${CTI_BACKEND_URL}/analytics/${url.slice(indice + marcador.length)}`
-}
 
 export default function AuthenticatedAnfirFetchBridge() {
   useEffect(() => {
@@ -49,14 +41,7 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headers.set("Authorization", `Bearer ${token}`)
-      headers.set("Accept", "application/json")
-
-      // Analytics do Dashboard podem processar milhares de evidências ANFIR/CRM.
-      // O proxy serverless /api/cti pode encerrar a conexão antes do backend Render
-      // terminar o cálculo, apesar de o backend continuar saudável. Para leituras
-      // analytics autenticadas, o navegador consulta o backend CTI diretamente.
-      const destino = destinoAnalyticsDireto(url)
-      const resposta = await originalFetch(destino, { ...init, headers, cache: "no-store" })
+      const resposta = await originalFetch(input, { ...init, headers })
 
       if (resposta.status !== 401 || !leituraSegura) {
         return resposta
@@ -70,8 +55,7 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       const headersRenovados = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headersRenovados.set("Authorization", `Bearer ${tokenRenovado}`)
-      headersRenovados.set("Accept", "application/json")
-      return originalFetch(destino, { ...init, headers: headersRenovados, cache: "no-store" })
+      return originalFetch(input, { ...init, headers: headersRenovados })
     }
 
     return () => {
