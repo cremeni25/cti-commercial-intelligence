@@ -8,6 +8,7 @@ from core.supabase_client import supabase
 from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
 from services.anfir_competitive_classification_store import remover_classificacao, salvar_classificacao
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
+from services.anfir_market_scope import particionar_mercado_disputavel
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
 from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
 
@@ -97,11 +98,14 @@ def anfif_workbook_2026(
 ):
     """Contrato funcional e seguro da auditoria ANFIR Carrier/JOV 2026."""
     registros, usuario_efetivo = _registros_2026(responsavel_id, usuario)
-    payload = consolidar_workbook_anfir_2026(registros)
+    disputavel, _, resumo_mercado = particionar_mercado_disputavel(registros)
+    payload = consolidar_workbook_anfir_2026(disputavel)
+    payload["mercado_viena"] = resumo_mercado
     metadata = payload.setdefault("metadata", {})
     metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
     metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
+    metadata["denominador_comercial"] = "MERCADO_DISPUTAVEL_VIENA"
     return payload
 
 
@@ -112,12 +116,15 @@ def anfir_competitividade_2026(
 ):
     """Inteligência competitiva por fabricante, segmento e mês, respeitando o mesmo RBAC do Dashboard ANFIR."""
     registros, usuario_efetivo = _registros_2026(responsavel_id, usuario)
-    payload = consolidar_competitividade_anfir_2026(registros, _fabricantes_ativos(), _classificacoes_cti())
+    disputavel, _, resumo_mercado = particionar_mercado_disputavel(registros)
+    payload = consolidar_competitividade_anfir_2026(disputavel, _fabricantes_ativos(), _classificacoes_cti())
     metadata = payload.setdefault("metadata", {})
     metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
     metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
     metadata["edicao_classificacao_cti"] = bool(_consolidado(usuario))
+    metadata["denominador_comercial"] = "MERCADO_DISPUTAVEL_VIENA"
+    metadata["mercado_viena"] = resumo_mercado
     return payload
 
 
