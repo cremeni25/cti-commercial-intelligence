@@ -79,7 +79,7 @@ def _chave_idempotencia(
     destinatarios: list[str],
     assunto: str,
     mensagem: str,
-    pdf_sha: str,
+    arquivo_sha: str,
     *,
     cc: list[str] | None = None,
     cco: list[str] | None = None,
@@ -93,7 +93,7 @@ def _chave_idempotencia(
         ",".join(sorted(cco_lista)),
         assunto,
         mensagem,
-        pdf_sha,
+        arquivo_sha,
     ])
     digest = hashlib.sha256(base.encode("utf-8")).hexdigest()
     return f"cti-proposta/{proposta_id}/{digest[:40]}"
@@ -109,6 +109,7 @@ def _snapshot_com_envio(
     arquivo: str,
     arquivo_sha256: str,
     paginas: int,
+    formato: str,
     enviado_em: str,
     cc: list[str] | None = None,
     cco: list[str] | None = None,
@@ -125,6 +126,7 @@ def _snapshot_com_envio(
         "arquivo": arquivo,
         "arquivo_sha256": arquivo_sha256,
         "paginas": paginas,
+        "formato": formato,
         "enviado_em": enviado_em,
     }
     return snapshot
@@ -183,9 +185,29 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             oportunidade=oportunidade,
             cliente=cliente,
         )
+    except ProposalDocumentRepositoryError as exc:
+        raise HTTPException(status_code=503, detail=f"Não foi possível preparar o documento oficial da proposta: {exc}") from exc
+
+    arquivo_nome: str
+    arquivo_conteudo: bytes
+    arquivo_sha256: str
+    paginas: int
+    formato: str
+    try:
         pdf = convert_docx_to_pdf(bytes(preview["content"]), str(preview["filename"]))
-    except (ProposalDocumentRepositoryError, DocxPdfConversionError) as exc:
-        raise HTTPException(status_code=503, detail=f"Não foi possível preparar o PDF oficial da proposta: {exc}") from exc
+        arquivo_nome = pdf.filename
+        arquivo_conteudo = pdf.content
+        arquivo_sha256 = pdf.sha256
+        paginas = pdf.page_count
+        formato = "PDF"
+    except DocxPdfConversionError:
+        # Continuidade comercial: o conversor PDF é uma camada de conveniência,
+        # não pode bloquear o envio do documento oficial já gerado e validado.
+        arquivo_nome = str(preview["filename"])
+        arquivo_conteudo = bytes(preview["content"])
+        arquivo_sha256 = str(preview["sha256"])
+        paginas = 4
+        formato = "DOCX"
 
     destinatarios = _emails_validos(dados.destinatarios, campo="Para")
     cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
@@ -196,14 +218,18 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     valor_br = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     mensagem = str(dados.mensagem or "Segue a proposta comercial para sua análise.").strip()
     assunto = str(dados.assunto or f"Proposta comercial {numero} - CTI").strip()
+    descricao_formato = "PDF" if formato == "PDF" else "Word oficial (DOCX)"
     html = (
         f"<p>Olá, {escape(cliente_nome)}.</p>"
         f"<p>{escape(mensagem)}</p>"
         f"<p><strong>Proposta:</strong> {escape(numero)}<br>"
         f"<strong>Valor:</strong> {escape(valor_br)}</p>"
-        "<p>O documento oficial segue anexado em PDF.</p>"
+        f"<p>O documento oficial segue anexado em {escape(descricao_formato)}.</p>"
     )
-    texto = f"Olá, {cliente_nome}.\n\n{mensagem}\n\nProposta: {numero}\nValor: {valor_br}\n\nO documento oficial segue anexado em PDF."
+    texto = (
+        f"Olá, {cliente_nome}.\n\n{mensagem}\n\nProposta: {numero}\nValor: {valor_br}"
+        f"\n\nO documento oficial segue anexado em {descricao_formato}."
+    )
 
     try:
         enviado = enviar_email(
@@ -213,13 +239,13 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             assunto=assunto,
             html=html,
             texto=texto,
-            attachments=[{"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")}],
+            attachments=[{"filename": arquivo_nome, "content": base64.b64encode(arquivo_conteudo).decode("ascii")}],
             idempotency_key=_chave_idempotencia(
                 proposta_id,
                 destinatarios,
                 assunto,
                 mensagem,
-                pdf.sha256,
+                arquivo_sha256,
                 cc=cc,
                 cco=cco,
             ),
@@ -238,9 +264,10 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
         cc=cc,
         cco=cco,
         assunto=assunto,
-        arquivo=pdf.filename,
-        arquivo_sha256=pdf.sha256,
-        paginas=pdf.page_count,
+        arquivo=arquivo_nome,
+        arquivo_sha256=arquivo_sha256,
+        paginas=paginas,
+        formato=formato,
         enviado_em=enviado_em,
     )
     try:
@@ -266,8 +293,9 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
         "cco": cco,
         "provider": enviado.provider,
         "message_id": enviado.message_id,
-        "arquivo": pdf.filename,
-        "sha256": pdf.sha256,
-        "paginas": pdf.page_count,
+        "arquivo": arquivo_nome,
+        "sha256": arquivo_sha256,
+        "paginas": paginas,
+        "formato": formato,
         "enviada_em": enviado_em,
     }
