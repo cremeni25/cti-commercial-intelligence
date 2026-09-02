@@ -11,6 +11,7 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers import drilldown_router as drill
 from routers import strategic_layers_router as estrategia
+from services.anfir_market_scope import particionar_mercado_disputavel
 from services.anfir_workbook_contract import _ddd_workbook
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
@@ -248,7 +249,7 @@ def equipamento_seguro(
             "escopo_usuario": _metadata_escopo(usuario),
         },
         "realizado": estrategia._camada_anfir(anf),
-        "historico_comercial": estrategia._camada_historico(historico),
+        "historico_comercial": historico_cam,
         "em_curso": estrategia._camada_crm(crm),
     }
 
@@ -286,6 +287,7 @@ def detalhamento_seguro(
     busca: str | None = None,
     ordenar: str | None = None,
     direcao: str = "asc",
+    mercado: str | None = None,
     pagina: int = 1,
     limite: int = 50,
     usuario: UsuarioAutenticado = Depends(usuario_atual),
@@ -298,6 +300,8 @@ def detalhamento_seguro(
 
     if camada == "anfir":
         registros, inicio_efetivo, fim_efetivo = _anfir_do_usuario(usuario, contexto, periodo, uf, ddd, inicio, fim)
+        if mercado == "DISPUTAVEL_VIENA":
+            registros, _, _ = particionar_mercado_disputavel(list(registros))
         if familia:
             registros = [item for item in registros if estrategia._familia_registro_anfir(item) == familia]
     elif camada == "historico":
@@ -351,6 +355,7 @@ def detalhamento_seguro(
             "ddd": ddd,
             "inicio": inicio_efetivo.isoformat() if inicio_efetivo else None,
             "fim": fim_efetivo.isoformat() if fim_efetivo else None,
+            "mercado": mercado,
             "escopo_usuario": _metadata_escopo(usuario),
         },
         "registros": [drill._projetar(item, camada) for item in registros[inicio_idx:fim_idx]],
