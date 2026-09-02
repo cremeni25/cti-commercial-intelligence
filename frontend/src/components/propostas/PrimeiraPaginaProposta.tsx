@@ -45,7 +45,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
     setErro("")
     const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/primeira-pagina`, { cache: "no-store" })
     const payload = await resposta.json().catch(() => ({}))
-    if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível carregar os dados finais do documento."))
+    if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível carregar os dados complementares da proposta."))
     setDados(payload)
     setCampos({ ...camposVazios, ...(payload.campos || {}) })
   }
@@ -70,17 +70,17 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
     try {
       const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/primeira-pagina`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) })
       const payload = await resposta.json().catch(() => ({}))
-      if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível salvar os dados finais."))
-      setMensagem("Dados finais salvos. A proposta e o pedido usarão este mesmo conteúdo.")
+      if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível salvar os dados complementares."))
+      setMensagem("Dados complementares salvos. A proposta e o pedido usarão este mesmo conteúdo.")
       await carregar()
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao salvar os campos.") }
     finally { setSalvando(false) }
   }
 
-  if (!dados && !erro) return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4 text-sm text-slate-400">Carregando dados finais do documento...</div>
+  if (!dados && !erro) return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4 text-sm text-slate-400">Carregando dados complementares da proposta...</div>
 
   return <section className={`rounded-3xl border border-[#16325c] bg-[#07162b] ${compacto ? "p-4" : "p-6"}`}>
-    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados finais da proposta / pedido</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • mesmo conteúdo documental para proposta e pedido</p>}</div>
+    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados complementares da proposta</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • mesmo conteúdo documental para proposta e pedido</p>}</div>
     {erro && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{erro}</div>}
     {mensagem && <div className="mt-4 rounded-xl border border-emerald-900 bg-emerald-950/30 p-3 text-sm text-emerald-200">{mensagem}</div>}
     {dados?.valores_negociados && <div className="mt-4 grid gap-2 rounded-2xl border border-[#16325c] bg-[#020817] p-4 text-sm sm:grid-cols-4"><Resumo label="Quantidade" valor={String(dados.valores_negociados.quantidade ?? 1)}/><Resumo label="Valor unitário" valor={moeda(dados.valores_negociados.preco_unitario)}/><Resumo label="Desconto" valor={`${Number(dados.valores_negociados.desconto_percentual || 0).toLocaleString("pt-BR")}%`}/><Resumo label="Valor proposta" valor={moeda(dados.valores_negociados.valor_proposta)}/></div>}
@@ -103,7 +103,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
         <Campo label="Período Lynx Fleet (meses)"><input disabled={!dados.editavel} type="number" min="0" step="1" value={campos.lynx_meses ?? ""} onChange={(e) => setCampos({ ...campos, lynx_meses: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" /></Campo>
       </div></div>
     </div>}
-    {dados?.editavel ? <button disabled={salvando} onClick={() => void salvar()} className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">{salvando ? "Salvando..." : "Salvar dados finais do documento"}</button> : <div className="mt-5 rounded-xl border border-amber-800 bg-amber-950/20 p-4"><p className="text-sm text-amber-200">O documento atual é imutável e permanece preservado no histórico.</p>{dados?.pode_abrir_revisao && <button disabled={revisando} onClick={() => void abrirRevisao()} className="mt-3 w-full rounded-xl border border-amber-600 px-4 py-3 font-semibold text-amber-100 disabled:opacity-50">{revisando ? "Abrindo revisão..." : "Abrir revisão corretiva"}</button>}</div>}
+    {dados?.editavel ? <button disabled={salvando} onClick={() => void salvar()} className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">{salvando ? "Salvando..." : "Salvar dados complementares"}</button> : <div className="mt-5 rounded-xl border border-amber-800 bg-amber-950/20 p-4"><p className="text-sm text-amber-200">O documento atual é imutável e permanece preservado no histórico.</p>{dados?.pode_abrir_revisao && <button disabled={revisando} onClick={() => void abrirRevisao()} className="mt-3 w-full rounded-xl border border-amber-600 px-4 py-3 font-semibold text-amber-100 disabled:opacity-50">{revisando ? "Abrindo revisão..." : "Abrir revisão corretiva"}</button>}</div>}
     <style jsx>{`.entrada{width:100%;border:1px solid #24466f;border-radius:12px;background:#020817;padding:12px;color:white}.entrada:disabled{opacity:.6}`}</style>
   </section>
 }
