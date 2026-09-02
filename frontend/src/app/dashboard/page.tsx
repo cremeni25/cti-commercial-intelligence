@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
+import AnfirTresMercadosSeguro from "@/components/AnfirTresMercadosSeguro"
 import AnfirWorkbookPanel from "@/components/AnfirWorkbookPanel"
 import AnfirWorkbookCharts from "@/components/AnfirWorkbookCharts"
 import CommercialTruthPanel from "@/components/CommercialTruthPanel"
@@ -40,6 +41,7 @@ export default function DashboardExecutivo(){
       <Link href="/dashboard/anfir-historico" className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-200 transition hover:border-cyan-400 hover:bg-cyan-500/20">Abrir histórico ANFIR</Link>
      </div>
     </header>
+    <AnfirTresMercadosSeguro responsavelId={responsavelEfetivo||undefined}/>
     <AnfirWorkbookPanel responsavelId={responsavelEfetivo||undefined}/>
     <AnfirWorkbookCharts responsavelId={responsavelEfetivo||undefined}/>
     <CommercialTruthPanel responsavelId={responsavelEfetivo||undefined}/>
