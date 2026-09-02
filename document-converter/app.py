@@ -27,7 +27,13 @@ def _authorize(value: str | None) -> None:
 @app.get("/health")
 def health() -> dict[str, object]:
     executable = shutil.which("libreoffice") or shutil.which("soffice")
-    return {"ok": bool(executable), "engine": executable, "expected_pages": EXPECTED_PAGES}
+    xvfb = shutil.which("xvfb-run")
+    return {
+        "ok": bool(executable and xvfb),
+        "engine": executable,
+        "xvfb": xvfb,
+        "expected_pages": EXPECTED_PAGES,
+    }
 
 
 @app.post("/convert")
@@ -45,14 +51,13 @@ async def convert(
         raise HTTPException(status_code=422, detail="Documento vazio.")
 
     executable = shutil.which("libreoffice") or shutil.which("soffice")
-    if not executable:
-        raise HTTPException(status_code=503, detail="LibreOffice indisponível no serviço documental.")
+    xvfb = shutil.which("xvfb-run")
+    if not executable or not xvfb:
+        raise HTTPException(status_code=503, detail="Motor documental incompleto no serviço de conversão.")
 
     with tempfile.TemporaryDirectory(prefix="cti-doc-") as temp_dir:
         workdir = Path(temp_dir)
         extension = ".docx" if filename.lower().endswith(".docx") else ".doc"
-        # O LibreOffice recebe um nome interno neutro para eliminar qualquer
-        # interferência de nome comercial, espaços ou caracteres do documento.
         source = workdir / f"source{extension}"
         source.write_bytes(content)
         profile_dir = workdir / "lo-profile"
@@ -61,6 +66,10 @@ async def convert(
         output_dir.mkdir(parents=True, exist_ok=True)
 
         command = [
+            xvfb,
+            "-a",
+            "-s",
+            "-screen 0 1280x1024x24",
             executable,
             "--headless",
             "--nologo",
@@ -77,10 +86,13 @@ async def convert(
             str(output_dir.resolve()),
             str(source.resolve()),
         ])
+
         process_env = os.environ.copy()
         process_env["HOME"] = str(workdir.resolve())
         process_env["TMPDIR"] = str(workdir.resolve())
-        process_env.setdefault("SAL_USE_VCLPLUGIN", "gen")
+        process_env["SAL_USE_VCLPLUGIN"] = "svp"
+        process_env.pop("DISPLAY", None)
+
         result = subprocess.run(
             command,
             cwd=str(workdir.resolve()),
