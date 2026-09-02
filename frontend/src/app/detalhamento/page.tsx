@@ -84,7 +84,7 @@ function DetalhamentoContent() {
   const subtitulo = params.get("subtitulo") || "Registros que formam o total selecionado"
 
   const queryBase = useMemo(() => {
-    const permitido = ["camada", "campo", "valor", "familia", "empresa", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao"]
+    const permitido = ["camada", "campo", "valor", "familia", "empresa", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao", "mercado"]
     const destino = new URLSearchParams()
     permitido.forEach((chave) => {
       const valor = params.get(chave)
