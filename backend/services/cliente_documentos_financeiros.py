@@ -12,27 +12,25 @@ from core.supabase_client import supabase
 BUCKET = "documentos-financeiros-clientes"
 MAX_FILE_BYTES = 20 * 1024 * 1024
 ALLOWED_MIME = {
-    "application/pdf",
-    "application/msword",
+    "application/pdf", "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.ms-excel",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "image/jpeg",
-    "image/png",
+    "image/jpeg", "image/png",
 }
 CATEGORIAS = {
-    "CONTRATO_SOCIAL",
-    "ULTIMA_ALTERACAO",
-    "FATURAMENTO_12_MESES",
-    "DRE_ASSINADA",
-    "BALANCO_ASSINADO",
-    "OUTRO",
+    "CONTRATO_SOCIAL", "ULTIMA_ALTERACAO", "FATURAMENTO_12_MESES",
+    "DRE_ASSINADA", "BALANCO_ASSINADO", "OUTRO",
 }
 
 
 def _dados(resposta):
     dados = getattr(resposta, "data", None)
     return dados if isinstance(dados, list) else []
+
+
+def _agora() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _validade_12_meses(validado_em: date) -> date:
@@ -50,8 +48,7 @@ def _status_temporal(registro: dict | None) -> dict | None:
     status = str(saida.get("status") or "EM_PREPARACAO")
     if valido_ate:
         vencimento = date.fromisoformat(str(valido_ate)[:10])
-        hoje = date.today()
-        dias = (vencimento - hoje).days
+        dias = (vencimento - date.today()).days
         if dias < 0 and status == "VALIDADO_CARRIER":
             saida["status_calculado"] = "VENCIDO"
         elif 0 <= dias <= 45 and status == "VALIDADO_CARRIER":
@@ -65,37 +62,72 @@ def _status_temporal(registro: dict | None) -> dict | None:
     return saida
 
 
+def _listar_ciclos(cliente_id: str) -> list[dict]:
+    ciclos = _dados(
+        supabase.table("cti_cliente_cadastro_financeiro_carrier")
+        .select("*").eq("cliente_id", cliente_id)
+        .order("ciclo_numero", desc=True).execute()
+    )
+    return [_status_temporal(item) or item for item in ciclos]
+
+
+def _ciclo_atual(cliente_id: str) -> dict | None:
+    dados = _dados(
+        supabase.table("cti_cliente_cadastro_financeiro_carrier")
+        .select("*").eq("cliente_id", cliente_id).eq("ciclo_atual", True)
+        .limit(1).execute()
+    )
+    return dados[0] if dados else None
+
+
+def _garantir_ciclo_atual(cliente_id: str, usuario_id: str) -> dict:
+    atual = _ciclo_atual(cliente_id)
+    if atual:
+        return atual
+    ciclos = _listar_ciclos(cliente_id)
+    numero = max((int(c.get("ciclo_numero") or 0) for c in ciclos), default=0) + 1
+    inseridos = _dados(
+        supabase.table("cti_cliente_cadastro_financeiro_carrier").insert({
+            "cliente_id": cliente_id,
+            "status": "EM_PREPARACAO",
+            "ciclo_numero": numero,
+            "ciclo_atual": True,
+            "criado_por": usuario_id,
+            "atualizado_por": usuario_id,
+        }).execute()
+    )
+    if not inseridos:
+        raise HTTPException(status_code=502, detail="Não foi possível iniciar o ciclo financeiro do cliente.")
+    return inseridos[0]
+
+
 def listar_dossie(cliente_id: str, proposta_id: str | None = None) -> dict:
     docs = _dados(
         supabase.table("cti_cliente_documentos_financeiros")
-        .select("*")
-        .eq("cliente_id", cliente_id)
-        .is_("arquivado_em", "null")
-        .order("created_at", desc=True)
-        .execute()
+        .select("*").eq("cliente_id", cliente_id).is_("arquivado_em", "null")
+        .order("created_at", desc=True).execute()
     )
     vinculados: set[str] = set()
     if proposta_id:
         links = _dados(
-            supabase.table("cti_proposta_documentos_financeiros")
-            .select("documento_id")
-            .eq("proposta_id", proposta_id)
-            .execute()
+            supabase.table("cti_proposta_documentos_financeiros").select("documento_id")
+            .eq("proposta_id", proposta_id).execute()
         )
         vinculados = {str(item.get("documento_id")) for item in links}
+    ciclos = _listar_ciclos(cliente_id)
+    mapa_ciclos = {str(c.get("id")): c for c in ciclos if c.get("id")}
     for doc in docs:
         doc["vinculado_proposta"] = str(doc.get("id")) in vinculados
-
-    cadastros = _dados(
-        supabase.table("cti_cliente_cadastro_financeiro_carrier")
-        .select("*")
-        .eq("cliente_id", cliente_id)
-        .order("updated_at", desc=True)
-        .limit(1)
-        .execute()
-    )
-    cadastro = _status_temporal(cadastros[0] if cadastros else None)
-    return {"cliente_id": cliente_id, "proposta_id": proposta_id, "cadastro": cadastro, "documentos": docs}
+        ciclo = mapa_ciclos.get(str(doc.get("ciclo_financeiro_id") or ""))
+        doc["ciclo_numero"] = ciclo.get("ciclo_numero") if ciclo else None
+    cadastro = next((c for c in ciclos if bool(c.get("ciclo_atual"))), None)
+    return {
+        "cliente_id": cliente_id,
+        "proposta_id": proposta_id,
+        "cadastro": cadastro,
+        "ciclos": ciclos,
+        "documentos": docs,
+    }
 
 
 async def anexar_documento(
@@ -114,9 +146,10 @@ async def anexar_documento(
     if mime not in ALLOWED_MIME:
         raise HTTPException(status_code=415, detail="Formato não permitido. Use PDF, Word, Excel, JPG ou PNG.")
 
+    ciclo = _garantir_ciclo_atual(cliente_id, usuario_id)
     nome_original = Path(arquivo.filename or "documento").name
     extensao = Path(nome_original).suffix.lower()
-    caminho = f"clientes/{cliente_id}/{datetime.now(timezone.utc).strftime('%Y/%m')}/{uuid4().hex}{extensao}"
+    caminho = f"clientes/{cliente_id}/ciclo-{int(ciclo.get('ciclo_numero') or 1)}/{datetime.now(timezone.utc).strftime('%Y/%m')}/{uuid4().hex}{extensao}"
     digest = sha256(conteudo).hexdigest()
     try:
         supabase.storage.from_(BUCKET).upload(caminho, conteudo, {"content-type": mime, "upsert": "false"})
@@ -127,6 +160,7 @@ async def anexar_documento(
         inseridos = _dados(
             supabase.table("cti_cliente_documentos_financeiros").insert({
                 "cliente_id": cliente_id,
+                "ciclo_financeiro_id": ciclo.get("id"),
                 "categoria": categoria,
                 "nome_arquivo": nome_original,
                 "storage_bucket": BUCKET,
@@ -157,28 +191,18 @@ async def anexar_documento(
 
 def vincular_documento(*, proposta_id: str, documento_id: str, cliente_id: str, usuario_id: str) -> dict:
     docs = _dados(
-        supabase.table("cti_cliente_documentos_financeiros")
-        .select("id,cliente_id,arquivado_em")
-        .eq("id", documento_id)
-        .eq("cliente_id", cliente_id)
-        .limit(1)
-        .execute()
+        supabase.table("cti_cliente_documentos_financeiros").select("id,cliente_id,arquivado_em")
+        .eq("id", documento_id).eq("cliente_id", cliente_id).limit(1).execute()
     )
     if not docs or docs[0].get("arquivado_em"):
         raise HTTPException(status_code=404, detail="Documento financeiro não encontrado para este cliente.")
     existentes = _dados(
-        supabase.table("cti_proposta_documentos_financeiros")
-        .select("id")
-        .eq("proposta_id", proposta_id)
-        .eq("documento_id", documento_id)
-        .limit(1)
-        .execute()
+        supabase.table("cti_proposta_documentos_financeiros").select("id")
+        .eq("proposta_id", proposta_id).eq("documento_id", documento_id).limit(1).execute()
     )
     if not existentes:
         supabase.table("cti_proposta_documentos_financeiros").insert({
-            "proposta_id": proposta_id,
-            "documento_id": documento_id,
-            "vinculado_por": usuario_id,
+            "proposta_id": proposta_id, "documento_id": documento_id, "vinculado_por": usuario_id,
         }).execute()
     return {"ok": True, "proposta_id": proposta_id, "documento_id": documento_id}
 
@@ -192,10 +216,7 @@ def url_temporaria(*, documento_id: str, cliente_id: str) -> dict:
     docs = _dados(
         supabase.table("cti_cliente_documentos_financeiros")
         .select("id,cliente_id,nome_arquivo,storage_bucket,storage_path,arquivado_em")
-        .eq("id", documento_id)
-        .eq("cliente_id", cliente_id)
-        .limit(1)
-        .execute()
+        .eq("id", documento_id).eq("cliente_id", cliente_id).limit(1).execute()
     )
     if not docs or docs[0].get("arquivado_em"):
         raise HTTPException(status_code=404, detail="Documento financeiro não encontrado.")
@@ -224,26 +245,44 @@ def atualizar_cadastro_financeiro(
             raise HTTPException(status_code=422, detail="Informe a data de validação pela Carrier.")
         valido_ate = _validade_12_meses(validado_carrier_em)
 
-    existentes = _dados(
-        supabase.table("cti_cliente_cadastro_financeiro_carrier")
-        .select("id")
-        .eq("cliente_id", cliente_id)
-        .order("updated_at", desc=True)
-        .limit(1)
-        .execute()
-    )
+    atual = _ciclo_atual(cliente_id)
+    if not atual:
+        atual = _garantir_ciclo_atual(cliente_id, usuario_id)
+
+    # Renovação abre um novo ciclo e encerra o anterior sem apagá-lo ou reescrevê-lo.
+    if status == "RENOVACAO_EM_ANALISE" and str(atual.get("status") or "") != "RENOVACAO_EM_ANALISE":
+        agora = _agora()
+        supabase.table("cti_cliente_cadastro_financeiro_carrier").update({
+            "ciclo_atual": False,
+            "encerrado_em": agora,
+            "updated_at": agora,
+            "atualizado_por": usuario_id,
+        }).eq("id", atual["id"]).execute()
+        numero = int(atual.get("ciclo_numero") or 1) + 1
+        inseridos = _dados(
+            supabase.table("cti_cliente_cadastro_financeiro_carrier").insert({
+                "cliente_id": cliente_id,
+                "status": "RENOVACAO_EM_ANALISE",
+                "ciclo_numero": numero,
+                "ciclo_atual": True,
+                "ciclo_anterior_id": atual["id"],
+                "observacao": observacao.strip() if observacao else None,
+                "criado_por": usuario_id,
+                "atualizado_por": usuario_id,
+            }).execute()
+        )
+        if not inseridos:
+            raise HTTPException(status_code=502, detail="Não foi possível iniciar o novo ciclo financeiro.")
+        return _status_temporal(inseridos[0]) or inseridos[0]
+
     payload = {
         "status": status,
         "validado_carrier_em": validado_carrier_em.isoformat() if validado_carrier_em else None,
         "valido_ate": valido_ate.isoformat() if valido_ate else None,
         "observacao": observacao.strip() if observacao else None,
         "atualizado_por": usuario_id,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": _agora(),
     }
-    if existentes:
-        resposta = supabase.table("cti_cliente_cadastro_financeiro_carrier").update(payload).eq("id", existentes[0]["id"]).execute()
-    else:
-        payload.update({"cliente_id": cliente_id, "criado_por": usuario_id})
-        resposta = supabase.table("cti_cliente_cadastro_financeiro_carrier").insert(payload).execute()
+    resposta = supabase.table("cti_cliente_cadastro_financeiro_carrier").update(payload).eq("id", atual["id"]).execute()
     dados = _dados(resposta)
     return _status_temporal(dados[0]) if dados else payload
