@@ -15,14 +15,15 @@ import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 
 type LocalizedLabel = { "pt-BR": string; en: string; es: string }
 type MenuItem = { labelKey?: MessageKey; label?: LocalizedLabel; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
-type MenuGroup = { tituloKey: MessageKey; itens: MenuItem[] }
+type MenuGroup = { tituloKey?: MessageKey; titulo?: LocalizedLabel; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
   {
-    tituloKey: "nav.main",
+    titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" },
     itens: [
       { labelKey: "nav.dashboard", href: "/dashboard", icon: "📊", type: "emoji" },
       { labelKey: "nav.history", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
+      { label: { "pt-BR": "Mapa Comercial Estratégico", en: "Strategic Commercial Map", es: "Mapa Comercial Estratégico" }, href: "/mapa-estrategico", icon: "🌎", type: "emoji" },
       { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
   },
@@ -54,7 +55,6 @@ const menuGroups: MenuGroup[] = [
       { labelKey: "nav.trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
       { labelKey: "nav.dieselTruck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
       { labelKey: "nav.directDrive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
-      { labelKey: "nav.strategicMap", href: "/mapa-estrategico", icon: "🌎", type: "emoji" },
     ],
   },
   {
@@ -110,9 +110,10 @@ export default function Sidebar() {
         {menuGroups.map((grupo, index) => {
           const itensPermitidos = grupo.itens.filter((item) => rotaPermitida(item.href, perfil, permissoes, acessoTotal))
           if (itensPermitidos.length === 0) return null
+          const tituloGrupo = grupo.tituloKey ? t(grupo.tituloKey) : grupo.titulo?.[locale] || ""
           return (
-            <div key={`${grupo.tituloKey}-${index}`}>
-              <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{t(grupo.tituloKey)}</p>
+            <div key={`${grupo.tituloKey || tituloGrupo}-${index}`}>
+              <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{tituloGrupo}</p>
               {itensPermitidos.map((item) => {
                 const active = pathname === item.href
                 const label = item.labelKey ? t(item.labelKey) : item.label?.[locale] || item.href
