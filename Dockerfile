@@ -10,6 +10,8 @@ RUN apt-get update \
         libreoffice-core \
         fonts-liberation \
         fonts-dejavu-core \
+        xvfb \
+        xauth \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
