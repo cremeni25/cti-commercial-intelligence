@@ -50,10 +50,16 @@ async def convert(
 
     with tempfile.TemporaryDirectory(prefix="cti-doc-") as temp_dir:
         workdir = Path(temp_dir)
-        source = workdir / filename
+        extension = ".docx" if filename.lower().endswith(".docx") else ".doc"
+        # O LibreOffice recebe um nome interno neutro para eliminar qualquer
+        # interferência de nome comercial, espaços ou caracteres do documento.
+        source = workdir / f"source{extension}"
         source.write_bytes(content)
         profile_dir = workdir / "lo-profile"
         profile_dir.mkdir(parents=True, exist_ok=True)
+        output_dir = workdir / "out"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
         command = [
             executable,
             "--headless",
@@ -61,19 +67,28 @@ async def convert(
             "--nodefault",
             "--nolockcheck",
             f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
-            "--convert-to",
-            "pdf",
-            "--outdir",
-            str(workdir),
-            str(source),
         ]
+        if extension == ".docx":
+            command.append("--infilter=Office Open XML Text")
+        command.extend([
+            "--convert-to",
+            "pdf:writer_pdf_Export",
+            "--outdir",
+            str(output_dir.resolve()),
+            str(source.resolve()),
+        ])
+        process_env = os.environ.copy()
+        process_env["HOME"] = str(workdir.resolve())
+        process_env["TMPDIR"] = str(workdir.resolve())
+        process_env.setdefault("SAL_USE_VCLPLUGIN", "gen")
         result = subprocess.run(
             command,
-            cwd=workdir,
+            cwd=str(workdir.resolve()),
             capture_output=True,
             text=True,
             timeout=180,
             check=False,
+            env=process_env,
         )
         diagnostics = " | ".join(
             parte.strip()
@@ -84,7 +99,7 @@ async def convert(
             detail = diagnostics or "erro sem detalhe"
             raise HTTPException(status_code=422, detail=f"Conversão recusada: {detail[:800]}")
 
-        output = workdir / f"{source.stem}.pdf"
+        output = output_dir / "source.pdf"
         if not output.exists() or output.stat().st_size == 0:
             detail = diagnostics or "LibreOffice terminou sem gerar arquivo de saída."
             raise HTTPException(
@@ -104,11 +119,12 @@ async def convert(
             )
 
     sha256 = hashlib.sha256(pdf).hexdigest()
+    output_name = f"{Path(filename).stem}.pdf"
     return Response(
         content=pdf,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": f'inline; filename="{source.stem}.pdf"',
+            "Content-Disposition": f'inline; filename="{output_name}"',
             "X-CTI-Pages": str(EXPECTED_PAGES),
             "X-CTI-SHA256": sha256,
             "Cache-Control": "no-store",
