@@ -52,9 +52,15 @@ async def convert(
         workdir = Path(temp_dir)
         source = workdir / filename
         source.write_bytes(content)
+        profile_dir = workdir / "lo-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
         command = [
             executable,
             "--headless",
+            "--nologo",
+            "--nodefault",
+            "--nolockcheck",
+            f"-env:UserInstallation={profile_dir.resolve().as_uri()}",
             "--convert-to",
             "pdf",
             "--outdir",
@@ -69,13 +75,22 @@ async def convert(
             timeout=180,
             check=False,
         )
+        diagnostics = " | ".join(
+            parte.strip()
+            for parte in (result.stderr, result.stdout)
+            if parte and parte.strip()
+        )
         if result.returncode != 0:
-            detail = (result.stderr or result.stdout or "erro sem detalhe").strip()
-            raise HTTPException(status_code=422, detail=f"Conversão recusada: {detail[:500]}")
+            detail = diagnostics or "erro sem detalhe"
+            raise HTTPException(status_code=422, detail=f"Conversão recusada: {detail[:800]}")
 
         output = workdir / f"{source.stem}.pdf"
         if not output.exists() or output.stat().st_size == 0:
-            raise HTTPException(status_code=422, detail="O conversor não produziu o PDF esperado.")
+            detail = diagnostics or "LibreOffice terminou sem gerar arquivo de saída."
+            raise HTTPException(
+                status_code=422,
+                detail=f"O conversor não produziu o PDF esperado. Detalhe: {detail[:800]}",
+            )
 
         pdf = output.read_bytes()
         try:
