@@ -5,7 +5,12 @@ import unicodedata
 from collections import Counter, defaultdict
 from typing import Any
 
-IMPLEMENTADORAS_FORA_ESCOPO = ("FIBRA WEST", "HIFLEX", "PLANALTO")
+from services.operational_filters import data_registro
+from services.product_line_classifier import classificar_linha
+
+IMPLEMENTADORAS_FORA_ESCOPO = ("FIBRA WEST", "HIGH FLEX", "PLANALTO")
+NOMES_SEGMENTOS = {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}
+MESES = {1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril", 5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"}
 
 
 def _normalizar(valor: Any) -> str:
@@ -23,11 +28,55 @@ def implementadora_fora_escopo(registro: dict[str, Any]) -> str | None:
         return None
     if "FIBRA WEST" in nome:
         return "FIBRA WEST"
-    if "HIFLEX" in nome or "HI FLEX" in nome:
-        return "HIFLEX"
+    if "HIGH FLEX" in nome or "HIFLEX" in nome or "HI FLEX" in nome:
+        return "HIGH FLEX"
     if "PLANALTO" in nome:
         return "PLANALTO"
     return None
+
+
+def _comparativo_mensal(registros: list[dict[str, Any]], fora: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    total_por_mes: Counter[int] = Counter()
+    fora_por_mes: Counter[int] = Counter()
+    for item in registros:
+        data = data_registro(item)
+        if data and data.year == 2026:
+            total_por_mes[data.month] += 1
+    for item in fora:
+        data = data_registro(item)
+        if data and data.year == 2026:
+            fora_por_mes[data.month] += 1
+    retorno = []
+    for mes in range(1, 13):
+        total = total_por_mes.get(mes, 0)
+        excluido = fora_por_mes.get(mes, 0)
+        if not total and not excluido:
+            continue
+        retorno.append({
+            "mes": MESES[mes],
+            "competencia": f"2026-{mes:02d}",
+            "mercado_total": total,
+            "mercado_excluido": excluido,
+            "mercado_real": total - excluido,
+        })
+    return retorno
+
+
+def _comparativo_segmentos(registros: list[dict[str, Any]], fora: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    total: Counter[str] = Counter(classificar_linha(item) or "UNKNOWN" for item in registros)
+    excluido: Counter[str] = Counter(classificar_linha(item) or "UNKNOWN" for item in fora)
+    retorno = []
+    for codigo in ("TR", "DT", "DD"):
+        mercado_total = total.get(codigo, 0)
+        mercado_excluido = excluido.get(codigo, 0)
+        retorno.append({
+            "codigo": codigo,
+            "segmento": NOMES_SEGMENTOS[codigo],
+            "mercado_total": mercado_total,
+            "mercado_excluido": mercado_excluido,
+            "mercado_real": mercado_total - mercado_excluido,
+        })
+    return retorno
 
 
 def particionar_mercado_disputavel(
@@ -74,8 +123,6 @@ def particionar_mercado_disputavel(
         "percentual_fora_escopo": percentual_fora,
         "percentual_disputavel": percentual_disputavel,
         "implementadoras_fora_escopo": resumo_implementadoras,
-        "regra": (
-            "Fibra West, HiFlex e Planalto permanecem visíveis como mercado ANFIR observado, "
-            "mas são retiradas do denominador comercial da Viena por impossibilidade estrutural de atendimento."
-        ),
+        "comparativo_mensal": _comparativo_mensal(registros, fora),
+        "comparativo_segmentos": _comparativo_segmentos(registros, fora),
     }
