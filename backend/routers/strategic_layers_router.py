@@ -7,13 +7,17 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.supabase_client import supabase
-from repositories.cti_repository import repository
+from services.anfir_read_cache import fonte_anfir, preaquecer_anfir_async
 from services.base_analytics import valor_float
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, equipamentos_registro, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
 from services.operational_filters import filtrar_registros, resolver_periodo
 
 router = APIRouter(prefix="/estrategia", tags=["Estratégia CTI"])
+
+# Carrega a base ANFIR em segundo plano no backend de produção. Isso evita que
+# o primeiro usuário do Dashboard pague o custo integral da paginação da fonte.
+preaquecer_anfir_async()
 
 EQUIPAMENTOS = {
     "trailer": {"nome": "TR • Trailer", "termos": ("TRAILER", "VECTOR", "X4")},
@@ -76,7 +80,7 @@ def _data_no_intervalo(valor: Any, inicio: date | None, fim: date | None) -> boo
 def _anfir(contexto: str, periodo: str, uf: str | None, ddd: str | None, inicio: date | None, fim: date | None):
     inicio_efetivo, fim_efetivo = resolver_periodo(periodo, inicio, fim)
     registros = filtrar_registros(
-        repository.buscar_cti_anfir(),
+        fonte_anfir(),
         contexto=contexto,
         uf=uf,
         ddd=ddd,
