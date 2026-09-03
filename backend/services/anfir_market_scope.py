@@ -35,6 +35,16 @@ def implementadora_fora_escopo(registro: dict[str, Any]) -> str | None:
     return None
 
 
+def filtrar_mercado_real_viena(registros: list[dict[str, Any]] | tuple[dict[str, Any], ...]) -> list[dict[str, Any]]:
+    """Aplica a regra comercial global sem alterar a fonte bruta auditável.
+
+    Fibra West, High Flex (incluindo aliases HiFlex/Hi Flex) e Planalto
+    permanecem disponíveis apenas nas fontes brutas/auditoria, mas nunca
+    compõem o universo comercial disputável da Viena.
+    """
+    return [dict(item) for item in registros if not implementadora_fora_escopo(item)]
+
+
 def _comparativo_mensal(registros: list[dict[str, Any]], fora: list[dict[str, Any]]) -> list[dict[str, Any]]:
     total_por_mes: Counter[int] = Counter()
     fora_por_mes: Counter[int] = Counter()
