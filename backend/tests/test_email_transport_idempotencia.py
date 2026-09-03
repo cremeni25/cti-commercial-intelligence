@@ -122,6 +122,7 @@ def test_snapshot_de_envio_preserva_dados_existentes_e_grava_protocolo():
         arquivo="PROP-1.pdf",
         arquivo_sha256="sha-pdf",
         paginas=4,
+        formato="PDF",
         enviado_em="2026-08-26T16:20:00+00:00",
     )
 
@@ -130,3 +131,4 @@ def test_snapshot_de_envio_preserva_dados_existentes_e_grava_protocolo():
     assert snapshot["envio_email"]["message_id"] == "email-789"
     assert snapshot["envio_email"]["destinatarios"] == ["destino@example.com"]
     assert snapshot["envio_email"]["paginas"] == 4
+    assert snapshot["envio_email"]["formato"] == "PDF"

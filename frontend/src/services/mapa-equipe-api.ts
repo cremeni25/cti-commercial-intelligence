@@ -35,6 +35,22 @@ export type MapaEquipeVisao = {
     crm_status: Array<{ nome: string; quantidade: number }>
     motivos_perda_historico: Array<{ nome: string; quantidade: number }>
   }
+  reconciliacao: {
+    universo_clientes: number
+    clientes_anfir: number
+    clientes_historico: number
+    clientes_crm: number
+    anfir_historico: number
+    anfir_crm: number
+    historico_crm: number
+    nas_tres_fontes: number
+    somente_anfir: number
+    somente_historico: number
+    somente_crm: number
+    historico_fora_mercado_real: number
+    crm_fora_mercado_real: number
+    regra: string
+  }
   ciclo: {
     clientes_mercado_real: number
     clientes_historico_2026: number
