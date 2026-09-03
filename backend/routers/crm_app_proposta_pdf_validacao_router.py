@@ -56,7 +56,12 @@ def _gerar_pdf_oficial(proposta_id: str):
             oportunidade=oportunidade,
             cliente=cliente,
         )
-        pdf = convert_docx_to_pdf(bytes(preview["content"]), str(preview["filename"]))
+        expected_pages = int(preview.get("expected_pages") or 4)
+        pdf = convert_docx_to_pdf(
+            bytes(preview["content"]),
+            str(preview["filename"]),
+            expected_pages=expected_pages,
+        )
     except (ProposalDocumentRepositoryError, DocxPdfConversionError) as exc:
         raise HTTPException(status_code=503, detail=f"Não foi possível gerar o PDF oficial da proposta: {exc}") from exc
     return proposta, preview, pdf
