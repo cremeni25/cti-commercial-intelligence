@@ -68,5 +68,6 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     assert "Região / responsável" in mapa
     assert "GraficoPizzaParticipacao" in mapa
     assert "GraficoPizzaFamilias" in mapa
-    assert "Cliente a cliente · evidências encontradas" in mapa
+    assert "Conciliação das três fontes" in mapa
+    assert "Mesmo cliente · mesmo responsável · mesmo recorte" in mapa
     assert "A correlação é estratégica, não uma fusão de registros." in catalogo
