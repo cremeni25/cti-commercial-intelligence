@@ -1,18 +1,47 @@
 export const CRM_CANONICAL = {
-  clientes: "/api/crm-proxy/crm-app/clientes",
-  nucleoComercial: "/api/crm-proxy/crm/nucleo-comercial",
+  clientes: "/api/crm-proxy/crm-seguro/clientes",
+  nucleoComercial: "/api/crm-proxy/crm-seguro/nucleo-comercial",
 } as const
 
 export const CRM_BACKEND_CANONICAL = {
-  clientes: "crm-app/clientes",
-  nucleoComercial: "crm/nucleo-comercial",
+  clientes: "crm-seguro/clientes",
+  nucleoComercial: "crm-seguro/nucleo-comercial",
 } as const
 
 export type RegistroCrm = Record<string, unknown>
 
 export function caminhoCanonicoLeitura(caminho: string, metodo: string) {
   if (metodo.toUpperCase() !== "GET") return caminho
-  if (caminho === "modulos/clientes") return CRM_BACKEND_CANONICAL.clientes
+
+  if (caminho === "modulos/clientes" || caminho === "crm-app/clientes") {
+    return "crm-seguro/clientes"
+  }
+  if (caminho === "crm/nucleo-comercial") {
+    return "crm-seguro/nucleo-comercial"
+  }
+  if (caminho === "crm/agenda") {
+    return "crm-seguro/agenda"
+  }
+  if (caminho === "crm/propostas") {
+    return "crm-seguro/propostas"
+  }
+  if (caminho === "crm/pedidos") {
+    return "crm-seguro/pedidos"
+  }
+  if (caminho === "crm/vendas" || caminho === "vendas") {
+    return "crm-seguro/vendas"
+  }
+
+  if (caminho.startsWith("crm/oportunidades/")) {
+    return caminho.replace(/^crm\/oportunidades\//, "crm-seguro/oportunidades/")
+  }
+  if (caminho.startsWith("crm/propostas/")) {
+    return caminho.replace(/^crm\/propostas\//, "crm-seguro/propostas/")
+  }
+  if (caminho.startsWith("crm/pedidos/")) {
+    return caminho.replace(/^crm\/pedidos\//, "crm-seguro/pedidos/")
+  }
+
   return caminho
 }
 
