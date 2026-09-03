@@ -15,6 +15,7 @@ class LegacyDocNormalizationError(RuntimeError):
 class NormalizedDocx:
     filename: str
     content: bytes
+    source_pages: int | None = None
 
 
 def _converter_config() -> tuple[str, str]:
@@ -30,7 +31,7 @@ def normalize_legacy_doc_to_docx(content: bytes, filename: str) -> NormalizedDoc
         raise LegacyDocNormalizationError("Documento legado vazio.")
     safe_filename = Path(filename or "modelo.doc").name
     if not safe_filename.lower().endswith(".doc") or safe_filename.lower().endswith(".docx"):
-        return NormalizedDocx(filename=safe_filename, content=content)
+        return NormalizedDocx(filename=safe_filename, content=content, source_pages=None)
 
     url, key = _converter_config()
     try:
@@ -55,4 +56,18 @@ def normalize_legacy_doc_to_docx(content: bytes, filename: str) -> NormalizedDoc
     normalized = bytes(response.content or b"")
     if not normalized.startswith(b"PK"):
         raise LegacyDocNormalizationError("O serviço documental não retornou um DOCX válido.")
-    return NormalizedDocx(filename=f"{Path(safe_filename).stem}.docx", content=normalized)
+
+    source_pages: int | None = None
+    try:
+        pages_header = str(response.headers.get("X-CTI-Source-Pages") or "").strip()
+        if pages_header:
+            parsed = int(pages_header)
+            source_pages = parsed if parsed > 0 else None
+    except (TypeError, ValueError):
+        source_pages = None
+
+    return NormalizedDocx(
+        filename=f"{Path(safe_filename).stem}.docx",
+        content=normalized,
+        source_pages=source_pages,
+    )
