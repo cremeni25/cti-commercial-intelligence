@@ -93,6 +93,16 @@ def _mapa_clientes() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any
     return por_nome, por_cnpj
 
 
+def _mapas_clientes() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Aceita o contrato novo (nome, CNPJ) e o mapa legado usado pelos testes/homologações."""
+    mapa = _mapa_clientes()
+    if isinstance(mapa, tuple):
+        return mapa
+    if isinstance(mapa, dict):
+        return mapa, {}
+    return {}, {}
+
+
 def _cliente_reconciliado(
     registro: dict[str, Any],
     por_nome: dict[str, dict[str, Any]],
@@ -115,7 +125,7 @@ def filtrar_por_responsabilidade_cliente(
     Quando há cliente reconciliado e responsável explícito, este prevalece. Assim uma conta
     direta Master não reaparece para o vendedor apenas porque está fisicamente no território.
     """
-    por_nome, por_cnpj = _mapa_clientes()
+    por_nome, por_cnpj = _mapas_clientes()
     if not por_nome and not por_cnpj:
         return registros
     saida: list[dict[str, Any]] = []
@@ -142,7 +152,7 @@ def filtrar_carteira_exata_responsavel(
     responsável existente no registro e depois o nome de responsabilidade/autoria da fonte.
     Isso impede que ANFIR, Histórico e CRM decidam carteiras diferentes para o mesmo cenário.
     """
-    por_nome, por_cnpj = _mapa_clientes()
+    por_nome, por_cnpj = _mapas_clientes()
     nome = str(nome_usuario or "").strip()
     primeiro_nome = nome.split(" ", 1)[0] if nome else ""
     chaves_nome = {_fold(nome), _fold(primeiro_nome)} - {""}
