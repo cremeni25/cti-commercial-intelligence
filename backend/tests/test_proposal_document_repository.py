@@ -45,6 +45,8 @@ class Supabase:
         raise AssertionError(name)
 
 
+SOURCE_HASH = "41cf6794ba4200b839c53531555f0f3998df4cbb01a4d5cb0b94e3ca5e23947d"
+
 BASE_MODEL = {
     "id": "m1",
     "equipamento": "SUPRA 750",
@@ -52,7 +54,7 @@ BASE_MODEL = {
     "ativo": True,
     "homologado_em": "2026-08-03T00:00:00Z",
     "arquivo_template_storage": "diesel/supra-750/v1/SUPRA 750.docx",
-    "arquivo_template_hash_sha256": "source-hash",
+    "arquivo_template_hash_sha256": SOURCE_HASH,
 }
 
 
@@ -66,7 +68,7 @@ def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render
         sha256="final-hash",
         template_code="SUPRA_750",
         template_version=1,
-        source_sha256="source-hash",
+        source_sha256=SOURCE_HASH,
     )
     supabase = Supabase(BASE_MODEL)
     result = finalize_official_proposal(
@@ -77,12 +79,13 @@ def test_final_document_is_uploaded_without_upsert_and_linked_to_proposal(render
         cliente={},
     )
     path, content, options = supabase.storage.final.uploads[0]
-    assert path == "propostas/p1/v1/fonte-source-hash/PROP-1-SUPRA_750-v1.docx"
+    assert path == f"propostas/p1/v1/fonte-{SOURCE_HASH[:12]}/PROP-1-SUPRA_750-v1.docx"
     assert content == b"final"
     assert options["upsert"] == "false"
     assert result["document"]["immutable"] is True
     assert result["document"]["preserves_images"] is True
     assert result["document"]["preserves_carrier_branding"] is True
+    assert result["document"]["source_sha256"] == SOURCE_HASH
     assert payload.call_args.kwargs["validate_required"] is False
     assert render.call_args.kwargs["validate_required"] is False
     assert render.call_args.kwargs["require_all_requested_anchors"] is False

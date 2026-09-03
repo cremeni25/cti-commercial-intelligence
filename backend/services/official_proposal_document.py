@@ -165,11 +165,6 @@ def render_official_docx(
     require_all_requested_anchors: bool = True,
 ) -> GeneratedOfficialDocument:
     template = template_for_equipment(equipment)
-    if not template.source_filename.lower().endswith(".docx"):
-        raise OfficialProposalDocumentError(
-            f"O modelo {template.equipment} está em formato DOC legado e precisa ser convertido para DOCX "
-            "sem alteração visual antes da emissão automatizada."
-        )
 
     document_fields = _document_fields(payload)
     if validate_required:
