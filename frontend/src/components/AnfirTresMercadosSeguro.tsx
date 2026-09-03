@@ -40,6 +40,8 @@ async function buscar(url:string):Promise<Payload>{
 
 const numero=(valor:unknown)=>Number.isFinite(Number(valor))?Number(valor):0
 const br=(valor:number)=>valor.toLocaleString("pt-BR")
+const pct=(parte:number,total:number)=>total>0?(parte/total*100):0
+const brPct=(valor:number)=>`${valor.toLocaleString("pt-BR",{minimumFractionDigits:1,maximumFractionDigits:1})}%`
 
 export default function AnfirTresMercadosSeguro({responsavelId}:{responsavelId?:string}){
   const[data,setData]=useState<Payload|null>(null)
@@ -85,20 +87,26 @@ export default function AnfirTresMercadosSeguro({responsavelId}:{responsavelId?:
   const tr=porCodigo.TR||{codigo:"TR",segmento:"Trailer",total:0,abatimento:0,real:0}
   const dt=porCodigo.DT||{codigo:"DT",segmento:"Diesel Truck",total:0,abatimento:0,real:0}
   const dd=porCodigo.DD||{codigo:"DD",segmento:"Direct Drive",total:0,abatimento:0,real:0}
+  const pctAbatimento=pct(modelo.abatimento,modelo.total)
+  const pctReal=pct(modelo.real,modelo.total)
 
   return <section className="space-y-5 rounded-3xl border border-cyan-500/30 bg-[#061126] p-5 sm:p-6">
     <div>
       <p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-400">Base executiva auditável</p>
       <h2 className="mt-2 text-2xl font-bold">Mercado total → empresas retiradas → mercado real Viena</h2>
-      <p className="mt-2 text-sm text-slate-400">Uma única conta, com os mesmos registros em todos os blocos. O mercado real é sempre o total ANFIR menos Fibra West, High Flex e Planalto.</p>
+      <p className="mt-2 text-sm text-slate-400">Leitura comparativa sobre a mesma base ANFIR 2026.</p>
     </div>
 
     <div className="grid gap-4 xl:grid-cols-3">
-      <MercadoBloco numeroBloco="1" titulo="Mercado total ANFIR" total={modelo.total} tr={tr.total} dt={dt.total} dd={dd.total} destaque="total" />
+      <MercadoBloco numeroBloco="1" titulo="Mercado total ANFIR" total={modelo.total} percentual={100} descricao="do mercado ANFIR observado" tr={tr.total} dt={dt.total} dd={dd.total} destaque="total" />
 
       <section className="rounded-2xl border border-amber-500/45 bg-amber-950/10 p-5">
         <p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">2 · Empresas retiradas do mercado</p>
-        <p className="mt-2 text-3xl font-bold text-amber-200">{br(modelo.abatimento)}</p>
+        <div className="mt-2 flex items-end gap-3">
+          <p className="text-3xl font-bold text-amber-200">{br(modelo.abatimento)}</p>
+          <p className="pb-1 text-lg font-bold text-amber-300">{brPct(pctAbatimento)}</p>
+        </div>
+        <p className="mt-1 text-xs text-amber-100/60">do mercado total ANFIR</p>
         <div className="mt-4 overflow-x-auto rounded-xl border border-amber-500/20">
           <table className="min-w-full text-xs">
             <thead className="bg-[#101827] text-left uppercase text-slate-500"><tr><th className="p-2.5">Implementadora</th><th className="p-2.5 text-right">Total</th><th className="p-2.5 text-right">TR</th><th className="p-2.5 text-right">DT</th><th className="p-2.5 text-right">DD</th></tr></thead>
@@ -108,11 +116,11 @@ export default function AnfirTresMercadosSeguro({responsavelId}:{responsavelId?:
         </div>
       </section>
 
-      <MercadoBloco numeroBloco="3" titulo="Mercado real Viena" total={modelo.real} tr={tr.real} dt={dt.real} dd={dd.real} destaque="real" />
+      <MercadoBloco numeroBloco="3" titulo="Mercado real Viena" total={modelo.real} percentual={pctReal} descricao="do mercado total ANFIR" tr={tr.real} dt={dt.real} dd={dd.real} destaque="real" />
     </div>
 
     <section className="overflow-hidden rounded-2xl border border-[#17304d] bg-[#071427]">
-      <div className="border-b border-[#17304d] px-4 py-3"><h3 className="font-bold">Conciliação auditável</h3><p className="mt-1 text-xs text-slate-500">Cada linha precisa fechar exatamente: Mercado total − Empresas retiradas = Mercado real Viena.</p></div>
+      <div className="border-b border-[#17304d] px-4 py-3"><h3 className="font-bold">Conciliação auditável</h3><p className="mt-1 text-xs text-slate-500">Mercado total − Empresas retiradas = Mercado real Viena.</p></div>
       <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-[#0b1b34] text-left text-xs uppercase text-slate-400"><tr><th className="p-3">Leitura</th><th className="p-3 text-right">Mercado total</th><th className="p-3 text-right">Retirar</th><th className="p-3 text-right">Mercado real</th><th className="p-3">Fechamento</th></tr></thead><tbody>
         <LinhaAuditoria nome="TOTAL" total={modelo.total} abater={modelo.abatimento} real={modelo.real}/>
         <LinhaAuditoria nome="Trailer" total={tr.total} abater={tr.abatimento} real={tr.real}/>
@@ -124,16 +132,18 @@ export default function AnfirTresMercadosSeguro({responsavelId}:{responsavelId?:
     <div className={`rounded-xl border px-4 py-3 text-sm font-semibold ${modelo.fecha&&modelo.total-modelo.abatimento===modelo.real?"border-emerald-500/30 bg-emerald-500/10 text-emerald-200":"border-red-500/40 bg-red-500/10 text-red-200"}`}>
       {modelo.fecha&&modelo.total-modelo.abatimento===modelo.real?`Fechamento confirmado: ${br(modelo.total)} − ${br(modelo.abatimento)} = ${br(modelo.real)}.`:"Inconsistência detectada: o Dashboard não deve usar este recorte até o fechamento dos números."}
     </div>
-
-    <p className="text-xs text-cyan-200/80">Abaixo desta linha, participação Carrier, concorrência, evolução mensal, DDDs e demais comparativos usam exclusivamente o Mercado real Viena.</p>
   </section>
 }
 
-function MercadoBloco({numeroBloco,titulo,total,tr,dt,dd,destaque}:{numeroBloco:string;titulo:string;total:number;tr:number;dt:number;dd:number;destaque:"total"|"real"}){
+function MercadoBloco({numeroBloco,titulo,total,percentual,descricao,tr,dt,dd,destaque}:{numeroBloco:string;titulo:string;total:number;percentual:number;descricao:string;tr:number;dt:number;dd:number;destaque:"total"|"real"}){
   const cor=destaque==="real"?"text-emerald-300":"text-cyan-300"
   return <section className="rounded-2xl border border-[#193354] bg-[#08162d] p-5">
     <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-400">{numeroBloco} · {titulo}</p>
-    <p className={`mt-2 text-3xl font-bold ${cor}`}>{br(total)}</p>
+    <div className="mt-2 flex items-end gap-3">
+      <p className={`text-3xl font-bold ${cor}`}>{br(total)}</p>
+      <p className={`pb-1 text-lg font-bold ${cor}`}>{brPct(percentual)}</p>
+    </div>
+    <p className="mt-1 text-xs text-slate-500">{descricao}</p>
     <div className="mt-4 grid grid-cols-3 gap-2">
       <Mini label="Trailer" value={tr}/><Mini label="Diesel Truck" value={dt}/><Mini label="Direct Drive" value={dd}/>
     </div>
