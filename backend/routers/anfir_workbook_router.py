@@ -16,7 +16,7 @@ from services.anfir_competitive_intelligence import consolidar_competitividade_a
 from services.anfir_market_scope import particionar_mercado_disputavel
 from services.anfir_read_cache import fonte_anfir
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
-from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
+from services.commercial_client_scope import filtrar_carteira_exata_responsavel, filtrar_por_responsabilidade_cliente
 from services.operational_filters import filtrar_registros
 
 
@@ -72,7 +72,13 @@ def _registros_2026(responsavel_id: str | None, usuario: UsuarioAutenticado):
         fim=fim,
     )
 
-    if not _consolidado(usuario_efetivo):
+    if responsavel_id and usuario_efetivo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+        registros = filtrar_carteira_exata_responsavel(
+            list(registros),
+            str(usuario_efetivo.id),
+            usuario_efetivo.nome,
+        )
+    elif not _consolidado(usuario_efetivo):
         perfil = _perfil_regional(usuario_efetivo)
         permitidos = set(perfil.get("ddds") or [])
         if not permitidos:
