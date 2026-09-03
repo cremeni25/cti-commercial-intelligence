@@ -128,6 +128,86 @@ def _crm_carteira(alvo: UsuarioAutenticado) -> list[dict[str, Any]]:
     ]
 
 
+def _anfir_carteira(
+    alvo: UsuarioAutenticado,
+    mercado_total: list[dict[str, Any]],
+    contexto: str,
+    periodo: str,
+    inicio: date,
+    fim: date,
+) -> list[dict[str, Any]]:
+    if alvo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+        return filtrar_carteira_exata_responsavel(list(mercado_total), str(alvo.id), alvo.nome)
+    registros, _, _ = _anfir_do_usuario(alvo, contexto, periodo, None, None, inicio, fim)
+    return registros
+
+
+def _chave_registro(item: dict[str, Any], indice: int) -> str:
+    for campo in ("id", "registro_id", "anfir_id", "oportunidade_id"):
+        valor = item.get(campo)
+        if valor not in (None, ""):
+            return f"{campo}:{valor}"
+    partes = [
+        str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or ""),
+        str(item.get("implementadora") or ""),
+        str(item.get("equipamento") or item.get("modelo") or ""),
+        str(item.get("data") or item.get("mes") or ""),
+        str(item.get("quantidade") or ""),
+        str(indice),
+    ]
+    return "|".join(partes)
+
+
+def _deduplicar(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    saida: list[dict[str, Any]] = []
+    vistos: set[str] = set()
+    for indice, item in enumerate(registros):
+        chave = _chave_registro(item, indice)
+        if chave in vistos:
+            continue
+        vistos.add(chave)
+        saida.append(item)
+    return saida
+
+
+def _agregar_equipe(
+    equipe: list[dict[str, Any]],
+    mercado_total: list[dict[str, Any]],
+    contexto: str,
+    periodo: str,
+    inicio: date,
+    fim: date,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], int]:
+    anf_todos: list[dict[str, Any]] = []
+    hist_todos: list[dict[str, Any]] = []
+    crm_todos: list[dict[str, Any]] = []
+    participacoes: list[dict[str, Any]] = []
+    soma_individual = 0
+
+    for registro in equipe:
+        alvo = _usuario_regional(registro)
+        anf_individual = _anfir_carteira(alvo, mercado_total, contexto, periodo, inicio, fim)
+        hist_individual = _historico_carteira(alvo, inicio, fim)
+        crm_individual = _crm_carteira(alvo)
+        soma_individual += len(anf_individual)
+        anf_todos.extend(anf_individual)
+        hist_todos.extend(hist_individual)
+        crm_todos.extend(crm_individual)
+        participacoes.append({
+            "id": alvo.id,
+            "nome": alvo.nome,
+            "mercado": len(anf_individual),
+        })
+
+    return (
+        _deduplicar(anf_todos),
+        _deduplicar(hist_todos),
+        _deduplicar(crm_todos),
+        participacoes,
+        soma_individual,
+    )
+
+
 @router.get("/visao")
 def visao_equipe(
     responsavel_id: str | None = None,
@@ -155,29 +235,22 @@ def visao_equipe(
         fim_efetivo,
     )
 
+    participacoes_equipe: list[dict[str, Any]] = []
+    soma_individual = 0
+
     if alvo is None:
-        anf = mercado_total
-        historico = _hist_do_usuario(usuario, inicio_efetivo, fim_efetivo)
-        crm = _crm_do_usuario(usuario)
+        anf, historico, crm, participacoes_equipe, soma_individual = _agregar_equipe(
+            equipe,
+            list(mercado_total),
+            contexto_efetivo,
+            periodo_efetivo,
+            inicio_efetivo,
+            fim_efetivo,
+        )
         selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}
         escopo = _metadata_escopo(usuario)
     else:
-        if alvo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
-            anf = filtrar_carteira_exata_responsavel(
-                list(mercado_total),
-                str(alvo.id),
-                alvo.nome,
-            )
-        else:
-            anf, _, _ = _anfir_do_usuario(
-                alvo,
-                contexto_efetivo,
-                periodo_efetivo,
-                None,
-                None,
-                inicio_efetivo,
-                fim_efetivo,
-            )
+        anf = _anfir_carteira(alvo, list(mercado_total), contexto_efetivo, periodo_efetivo, inicio_efetivo, fim_efetivo)
         historico = _historico_carteira(alvo, inicio_efetivo, fim_efetivo)
         crm = _crm_carteira(alvo)
         registro_alvo = next((item for item in equipe if str(item.get("id")) == str(alvo.id)), {})
@@ -204,6 +277,10 @@ def visao_equipe(
     total_viena = len(mercado_total)
     total_regiao = len(anf)
     percentual_regiao = round((total_regiao / total_viena * 100), 1) if total_viena else 0.0
+    sobreposicoes = max(0, soma_individual - total_regiao) if alvo is None else 0
+
+    for item in participacoes_equipe:
+        item["participacao_pct"] = round((int(item["mercado"]) / total_viena * 100), 1) if total_viena else 0.0
 
     return {
         "regra": "GESTAO_REGIONAL_SOBRE_MERCADO_REAL_VIENA",
@@ -233,6 +310,10 @@ def visao_equipe(
             "participacao_regiao_no_mercado_real_pct": percentual_regiao,
             "familias": _familias(anf),
             "clientes_unicos": len(clientes_anfir),
+            "participacoes_equipe": participacoes_equipe,
+            "soma_mercado_individual": soma_individual if alvo is None else total_regiao,
+            "sobreposicoes_entre_carteiras": sobreposicoes,
+            "mercado_real_sem_carteira": max(0, total_viena - total_regiao),
         },
         "evidencias": {
             "historico_registros_2026": len(historico),
