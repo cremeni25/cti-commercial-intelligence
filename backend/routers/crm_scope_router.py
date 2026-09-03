@@ -56,13 +56,15 @@ def _visao_consolidada(usuario: UsuarioAutenticado) -> bool:
 
 
 def _usa_escopo_proprio(usuario: UsuarioAutenticado) -> bool:
-    return usuario.tipo_usuario in PERFIS_ESCOPO_PROPRIO
+    # Regra de segurança do CTI: somente a gestão consolidada (Anderson/Admin Master
+    # e André/Diretor com acesso_total) pode enxergar dados de toda a equipe.
+    # Qualquer outro usuário autenticado opera exclusivamente no próprio escopo,
+    # inclusive perfis atuais/futuros que ainda não estejam nomeados em uma whitelist.
+    return not _visao_consolidada(usuario)
 
 
 def _filtrar_por_usuario(registros: list[dict], usuario: UsuarioAutenticado) -> list[dict]:
     if _visao_consolidada(usuario):
-        return registros
-    if not _usa_escopo_proprio(usuario):
         return registros
     resultado: list[dict] = []
     for item in registros:
@@ -118,7 +120,7 @@ def _responsavel_efetivo(registro: dict) -> str:
 
 
 def _exigir_acesso(registro: dict, usuario: UsuarioAutenticado) -> dict:
-    if _visao_consolidada(usuario) or not _usa_escopo_proprio(usuario):
+    if _visao_consolidada(usuario):
         return registro
     if _responsavel_efetivo(registro) == str(usuario.id):
         return registro
