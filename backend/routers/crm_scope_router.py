@@ -51,6 +51,23 @@ PERFIS_ESCOPO_PROPRIO = {
 }
 
 
+class _PerfisComEscopoIndividualPadrao:
+    def __contains__(self, _perfil: object) -> bool:
+        return True
+
+
+def _aplicar_escopo_individual_estrategico() -> None:
+    # A camada estratégica historicamente usava uma whitelist de perfis regionais.
+    # A regra oficial agora é inversa: somente usuários com visão consolidada podem
+    # enxergar totais da equipe; qualquer outro perfil atual ou futuro é individual.
+    from routers import crm_scope_estrategia_router as estrategia_scope
+
+    estrategia_scope.PERFIS_REGIONAIS = _PerfisComEscopoIndividualPadrao()
+
+
+_aplicar_escopo_individual_estrategico()
+
+
 def _visao_consolidada(usuario: UsuarioAutenticado) -> bool:
     return usuario.tipo_usuario == "ADMIN_MASTER" or (
         usuario.tipo_usuario == "DIRETOR_VIENA_SP"
