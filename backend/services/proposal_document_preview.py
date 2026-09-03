@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import hmac
 from hashlib import sha256
+from pathlib import Path
 from typing import Any, Mapping
 
+from services.legacy_doc_normalization_service import LegacyDocNormalizationError, normalize_legacy_doc_to_docx
 from services.official_proposal_document import render_official_docx, verify_media_preserved
 from services.proposal_document_payload import build_proposal_document_payload
 from services.proposal_template_catalog import template_for_equipment
@@ -44,15 +46,24 @@ def build_preview_official_proposal(
         raise ProposalDocumentRepositoryError("Modelo oficial sem arquivo mestre ou SHA-256 registrado.")
 
     try:
-        source = bytes(supabase.storage.from_(MASTER_BUCKET).download(source_path))
+        source_original = bytes(supabase.storage.from_(MASTER_BUCKET).download(source_path))
     except Exception as exc:
         raise ProposalDocumentRepositoryError(f"Falha ao baixar o arquivo mestre: {exc}") from exc
-    if not source:
+    if not source_original:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
 
-    source_hash = sha256(source).hexdigest()
+    source_hash = sha256(source_original).hexdigest()
     if not hmac.compare_digest(source_hash.lower(), expected_hash):
         raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do registro técnico.")
+
+    source = source_original
+    source_name = str(model.get("arquivo_template_nome_original") or Path(source_path).name)
+    if source_name.lower().endswith(".doc") and not source_name.lower().endswith(".docx"):
+        try:
+            normalized = normalize_legacy_doc_to_docx(source_original, source_name)
+        except LegacyDocNormalizationError as exc:
+            raise ProposalDocumentRepositoryError(f"Falha ao normalizar o modelo DOC legado: {exc}") from exc
+        source = normalized.content
 
     payload = build_proposal_document_payload(
         proposal=dict(proposta),
