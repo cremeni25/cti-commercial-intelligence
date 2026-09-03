@@ -5,18 +5,13 @@ from pydantic import BaseModel
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from routers.crm_scope_estrategia_router import (
-    _consolidado,
-    _metadata_escopo,
-    _perfil_regional,
-    _registro_anfir_no_escopo,
-)
+from routers.crm_scope_estrategia_router import _consolidado, _metadata_escopo
 from services.anfir_competitive_classification_store import remover_classificacao, salvar_classificacao
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 from services.anfir_market_scope import particionar_mercado_disputavel
 from services.anfir_read_cache import fonte_anfir
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
-from services.commercial_client_scope import filtrar_carteira_exata_responsavel, filtrar_por_responsabilidade_cliente
+from services.commercial_client_scope import filtrar_carteira_exata_responsavel
 from services.operational_filters import filtrar_registros
 
 
@@ -54,11 +49,12 @@ def _usuario_alvo(responsavel_id: str, solicitante: UsuarioAutenticado) -> Usuar
 
 
 def _registros_2026(responsavel_id: str | None, usuario: UsuarioAutenticado):
-    """Retorna a base ANFIR bruta do escopo Viena SP/2026 antes das exclusões comerciais.
+    """Base ANFIR bruta Viena SP/2026 com o mesmo escopo canônico do Mapa Comercial.
 
-    A separação bruto -> excluídos -> mercado real precisa acontecer somente em
-    ``particionar_mercado_disputavel``. Isso mantém a auditoria do Dashboard
-    verdadeira sem alterar o universo funcional usado pelos indicadores.
+    Sem responsável selecionado, Master/Direção preserva a base bruta para a auditoria
+    597 -> exclusões -> Mercado Real. Quando existe responsável, ou quando o próprio usuário
+    regional acessa a tela, a carteira é resolvida pela mesma identidade comercial canônica
+    usada em ANFIR, Histórico/Funil e CRM.
     """
     usuario_efetivo = _usuario_alvo(responsavel_id, usuario) if responsavel_id else usuario
     inicio = date(2026, 1, 1)
@@ -72,26 +68,22 @@ def _registros_2026(responsavel_id: str | None, usuario: UsuarioAutenticado):
         fim=fim,
     )
 
-    if responsavel_id and usuario_efetivo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+    if responsavel_id or not _consolidado(usuario_efetivo):
         registros = filtrar_carteira_exata_responsavel(
             list(registros),
             str(usuario_efetivo.id),
             usuario_efetivo.nome,
         )
-    elif not _consolidado(usuario_efetivo):
-        perfil = _perfil_regional(usuario_efetivo)
-        permitidos = set(perfil.get("ddds") or [])
-        if not permitidos:
-            registros = []
-        else:
-            registros = [
-                item
-                for item in registros
-                if _registro_anfir_no_escopo(item, usuario_efetivo, permitidos, perfil)
-            ]
-        registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario_efetivo.id))
 
     return list(registros), usuario_efetivo
+
+
+def _metadata_comercial(responsavel_id: str | None, usuario: UsuarioAutenticado, usuario_efetivo: UsuarioAutenticado) -> dict:
+    if responsavel_id:
+        return _metadata_escopo(usuario_efetivo)
+    if _consolidado(usuario):
+        return {"modo": "TODA_EQUIPE", "usuario": "Toda a equipe comercial"}
+    return _metadata_escopo(usuario_efetivo)
 
 
 def _fabricantes_ativos() -> list[str]:
@@ -134,10 +126,11 @@ def anfif_workbook_2026(
     payload = consolidar_workbook_anfir_2026(disputavel)
     payload["mercado_viena"] = resumo_mercado
     metadata = payload.setdefault("metadata", {})
-    metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
+    metadata["escopo_usuario"] = _metadata_comercial(responsavel_id, usuario, usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
     metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
     metadata["denominador_comercial"] = "MERCADO_DISPUTAVEL_VIENA"
+    metadata["regra_escopo"] = "CARTEIRA_COMERCIAL_CANONICA"
     return payload
 
 
@@ -146,17 +139,18 @@ def anfir_competitividade_2026(
     responsavel_id: str | None = Query(default=None),
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
-    """Inteligência competitiva por fabricante, segmento e mês, respeitando o mesmo RBAC do Dashboard ANFIR."""
+    """Inteligência competitiva por fabricante, segmento e mês, respeitando o mesmo escopo canônico do Mapa."""
     registros, usuario_efetivo = _registros_2026(responsavel_id, usuario)
     disputavel, _, resumo_mercado = particionar_mercado_disputavel(registros)
     payload = consolidar_competitividade_anfir_2026(disputavel, _fabricantes_ativos(), _classificacoes_cti())
     metadata = payload.setdefault("metadata", {})
-    metadata["escopo_usuario"] = _metadata_escopo(usuario) if not responsavel_id else _metadata_escopo(usuario_efetivo)
+    metadata["escopo_usuario"] = _metadata_comercial(responsavel_id, usuario, usuario_efetivo)
     metadata["filtro_responsavel_id"] = responsavel_id
     metadata["filtro_aplicado_por_master"] = bool(responsavel_id)
     metadata["edicao_classificacao_cti"] = bool(_consolidado(usuario))
     metadata["denominador_comercial"] = "MERCADO_DISPUTAVEL_VIENA"
     metadata["mercado_viena"] = resumo_mercado
+    metadata["regra_escopo"] = "CARTEIRA_COMERCIAL_CANONICA"
     return payload
 
 
