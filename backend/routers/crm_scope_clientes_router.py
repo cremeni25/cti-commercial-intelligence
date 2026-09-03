@@ -57,15 +57,20 @@ def _exigir_permissao(usuario: UsuarioAutenticado, permissao: str) -> None:
 
 
 def _perfil_usuario(usuario_id: str) -> dict[str, Any]:
-    dados = (
-        supabase.table("cti_users")
-        .select("id,nome,tipo_usuario,codigo_regional,ddds,ativo")
-        .eq("id", usuario_id)
-        .limit(1)
-        .execute()
-        .data
-        or []
-    )
+    try:
+        dados = (
+            supabase.table("cti_users")
+            .select("id,nome,tipo_usuario,codigo_regional,ddds,ativo")
+            .eq("id", usuario_id)
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        # Segurança fail-closed: se o perfil territorial não puder ser resolvido,
+        # o usuário não recebe clientes sem responsabilidade explícita.
+        return {}
     return dados[0] if dados else {}
 
 
@@ -77,8 +82,6 @@ def _cliente_no_escopo(cliente: dict[str, Any], usuario: UsuarioAutenticado) -> 
     if responsavel:
         return responsavel == str(usuario.id)
 
-    # Cliente sem responsável explícito só pode entrar por território canônico do usuário.
-    # Perfis sem território e sem responsabilidade explícita não recebem visão global por fallback.
     perfil = _perfil_usuario(str(usuario.id))
     codigo_usuario = _codigo_regional(perfil.get("codigo_regional"))
     codigo_cliente = _codigo_regional(cliente.get("sub_regiao"))
