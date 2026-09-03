@@ -38,6 +38,9 @@ def convert_docx_to_pdf(docx: bytes, filename: str, *, expected_pages: int = 4) 
 
     url, key = _converter_config()
     safe_filename = Path(filename or "proposta.docx").name
+    headers = {"X-CTI-Converter-Key": key}
+    if expected_pages > 0:
+        headers["X-CTI-Expected-Pages"] = str(expected_pages)
     try:
         response = requests.post(
             f"{url}/convert",
@@ -48,7 +51,7 @@ def convert_docx_to_pdf(docx: bytes, filename: str, *, expected_pages: int = 4) 
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                 )
             },
-            headers={"X-CTI-Converter-Key": key},
+            headers=headers,
             timeout=210,
         )
     except requests.RequestException as exc:

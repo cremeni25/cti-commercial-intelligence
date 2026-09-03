@@ -57,6 +57,7 @@ def build_preview_official_proposal(
         raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do registro técnico.")
 
     source = source_original
+    expected_pages = 4
     source_name = str(model.get("arquivo_template_nome_original") or Path(source_path).name)
     if source_name.lower().endswith(".doc") and not source_name.lower().endswith(".docx"):
         try:
@@ -64,6 +65,8 @@ def build_preview_official_proposal(
         except LegacyDocNormalizationError as exc:
             raise ProposalDocumentRepositoryError(f"Falha ao normalizar o modelo DOC legado: {exc}") from exc
         source = normalized.content
+        if normalized.source_pages:
+            expected_pages = normalized.source_pages
 
     payload = build_proposal_document_payload(
         proposal=dict(proposta),
@@ -99,4 +102,5 @@ def build_preview_official_proposal(
         "homologado": bool(model.get("homologado_em")),
         "preview_mode": "WORD_PREENCHIDO",
         "mime_type": DOCX_MIME,
+        "expected_pages": expected_pages,
     }

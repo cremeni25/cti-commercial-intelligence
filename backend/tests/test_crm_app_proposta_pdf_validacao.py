@@ -24,16 +24,17 @@ def preparar_pdf(monkeypatch):
         lambda supabase, proposta, item, oportunidade, cliente: {
             "filename": "CITIMAX 400.docx",
             "content": b"docx-oficial",
+            "expected_pages": 4,
         },
     )
     monkeypatch.setattr(
         modulo,
         "convert_docx_to_pdf",
-        lambda content, filename: ConvertedPdf(
+        lambda content, filename, expected_pages=4: ConvertedPdf(
             filename="CITIMAX 400.pdf",
             content=b"%PDF-validado",
             sha256="abc123",
-            page_count=4,
+            page_count=expected_pages,
         ),
     )
 
