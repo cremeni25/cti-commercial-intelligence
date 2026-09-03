@@ -9,17 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers import strategic_layers_router as estrategia
-from routers.crm_scope_estrategia_router import (
-    FECHADOS,
-    PERFIS_REGIONAIS,
-    _anfir_do_usuario,
-    _consolidado,
-    _crm_do_usuario,
-    _hist_do_usuario,
-    _metadata_escopo,
-)
+from routers.crm_scope_estrategia_router import FECHADOS, PERFIS_REGIONAIS, _consolidado, _metadata_escopo
 from services.commercial_client_scope import filtrar_carteira_exata_responsavel
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
+from services.historical_commercial_source import carregar_historico_comercial
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-equipe"])
@@ -88,11 +81,11 @@ def _nome_cliente_anfir(item: dict[str, Any]) -> str:
 
 
 def _nome_cliente_historico(item: dict[str, Any]) -> str:
-    return _fold(item.get("cliente"))
+    return _fold(item.get("cliente") or item.get("empresa") or item.get("transportadora"))
 
 
 def _nome_cliente_crm(item: dict[str, Any]) -> str:
-    return _fold(item.get("cliente_nome") or item.get("cliente"))
+    return _fold(item.get("cliente_nome") or item.get("cliente") or item.get("empresa"))
 
 
 def _clientes(registros: list[dict[str, Any]], extrator) -> set[str]:
@@ -103,43 +96,28 @@ def _ranking(counter: Counter, limite: int = 8) -> list[dict[str, Any]]:
     return [{"nome": str(nome), "quantidade": int(qtd)} for nome, qtd in counter.most_common(limite) if nome]
 
 
-def _historico_carteira(alvo: UsuarioAutenticado, inicio: date, fim: date) -> list[dict[str, Any]]:
-    registros = _hist_do_usuario(alvo, inicio, fim)
-    if alvo.tipo_usuario not in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
-        return registros
-    nome = _fold(alvo.nome)
-    primeiro = nome.split(" ", 1)[0] if nome else ""
+def _historico_base(inicio: date, fim: date) -> list[dict[str, Any]]:
     return [
-        item for item in registros
-        if primeiro and (
-            _fold(item.get("representante_atual")) == nome
-            or _fold(item.get("representante_atual")) == primeiro
-            or _fold(item.get("representante_atual")).startswith(f"{primeiro} ")
-        )
+        item
+        for item in carregar_historico_comercial()
+        if estrategia._data_no_intervalo(item.get("data"), inicio, fim)
     ]
 
 
-def _crm_carteira(alvo: UsuarioAutenticado) -> list[dict[str, Any]]:
-    if alvo.tipo_usuario not in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
-        return _crm_do_usuario(alvo)
-    return [
-        item for item in carregar_oportunidades_enriquecidas()
-        if str(item.get("responsavel_id") or "") == str(alvo.id)
-    ]
+def _carteira_canonica(alvo: UsuarioAutenticado, registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return filtrar_carteira_exata_responsavel(list(registros), str(alvo.id), alvo.nome)
 
 
-def _anfir_carteira(
-    alvo: UsuarioAutenticado,
-    mercado_total: list[dict[str, Any]],
-    contexto: str,
-    periodo: str,
-    inicio: date,
-    fim: date,
-) -> list[dict[str, Any]]:
-    if alvo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
-        return filtrar_carteira_exata_responsavel(list(mercado_total), str(alvo.id), alvo.nome)
-    registros, _, _ = _anfir_do_usuario(alvo, contexto, periodo, None, None, inicio, fim)
-    return registros
+def _historico_carteira(alvo: UsuarioAutenticado, historico_base: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _carteira_canonica(alvo, historico_base)
+
+
+def _crm_carteira(alvo: UsuarioAutenticado, crm_base: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _carteira_canonica(alvo, crm_base)
+
+
+def _anfir_carteira(alvo: UsuarioAutenticado, mercado_total: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return _carteira_canonica(alvo, mercado_total)
 
 
 def _chave_registro(item: dict[str, Any], indice: int) -> str:
@@ -148,7 +126,7 @@ def _chave_registro(item: dict[str, Any], indice: int) -> str:
         if valor not in (None, ""):
             return f"{campo}:{valor}"
     partes = [
-        str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or ""),
+        str(item.get("cliente") or item.get("cliente_nome") or item.get("empresa") or item.get("transportadora") or ""),
         str(item.get("implementadora") or ""),
         str(item.get("equipamento") or item.get("modelo") or ""),
         str(item.get("data") or item.get("mes") or ""),
@@ -173,10 +151,8 @@ def _deduplicar(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def _agregar_equipe(
     equipe: list[dict[str, Any]],
     mercado_total: list[dict[str, Any]],
-    contexto: str,
-    periodo: str,
-    inicio: date,
-    fim: date,
+    historico_base: list[dict[str, Any]],
+    crm_base: list[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], int]:
     anf_todos: list[dict[str, Any]] = []
     hist_todos: list[dict[str, Any]] = []
@@ -186,9 +162,9 @@ def _agregar_equipe(
 
     for registro in equipe:
         alvo = _usuario_regional(registro)
-        anf_individual = _anfir_carteira(alvo, mercado_total, contexto, periodo, inicio, fim)
-        hist_individual = _historico_carteira(alvo, inicio, fim)
-        crm_individual = _crm_carteira(alvo)
+        anf_individual = _anfir_carteira(alvo, mercado_total)
+        hist_individual = _historico_carteira(alvo, historico_base)
+        crm_individual = _crm_carteira(alvo, crm_base)
         soma_individual += len(anf_individual)
         anf_todos.extend(anf_individual)
         hist_todos.extend(hist_individual)
@@ -234,6 +210,8 @@ def visao_equipe(
         inicio_efetivo,
         fim_efetivo,
     )
+    historico_base = _historico_base(inicio_efetivo, fim_efetivo)
+    crm_base = carregar_oportunidades_enriquecidas()
 
     participacoes_equipe: list[dict[str, Any]] = []
     soma_individual = 0
@@ -242,17 +220,15 @@ def visao_equipe(
         anf, historico, crm, participacoes_equipe, soma_individual = _agregar_equipe(
             equipe,
             list(mercado_total),
-            contexto_efetivo,
-            periodo_efetivo,
-            inicio_efetivo,
-            fim_efetivo,
+            historico_base,
+            crm_base,
         )
         selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}
-        escopo = _metadata_escopo(usuario)
+        escopo = {"modo": "TODA_EQUIPE", "usuario": "Toda a equipe comercial"}
     else:
-        anf = _anfir_carteira(alvo, list(mercado_total), contexto_efetivo, periodo_efetivo, inicio_efetivo, fim_efetivo)
-        historico = _historico_carteira(alvo, inicio_efetivo, fim_efetivo)
-        crm = _crm_carteira(alvo)
+        anf = _anfir_carteira(alvo, list(mercado_total))
+        historico = _historico_carteira(alvo, historico_base)
+        crm = _crm_carteira(alvo, crm_base)
         registro_alvo = next((item for item in equipe if str(item.get("id")) == str(alvo.id)), {})
         selecao = {
             "modo": "RESPONSAVEL",
@@ -283,7 +259,7 @@ def visao_equipe(
         item["participacao_pct"] = round((int(item["mercado"]) / total_viena * 100), 1) if total_viena else 0.0
 
     return {
-        "regra": "GESTAO_REGIONAL_SOBRE_MERCADO_REAL_VIENA",
+        "regra": "ESCOPO_COMERCIAL_CANONICO_SOBRE_MERCADO_REAL_VIENA",
         "metadata": {
             "contexto": contexto_efetivo,
             "periodo": periodo_efetivo,
@@ -291,6 +267,7 @@ def visao_equipe(
             "fim": fim_efetivo.isoformat(),
             "escopo": escopo,
             "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026",
+            "regra_identidade": "CLIENTE_RECONCILIADO_CT I > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE".replace("CT I", "CTI"),
         },
         "pode_selecionar_responsavel": _pode_gerir(usuario),
         "equipe": [
@@ -331,6 +308,6 @@ def visao_equipe(
             "crm_com_evidencia_historico": len(crm_com_historico),
             "crm_com_evidencia_anfir": len(crm_com_anfir),
             "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta),
-            "nota": "Ausência de CRM antes da implantação não é classificada como falha. O cruzamento é evidencial por cliente, nunca uma conversão artificial entre totais.",
+            "nota": "As três fontes usam a mesma carteira canônica. Os totais de registros podem diferir porque ANFIR, Histórico/Funil e CRM medem eventos distintos do mesmo universo comercial.",
         },
     }
