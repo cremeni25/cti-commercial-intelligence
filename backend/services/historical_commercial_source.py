@@ -11,6 +11,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from services.anfir_market_scope import filtrar_mercado_real_viena
+
 SOURCE_FILE = "funil de vendas 2026(20260814-104652).xlsx"
 SOURCE_SHA256 = "54bb20087d96013e5a814a1d378f37315987c56b4a617631bd9603725ebb4583"
 SOURCE_TOTAL = 906
@@ -67,13 +69,20 @@ def _normalizar_linha(row: dict[str, str]) -> dict[str, Any]:
 
 
 @lru_cache(maxsize=1)
-def carregar_historico_comercial() -> tuple[dict[str, Any], ...]:
+def carregar_historico_comercial_bruto() -> tuple[dict[str, Any], ...]:
+    """Fonte imutável para auditoria e rastreabilidade do arquivo original."""
     encoded = "".join(part.read_text(encoding="utf-8").strip() for part in PARTS)
     raw = gzip.decompress(base64.b64decode(encoded)).decode("utf-8")
     rows = tuple(_normalizar_linha(row) for row in csv.DictReader(io.StringIO(raw)))
     if len(rows) != SOURCE_TOTAL:
         raise RuntimeError(f"Fonte histórica homologada inválida: esperado {SOURCE_TOTAL}, recebido {len(rows)}")
     return rows
+
+
+@lru_cache(maxsize=1)
+def carregar_historico_comercial() -> tuple[dict[str, Any], ...]:
+    """Universo comercial funcional: sempre aplica a regra do mercado real Viena."""
+    return tuple(filtrar_mercado_real_viena(carregar_historico_comercial_bruto()))
 
 
 def _counter(rows: tuple[dict[str, Any], ...], field: str) -> dict[str, int]:
@@ -87,6 +96,7 @@ def resumir_historico_comercial(rows: tuple[dict[str, Any], ...] | None = None) 
         "fonte": SOURCE_FILE,
         "sha256": SOURCE_SHA256,
         "homologado": True,
+        "regra_mercado": "MERCADO_REAL_VIENA",
         "total_registros": len(base),
         "total_unidades": sum(int(row.get("quantidade") or 0) for row in base),
         "valor_nominal": round(sum(float(row.get("valor_total") or 0) for row in base), 2),
