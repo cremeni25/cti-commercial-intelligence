@@ -35,9 +35,13 @@ def _anfir(ddd="011", sub_regiao="", responsavel="", cidade="", estado="SP"):
 def test_workbook_anfir_exige_usuario_e_reutiliza_escopo_territorial():
     source = BACKEND.read_text(encoding="utf-8")
     assert "Depends(usuario_atual)" in source
-    assert "_anfir_do_usuario" in source
+    assert "_perfil_regional" in source
+    assert "_registro_anfir_no_escopo" in source
+    assert "filtrar_por_responsabilidade_cliente" in source
+    assert "particionar_mercado_disputavel" in source
     assert 'contexto="viena-sp"' in source
-    assert 'periodo="PERSONALIZADO"' in source
+    assert "date(2026, 1, 1)" in source
+    assert "date(2026, 12, 31)" in source
     assert "_metadata_escopo(usuario)" in source
 
 
