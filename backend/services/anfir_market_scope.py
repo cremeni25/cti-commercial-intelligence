@@ -85,6 +85,7 @@ def particionar_mercado_disputavel(
     disputavel: list[dict[str, Any]] = []
     fora: list[dict[str, Any]] = []
     por_implementadora: Counter[str] = Counter()
+    por_implementadora_linha: dict[str, Counter[str]] = defaultdict(Counter)
     variantes: dict[str, Counter[str]] = defaultdict(Counter)
 
     for item in registros:
@@ -95,6 +96,7 @@ def particionar_mercado_disputavel(
             continue
         fora.append(registro)
         por_implementadora[canonico] += 1
+        por_implementadora_linha[canonico][classificar_linha(registro) or "UNKNOWN"] += 1
         bruto = str(registro.get("implementadora") or registro.get("implementador") or canonico).strip()
         variantes[canonico][bruto or canonico] += 1
 
@@ -106,15 +108,34 @@ def particionar_mercado_disputavel(
 
     resumo_implementadoras = []
     for nome in IMPLEMENTADORAS_FORA_ESCOPO:
+        por_linha = por_implementadora_linha[nome]
+        tr = por_linha.get("TR", 0)
+        dt = por_linha.get("DT", 0)
+        dd = por_linha.get("DD", 0)
+        nao_classificado = max(0, por_implementadora.get(nome, 0) - tr - dt - dd)
         resumo_implementadoras.append({
             "implementadora": nome,
             "registros": por_implementadora.get(nome, 0),
+            "trailer": tr,
+            "diesel_truck": dt,
+            "direct_drive": dd,
+            "nao_classificado": nao_classificado,
             "percentual_mercado_anfir": round(por_implementadora.get(nome, 0) / total * 100, 2) if total else 0.0,
             "variantes_fonte": [
                 {"nome": variante, "registros": quantidade}
                 for variante, quantidade in variantes[nome].most_common()
             ],
         })
+
+    comparativo_segmentos = _comparativo_segmentos(registros, fora)
+    total_segmentos = {
+        item["codigo"]: {
+            "mercado_total": item["mercado_total"],
+            "mercado_excluido": item["mercado_excluido"],
+            "mercado_real": item["mercado_real"],
+        }
+        for item in comparativo_segmentos
+    }
 
     return disputavel, fora, {
         "mercado_anfir_total": total,
@@ -124,5 +145,10 @@ def particionar_mercado_disputavel(
         "percentual_disputavel": percentual_disputavel,
         "implementadoras_fora_escopo": resumo_implementadoras,
         "comparativo_mensal": _comparativo_mensal(registros, fora),
-        "comparativo_segmentos": _comparativo_segmentos(registros, fora),
+        "comparativo_segmentos": comparativo_segmentos,
+        "auditoria": {
+            "fecha_total": total == total_fora + total_disputavel,
+            "formula_total": f"{total} - {total_fora} = {total_disputavel}",
+            "segmentos": total_segmentos,
+        },
     }

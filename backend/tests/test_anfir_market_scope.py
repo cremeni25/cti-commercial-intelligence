@@ -35,6 +35,7 @@ def test_particionamento_preserva_total_e_recalcula_denominador_comercial():
     assert resumo["mercado_anfir_total"] == resumo["mercado_fora_escopo_comercial"] + resumo["mercado_disputavel_viena"]
     assert resumo["percentual_fora_escopo"] == 66.67
     assert resumo["percentual_disputavel"] == 33.33
+    assert resumo["auditoria"]["fecha_total"] is True
 
 
 def test_resumo_mantem_tres_blocos_mesmo_sem_ocorrencia_na_fonte():
@@ -59,3 +60,25 @@ def test_comparativos_mensal_e_segmento_fecham_total_menos_abate_igual_real():
     assert direct_drive["mercado_total"] == 3
     assert direct_drive["mercado_excluido"] == 2
     assert direct_drive["mercado_real"] == 1
+
+
+def test_abate_e_auditavel_por_implementadora_e_linha():
+    registros = [
+        _r("Fibra West", linha="Direct Drive"),
+        _r("Fibra West", linha="Diesel Truck"),
+        _r("High Flex", linha="Direct Drive"),
+        _r("High Flex", linha="Direct Drive"),
+        _r("Planalto", linha="Trailer"),
+        _r("Ibiporã", linha="Direct Drive"),
+    ]
+    _, _, resumo = particionar_mercado_disputavel(registros)
+    por_nome = {item["implementadora"]: item for item in resumo["implementadoras_fora_escopo"]}
+
+    assert por_nome["FIBRA WEST"]["registros"] == 2
+    assert por_nome["FIBRA WEST"]["diesel_truck"] == 1
+    assert por_nome["FIBRA WEST"]["direct_drive"] == 1
+    assert por_nome["HIGH FLEX"]["registros"] == 2
+    assert por_nome["HIGH FLEX"]["direct_drive"] == 2
+    assert por_nome["PLANALTO"]["trailer"] == 1
+    assert sum(item["registros"] for item in resumo["implementadoras_fora_escopo"]) == resumo["mercado_fora_escopo_comercial"]
+    assert sum(item["direct_drive"] for item in resumo["implementadoras_fora_escopo"]) == resumo["auditoria"]["segmentos"]["DD"]["mercado_excluido"]

@@ -42,10 +42,15 @@ export default function DashboardExecutivo(){
      </div>
     </header>
     <AnfirTresMercadosSeguro responsavelId={responsavelEfetivo||undefined}/>
-    <AnfirWorkbookPanel responsavelId={responsavelEfetivo||undefined}/>
+    <div className="dashboard-workbook-clean"><AnfirWorkbookPanel responsavelId={responsavelEfetivo||undefined}/></div>
     <AnfirWorkbookCharts responsavelId={responsavelEfetivo||undefined}/>
     <CommercialTruthPanel responsavelId={responsavelEfetivo||undefined}/>
    </div>
   </section>
+  <style jsx global>{`
+    .dashboard-workbook-clean > section > div.mt-6.space-y-6 > div:nth-child(1),
+    .dashboard-workbook-clean > section > div.mt-6.space-y-6 > div:nth-child(2) { display: none; }
+    .dashboard-workbook-clean > section > div.mt-6.space-y-5 > div:first-child.rounded-xl { display: none; }
+  `}</style>
  </main>
 }
