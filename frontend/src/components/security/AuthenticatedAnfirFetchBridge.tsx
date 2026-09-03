@@ -46,11 +46,16 @@ export default function AuthenticatedAnfirFetchBridge() {
           : input.url
       const metodo = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
       const legadoSeguro = destinoSeguroLeitura(url, metodo)
+
+      // Mantém o contrato homologado do bridge ANFIR e acrescenta apenas as
+      // leituras CRM seguras. Escritas continuam usando exatamente a rota original.
+      if (!url.includes(ANFIR_WORKBOOK_PATH)) {
+        if (!url.includes(CTI_ANALYTICS_PATH) && !url.includes(CRM_PROXY_PATH) && !legadoSeguro) {
+          return originalFetch(input, init)
+        }
+      }
+
       const destino = legadoSeguro || input
-
-      const leituraCti = Boolean(legadoSeguro) || url.includes(ANFIR_WORKBOOK_PATH) || url.includes(CTI_ANALYTICS_PATH) || url.includes(CRM_PROXY_PATH)
-      if (!leituraCti) return originalFetch(input, init)
-
       const leituraSegura = metodo === "GET" || metodo === "HEAD"
       const supabase = getSupabaseClient()
       const { data, error } = await supabase.auth.getSession()
@@ -80,6 +85,9 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       const headersRenovados = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headersRenovados.set("Authorization", `Bearer ${tokenRenovado}`)
+      if (!legadoSeguro) {
+        return originalFetch(input, { ...init, headers: headersRenovados })
+      }
       return originalFetch(destino, { ...init, headers: headersRenovados })
     }
 
