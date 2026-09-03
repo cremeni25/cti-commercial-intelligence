@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import hmac
 from datetime import datetime, timezone
+from hashlib import sha256
+from pathlib import Path
 from typing import Any, Mapping
 
+from services.legacy_doc_normalization_service import LegacyDocNormalizationError, normalize_legacy_doc_to_docx
 from services.official_proposal_document import render_official_docx, verify_media_preserved
 from services.proposal_document_payload import build_proposal_document_payload
 from services.proposal_template_catalog import template_for_equipment
@@ -43,9 +46,21 @@ def finalize_official_proposal(
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
     if not source_path or not expected_hash:
         raise ProposalDocumentRepositoryError("Modelo oficial sem arquivo mestre ou SHA-256 registrado.")
-    source = supabase.storage.from_(MASTER_BUCKET).download(source_path)
-    if not source:
+    source_original = bytes(supabase.storage.from_(MASTER_BUCKET).download(source_path) or b"")
+    if not source_original:
         raise ProposalDocumentRepositoryError("Arquivo mestre indisponível no bucket privado.")
+
+    original_hash = sha256(source_original).hexdigest()
+    if not hmac.compare_digest(original_hash.lower(), expected_hash):
+        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo oficial registrado.")
+
+    source = source_original
+    source_name = str(model.get("arquivo_template_nome_original") or Path(source_path).name)
+    if source_name.lower().endswith(".doc") and not source_name.lower().endswith(".docx"):
+        try:
+            source = normalize_legacy_doc_to_docx(source_original, source_name).content
+        except LegacyDocNormalizationError as exc:
+            raise ProposalDocumentRepositoryError(f"Falha ao normalizar o modelo DOC legado: {exc}") from exc
 
     snapshot_atual = proposta.get("snapshot_dados") or {}
     if not isinstance(snapshot_atual, Mapping):
@@ -59,18 +74,16 @@ def finalize_official_proposal(
         proposal=dict(proposta), item=dict(item), opportunity=dict(oportunidade), client=dict(cliente), validate_required=False,
     )
     generated = render_official_docx(
-        bytes(source), equipment, payload, output_number=numero_saida, validate_required=False, require_all_requested_anchors=False,
+        source, equipment, payload, output_number=numero_saida, validate_required=False, require_all_requested_anchors=False,
     )
-    if not hmac.compare_digest(generated.source_sha256.lower(), expected_hash):
-        raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do modelo oficial registrado.")
-    if not verify_media_preserved(bytes(source), generated.content):
+    if not verify_media_preserved(source, generated.content):
         raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")
 
     proposal_id = str(proposta.get("id") or "").strip()
     if not proposal_id:
         raise ProposalDocumentRepositoryError("Proposta sem identificador persistente.")
     version = int(proposta.get("versao") or 1)
-    source_revision = generated.source_sha256[:12]
+    source_revision = original_hash[:12]
     if revisao_documental <= 1:
         path = f"propostas/{proposal_id}/v{version}/fonte-{source_revision}/{generated.filename}"
     else:
@@ -82,10 +95,10 @@ def finalize_official_proposal(
     metadata = {
         "bucket": FINAL_BUCKET, "path": path, "filename": generated.filename, "mime_type": DOCX_MIME,
         "sha256": generated.sha256, "source_bucket": MASTER_BUCKET, "source_path": source_path,
-        "source_sha256": generated.source_sha256, "template_code": generated.template_code,
-        "template_version": generated.template_version, "document_revision": revisao_documental,
-        "finalized_at": _now(), "preserves_images": True, "preserves_carrier_branding": True,
-        "immutable": True, "document_format": "DOCX",
+        "source_sha256": original_hash, "normalized_source_sha256": generated.source_sha256,
+        "template_code": generated.template_code, "template_version": generated.template_version,
+        "document_revision": revisao_documental, "finalized_at": _now(), "preserves_images": True,
+        "preserves_carrier_branding": True, "immutable": True, "document_format": "DOCX",
     }
     snapshot_persistido = {**snapshot_atual, "arquivo_documento": metadata}
     snapshot_persistido.pop("revisao_aberta_em", None)
