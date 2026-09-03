@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server"
 
 import { caminhoCanonicoLeitura } from "@/lib/crm-canonical"
 
+// Leituras estratégicas agregam ANFIR, histórico e CRM e podem levar alguns
+// segundos no backend. O limite explícito evita que a função serverless encerre
+// uma resposta saudável do Render antes de ela chegar ao CTI Web.
+export const maxDuration = 60
+
 const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com").replace(/\/$/, "")
 const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
 const ATRASOS_RETRY_MS = [0, 180, 450]
