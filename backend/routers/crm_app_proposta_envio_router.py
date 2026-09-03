@@ -188,26 +188,24 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     except ProposalDocumentRepositoryError as exc:
         raise HTTPException(status_code=503, detail=f"Não foi possível preparar o documento oficial da proposta: {exc}") from exc
 
-    arquivo_nome: str
-    arquivo_conteudo: bytes
-    arquivo_sha256: str
-    paginas: int
-    formato: str
+    expected_pages = int(preview.get("expected_pages") or 4)
     try:
-        pdf = convert_docx_to_pdf(bytes(preview["content"]), str(preview["filename"]))
-        arquivo_nome = pdf.filename
-        arquivo_conteudo = pdf.content
-        arquivo_sha256 = pdf.sha256
-        paginas = pdf.page_count
-        formato = "PDF"
-    except DocxPdfConversionError:
-        # Continuidade comercial: o conversor PDF é uma camada de conveniência,
-        # não pode bloquear o envio do documento oficial já gerado e validado.
-        arquivo_nome = str(preview["filename"])
-        arquivo_conteudo = bytes(preview["content"])
-        arquivo_sha256 = str(preview["sha256"])
-        paginas = 4
-        formato = "DOCX"
+        pdf = convert_docx_to_pdf(
+            bytes(preview["content"]),
+            str(preview["filename"]),
+            expected_pages=expected_pages,
+        )
+    except DocxPdfConversionError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Não foi possível converter a proposta oficial para PDF. O envio por e-mail exige PDF validado: {exc}",
+        ) from exc
+
+    arquivo_nome = pdf.filename
+    arquivo_conteudo = pdf.content
+    arquivo_sha256 = pdf.sha256
+    paginas = pdf.page_count
+    formato = "PDF"
 
     destinatarios = _emails_validos(dados.destinatarios, campo="Para")
     cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
@@ -218,17 +216,16 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     valor_br = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
     mensagem = str(dados.mensagem or "Segue a proposta comercial para sua análise.").strip()
     assunto = str(dados.assunto or f"Proposta comercial {numero} - CTI").strip()
-    descricao_formato = "PDF" if formato == "PDF" else "Word oficial (DOCX)"
     html = (
         f"<p>Olá, {escape(cliente_nome)}.</p>"
         f"<p>{escape(mensagem)}</p>"
         f"<p><strong>Proposta:</strong> {escape(numero)}<br>"
         f"<strong>Valor:</strong> {escape(valor_br)}</p>"
-        f"<p>O documento oficial segue anexado em {escape(descricao_formato)}.</p>"
+        "<p>O documento oficial segue anexado em PDF.</p>"
     )
     texto = (
         f"Olá, {cliente_nome}.\n\n{mensagem}\n\nProposta: {numero}\nValor: {valor_br}"
-        f"\n\nO documento oficial segue anexado em {descricao_formato}."
+        "\n\nO documento oficial segue anexado em PDF."
     )
 
     try:
