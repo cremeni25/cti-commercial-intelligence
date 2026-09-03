@@ -29,6 +29,7 @@ from routers.crm_scope_empresas_router import router as crm_scope_empresas_route
 from routers.crm_scope_estrategia_router import router as crm_scope_estrategia_router
 from routers.crm_scope_financeiro_router import router as crm_scope_financeiro_router
 from routers.crm_scope_implementadoras_router import router as crm_scope_implementadoras_router
+from routers.crm_scope_mapa_equipe_router import router as crm_scope_mapa_equipe_router
 from routers.crm_scope_negocio_historico_router import router as crm_scope_negocio_historico_router
 from routers.crm_scope_relatorios_router import router as crm_scope_relatorios_router
 from routers.crm_scope_vendas_router import router as crm_scope_vendas_router
@@ -86,6 +87,7 @@ app.include_router(crm_scope_documents_secure_router)
 app.include_router(crm_scope_documents_public_router)
 app.include_router(crm_scope_empresas_router)
 app.include_router(crm_scope_estrategia_router)
+app.include_router(crm_scope_mapa_equipe_router)
 app.include_router(crm_scope_financeiro_router)
 app.include_router(crm_scope_implementadoras_router)
 app.include_router(crm_scope_relatorios_router)

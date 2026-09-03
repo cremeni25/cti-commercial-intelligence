@@ -1,56 +1,195 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { useAuth } from "@/core/auth/AuthContext"
-import { useOperationalContext } from "@/context/OperationalContext"
-import { useStrategicI18n } from "@/core/i18n/strategic"
-import { getMapaEstrategico, type MapaEstrategicoResumo, type RankingItem } from "@/services/modulos-api"
+import { getMapaEquipeVisao, type MapaEquipeVisao } from "@/services/mapa-equipe-api"
 
 export default function Page() {
-  const { usuario } = useAuth(); const { contextoAtual, queryString } = useOperationalContext(); const { t, formatNumber, formatCurrency } = useStrategicI18n()
-  const [dados,setDados]=useState<MapaEstrategicoResumo|null>(null),[loading,setLoading]=useState(true),[erro,setErro]=useState("")
-  const queryEstrategica=(()=>{const q=new URLSearchParams(queryString||"");q.set("periodo","ANO_ATUAL");q.delete("inicio");q.delete("fim");return q.toString()})()
-  useEffect(()=>{let ativo=true;queueMicrotask(()=>{if(!ativo)return;setLoading(true);setErro("");getMapaEstrategico(queryEstrategica).then((mapa)=>{if(!ativo)return;setDados(mapa)}).catch(()=>{if(ativo)setErro(t("map.loadError"))}).finally(()=>{if(ativo)setLoading(false)})});return()=>{ativo=false}},[queryEstrategica,t])
-  const perfil=String(usuario?.tipo_usuario||"").toUpperCase(), gestaoComercial=perfil==="ADMIN_MASTER"||perfil==="DIRETOR_VIENA_SP", escopoExibido=gestaoComercial?t("map.consolidatedScope"):t("map.allowedScope",{name:usuario?.nome||t("map.authUser")})
-  const numero=(v:number)=>formatNumber(Number(v||0)), moeda=(v:number)=>formatCurrency(Number(v||0),{maximumFractionDigits:0})
-  const drill=(camada:"anfir"|"historico"|"crm",campo:string|undefined,valor:string|undefined,titulo:string)=>hrefDrill(camada,campo,valor,titulo,queryEstrategica,t("map.drillSub"))
-  return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="space-y-7 p-4 sm:p-6 lg:p-8">
-    <header><p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Leitura estratégica regional</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">Mapa Comercial Estratégico</h1><p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">Leitura territorial e comercial do mercado refrigerado, preservando ANFIR, Histórico Comercial e CRM como fontes independentes e rastreáveis.</p><div className="mt-4 flex flex-wrap gap-2 text-xs"><Pill>{t("common.scope")}: {escopoExibido}</Pill><Pill>{t("common.session")}: {usuario?.nome||t("map.authUser")}</Pill><Pill>{t("common.context")}: {contextoAtual.label}</Pill><Pill>{t("common.period")}: 2026</Pill></div></header>
-    <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80"><strong>Regra de leitura.</strong> ANFIR representa o Mercado Real Viena em 2026. Histórico/Funil representa registros comerciais preservados de 2026 e não é mercado. CRM representa somente a operação registrada desde sua entrada em uso. Os três totais não são comparados como se fossem a mesma grandeza.</div>
-    {erro&&<div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}{loading&&<div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">{t("map.loading")}</div>}
-    {!loading&&dados&&<><section className="grid gap-4 md:grid-cols-3"><Kpi titulo="Mercado Real Viena · ANFIR 2026" valor={numero(dados.realizado.total_registros)} apoio={moeda(dados.realizado.valor_total)} tom="cyan" href={drill("anfir",undefined,undefined,"Mercado Real Viena · ANFIR 2026")} detalhe={t("common.clickDetail")}/><Kpi titulo="Registros Funil / Histórico 2026" valor={numero(dados.historico_comercial.total_registros)} apoio={t("map.nominalUnits",{count:numero(dados.historico_comercial.total_unidades)})} tom="amber" href={drill("historico",undefined,undefined,"Registros Funil / Histórico 2026")} detalhe={t("common.clickDetail")}/><Kpi titulo="CRM · operação atual" valor={numero(dados.em_curso.total_registros)} apoio={moeda(dados.em_curso.valor_pipeline)} tom="emerald" href={drill("crm",undefined,undefined,"CRM · operação atual")} detalhe={t("common.clickDetail")}/></section>
+  const [responsavelId, setResponsavelId] = useState<string>("")
+  const [dados, setDados] = useState<MapaEquipeVisao | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState("")
 
-    <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
-      <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Três fontes de evidência</p><h2 className="mt-1 text-xl font-semibold">Mercado realizado, registros comerciais e operação atual</h2><p className="mt-2 max-w-4xl text-xs leading-5 text-slate-500">ANFIR, Histórico/Funil e CRM permanecem independentes. O CTI não usa diferença entre esses totais como taxa de conversão, share ou avaliação automática da equipe.</p></div>
-      <div className="mt-5 grid gap-3 md:grid-cols-3">
-        <EtapaCiclo titulo="Mercado Real Viena · ANFIR 2026" valor={numero(dados.realizado.total_registros)} apoio={moeda(dados.realizado.valor_total)} descricao="Mercado efetivamente observado em 2026 depois das exclusões comerciais globais autorizadas." tom="cyan" href={drill("anfir",undefined,undefined,"Mercado Real Viena · ANFIR 2026")}/>
-        <EtapaCiclo titulo="Registros Funil / Histórico 2026" valor={numero(dados.historico_comercial.total_registros)} apoio={t("map.nominalUnits",{count:numero(dados.historico_comercial.total_unidades)})} descricao="Registros preservados da operação comercial de 2026. Não representam tamanho de mercado nem share." tom="amber" href={drill("historico",undefined,undefined,"Registros Funil / Histórico 2026")}/>
-        <EtapaCiclo titulo="CRM · operação atual" valor={numero(dados.em_curso.total_registros)} apoio={moeda(dados.em_curso.valor_pipeline)} descricao="Negociações e oportunidades ativas registradas desde a entrada operacional do CRM." tom="emerald" href={drill("crm",undefined,undefined,"CRM · operação atual")}/>
-      </div>
-      <div className="mt-5 grid gap-4 xl:grid-cols-2">
-        <div className="rounded-xl border border-[#13203f] bg-[#08162d] p-4"><h3 className="font-semibold text-slate-100">Leitura gerencial imediata</h3><div className="mt-3 space-y-2 text-sm text-slate-400"><p>• Mercado Real Viena: base comercial oficial para share, cobertura e avaliação territorial.</p><p>• Histórico/Funil: evidência de registros comerciais de 2026, nunca denominador de mercado.</p><p>• CRM: fotografia da operação corrente desde sua implantação.</p></div></div>
-        <div className="rounded-xl border border-[#13203f] bg-[#08162d] p-4"><h3 className="font-semibold text-slate-100">Regra de avaliação da equipe</h3><div className="mt-3 space-y-2 text-sm text-slate-400"><p>• Não gerar negativa por ausência de CRM anterior ao lançamento da ferramenta.</p><p>• Alertas de acompanhamento serão avaliados somente sobre oportunidades e eventos posteriores à entrada operacional do CRM.</p><p>• Ganhos e perdas exigem evidência do ciclo comercial; totais de fontes diferentes não são comparados diretamente.</p></div></div>
-      </div>
-    </section>
+  useEffect(() => {
+    let ativo = true
+    getMapaEquipeVisao(responsavelId || null)
+      .then((payload) => { if (ativo) setDados(payload) })
+      .catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar a visão comercial regional.") })
+      .finally(() => { if (ativo) setLoading(false) })
+    return () => { ativo = false }
+  }, [responsavelId])
 
-    <section className="grid gap-5 xl:grid-cols-3"><Ranking titulo="Cobertura por estado · Mercado Real ANFIR 2026" itens={dados.realizado.estados} vazio={t("map.noState")} camada="anfir" campo="estado" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/><Ranking titulo="Cobertura por município · Mercado Real ANFIR 2026" itens={dados.realizado.municipios} vazio={t("map.noCity")} camada="anfir" campo="municipio" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/><Ranking titulo="Cobertura por DDD · Mercado Real ANFIR 2026" itens={dados.realizado.ddds} vazio={t("map.noDdd")} camada="anfir" campo="ddd" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/></section>
+  const trocarResponsavel = (novoId: string) => {
+    setLoading(true)
+    setErro("")
+    setResponsavelId(novoId)
+  }
 
-    <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><div className="mb-4"><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Mercado real por família</p><h2 className="mt-1 text-lg font-semibold">ANFIR 2026 · Mercado Real Viena</h2><p className="mt-2 text-xs text-slate-500">Somente o mercado efetivamente disputável pela Viena. Histórico e CRM não entram neste quadro porque não representam tamanho de mercado.</p></div><div className="grid gap-3 md:grid-cols-3">{familias(dados).map(item=><div key={item.nome} className="rounded-xl border border-[#13203f] bg-[#08162d] p-4"><h3 className="font-semibold">{item.nome}</h3><div className="mt-3 text-sm"><Linha rotulo="Mercado Real ANFIR 2026" valor={item.realizado} cor="text-cyan-300" href={drill("anfir","familia",item.slug,`${item.nome} · Mercado Real ANFIR 2026`)} formatNumber={formatNumber}/></div></div>)}</div></section>
+  const familiaTotal = useMemo(() => {
+    if (!dados) return 0
+    const f = dados.mercado.familias
+    return f.trailer + f.diesel_truck + f.direct_drive
+  }, [dados])
 
-    <section className="grid gap-5 xl:grid-cols-3"><Ranking titulo="Empresas · Mercado Real ANFIR 2026" itens={dados.realizado.empresas} vazio={t("map.noCompany")} camada="anfir" campo="empresa" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/><Ranking titulo="Equipamentos citados nos registros Funil / Histórico 2026" itens={dados.historico_comercial.equipamentos} vazio={t("map.noHistEquipment")} camada="historico" campo="equipamento" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/><Ranking titulo="Equipamentos nas oportunidades CRM em curso" itens={dados.em_curso.equipamentos} vazio={t("map.noLiveEquipment")} camada="crm" campo="equipamento" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/></section>
+  return (
+    <main className="flex min-h-screen bg-[#020817] text-white">
+      <Sidebar />
+      <section className="min-w-0 flex-1">
+        <Topbar />
+        <div className="space-y-6 p-4 sm:p-6 lg:p-8">
+          <header className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Gestão comercial regional</p>
+              <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Mapa Comercial Estratégico</h1>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">
+                Mercado Real Viena 2026 por região e responsável, com ANFIR como mercado, Histórico/Funil como evidência comercial e CRM como operação atual.
+              </p>
+            </div>
+            {dados?.pode_selecionar_responsavel && (
+              <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-400">
+                Região / responsável
+                <select
+                  value={responsavelId}
+                  onChange={(e) => trocarResponsavel(e.target.value)}
+                  className="mt-2 w-full rounded-xl border border-[#214363] bg-[#071226] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400"
+                >
+                  <option value="">Toda a equipe comercial</option>
+                  {dados.equipe.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+          </header>
 
-    <section className="grid gap-5 xl:grid-cols-2"><Ranking titulo="Implementadoras · Mercado Real ANFIR 2026" itens={dados.realizado.implementadoras} vazio={t("map.noBodyBuilder")} camada="anfir" campo="implementadora" queryString={queryEstrategica} subtitulo={t("map.drillSub")} formatNumber={formatNumber}/><div className="rounded-2xl border border-amber-500/20 bg-amber-950/10 p-5"><h2 className="font-semibold text-amber-200">Histórico/Funil não é mercado de implementadoras</h2><p className="mt-3 text-sm leading-6 text-slate-400">A implementadora registrada no Histórico/Funil é apenas um atributo do registro comercial preservado. Ela não deve ser confrontada com o ranking ANFIR como se fosse participação de mercado. Por isso o ranking histórico foi retirado desta leitura estratégica.</p></div></section>
+          {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
+          {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando leitura regional...</div>}
 
-    <div className="rounded-xl border border-cyan-500/25 bg-cyan-950/10 p-4 text-sm leading-6 text-cyan-100/80">Regra do Mapa Comercial: Mercado Real Viena vem da ANFIR filtrada. Histórico/Funil e CRM são evidências operacionais independentes e só serão correlacionados cliente a cliente quando houver vínculo rastreável.</div></>}
-  </div></section></main>
+          {!loading && dados && (
+            <>
+              <section className="rounded-2xl border border-cyan-500/30 bg-[#071226] p-5">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Recorte ativo</p>
+                    <h2 className="mt-1 text-2xl font-semibold">{dados.selecao.nome}</h2>
+                    <p className="mt-2 text-sm text-slate-400">
+                      {dados.selecao.codigo_regional || "Consolidado Viena SP"}
+                      {dados.selecao.ddds.length ? ` · DDDs ${dados.selecao.ddds.join(", ")}` : ""}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-cyan-500/20 bg-cyan-950/10 px-4 py-3 text-sm text-cyan-100/80">
+                    Base oficial: Mercado Real Viena 2026. Fibra West, High Flex e Planalto já estão fora do mercado funcional.
+                  </div>
+                </div>
+              </section>
+
+              <section className="grid gap-4 xl:grid-cols-3">
+                <Kpi titulo="Mercado Real Viena 2026" valor={dados.mercado.mercado_real_viena_2026} apoio="Base total efetivamente disputável" />
+                <Kpi titulo="Mercado da região / carteira" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}% do Mercado Real Viena`} />
+                <Kpi titulo="Clientes únicos no mercado real" valor={dados.mercado.clientes_unicos} apoio="Clientes observados no recorte ANFIR da seleção" />
+              </section>
+
+              <section className="grid gap-5 xl:grid-cols-2">
+                <GraficoPizzaParticipacao
+                  percentual={dados.mercado.participacao_regiao_no_mercado_real_pct}
+                  selecionado={dados.mercado.mercado_real_selecao_2026}
+                  total={dados.mercado.mercado_real_viena_2026}
+                  titulo="Peso da região no Mercado Real Viena"
+                />
+                <GraficoPizzaFamilias familias={dados.mercado.familias} total={familiaTotal} />
+              </section>
+
+              <section className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-amber-500/20 bg-[#071226] p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[.14em] text-amber-300">Evidência comercial preservada</p>
+                  <h2 className="mt-1 text-xl font-semibold">Histórico / Funil 2026</h2>
+                  <div className="mt-5 grid grid-cols-2 gap-3">
+                    <MiniKpi rotulo="Registros" valor={dados.evidencias.historico_registros_2026} />
+                    <MiniKpi rotulo="Unidades nominais" valor={dados.evidencias.historico_unidades_2026} />
+                  </div>
+                  <p className="mt-4 text-xs leading-5 text-slate-500">Estes números são evidências de registros comerciais de 2026. Não representam tamanho de mercado nem share.</p>
+                </div>
+
+                <div className="rounded-2xl border border-emerald-500/20 bg-[#071226] p-5">
+                  <p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-300">Operação atual</p>
+                  <h2 className="mt-1 text-xl font-semibold">CRM desde a implantação</h2>
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                    <MiniKpi rotulo="Registros CRM" valor={dados.evidencias.crm_registros} />
+                    <MiniKpi rotulo="Ativos" valor={dados.evidencias.crm_ativos} />
+                    <MiniKpi rotulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} />
+                  </div>
+                  {dados.evidencias.crm_status.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {dados.evidencias.crm_status.map((item) => <Badge key={item.nome}>{item.nome}: {item.quantidade}</Badge>)}
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Rastreabilidade do ciclo</p>
+                  <h2 className="mt-1 text-xl font-semibold">Cliente a cliente · evidências encontradas</h2>
+                  <p className="mt-2 max-w-4xl text-sm leading-6 text-slate-400">O CTI cruza nomes de clientes entre as três fontes para encontrar continuidade. A diferença entre os totais nunca é tratada como conversão ou falha da equipe.</p>
+                </div>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                  <MiniKpi rotulo="Mercado real" valor={dados.ciclo.clientes_mercado_real} />
+                  <MiniKpi rotulo="Histórico 2026" valor={dados.ciclo.clientes_historico_2026} />
+                  <MiniKpi rotulo="CRM" valor={dados.ciclo.clientes_crm} />
+                  <MiniKpi rotulo="CRM + Histórico" valor={dados.ciclo.crm_com_evidencia_historico} />
+                  <MiniKpi rotulo="CRM + ANFIR" valor={dados.ciclo.crm_com_evidencia_anfir} />
+                  <MiniKpi rotulo="3 fontes" valor={dados.ciclo.clientes_com_evidencia_nas_tres_fontes} />
+                </div>
+                <div className="mt-4 rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-4 text-xs leading-5 text-cyan-100/70">{dados.ciclo.nota}</div>
+              </section>
+
+              <section className="grid gap-5 xl:grid-cols-2">
+                <Lista titulo="Status atuais do CRM" itens={dados.evidencias.crm_status} vazio="Ainda não há status CRM registrados neste recorte." />
+                <Lista titulo="Motivos de perda registrados no Histórico/Funil 2026" itens={dados.evidencias.motivos_perda_historico} vazio="Não há motivos de perda registrados neste recorte." />
+              </section>
+            </>
+          )}
+        </div>
+      </section>
+    </main>
+  )
 }
-function Pill({children}:{children:React.ReactNode}){return <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-slate-300">{children}</span>}
-function hrefDrill(camada:"anfir"|"historico"|"crm",campo:string|undefined,valor:string|undefined,titulo:string,base:string,subtitulo:string){const q=new URLSearchParams(base||"");q.set("camada",camada);q.set("titulo",titulo);q.set("subtitulo",subtitulo);if(campo)q.set("campo",campo);if(valor)q.set("valor",valor);return `/detalhamento?${q.toString()}`}
-function Kpi({titulo,valor,apoio,tom,href,detalhe}:{titulo:string;valor:string;apoio:string;tom:"cyan"|"amber"|"emerald";href:string;detalhe:string}){const cor=tom==="amber"?"text-amber-300":tom==="emerald"?"text-emerald-300":"text-cyan-300";return <Link href={href} className="rounded-2xl border border-[#17304d] bg-[#071226] p-5 transition hover:border-cyan-500/70 hover:bg-[#0a1a31]"><p className={`text-xs font-semibold uppercase tracking-[.14em] ${cor}`}>{titulo}</p><strong className="mt-2 block text-3xl">{valor}</strong><p className="mt-1 text-sm text-slate-400">{apoio}</p><p className="mt-3 text-[11px] text-slate-500">{detalhe}</p></Link>}
-function EtapaCiclo({titulo,valor,apoio,descricao,tom,href}:{titulo:string;valor:string;apoio:string;descricao:string;tom:"cyan"|"amber"|"emerald";href:string}){const cor=tom==="amber"?"text-amber-300":tom==="emerald"?"text-emerald-300":"text-cyan-300";return <Link href={href} className="rounded-xl border border-[#13203f] bg-[#08162d] p-4 transition hover:border-cyan-500/60"><p className={`text-xs font-semibold uppercase tracking-[.12em] ${cor}`}>{titulo}</p><strong className="mt-2 block text-3xl">{valor}</strong><p className="mt-1 text-sm text-slate-300">{apoio}</p><p className="mt-3 text-xs leading-5 text-slate-500">{descricao}</p></Link>}
-function Ranking({titulo,itens,vazio,camada,campo,queryString,subtitulo,formatNumber}:{titulo:string;itens:RankingItem[];vazio:string;camada:"anfir"|"historico"|"crm";campo:string;queryString:string;subtitulo:string;formatNumber:(v:number)=>string}){return <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length===0?<p className="mt-4 text-sm text-slate-500">{vazio}</p>:<div className="mt-4 space-y-2">{itens.slice(0,12).map(item=><Link href={hrefDrill(camada,campo,item.nome,`${titulo} · ${item.nome}`,queryString,subtitulo)} key={item.nome} className="flex items-center justify-between gap-4 rounded-xl bg-[#08162d] px-3 py-2.5 text-sm transition hover:bg-[#0b1d38] hover:ring-1 hover:ring-cyan-500/50"><span className="min-w-0 truncate text-slate-300">{item.nome}</span><strong className="shrink-0 text-cyan-300">{formatNumber(item.quantidade_registros)}</strong></Link>)}</div>}</section>}
-function Linha({rotulo,valor,cor,href,formatNumber}:{rotulo:string;valor:number;cor:string;href:string;formatNumber:(v:number)=>string}){return <Link href={href} className="flex items-center justify-between gap-3 rounded-lg px-2 py-1 transition hover:bg-[#0b1d38]"><span className="text-slate-400">{rotulo}</span><strong className={cor}>{formatNumber(valor)}</strong></Link>}
-function familias(dados:MapaEstrategicoResumo){const itens=[{nome:"TR • Trailer",slug:"trailer"},{nome:"DT • Diesel Truck",slug:"diesel-truck"},{nome:"DD • Direct Drive",slug:"direct-drive"}];const procurar=(lista:RankingItem[]|undefined,nome:string)=>lista?.find(i=>i.nome===nome)?.quantidade_registros??0;return itens.map(item=>({...item,realizado:procurar(dados.realizado.familias,item.nome)}))}
+
+function Kpi({ titulo, valor, apoio }: { titulo: string; valor: number; apoio: string }) {
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><p className="text-xs font-semibold uppercase tracking-[.13em] text-cyan-300">{titulo}</p><strong className="mt-2 block text-3xl">{valor.toLocaleString("pt-BR")}</strong><p className="mt-2 text-xs text-slate-500">{apoio}</p></div>
+}
+
+function MiniKpi({ rotulo, valor }: { rotulo: string; valor: number | string }) {
+  return <div className="rounded-xl border border-[#13203f] bg-[#08162d] p-3"><p className="text-[11px] uppercase tracking-[.1em] text-slate-500">{rotulo}</p><strong className="mt-1 block text-xl text-slate-100">{typeof valor === "number" ? valor.toLocaleString("pt-BR") : valor}</strong></div>
+}
+
+function Badge({ children }: { children: React.ReactNode }) {
+  return <span className="rounded-full border border-slate-700 bg-slate-900/70 px-3 py-1.5 text-xs text-slate-300">{children}</span>
+}
+
+function GraficoPizzaParticipacao({ percentual, selecionado, total, titulo }: { percentual: number; selecionado: number; total: number; titulo: string }) {
+  const pct = Math.max(0, Math.min(100, percentual))
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2><div className="mt-5 flex flex-col items-center gap-5 sm:flex-row"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${pct}%, #172554 ${pct}% 100%)` }}><div className="absolute inset-7 flex items-center justify-center rounded-full bg-[#071226]"><strong className="text-2xl">{pct.toFixed(1)}%</strong></div></div><div className="space-y-3 text-sm"><Legenda cor="bg-cyan-400" texto={`Região / carteira: ${selecionado.toLocaleString("pt-BR")}`} /><Legenda cor="bg-blue-950" texto={`Demais regiões: ${Math.max(0, total - selecionado).toLocaleString("pt-BR")}`} /><p className="pt-2 text-xs leading-5 text-slate-500">A pizza mede somente a participação territorial dentro do Mercado Real Viena 2026.</p></div></div></div>
+}
+
+function GraficoPizzaFamilias({ familias, total }: { familias: { trailer: number; diesel_truck: number; direct_drive: number }; total: number }) {
+  const tr = total ? familias.trailer / total * 100 : 0
+  const dt = total ? familias.diesel_truck / total * 100 : 0
+  const ddFim = Math.min(100, tr + dt + (total ? familias.direct_drive / total * 100 : 0))
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">Composição do mercado real da região</h2><div className="mt-5 flex flex-col items-center gap-5 sm:flex-row"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${tr}%, #f59e0b ${tr}% ${tr + dt}%, #34d399 ${tr + dt}% ${ddFim}%, #172554 ${ddFim}% 100%)` }}><div className="absolute inset-7 flex items-center justify-center rounded-full bg-[#071226]"><strong className="text-xl">{total.toLocaleString("pt-BR")}</strong></div></div><div className="space-y-3 text-sm"><Legenda cor="bg-cyan-400" texto={`Trailer: ${familias.trailer.toLocaleString("pt-BR")}`} /><Legenda cor="bg-amber-500" texto={`Diesel Truck: ${familias.diesel_truck.toLocaleString("pt-BR")}`} /><Legenda cor="bg-emerald-400" texto={`Direct Drive: ${familias.direct_drive.toLocaleString("pt-BR")}`} /><p className="pt-2 text-xs leading-5 text-slate-500">Distribuição interna do Mercado Real ANFIR 2026 no recorte selecionado.</p></div></div></div>
+}
+
+function Legenda({ cor, texto }: { cor: string; texto: string }) {
+  return <div className="flex items-center gap-2 text-slate-300"><span className={`h-3 w-3 rounded-sm ${cor}`} />{texto}</div>
+}
+
+function Lista({ titulo, itens, vazio }: { titulo: string; itens: Array<{ nome: string; quantidade: number }>; vazio: string }) {
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.map((item) => <div key={item.nome} className="flex items-center justify-between rounded-xl bg-[#08162d] px-3 py-2.5 text-sm"><span className="text-slate-300">{item.nome}</span><strong className="text-cyan-300">{item.quantidade.toLocaleString("pt-BR")}</strong></div>)}</div>}</div>
+}
+
+function formatarMoeda(valor: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(valor || 0)
+}
