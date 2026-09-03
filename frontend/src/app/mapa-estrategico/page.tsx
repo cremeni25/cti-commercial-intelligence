@@ -47,17 +47,9 @@ export default function Page() {
             {dados?.pode_selecionar_responsavel && (
               <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-400">
                 Região / responsável
-                <select
-                  value={responsavelId}
-                  onChange={(e) => trocarResponsavel(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#214363] bg-[#071226] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400"
-                >
+                <select value={responsavelId} onChange={(e) => trocarResponsavel(e.target.value)} className="mt-2 w-full rounded-xl border border-[#214363] bg-[#071226] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400">
                   <option value="">Toda a equipe comercial</option>
-                  {dados.equipe.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}
-                    </option>
-                  ))}
+                  {dados.equipe.map((item) => <option key={item.id} value={item.id}>{item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}</option>)}
                 </select>
               </label>
             )}
@@ -66,87 +58,56 @@ export default function Page() {
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando leitura regional...</div>}
 
-          {!loading && dados && (
-            <>
-              <section className="flex flex-col gap-3 rounded-2xl border border-cyan-500/30 bg-[#071226] p-5 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Responsável analisado</p>
-                  <h2 className="mt-1 text-2xl font-semibold">{dados.selecao.nome}</h2>
-                  {(dados.selecao.codigo_regional || dados.selecao.ddds.length > 0) && (
-                    <p className="mt-1 text-sm text-slate-400">
-                      {dados.selecao.codigo_regional || "Viena SP"}
-                      {dados.selecao.ddds.length ? ` · DDDs ${dados.selecao.ddds.join(", ")}` : ""}
-                    </p>
-                  )}
-                </div>
-                <span className="rounded-full border border-cyan-500/20 bg-cyan-950/10 px-4 py-2 text-xs font-semibold text-cyan-200">
-                  Base: Mercado Real Viena 2026
-                </span>
-              </section>
+          {!loading && dados && <>
+            <section className="flex flex-col gap-3 rounded-2xl border border-cyan-500/30 bg-[#071226] p-5 lg:flex-row lg:items-center lg:justify-between">
+              <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Responsável analisado</p><h2 className="mt-1 text-2xl font-semibold">{dados.selecao.nome}</h2>{(dados.selecao.codigo_regional || dados.selecao.ddds.length > 0) && <p className="mt-1 text-sm text-slate-400">{dados.selecao.codigo_regional || "Viena SP"}{dados.selecao.ddds.length ? ` · DDDs ${dados.selecao.ddds.join(", ")}` : ""}</p>}</div>
+              <span className="rounded-full border border-cyan-500/20 bg-cyan-950/10 px-4 py-2 text-xs font-semibold text-cyan-200">Base: Mercado Real Viena 2026</span>
+            </section>
 
-              <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="100,0% da base comercial" />
-                <Kpi titulo="Mercado da carteira" valor={dados.mercado.mercado_real_selecao_2026} apoio="Unidades no recorte selecionado" />
-                <Kpi titulo="Participação no mercado real" valor={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} apoio={`${dados.mercado.mercado_real_selecao_2026.toLocaleString("pt-BR")} de ${dados.mercado.mercado_real_viena_2026.toLocaleString("pt-BR")}`} destaque />
-                <Kpi titulo="Clientes únicos" valor={dados.mercado.clientes_unicos} apoio="Clientes ANFIR no recorte" />
-              </section>
+            <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="100,0% da base comercial" />
+              <Kpi titulo="Mercado da carteira" valor={dados.mercado.mercado_real_selecao_2026} apoio="Unidades no recorte selecionado" />
+              <Kpi titulo="Participação no mercado real" valor={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} apoio={`${dados.mercado.mercado_real_selecao_2026.toLocaleString("pt-BR")} de ${dados.mercado.mercado_real_viena_2026.toLocaleString("pt-BR")}`} destaque />
+              <Kpi titulo="Clientes únicos" valor={dados.mercado.clientes_unicos} apoio="Clientes ANFIR no recorte" />
+            </section>
 
-              <section className="grid gap-5 xl:grid-cols-2">
-                <GraficoPizzaParticipacao
-                  percentual={dados.mercado.participacao_regiao_no_mercado_real_pct}
-                  selecionado={dados.mercado.mercado_real_selecao_2026}
-                  total={dados.mercado.mercado_real_viena_2026}
-                  nome={dados.selecao.nome}
-                />
-                <GraficoPizzaFamilias familias={dados.mercado.familias} total={familiaTotal} />
-              </section>
+            <section className="grid gap-5 xl:grid-cols-2">
+              <GraficoPizzaParticipacao percentual={dados.mercado.participacao_regiao_no_mercado_real_pct} selecionado={dados.mercado.mercado_real_selecao_2026} total={dados.mercado.mercado_real_viena_2026} nome={dados.selecao.nome} />
+              <GraficoPizzaFamilias familias={dados.mercado.familias} total={familiaTotal} />
+            </section>
 
-              <section>
-                <div className="mb-3">
-                  <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Atividade comercial do recorte</p>
-                </div>
-                <div className="grid gap-4 xl:grid-cols-2">
-                  <div className="rounded-2xl border border-amber-500/20 bg-[#071226] p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[.14em] text-amber-300">Histórico / Funil 2026</p>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <MiniKpi rotulo="Registros" valor={dados.evidencias.historico_registros_2026} />
-                      <MiniKpi rotulo="Unidades registradas" valor={dados.evidencias.historico_unidades_2026} />
-                    </div>
-                  </div>
+            <section className="rounded-2xl border border-emerald-500/30 bg-[#071226] p-5">
+              <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+                <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">Conciliação das três fontes</p><h2 className="mt-1 text-xl font-semibold">Mesmo cliente · mesmo responsável · mesmo recorte</h2></div>
+                <span className="text-xs text-slate-400">Universo reconciliado: {dados.reconciliacao.universo_clientes.toLocaleString("pt-BR")} clientes</span>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <MiniKpi rotulo="Clientes ANFIR" valor={dados.reconciliacao.clientes_anfir} />
+                <MiniKpi rotulo="Clientes Histórico/Funil" valor={dados.reconciliacao.clientes_historico} />
+                <MiniKpi rotulo="Clientes CRM" valor={dados.reconciliacao.clientes_crm} />
+                <MiniKpi rotulo="Presentes nas 3 fontes" valor={dados.reconciliacao.nas_tres_fontes} />
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <MiniKpi rotulo="ANFIR + Histórico" valor={dados.reconciliacao.anfir_historico} />
+                <MiniKpi rotulo="ANFIR + CRM" valor={dados.reconciliacao.anfir_crm} />
+                <MiniKpi rotulo="Histórico + CRM" valor={dados.reconciliacao.historico_crm} />
+              </div>
+              <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/10 px-4 py-3 text-xs text-slate-300">Fora do Mercado Real deste recorte: Histórico/Funil {dados.reconciliacao.historico_fora_mercado_real.toLocaleString("pt-BR")} cliente(s) · CRM {dados.reconciliacao.crm_fora_mercado_real.toLocaleString("pt-BR")} cliente(s). Estes registros permanecem auditáveis, mas não entram no denominador de mercado.</div>
+            </section>
 
-                  <div className="rounded-2xl border border-emerald-500/20 bg-[#071226] p-5">
-                    <p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-300">CRM em operação</p>
-                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      <MiniKpi rotulo="Registros" valor={dados.evidencias.crm_registros} />
-                      <MiniKpi rotulo="Ativos" valor={dados.evidencias.crm_ativos} />
-                      <MiniKpi rotulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} />
-                    </div>
-                  </div>
-                </div>
-              </section>
+            <section>
+              <div className="mb-3"><p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Eventos comerciais do mesmo recorte</p></div>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-amber-500/20 bg-[#071226] p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-amber-300">Histórico / Funil 2026</p><div className="mt-4 grid grid-cols-2 gap-3"><MiniKpi rotulo="Eventos registrados" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Unidades registradas" valor={dados.evidencias.historico_unidades_2026} /></div></div>
+                <div className="rounded-2xl border border-emerald-500/20 bg-[#071226] p-5"><p className="text-xs font-semibold uppercase tracking-[.14em] text-emerald-300">CRM em operação</p><div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3"><MiniKpi rotulo="Eventos CRM" valor={dados.evidencias.crm_registros} /><MiniKpi rotulo="Ativos" valor={dados.evidencias.crm_ativos} /><MiniKpi rotulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} /></div></div>
+              </div>
+            </section>
 
-              <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Continuidade comercial</p>
-                    <h2 className="mt-1 text-xl font-semibold">Evidências cliente a cliente</h2>
-                  </div>
-                  <span className="text-xs text-slate-500">Cruzamento de evidências, não conversão entre totais.</span>
-                </div>
-                <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  <MiniKpi rotulo="Clientes no mercado real" valor={dados.ciclo.clientes_mercado_real} />
-                  <MiniKpi rotulo="CRM + Histórico" valor={dados.ciclo.crm_com_evidencia_historico} />
-                  <MiniKpi rotulo="CRM + ANFIR" valor={dados.ciclo.crm_com_evidencia_anfir} />
-                  <MiniKpi rotulo="Presente nas 3 fontes" valor={dados.ciclo.clientes_com_evidencia_nas_tres_fontes} />
-                </div>
-              </section>
-
-              <section className="grid gap-5 xl:grid-cols-2">
-                <Lista titulo="Status atuais do CRM" itens={dados.evidencias.crm_status} vazio="Sem status CRM neste recorte." />
-                <Lista titulo="Motivos de perda · Histórico/Funil 2026" itens={dados.evidencias.motivos_perda_historico} vazio="Sem motivos de perda registrados neste recorte." />
-              </section>
-            </>
-          )}
+            <section className="grid gap-5 xl:grid-cols-2">
+              <Lista titulo="Status atuais do CRM" itens={dados.evidencias.crm_status} vazio="Sem status CRM neste recorte." />
+              <Lista titulo="Motivos de perda · Histórico/Funil 2026" itens={dados.evidencias.motivos_perda_historico} vazio="Sem motivos de perda registrados neste recorte." />
+            </section>
+          </>}
         </div>
       </section>
     </main>
@@ -174,14 +135,6 @@ function GraficoPizzaFamilias({ familias, total }: { familias: { trailer: number
   return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">Composição da carteira por linha</h2><div className="mt-5 flex flex-col items-center gap-6 sm:flex-row"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${tr}%, #f59e0b ${tr}% ${tr + dt}%, #34d399 ${tr + dt}% ${ddFim}%, #172554 ${ddFim}% 100%)` }}><div className="absolute inset-7 flex items-center justify-center rounded-full bg-[#071226]"><strong className="text-xl">{total.toLocaleString("pt-BR")}</strong></div></div><div className="space-y-3 text-sm"><Legenda cor="bg-cyan-400" texto={`Trailer: ${familias.trailer.toLocaleString("pt-BR")} · ${tr.toFixed(1)}%`} /><Legenda cor="bg-amber-500" texto={`Diesel Truck: ${familias.diesel_truck.toLocaleString("pt-BR")} · ${dt.toFixed(1)}%`} /><Legenda cor="bg-emerald-400" texto={`Direct Drive: ${familias.direct_drive.toLocaleString("pt-BR")} · ${dd.toFixed(1)}%`} /></div></div></div>
 }
 
-function Legenda({ cor, texto }: { cor: string; texto: string }) {
-  return <div className="flex items-center gap-2 text-slate-300"><span className={`h-3 w-3 rounded-sm ${cor}`} />{texto}</div>
-}
-
-function Lista({ titulo, itens, vazio }: { titulo: string; itens: Array<{ nome: string; quantidade: number }>; vazio: string }) {
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.map((item) => <div key={item.nome} className="flex items-center justify-between rounded-xl bg-[#08162d] px-3 py-2.5 text-sm"><span className="text-slate-300">{item.nome}</span><strong className="text-cyan-300">{item.quantidade.toLocaleString("pt-BR")}</strong></div>)}</div>}</div>
-}
-
-function formatarMoeda(valor: number) {
-  return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 })
-}
+function Legenda({ cor, texto }: { cor: string; texto: string }) { return <div className="flex items-center gap-2 text-slate-300"><span className={`h-3 w-3 rounded-sm ${cor}`} />{texto}</div> }
+function Lista({ titulo, itens, vazio }: { titulo: string; itens: Array<{ nome: string; quantidade: number }>; vazio: string }) { return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">{titulo}</h2>{itens.length === 0 ? <p className="mt-4 text-sm text-slate-500">{vazio}</p> : <div className="mt-4 space-y-2">{itens.map((item) => <div key={item.nome} className="flex items-center justify-between rounded-xl bg-[#08162d] px-3 py-2.5 text-sm"><span className="text-slate-300">{item.nome}</span><strong className="text-cyan-300">{item.quantidade.toLocaleString("pt-BR")}</strong></div>)}</div>}</div> }
+function formatarMoeda(valor: number) { return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }) }
