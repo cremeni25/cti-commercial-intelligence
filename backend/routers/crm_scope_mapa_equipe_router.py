@@ -18,9 +18,12 @@ from routers.crm_scope_estrategia_router import (
     _hist_do_usuario,
     _metadata_escopo,
 )
+from services.commercial_client_scope import filtrar_carteira_exata_responsavel
+from services.crm_live_projection import carregar_oportunidades_enriquecidas
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-equipe"])
+PERFIS_ANALISE = PERFIS_REGIONAIS | {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}
 
 
 def _fold(valor: Any) -> str:
@@ -44,8 +47,8 @@ def _equipe_ativa() -> list[dict[str, Any]]:
         )
     except Exception:
         dados = []
-    equipe = [item for item in dados if str(item.get("tipo_usuario") or "").upper() in PERFIS_REGIONAIS]
-    return sorted(equipe, key=lambda item: str(item.get("codigo_regional") or item.get("nome") or ""))
+    equipe = [item for item in dados if str(item.get("tipo_usuario") or "").upper() in PERFIS_ANALISE]
+    return sorted(equipe, key=lambda item: str(item.get("nome") or ""))
 
 
 def _usuario_regional(registro: dict[str, Any]) -> UsuarioAutenticado:
@@ -67,14 +70,11 @@ def _resolver_alvo(usuario: UsuarioAutenticado, responsavel_id: str | None) -> t
         return None, equipe
     registro = next((item for item in equipe if str(item.get("id")) == str(responsavel_id)), None)
     if not registro:
-        raise HTTPException(status_code=404, detail="Responsável comercial não encontrado ou fora do escopo regional.")
+        raise HTTPException(status_code=404, detail="Responsável comercial não encontrado ou fora do escopo de análise.")
     return _usuario_regional(registro), equipe
 
 
 def _familias(registros: list[dict[str, Any]]) -> dict[str, int]:
-    # Usa exatamente o mesmo classificador canônico do workbook ANFIR 2026.
-    # Assim Dashboard Executivo e Mapa Comercial não podem divergir na leitura
-    # TR/DT/DD para o mesmo conjunto de registros do Mercado Real Viena.
     contagem = Counter(classificar_linha(item) for item in registros)
     return {
         "trailer": int(contagem.get("TR", 0)),
@@ -103,6 +103,31 @@ def _ranking(counter: Counter, limite: int = 8) -> list[dict[str, Any]]:
     return [{"nome": str(nome), "quantidade": int(qtd)} for nome, qtd in counter.most_common(limite) if nome]
 
 
+def _historico_carteira(alvo: UsuarioAutenticado, inicio: date, fim: date) -> list[dict[str, Any]]:
+    registros = _hist_do_usuario(alvo, inicio, fim)
+    if alvo.tipo_usuario not in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+        return registros
+    nome = _fold(alvo.nome)
+    primeiro = nome.split(" ", 1)[0] if nome else ""
+    return [
+        item for item in registros
+        if primeiro and (
+            _fold(item.get("representante_atual")) == nome
+            or _fold(item.get("representante_atual")) == primeiro
+            or _fold(item.get("representante_atual")).startswith(f"{primeiro} ")
+        )
+    ]
+
+
+def _crm_carteira(alvo: UsuarioAutenticado) -> list[dict[str, Any]]:
+    if alvo.tipo_usuario not in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+        return _crm_do_usuario(alvo)
+    return [
+        item for item in carregar_oportunidades_enriquecidas()
+        if str(item.get("responsavel_id") or "") == str(alvo.id)
+    ]
+
+
 @router.get("/visao")
 def visao_equipe(
     responsavel_id: str | None = None,
@@ -116,10 +141,6 @@ def visao_equipe(
 ):
     alvo, equipe = _resolver_alvo(usuario, responsavel_id)
 
-    # O Mapa deve usar exatamente o mesmo universo temporal/territorial do
-    # Dashboard Executivo ANFIR 2026. Nunca usar o contexto Brasil ou um período
-    # implícito aqui, pois isso mistura registros nacionais/históricos e altera
-    # artificialmente o denominador do Mercado Real Viena.
     inicio_efetivo = date(2026, 1, 1)
     fim_efetivo = date(2026, 12, 31)
     contexto_efetivo = "viena-sp"
@@ -141,17 +162,24 @@ def visao_equipe(
         selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}
         escopo = _metadata_escopo(usuario)
     else:
-        anf, _, _ = _anfir_do_usuario(
-            alvo,
-            contexto_efetivo,
-            periodo_efetivo,
-            None,
-            None,
-            inicio_efetivo,
-            fim_efetivo,
-        )
-        historico = _hist_do_usuario(alvo, inicio_efetivo, fim_efetivo)
-        crm = _crm_do_usuario(alvo)
+        if alvo.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
+            anf = filtrar_carteira_exata_responsavel(
+                list(mercado_total),
+                str(alvo.id),
+                alvo.nome,
+            )
+        else:
+            anf, _, _ = _anfir_do_usuario(
+                alvo,
+                contexto_efetivo,
+                periodo_efetivo,
+                None,
+                None,
+                inicio_efetivo,
+                fim_efetivo,
+            )
+        historico = _historico_carteira(alvo, inicio_efetivo, fim_efetivo)
+        crm = _crm_carteira(alvo)
         registro_alvo = next((item for item in equipe if str(item.get("id")) == str(alvo.id)), {})
         selecao = {
             "modo": "RESPONSAVEL",
