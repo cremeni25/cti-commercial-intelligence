@@ -18,6 +18,7 @@ from routers.crm_scope_estrategia_router import (
     _hist_do_usuario,
     _metadata_escopo,
 )
+from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-equipe"])
 
@@ -71,11 +72,14 @@ def _resolver_alvo(usuario: UsuarioAutenticado, responsavel_id: str | None) -> t
 
 
 def _familias(registros: list[dict[str, Any]]) -> dict[str, int]:
-    contagem = Counter(estrategia._familia_registro_anfir(item) for item in registros)
+    # Usa exatamente o mesmo classificador canônico do workbook ANFIR 2026.
+    # Assim Dashboard Executivo e Mapa Comercial não podem divergir na leitura
+    # TR/DT/DD para o mesmo conjunto de registros do Mercado Real Viena.
+    contagem = Counter(classificar_linha(item) for item in registros)
     return {
-        "trailer": int(contagem.get("trailer", 0)),
-        "diesel_truck": int(contagem.get("diesel-truck", 0)),
-        "direct_drive": int(contagem.get("direct-drive", 0)),
+        "trailer": int(contagem.get("TR", 0)),
+        "diesel_truck": int(contagem.get("DT", 0)),
+        "direct_drive": int(contagem.get("DD", 0)),
     }
 
 
