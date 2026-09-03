@@ -3,11 +3,9 @@
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { useAuth } from "@/core/auth/AuthContext"
 import { getMapaEquipeVisao, type MapaEquipeVisao } from "@/services/mapa-equipe-api"
 
 export default function Page() {
-  const { usuario } = useAuth()
   const [responsavelId, setResponsavelId] = useState<string>("")
   const [dados, setDados] = useState<MapaEquipeVisao | null>(null)
   const [loading, setLoading] = useState(true)
@@ -15,14 +13,18 @@ export default function Page() {
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
-    setErro("")
     getMapaEquipeVisao(responsavelId || null)
       .then((payload) => { if (ativo) setDados(payload) })
       .catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar a visão comercial regional.") })
       .finally(() => { if (ativo) setLoading(false) })
     return () => { ativo = false }
   }, [responsavelId])
+
+  const trocarResponsavel = (novoId: string) => {
+    setLoading(true)
+    setErro("")
+    setResponsavelId(novoId)
+  }
 
   const familiaTotal = useMemo(() => {
     if (!dados) return 0
@@ -49,7 +51,7 @@ export default function Page() {
                 Região / responsável
                 <select
                   value={responsavelId}
-                  onChange={(e) => setResponsavelId(e.target.value)}
+                  onChange={(e) => trocarResponsavel(e.target.value)}
                   className="mt-2 w-full rounded-xl border border-[#214363] bg-[#071226] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400"
                 >
                   <option value="">Toda a equipe comercial</option>
