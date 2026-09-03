@@ -51,7 +51,7 @@ PERFIS_ESCOPO_PROPRIO = {
 }
 
 
-class _PerfisComEscopoIndividualPadrao:
+class _PerfisComEscopoIndividualPadrao(set[str]):
     def __contains__(self, _perfil: object) -> bool:
         return True
 
