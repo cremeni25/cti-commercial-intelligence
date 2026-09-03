@@ -9,14 +9,24 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers import strategic_layers_router as estrategia
-from routers.crm_scope_estrategia_router import FECHADOS, PERFIS_REGIONAIS, _consolidado, _metadata_escopo
+from routers.crm_scope_estrategia_router import FECHADOS, _consolidado, _metadata_escopo
 from services.commercial_client_scope import filtrar_carteira_exata_responsavel
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
 from services.historical_commercial_source import carregar_historico_comercial
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-equipe"])
-PERFIS_ANALISE = PERFIS_REGIONAIS | {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}
+
+# O Mapa Comercial representa a equipe Viena que efetivamente possui carteira/demanda.
+# Perfis corporativos Carrier, gestores institucionais e registros técnicos não podem
+# entrar na soma da equipe, pois inflariam ou distorceriam o fechamento micro = macro.
+PERFIS_COMERCIAIS_DIRETOS = {
+    "ADMIN_MASTER",
+    "DIRETOR_VIENA_SP",
+    "REPRES_REGIAO_01",
+    "REPRES_REGIAO_02",
+    "INDICADOR_VIENA_SP",
+}
 
 
 def _fold(valor: Any) -> str:
@@ -26,6 +36,27 @@ def _fold(valor: Any) -> str:
 
 def _pode_gerir(usuario: UsuarioAutenticado) -> bool:
     return _consolidado(usuario) or usuario.tipo_usuario == "DIRETOR_VIENA_SP"
+
+
+def _ids_com_carteira_explicita() -> set[str]:
+    try:
+        dados = supabase.table("clientes").select("responsavel_comercial_id").execute().data or []
+    except Exception:
+        return set()
+    return {
+        str(item.get("responsavel_comercial_id") or "").strip()
+        for item in dados
+        if str(item.get("responsavel_comercial_id") or "").strip()
+    }
+
+
+def _perfil_comercial(tipo: str) -> bool:
+    perfil = str(tipo or "").strip().upper()
+    return (
+        perfil in PERFIS_COMERCIAIS_DIRETOS
+        or perfil.startswith("REPRES_")
+        or perfil.startswith("INDICADOR_")
+    )
 
 
 def _equipe_ativa() -> list[dict[str, Any]]:
@@ -40,7 +71,14 @@ def _equipe_ativa() -> list[dict[str, Any]]:
         )
     except Exception:
         dados = []
-    equipe = [item for item in dados if str(item.get("tipo_usuario") or "").upper() in PERFIS_ANALISE]
+
+    ids_carteira = _ids_com_carteira_explicita()
+    equipe = [
+        item
+        for item in dados
+        if _perfil_comercial(str(item.get("tipo_usuario") or ""))
+        or str(item.get("id") or "") in ids_carteira
+    ]
     return sorted(equipe, key=lambda item: str(item.get("nome") or ""))
 
 
