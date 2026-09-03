@@ -15,16 +15,24 @@ def usuario(tipo="USUARIO_CTI", **permissoes):
 
 
 def test_visualizacao_exige_permissao(monkeypatch):
-    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id})
+    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id, "responsavel_comercial_id": "user-1"})
     with pytest.raises(HTTPException) as erro:
         modulo.obter_cliente_seguro("cliente-1", usuario())
     assert erro.value.status_code == 403
 
 
-def test_visualizacao_com_permissao(monkeypatch):
-    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id})
+def test_visualizacao_com_permissao_e_responsabilidade_propria(monkeypatch):
+    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id, "responsavel_comercial_id": "user-1"})
+    monkeypatch.setattr(modulo, "_perfil_usuario", lambda user_id: {"id": user_id, "nome": "Usuário 1", "tipo_usuario": "USUARIO_CTI"})
     retorno = modulo.obter_cliente_seguro("cliente-1", usuario(clientes_visualizar=True))
     assert retorno["id"] == "cliente-1"
+
+
+def test_visualizacao_com_permissao_nao_autoriza_cliente_de_outro_responsavel(monkeypatch):
+    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id, "responsavel_comercial_id": "user-2"})
+    with pytest.raises(HTTPException) as erro:
+        modulo.obter_cliente_seguro("cliente-1", usuario(clientes_visualizar=True))
+    assert erro.value.status_code == 403
 
 
 def test_edicao_exige_clientes_editar(monkeypatch):
