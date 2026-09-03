@@ -5,6 +5,7 @@ import { getSupabaseClient } from "@/core/database/supabase"
 
 const ANFIR_WORKBOOK_PATH = "/api/cti/analytics/anfir-workbook-2026"
 const CTI_ANALYTICS_PATH = "/api/cti/analytics/"
+const CRM_PROXY_PATH = "/api/crm-proxy/"
 
 export default function AuthenticatedAnfirFetchBridge() {
   useEffect(() => {
@@ -17,9 +18,8 @@ export default function AuthenticatedAnfirFetchBridge() {
           ? input.toString()
           : input.url
 
-      if (!url.includes(ANFIR_WORKBOOK_PATH)) {
-        if (!url.includes(CTI_ANALYTICS_PATH)) return originalFetch(input, init)
-      }
+      const leituraCti = url.includes(ANFIR_WORKBOOK_PATH) || url.includes(CTI_ANALYTICS_PATH) || url.includes(CRM_PROXY_PATH)
+      if (!leituraCti) return originalFetch(input, init)
 
       const metodo = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
       const leituraSegura = metodo === "GET" || metodo === "HEAD"
