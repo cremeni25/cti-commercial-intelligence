@@ -12,9 +12,10 @@ from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pypdf import PdfReader
 
-app = FastAPI(title="CTI Document Converter", version="1.0.0")
+app = FastAPI(title="CTI Document Converter", version="1.1.0")
 EXPECTED_PAGES = 4
 API_KEY = os.getenv("CTI_DOCUMENT_CONVERTER_KEY", "").strip()
+DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 def _authorize(value: str | None) -> None:
@@ -24,40 +25,22 @@ def _authorize(value: str | None) -> None:
         raise HTTPException(status_code=401, detail="Acesso não autorizado.")
 
 
-@app.get("/health")
-def health() -> dict[str, object]:
-    executable = shutil.which("libreoffice") or shutil.which("soffice")
-    xvfb = shutil.which("xvfb-run")
-    return {
-        "ok": bool(executable and xvfb),
-        "engine": executable,
-        "xvfb": xvfb,
-        "expected_pages": EXPECTED_PAGES,
-    }
-
-
-@app.post("/convert")
-async def convert(
-    file: UploadFile = File(...),
-    x_cti_converter_key: str | None = Header(default=None),
-) -> Response:
-    _authorize(x_cti_converter_key)
-    filename = Path(file.filename or "proposta.docx").name
-    if not filename.lower().endswith((".docx", ".doc")):
-        raise HTTPException(status_code=422, detail="Formato de documento não suportado.")
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=422, detail="Documento vazio.")
-
+def _engine() -> tuple[str, str]:
     executable = shutil.which("libreoffice") or shutil.which("soffice")
     xvfb = shutil.which("xvfb-run")
     if not executable or not xvfb:
         raise HTTPException(status_code=503, detail="Motor documental incompleto no serviço de conversão.")
+    return executable, xvfb
+
+
+def _run_libreoffice(content: bytes, filename: str, *, target: str) -> bytes:
+    if not content:
+        raise HTTPException(status_code=422, detail="Documento vazio.")
+    executable, xvfb = _engine()
+    extension = ".docx" if filename.lower().endswith(".docx") else ".doc"
 
     with tempfile.TemporaryDirectory(prefix="cti-doc-") as temp_dir:
         workdir = Path(temp_dir)
-        extension = ".docx" if filename.lower().endswith(".docx") else ".doc"
         source = workdir / f"source{extension}"
         source.write_bytes(content)
         profile_dir = workdir / "lo-profile"
@@ -81,7 +64,7 @@ async def convert(
             command.append("--infilter=Office Open XML Text")
         command.extend([
             "--convert-to",
-            "pdf:writer_pdf_Export",
+            target,
             "--outdir",
             str(output_dir.resolve()),
             str(source.resolve()),
@@ -103,34 +86,80 @@ async def convert(
             env=process_env,
         )
         diagnostics = " | ".join(
-            parte.strip()
-            for parte in (result.stderr, result.stdout)
-            if parte and parte.strip()
+            parte.strip() for parte in (result.stderr, result.stdout) if parte and parte.strip()
         )
         if result.returncode != 0:
-            detail = diagnostics or "erro sem detalhe"
-            raise HTTPException(status_code=422, detail=f"Conversão recusada: {detail[:800]}")
+            raise HTTPException(status_code=422, detail=f"Conversão recusada: {(diagnostics or 'erro sem detalhe')[:800]}")
 
-        output = output_dir / "source.pdf"
+        output_extension = ".pdf" if target.startswith("pdf") else ".docx"
+        output = output_dir / f"source{output_extension}"
         if not output.exists() or output.stat().st_size == 0:
-            detail = diagnostics or "LibreOffice terminou sem gerar arquivo de saída."
             raise HTTPException(
                 status_code=422,
-                detail=f"O conversor não produziu o PDF esperado. Detalhe: {detail[:800]}",
+                detail=f"O conversor não produziu o arquivo esperado. Detalhe: {(diagnostics or 'sem detalhe')[:800]}",
             )
+        return output.read_bytes()
 
-        pdf = output.read_bytes()
-        try:
-            pages = len(PdfReader(BytesIO(pdf)).pages)
-        except Exception as exc:
-            raise HTTPException(status_code=422, detail=f"PDF inválido: {exc}") from exc
-        if pages != EXPECTED_PAGES:
-            raise HTTPException(
-                status_code=422,
-                detail=f"PDF rejeitado: esperado {EXPECTED_PAGES} páginas, gerado {pages}.",
-            )
 
-    sha256 = hashlib.sha256(pdf).hexdigest()
+@app.get("/health")
+def health() -> dict[str, object]:
+    executable = shutil.which("libreoffice") or shutil.which("soffice")
+    xvfb = shutil.which("xvfb-run")
+    return {
+        "ok": bool(executable and xvfb),
+        "engine": executable,
+        "xvfb": xvfb,
+        "expected_pages": EXPECTED_PAGES,
+        "legacy_doc_to_docx": True,
+    }
+
+
+@app.post("/normalize-docx")
+async def normalize_docx(
+    file: UploadFile = File(...),
+    x_cti_converter_key: str | None = Header(default=None),
+) -> Response:
+    _authorize(x_cti_converter_key)
+    filename = Path(file.filename or "modelo.doc").name
+    if not filename.lower().endswith(".doc") or filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=422, detail="A normalização aceita somente arquivos DOC legados.")
+    content = await file.read()
+    docx = _run_libreoffice(content, filename, target="docx:Office Open XML Text")
+    if not docx.startswith(b"PK"):
+        raise HTTPException(status_code=422, detail="DOCX normalizado inválido.")
+    return Response(
+        content=docx,
+        media_type=DOCX_MIME,
+        headers={
+            "Content-Disposition": f'inline; filename="{Path(filename).stem}.docx"',
+            "X-CTI-SHA256": hashlib.sha256(docx).hexdigest(),
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.post("/convert")
+async def convert(
+    file: UploadFile = File(...),
+    x_cti_converter_key: str | None = Header(default=None),
+) -> Response:
+    _authorize(x_cti_converter_key)
+    filename = Path(file.filename or "proposta.docx").name
+    if not filename.lower().endswith((".docx", ".doc")):
+        raise HTTPException(status_code=422, detail="Formato de documento não suportado.")
+    content = await file.read()
+    pdf = _run_libreoffice(content, filename, target="pdf:writer_pdf_Export")
+
+    try:
+        pages = len(PdfReader(BytesIO(pdf)).pages)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"PDF inválido: {exc}") from exc
+    if pages != EXPECTED_PAGES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"PDF rejeitado: esperado {EXPECTED_PAGES} páginas, gerado {pages}.",
+        )
+
     output_name = f"{Path(filename).stem}.pdf"
     return Response(
         content=pdf,
@@ -138,7 +167,7 @@ async def convert(
         headers={
             "Content-Disposition": f'inline; filename="{output_name}"',
             "X-CTI-Pages": str(EXPECTED_PAGES),
-            "X-CTI-SHA256": sha256,
+            "X-CTI-SHA256": hashlib.sha256(pdf).hexdigest(),
             "Cache-Control": "no-store",
         },
     )
