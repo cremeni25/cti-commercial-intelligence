@@ -5,13 +5,18 @@ from pydantic import BaseModel
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from routers.crm_scope_estrategia_router import _consolidado, _metadata_escopo
+from routers.crm_scope_estrategia_router import (
+    _consolidado,
+    _metadata_escopo,
+    _perfil_regional,
+    _registro_anfir_no_escopo,
+)
 from services.anfir_competitive_classification_store import remover_classificacao, salvar_classificacao
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 from services.anfir_market_scope import particionar_mercado_disputavel
 from services.anfir_read_cache import fonte_anfir
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
-from services.commercial_client_scope import filtrar_carteira_exata_responsavel
+from services.commercial_client_scope import filtrar_carteira_exata_responsavel, filtrar_por_responsabilidade_cliente
 from services.operational_filters import filtrar_registros
 
 
@@ -83,7 +88,7 @@ def _metadata_comercial(responsavel_id: str | None, usuario: UsuarioAutenticado,
         return _metadata_escopo(usuario_efetivo)
     if _consolidado(usuario):
         return {"modo": "TODA_EQUIPE", "usuario": "Toda a equipe comercial"}
-    return _metadata_escopo(usuario_efetivo)
+    return _metadata_escopo(usuario)
 
 
 def _fabricantes_ativos() -> list[str]:
