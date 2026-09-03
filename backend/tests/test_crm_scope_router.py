@@ -9,6 +9,7 @@ REGISTROS = [
     {"oportunidade_id": "opp-anderson", "responsavel_id": "anderson"},
     {"oportunidade_id": "opp-monica", "responsavel_id": "monica"},
     {"oportunidade_id": "opp-michele", "responsavel_id": "michele"},
+    {"oportunidade_id": "opp-gessica", "responsavel_id": "gessica"},
 ]
 
 
@@ -46,9 +47,9 @@ def test_segundo_representante_nao_herda_negocios_da_primeira_regiao():
     assert [item["oportunidade_id"] for item in resultado] == ["opp-michele"]
 
 
-def test_usuario_cti_generico_preserva_regra_atual_ate_definicao_especifica():
+def test_usuario_cti_generico_recebe_somente_proprios_negocios():
     resultado = _filtrar_por_usuario(REGISTROS, usuario("gessica", "USUARIO_CTI"))
-    assert resultado == REGISTROS
+    assert [item["oportunidade_id"] for item in resultado] == ["opp-gessica"]
 
 
 def test_representante_pode_abrir_detalhe_do_proprio_negocio():
