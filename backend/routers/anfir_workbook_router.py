@@ -5,12 +5,19 @@ from pydantic import BaseModel
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
-from routers.crm_scope_estrategia_router import _anfir_do_usuario, _consolidado, _metadata_escopo
+from routers.crm_scope_estrategia_router import (
+    _consolidado,
+    _metadata_escopo,
+    _perfil_regional,
+    _registro_anfir_no_escopo,
+)
 from services.anfir_competitive_classification_store import remover_classificacao, salvar_classificacao
 from services.anfir_competitive_intelligence import consolidar_competitividade_anfir_2026
 from services.anfir_market_scope import particionar_mercado_disputavel
+from services.anfir_read_cache import fonte_anfir
 from services.anfir_workbook_contract import consolidar_workbook_anfir_2026
 from services.commercial_client_scope import filtrar_por_responsabilidade_cliente
+from services.operational_filters import filtrar_registros
 
 
 router = APIRouter()
@@ -47,18 +54,37 @@ def _usuario_alvo(responsavel_id: str, solicitante: UsuarioAutenticado) -> Usuar
 
 
 def _registros_2026(responsavel_id: str | None, usuario: UsuarioAutenticado):
+    """Retorna a base ANFIR bruta do escopo Viena SP/2026 antes das exclusões comerciais.
+
+    A separação bruto -> excluídos -> mercado real precisa acontecer somente em
+    ``particionar_mercado_disputavel``. Isso mantém a auditoria do Dashboard
+    verdadeira sem alterar o universo funcional usado pelos indicadores.
+    """
     usuario_efetivo = _usuario_alvo(responsavel_id, usuario) if responsavel_id else usuario
-    registros, _, _ = _anfir_do_usuario(
-        usuario_efetivo,
+    inicio = date(2026, 1, 1)
+    fim = date(2026, 12, 31)
+    registros = filtrar_registros(
+        fonte_anfir(),
         contexto="viena-sp",
-        periodo="PERSONALIZADO",
         uf=None,
         ddd=None,
-        inicio=date(2026, 1, 1),
-        fim=date(2026, 12, 31),
+        inicio=inicio,
+        fim=fim,
     )
+
     if not _consolidado(usuario_efetivo):
+        perfil = _perfil_regional(usuario_efetivo)
+        permitidos = set(perfil.get("ddds") or [])
+        if not permitidos:
+            registros = []
+        else:
+            registros = [
+                item
+                for item in registros
+                if _registro_anfir_no_escopo(item, usuario_efetivo, permitidos, perfil)
+            ]
         registros = filtrar_por_responsabilidade_cliente(list(registros), str(usuario_efetivo.id))
+
     return list(registros), usuario_efetivo
 
 
@@ -139,6 +165,7 @@ def classificar_fabricante_concorrente(
         raise HTTPException(status_code=403, detail="Somente usuários Master podem alterar a classificação competitiva CTI.")
 
     registros, _ = _registros_2026(None, usuario)
+    registros, _, _ = particionar_mercado_disputavel(registros)
     registro = next((item for item in registros if str(item.get("id") or "") == registro_id), None)
     if not registro:
         raise HTTPException(status_code=404, detail="Registro ANFIR não encontrado no escopo Viena SP 2026.")
