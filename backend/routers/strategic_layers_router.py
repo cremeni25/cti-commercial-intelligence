@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.supabase_client import supabase
+from services.anfir_market_scope import filtrar_mercado_real_viena
 from services.anfir_read_cache import fonte_anfir, preaquecer_anfir_async
 from services.base_analytics import valor_float
 from services.crm_live_projection import carregar_oportunidades_enriquecidas, equipamentos_registro, familias_registro
@@ -87,6 +88,7 @@ def _anfir(contexto: str, periodo: str, uf: str | None, ddd: str | None, inicio:
         inicio=inicio_efetivo,
         fim=fim_efetivo,
     )
+    registros = filtrar_mercado_real_viena(registros)
     return registros, inicio_efetivo, fim_efetivo
 
 
@@ -215,6 +217,7 @@ def equipamento_estrategico(
             "ddd": ddd,
             "inicio": inicio_efetivo.isoformat() if inicio_efetivo else None,
             "fim": fim_efetivo.isoformat() if fim_efetivo else None,
+            "mercado": "REAL_VIENA",
         },
         "realizado": _camada_anfir(anf_registros),
         "historico_comercial": _camada_historico(hist_registros),
@@ -267,6 +270,7 @@ def mapa_estrategico(
             "ddd": ddd,
             "inicio": inicio_efetivo.isoformat() if inicio_efetivo else None,
             "fim": fim_efetivo.isoformat() if fim_efetivo else None,
+            "mercado": "REAL_VIENA",
         },
         "realizado": realizado,
         "historico_comercial": historico_cam,
