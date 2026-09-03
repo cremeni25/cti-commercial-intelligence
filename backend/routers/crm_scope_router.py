@@ -12,6 +12,9 @@ from routers.crm_router import (
     atualizar_oportunidade,
     atualizar_pedido,
     atualizar_proposta,
+    listar_atividades,
+    listar_oportunidades,
+    listar_pipeline,
     obter_oportunidade,
     obter_pedido,
     obter_proposta,
@@ -48,6 +51,23 @@ PERFIS_ESCOPO_PROPRIO = {
 }
 
 
+class _PerfisComEscopoIndividualPadrao(set[str]):
+    def __contains__(self, _perfil: object) -> bool:
+        return True
+
+
+def _aplicar_escopo_individual_estrategico() -> None:
+    # A camada estratégica historicamente usava uma whitelist de perfis regionais.
+    # A regra oficial agora é inversa: somente usuários com visão consolidada podem
+    # enxergar totais da equipe; qualquer outro perfil atual ou futuro é individual.
+    from routers import crm_scope_estrategia_router as estrategia_scope
+
+    estrategia_scope.PERFIS_REGIONAIS = _PerfisComEscopoIndividualPadrao()
+
+
+_aplicar_escopo_individual_estrategico()
+
+
 def _visao_consolidada(usuario: UsuarioAutenticado) -> bool:
     return usuario.tipo_usuario == "ADMIN_MASTER" or (
         usuario.tipo_usuario == "DIRETOR_VIENA_SP"
@@ -56,20 +76,20 @@ def _visao_consolidada(usuario: UsuarioAutenticado) -> bool:
 
 
 def _usa_escopo_proprio(usuario: UsuarioAutenticado) -> bool:
-    return usuario.tipo_usuario in PERFIS_ESCOPO_PROPRIO
+    # Somente Anderson/Admin Master e André/Diretor com acesso_total possuem visão consolidada.
+    # Todo usuário comercial atual ou futuro que não esteja nessa condição recebe escopo próprio.
+    return not _visao_consolidada(usuario)
 
 
 def _filtrar_por_usuario(registros: list[dict], usuario: UsuarioAutenticado) -> list[dict]:
     if _visao_consolidada(usuario):
-        return registros
-    if not _usa_escopo_proprio(usuario):
         return registros
     resultado: list[dict] = []
     for item in registros:
         try:
             responsavel = _responsavel_efetivo(item)
         except HTTPException:
-            responsavel = str(item.get("responsavel_id") or "")
+            responsavel = str(item.get("responsavel_id") or item.get("usuario_id") or "")
         if responsavel == str(usuario.id):
             resultado.append(item)
     return resultado
@@ -88,7 +108,7 @@ def _responsavel_dossie(registro: dict) -> str:
 
 
 def _responsavel_efetivo(registro: dict) -> str:
-    responsavel = str(registro.get("responsavel_id") or "").strip()
+    responsavel = str(registro.get("responsavel_id") or registro.get("usuario_id") or "").strip()
     if responsavel:
         return responsavel
     oportunidade_id = str(registro.get("oportunidade_id") or "").strip()
@@ -118,7 +138,7 @@ def _responsavel_efetivo(registro: dict) -> str:
 
 
 def _exigir_acesso(registro: dict, usuario: UsuarioAutenticado) -> dict:
-    if _visao_consolidada(usuario) or not _usa_escopo_proprio(usuario):
+    if _visao_consolidada(usuario):
         return registro
     if _responsavel_efetivo(registro) == str(usuario.id):
         return registro
@@ -141,6 +161,21 @@ def _pedido_autorizado(pedido_id: str, usuario: UsuarioAutenticado) -> dict:
 @router.get("/nucleo-comercial")
 def nucleo_comercial_seguro(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return _filtrar_por_usuario(nucleo_comercial(), usuario)
+
+
+@router.get("/oportunidades")
+def listar_oportunidades_seguras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    return _filtrar_por_usuario(listar_oportunidades(), usuario)
+
+
+@router.get("/pipeline")
+def listar_pipeline_seguro(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    return _filtrar_por_usuario(listar_pipeline(), usuario)
+
+
+@router.get("/atividades")
+def listar_atividades_seguras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    return _filtrar_por_usuario(listar_atividades() or [], usuario)
 
 
 @router.get("/propostas")
