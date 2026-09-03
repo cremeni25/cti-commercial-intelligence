@@ -1,4 +1,8 @@
-from services.anfir_market_scope import implementadora_fora_escopo, particionar_mercado_disputavel
+from services.anfir_market_scope import (
+    filtrar_mercado_real_viena,
+    implementadora_fora_escopo,
+    particionar_mercado_disputavel,
+)
 
 
 def _r(implementadora: str, mes: int = 1, linha: str = "Direct Drive") -> dict:
@@ -14,6 +18,20 @@ def test_identifica_somente_implementadoras_fora_do_escopo_autorizadas():
     assert implementadora_fora_escopo(_r("Planalto Carrocerias")) == "PLANALTO"
     assert implementadora_fora_escopo(_r("Fibra Vest")) is None
     assert implementadora_fora_escopo(_r("Fibrasil")) is None
+
+
+def test_filtro_global_remove_as_tres_implementadoras_e_preserva_as_demais():
+    registros = [
+        _r("Fibra West"),
+        _r("Hiflex"),
+        _r("Planalto Carrocerias"),
+        _r("Ibiporã"),
+        _r("Fibra Vest"),
+    ]
+    mercado_real = filtrar_mercado_real_viena(registros)
+
+    assert [item["implementadora"] for item in mercado_real] == ["Ibiporã", "Fibra Vest"]
+    assert all(implementadora_fora_escopo(item) is None for item in mercado_real)
 
 
 def test_particionamento_preserva_total_e_recalcula_denominador_comercial():
