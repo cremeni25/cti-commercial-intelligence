@@ -246,9 +246,11 @@ def visao_equipe(
     clientes_anfir = _clientes(anf, _nome_cliente_anfir)
     clientes_hist = _clientes(historico, _nome_cliente_historico)
     clientes_crm = _clientes(crm, _nome_cliente_crm)
+    universo_clientes = clientes_anfir | clientes_hist | clientes_crm
+    anf_hist = clientes_anfir & clientes_hist
+    anf_crm = clientes_anfir & clientes_crm
+    hist_crm = clientes_hist & clientes_crm
     ponta_a_ponta = clientes_anfir & clientes_hist & clientes_crm
-    crm_com_anfir = clientes_crm & clientes_anfir
-    crm_com_historico = clientes_crm & clientes_hist
 
     total_viena = len(mercado_total)
     total_regiao = len(anf)
@@ -267,7 +269,7 @@ def visao_equipe(
             "fim": fim_efetivo.isoformat(),
             "escopo": escopo,
             "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026",
-            "regra_identidade": "CLIENTE_RECONCILIADO_CT I > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE".replace("CT I", "CTI"),
+            "regra_identidade": "CLIENTE_RECONCILIADO_CTI > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE",
         },
         "pode_selecionar_responsavel": _pode_gerir(usuario),
         "equipe": [
@@ -301,13 +303,29 @@ def visao_equipe(
             "crm_status": _ranking(status_crm),
             "motivos_perda_historico": _ranking(motivos_perda),
         },
+        "reconciliacao": {
+            "universo_clientes": len(universo_clientes),
+            "clientes_anfir": len(clientes_anfir),
+            "clientes_historico": len(clientes_hist),
+            "clientes_crm": len(clientes_crm),
+            "anfir_historico": len(anf_hist),
+            "anfir_crm": len(anf_crm),
+            "historico_crm": len(hist_crm),
+            "nas_tres_fontes": len(ponta_a_ponta),
+            "somente_anfir": len(clientes_anfir - clientes_hist - clientes_crm),
+            "somente_historico": len(clientes_hist - clientes_anfir - clientes_crm),
+            "somente_crm": len(clientes_crm - clientes_anfir - clientes_hist),
+            "historico_fora_mercado_real": len(clientes_hist - clientes_anfir),
+            "crm_fora_mercado_real": len(clientes_crm - clientes_anfir),
+            "regra": "MESMO_CLIENTE_MESMO_RESPONSAVEL_MESMO_RECORTE; FONTES SAO EVIDENCIAS DIFERENTES",
+        },
         "ciclo": {
             "clientes_mercado_real": len(clientes_anfir),
             "clientes_historico_2026": len(clientes_hist),
             "clientes_crm": len(clientes_crm),
-            "crm_com_evidencia_historico": len(crm_com_historico),
-            "crm_com_evidencia_anfir": len(crm_com_anfir),
+            "crm_com_evidencia_historico": len(hist_crm),
+            "crm_com_evidencia_anfir": len(anf_crm),
             "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta),
-            "nota": "As três fontes usam a mesma carteira canônica. Os totais de registros podem diferir porque ANFIR, Histórico/Funil e CRM medem eventos distintos do mesmo universo comercial.",
+            "nota": "As três fontes usam a mesma carteira canônica. A conciliação separa o mesmo universo de clientes do número de eventos registrados em cada fonte.",
         },
     }
