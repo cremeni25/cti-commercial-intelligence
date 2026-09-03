@@ -102,8 +102,8 @@ def _ranking(counter: Counter, limite: int = 8) -> list[dict[str, Any]]:
 @router.get("/visao")
 def visao_equipe(
     responsavel_id: str | None = None,
-    contexto: str = "brasil",
-    periodo: str = "ANO_ATUAL",
+    contexto: str = "viena-sp",
+    periodo: str = "PERSONALIZADO",
     uf: str | None = None,
     ddd: str | None = None,
     inicio: date | None = None,
@@ -112,7 +112,24 @@ def visao_equipe(
 ):
     alvo, equipe = _resolver_alvo(usuario, responsavel_id)
 
-    mercado_total, inicio_efetivo, fim_efetivo = estrategia._anfir(contexto, periodo, uf, ddd, inicio, fim)
+    # O Mapa deve usar exatamente o mesmo universo temporal/territorial do
+    # Dashboard Executivo ANFIR 2026. Nunca usar o contexto Brasil ou um período
+    # implícito aqui, pois isso mistura registros nacionais/históricos e altera
+    # artificialmente o denominador do Mercado Real Viena.
+    inicio_efetivo = date(2026, 1, 1)
+    fim_efetivo = date(2026, 12, 31)
+    contexto_efetivo = "viena-sp"
+    periodo_efetivo = "PERSONALIZADO"
+
+    mercado_total, _, _ = estrategia._anfir(
+        contexto_efetivo,
+        periodo_efetivo,
+        None,
+        None,
+        inicio_efetivo,
+        fim_efetivo,
+    )
+
     if alvo is None:
         anf = mercado_total
         historico = _hist_do_usuario(usuario, inicio_efetivo, fim_efetivo)
@@ -120,7 +137,15 @@ def visao_equipe(
         selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}
         escopo = _metadata_escopo(usuario)
     else:
-        anf, _, _ = _anfir_do_usuario(alvo, contexto, periodo, uf, ddd, inicio, fim)
+        anf, _, _ = _anfir_do_usuario(
+            alvo,
+            contexto_efetivo,
+            periodo_efetivo,
+            None,
+            None,
+            inicio_efetivo,
+            fim_efetivo,
+        )
         historico = _hist_do_usuario(alvo, inicio_efetivo, fim_efetivo)
         crm = _crm_do_usuario(alvo)
         registro_alvo = next((item for item in equipe if str(item.get("id")) == str(alvo.id)), {})
@@ -151,11 +176,12 @@ def visao_equipe(
     return {
         "regra": "GESTAO_REGIONAL_SOBRE_MERCADO_REAL_VIENA",
         "metadata": {
-            "contexto": contexto,
-            "periodo": periodo,
-            "inicio": inicio_efetivo.isoformat() if inicio_efetivo else None,
-            "fim": fim_efetivo.isoformat() if fim_efetivo else None,
+            "contexto": contexto_efetivo,
+            "periodo": periodo_efetivo,
+            "inicio": inicio_efetivo.isoformat(),
+            "fim": fim_efetivo.isoformat(),
             "escopo": escopo,
+            "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026",
         },
         "pode_selecionar_responsavel": _pode_gerir(usuario),
         "equipe": [
