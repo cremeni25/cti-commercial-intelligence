@@ -2,6 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 ROUTER = ROOT / "backend" / "routers" / "crm_scope_mapa_equipe_router.py"
+SCOPE = ROOT / "backend" / "services" / "commercial_client_scope.py"
 
 
 def test_mapa_nao_agrega_perfis_corporativos_como_equipe_comercial():
@@ -25,3 +26,15 @@ def test_macro_continua_sendo_uniao_das_mesmas_carteiras_individuais():
     assert '"soma_mercado_individual"' in fonte
     assert '"sobreposicoes_entre_carteiras"' in fonte
     assert '"mercado_real_sem_carteira"' in fonte
+
+
+def test_anfir_nao_retroage_responsabilidade_atual_do_cliente():
+    fonte = SCOPE.read_text(encoding="utf-8")
+    assert "_eh_anfir_realizado" in fonte
+    assert "_anfir_pertence_ao_responsavel" in fonte
+    assert "resolver_ddd_registro" in fonte
+    assert 'ALIASES_RESPONSAVEL_ATUAL = {"CARLA": "MONICA"}' in fonte
+    assert "DDD exclusivo" in fonte
+    assert "sub_regiao = codigo_regional" in fonte
+    bloco = fonte.split("if _eh_anfir_realizado(registro):", 1)[1].split("cliente = _cliente_reconciliado", 1)[0]
+    assert "_cliente_reconciliado" not in bloco
