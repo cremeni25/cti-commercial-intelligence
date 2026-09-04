@@ -10,9 +10,9 @@ from pathlib import Path
 
 from fastapi import FastAPI, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
-from pypdf import PdfReader
+from pypdf import PdfReader, PdfWriter
 
-app = FastAPI(title="CTI Document Converter", version="1.2.0")
+app = FastAPI(title="CTI Document Converter", version="1.2.1")
 EXPECTED_PAGES = 4
 API_KEY = os.getenv("CTI_DOCUMENT_CONVERTER_KEY", "").strip()
 DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -108,6 +108,56 @@ def _pdf_pages(pdf: bytes) -> int:
         raise HTTPException(status_code=422, detail=f"PDF inválido: {exc}") from exc
 
 
+def _page_has_visible_content(page) -> bool:
+    """Conservador: texto ou objetos gráficos tornam a página não removível."""
+    try:
+        if str(page.extract_text() or "").strip():
+            return True
+    except Exception:
+        return True
+
+    try:
+        resources = page.get("/Resources")
+        if resources:
+            resources = resources.get_object() if hasattr(resources, "get_object") else resources
+            xobjects = resources.get("/XObject") if hasattr(resources, "get") else None
+            if xobjects:
+                xobjects = xobjects.get_object() if hasattr(xobjects, "get_object") else xobjects
+                if len(xobjects):
+                    return True
+    except Exception:
+        return True
+
+    return False
+
+
+def _trim_only_blank_trailing_pages(pdf: bytes, expected_pages: int) -> tuple[bytes, int]:
+    """Remove somente páginas extras finais sem texto nem objetos gráficos.
+
+    Nunca corta conteúdo real. Se qualquer página excedente possuir conteúdo,
+    o PDF permanece intacto e a validação rígida de paginação continua falhando.
+    """
+    try:
+        reader = PdfReader(BytesIO(pdf))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"PDF inválido: {exc}") from exc
+
+    total = len(reader.pages)
+    if expected_pages <= 0 or total <= expected_pages:
+        return pdf, 0
+
+    extras = list(reader.pages[expected_pages:])
+    if any(_page_has_visible_content(page) for page in extras):
+        return pdf, 0
+
+    writer = PdfWriter()
+    for page in reader.pages[:expected_pages]:
+        writer.add_page(page)
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue(), len(extras)
+
+
 @app.get("/health")
 def health() -> dict[str, object]:
     executable = shutil.which("libreoffice") or shutil.which("soffice")
@@ -119,6 +169,7 @@ def health() -> dict[str, object]:
         "expected_pages": EXPECTED_PAGES,
         "legacy_doc_to_docx": True,
         "source_aware_pagination": True,
+        "trim_blank_trailing_pages": True,
     }
 
 
@@ -165,13 +216,14 @@ async def convert(
         raise HTTPException(status_code=422, detail="Formato de documento não suportado.")
     content = await file.read()
     pdf = _run_libreoffice(content, filename, target="pdf:writer_pdf_Export")
-    pages = _pdf_pages(pdf)
 
     expected_pages = x_cti_expected_pages if x_cti_expected_pages and x_cti_expected_pages > 0 else EXPECTED_PAGES
+    pdf, trimmed_blank_pages = _trim_only_blank_trailing_pages(pdf, expected_pages)
+    pages = _pdf_pages(pdf)
     if pages != expected_pages:
         raise HTTPException(
             status_code=422,
-            detail=f"PDF rejeitado: mestre oficial {expected_pages} páginas, gerado {pages}.",
+            detail=f"PDF rejeitado: mestre oficial {expected_pages} páginas, gerado {pages}. Página excedente contém conteúdo e não pode ser removida automaticamente.",
         )
 
     output_name = f"{Path(filename).stem}.pdf"
@@ -182,6 +234,7 @@ async def convert(
             "Content-Disposition": f'inline; filename="{output_name}"',
             "X-CTI-Pages": str(pages),
             "X-CTI-Expected-Pages": str(expected_pages),
+            "X-CTI-Trimmed-Blank-Pages": str(trimmed_blank_pages),
             "X-CTI-SHA256": hashlib.sha256(pdf).hexdigest(),
             "Cache-Control": "no-store",
         },
