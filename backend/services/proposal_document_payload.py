@@ -116,6 +116,10 @@ def build_proposal_document_payload(
     client_email = _first(client, "email", "email_principal", "email_comercial") or _first(opportunity, "email", "email_principal")
 
     entrada = _prefer(final, "valor_entrada", proposal, "valor_entrada")
+    tipo_equipamento = _prefer(final, "tipo_equipamento", item, "configuracao", "tipo_equipamento")
+    if template.equipment == "CITIMAX 500AE":
+        tipo_equipamento = template.equipment
+
     fields: dict[str, Any] = {
         "proposal_number": _first(proposal, "numero"),
         "proposal_revision": _first(proposal, "versao", default=1),
@@ -129,7 +133,7 @@ def build_proposal_document_payload(
         "client_phone": client_phone,
         "client_email": client_email,
         "equipment": template.equipment,
-        "configuration": _prefer(final, "tipo_equipamento", item, "configuracao", "tipo_equipamento"),
+        "configuration": tipo_equipamento,
         "voltage": _prefer(final, "voltagem", proposal, "voltagem"),
         "quantity_intro": quantity,
         "quantity": quantity,
