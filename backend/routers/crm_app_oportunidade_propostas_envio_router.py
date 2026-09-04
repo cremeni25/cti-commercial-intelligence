@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
 from routers.propostas_pedidos_router import emitir_proposta
+from routers.propostas_primeira_pagina_router import validar_documento_para_emissao
 from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
 from services.email_transport_service import TransporteEmailNaoConfigurado, enviar_email
 from services.proposal_document_preview import build_preview_official_proposal
@@ -93,26 +94,29 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
     if not proposta_ids:
         raise HTTPException(status_code=422, detail="Informe ao menos uma proposta da oportunidade.")
 
+    # Pré-validação integral e sem escrita: nenhum status é alterado enquanto houver
+    # documento incompleto, PDF inválido ou item de outra oportunidade no pacote.
     anexos: list[dict[str, str]] = []
     propostas_preparadas: list[dict[str, Any]] = []
+    propostas_a_emitir: list[str] = []
     valor_total = 0.0
 
     for proposta_id in proposta_ids:
         proposta = _primeiro("cti_propostas", proposta_id, f"Proposta {proposta_id} não encontrada.")
         if str(proposta.get("oportunidade_id") or "") != oportunidade_id:
             raise HTTPException(status_code=409, detail="Todas as propostas devem pertencer à mesma oportunidade.")
+
         status = str(proposta.get("status_documento") or "RASCUNHO").upper()
-        if status in STATUS_PRE_EMISSAO:
-            emitir_proposta(proposta_id)
-            proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada após emissão.")
-            status = str(proposta.get("status_documento") or "").upper()
-        if status not in STATUS_ENVIAVEL:
+        if status not in STATUS_PRE_EMISSAO and status not in STATUS_ENVIAVEL:
             raise HTTPException(status_code=409, detail=f"A proposta {proposta.get('numero') or proposta_id} não está em condição de envio.")
 
         item_id = str(proposta.get("item_oportunidade_id") or "")
         if not item_id:
             raise HTTPException(status_code=422, detail="Uma das propostas não possui item comercial vinculado.")
         item = _primeiro("cti_oportunidade_itens", item_id, "Item comercial da proposta não encontrado.")
+
+        # A mesma regra documental usada no envio individual vale para o pacote.
+        validar_documento_para_emissao(proposta, item)
 
         try:
             preview = build_preview_official_proposal(
@@ -122,9 +126,17 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
                 oportunidade=oportunidade,
                 cliente=cliente,
             )
-            pdf = convert_docx_to_pdf(bytes(preview["content"]), str(preview["filename"]))
+            expected_pages = int(preview.get("expected_pages") or 4)
+            pdf = convert_docx_to_pdf(
+                bytes(preview["content"]),
+                str(preview["filename"]),
+                expected_pages=expected_pages,
+            )
         except (ProposalDocumentRepositoryError, DocxPdfConversionError) as exc:
             raise HTTPException(status_code=503, detail=f"Não foi possível preparar um dos PDFs oficiais: {exc}") from exc
+
+        if status in STATUS_PRE_EMISSAO:
+            propostas_a_emitir.append(proposta_id)
 
         anexos.append({"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")})
         propostas_preparadas.append({
@@ -140,6 +152,10 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
             "snapshot_dados": proposta.get("snapshot_dados"),
         })
         valor_total += float(proposta.get("valor") or 0)
+
+    # Só depois de TODOS os PDFs estarem válidos os rascunhos são emitidos.
+    for proposta_id in propostas_a_emitir:
+        emitir_proposta(proposta_id)
 
     destinatarios = _emails_validos(dados.destinatarios, campo="Para")
     cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
@@ -163,9 +179,9 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
     )
     texto = (
         f"Olá, {cliente_nome}.\n\n{mensagem}\n\nNegociação: {titulo_oportunidade}\n"
-        f"Valor total negociado: {valor_br}\n\n" +
-        "\n".join(f"- {item['numero']} | {item['equipamento']} | {item['quantidade']} un." for item in propostas_preparadas) +
-        "\n\nCada proposta oficial segue anexada separadamente em PDF."
+        f"Valor total negociado: {valor_br}\n\n"
+        + "\n".join(f"- {item['numero']} | {item['equipamento']} | {item['quantidade']} un." for item in propostas_preparadas)
+        + "\n\nCada proposta oficial segue anexada separadamente em PDF."
     )
     chave_material = "|".join([
         oportunidade_id,
@@ -209,9 +225,7 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
             "envio_conjunto": True,
             "proposta_ids": proposta_ids,
         }
-        proposta_atual = {
-            "snapshot_dados": proposta.get("snapshot_dados")
-        }
+        proposta_atual = {"snapshot_dados": proposta.get("snapshot_dados")}
         snapshot = _snapshot_com_envio(proposta_atual, envio_registro)
         atualizado = supabase.table("cti_propostas").update({
             "status_documento": "ENVIADA",
@@ -228,7 +242,10 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
     return {
         "success": True,
         "oportunidade_id": oportunidade_id,
-        "propostas": [{chave: valor for chave, valor in proposta.items() if chave != "snapshot_dados"} for proposta in propostas_preparadas],
+        "propostas": [
+            {chave: valor for chave, valor in proposta.items() if chave != "snapshot_dados"}
+            for proposta in propostas_preparadas
+        ],
         "destinatarios": destinatarios,
         "cc": cc,
         "cco": cco,
