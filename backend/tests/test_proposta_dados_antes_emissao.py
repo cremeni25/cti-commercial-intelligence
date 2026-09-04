@@ -45,7 +45,7 @@ def test_campos_obrigatorios_bloqueiam_emissao_incompleta():
     assert "voltagem" in pendentes
     assert "condição de pagamento" in pendentes
     assert "definição de entrada" in pendentes
-    assert "validade da proposta" in pendentes
+    assert "validade da proposta" not in pendentes
 
     try:
         validar_documento_para_emissao(_proposta(), _item())
@@ -62,6 +62,15 @@ def test_documento_completo_pode_ser_emitido():
     campos = validar_documento_para_emissao(proposta, _item())
     assert campos["voltagem"] == "12V"
     assert campos["frete"] == "CIF"
+
+
+def test_documento_sem_validade_pode_ser_emitido():
+    dados = _completo()
+    dados["validade"] = None
+    proposta = _proposta(dados)
+    assert campos_pendentes_documento(proposta, _item()) == []
+    campos = validar_documento_para_emissao(proposta, _item())
+    assert campos["validade"] is None
 
 
 def test_supra_850_nao_exige_voltagem_que_nao_existe_no_documento():
