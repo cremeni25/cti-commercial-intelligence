@@ -128,7 +128,6 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
         "local_entrega": "local de entrega",
         "frete": "frete",
         "prazo_entrega": "prazo de entrega",
-        "validade": "validade da proposta",
     }
     if _campo_existe_no_documento(item, "voltagem"):
         obrigatorios = {"voltagem": "voltagem", **obrigatorios}
@@ -148,9 +147,8 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
         if valor_entrada <= 0:
             pendentes.append("valor da entrada")
 
-    # Nome/endereço da autorizada permanece disponível para compor o documento,
-    # mas não bloqueia a emissão: pode não ser aplicável ou ainda não estar definido
-    # no momento comercial da proposta.
+    # Validade, acessórios, Lynx e nome/endereço da autorizada podem ser deixados em branco.
+    # Quando houver conteúdo, ele continua sendo preservado e aplicado ao documento oficial.
     return pendentes
 
 
