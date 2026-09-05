@@ -18,6 +18,11 @@ const ROTAS_LEGADAS_SEGURAS: Record<string, string> = {
   "/crm/propostas": "crm-seguro/propostas",
   "/crm/pedidos": "crm-seguro/pedidos",
   "/crm/vendas": "crm-seguro/vendas",
+  "/vendas": "crm-seguro/vendas",
+  "/crm-documentos/propostas": "crm-seguro/propostas",
+  "/crm-documentos/pedidos": "crm-seguro/pedidos",
+  "/carrier-operacional/pedidos": "crm-seguro/pedidos",
+  "/carrier-operacional/ciclos": "crm-seguro/ciclos",
   "/crm-app/clientes": "crm-seguro/clientes",
   "/modulos/clientes": "crm-seguro/clientes",
 }
@@ -26,9 +31,15 @@ function destinoSeguroLeitura(url: string, metodo: string): string | null {
   if (metodo !== "GET" && metodo !== "HEAD") return null
   try {
     const parsed = new URL(url, window.location.origin)
-    const seguro = ROTAS_LEGADAS_SEGURAS[parsed.pathname]
-    if (!seguro) return null
-    return `/api/crm-proxy/${seguro}${parsed.search}`
+    const seguroDireto = ROTAS_LEGADAS_SEGURAS[parsed.pathname]
+    if (seguroDireto) return `/api/crm-proxy/${seguroDireto}${parsed.search}`
+
+    const cicloPedido = parsed.pathname.match(/^\/carrier-operacional\/pedidos\/([^/]+)\/ciclo$/)
+    if (cicloPedido) {
+      return `/api/crm-proxy/crm-seguro/pedidos/${encodeURIComponent(cicloPedido[1])}/ciclo${parsed.search}`
+    }
+
+    return null
   } catch {
     return null
   }

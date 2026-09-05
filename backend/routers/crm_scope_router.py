@@ -23,6 +23,7 @@ from routers.documentos_comerciais_listagem_router import (
     listar_pedidos_operacionais,
     listar_propostas_operacionais,
 )
+from routers.pedidos_ciclo_router import listar_ciclos, obter_ciclo
 from routers.pedidos_operacionais_router import (
     AtualizarDestinatariosPedidoRequest,
     ConverterPedidoOperacionalRequest,
@@ -188,6 +189,16 @@ def listar_pedidos_seguras(usuario: UsuarioAutenticado = Depends(usuario_atual))
     return _filtrar_por_usuario(listar_pedidos_operacionais(), usuario)
 
 
+@router.get("/ciclos")
+def listar_ciclos_seguros(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    pedidos_permitidos = {
+        str(item.get("id"))
+        for item in _filtrar_por_usuario(listar_pedidos_operacionais(), usuario)
+        if item.get("id")
+    }
+    return [item for item in listar_ciclos() if str(item.get("id")) in pedidos_permitidos]
+
+
 @router.get("/oportunidades/{oportunidade_id}")
 def obter_oportunidade_segura(oportunidade_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return _exigir_acesso(obter_oportunidade(oportunidade_id), usuario)
@@ -260,6 +271,12 @@ def atualizar_proposta_segura(proposta_id: str, proposta: PropostaUpdate, usuari
 @router.get("/pedidos/{pedido_id}")
 def obter_pedido_seguro(pedido_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return _pedido_autorizado(pedido_id, usuario)
+
+
+@router.get("/pedidos/{pedido_id}/ciclo")
+def obter_ciclo_seguro(pedido_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _pedido_autorizado(pedido_id, usuario)
+    return obter_ciclo(pedido_id)
 
 
 @router.get("/pedidos/{pedido_id}/pacote")
