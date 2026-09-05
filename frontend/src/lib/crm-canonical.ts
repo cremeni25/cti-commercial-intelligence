@@ -19,13 +19,17 @@ export function caminhoCanonicoLeitura(caminho: string, metodo: string) {
   if (caminho === "crm/oportunidades") return "crm-seguro/oportunidades"
   if (caminho === "crm/pipeline") return "crm-seguro/pipeline"
   if (caminho === "crm/atividades") return "crm-seguro/atividades"
-  if (caminho === "crm/propostas") return "crm-seguro/propostas"
-  if (caminho === "crm/pedidos") return "crm-seguro/pedidos"
+  if (caminho === "crm/propostas" || caminho === "crm-documentos/propostas") return "crm-seguro/propostas"
+  if (caminho === "crm/pedidos" || caminho === "crm-documentos/pedidos" || caminho === "carrier-operacional/pedidos") return "crm-seguro/pedidos"
   if (caminho === "crm/vendas" || caminho === "vendas") return "crm-seguro/vendas"
+  if (caminho === "carrier-operacional/ciclos") return "crm-seguro/ciclos"
 
   if (caminho.startsWith("crm/oportunidades/")) return caminho.replace(/^crm\/oportunidades\//, "crm-seguro/oportunidades/")
   if (caminho.startsWith("crm/propostas/")) return caminho.replace(/^crm\/propostas\//, "crm-seguro/propostas/")
   if (caminho.startsWith("crm/pedidos/")) return caminho.replace(/^crm\/pedidos\//, "crm-seguro/pedidos/")
+  if (/^carrier-operacional\/pedidos\/[^/]+\/ciclo$/.test(caminho)) {
+    return caminho.replace(/^carrier-operacional\/pedidos\//, "crm-seguro/pedidos/")
+  }
 
   return caminho
 }
