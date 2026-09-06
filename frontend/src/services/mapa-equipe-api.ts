@@ -8,6 +8,13 @@ export type EquipeOpcao = {
   ddds: string[]
 }
 
+export type ParticipacaoEquipe = {
+  id: string
+  nome: string
+  mercado: number
+  participacao_pct: number
+}
+
 export type MapaEquipeVisao = {
   regra: string
   pode_selecionar_responsavel: boolean
@@ -25,6 +32,10 @@ export type MapaEquipeVisao = {
     participacao_regiao_no_mercado_real_pct: number
     familias: { trailer: number; diesel_truck: number; direct_drive: number }
     clientes_unicos: number
+    participacoes_equipe: ParticipacaoEquipe[]
+    soma_mercado_individual: number
+    sobreposicoes_entre_carteiras: number
+    mercado_real_sem_carteira: number
   }
   evidencias: {
     historico_registros_2026: number

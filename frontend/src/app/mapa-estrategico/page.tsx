@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { getMapaEquipeVisao, type MapaEquipeVisao } from "@/services/mapa-equipe-api"
+import { getMapaEquipeVisao, type MapaEquipeVisao, type ParticipacaoEquipe } from "@/services/mapa-equipe-api"
 
 export default function Page() {
   const [responsavelId, setResponsavelId] = useState<string>("")
@@ -76,6 +76,17 @@ export default function Page() {
               <GraficoPizzaFamilias familias={dados.mercado.familias} total={familiaTotal} />
             </section>
 
+            {dados.selecao.modo === "TODA_EQUIPE" && (
+              <FechamentoEquipe
+                participacoes={dados.mercado.participacoes_equipe}
+                totalViena={dados.mercado.mercado_real_viena_2026}
+                totalEquipe={dados.mercado.mercado_real_selecao_2026}
+                somaIndividual={dados.mercado.soma_mercado_individual}
+                sobreposicoes={dados.mercado.sobreposicoes_entre_carteiras}
+                semCarteira={dados.mercado.mercado_real_sem_carteira}
+              />
+            )}
+
             <section className="rounded-2xl border border-emerald-500/30 bg-[#071226] p-5">
               <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
                 <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">Conciliação das três fontes</p><h2 className="mt-1 text-xl font-semibold">Mesmo cliente · mesmo responsável · mesmo recorte</h2></div>
@@ -91,6 +102,11 @@ export default function Page() {
                 <MiniKpi rotulo="ANFIR + Histórico" valor={dados.reconciliacao.anfir_historico} />
                 <MiniKpi rotulo="ANFIR + CRM" valor={dados.reconciliacao.anfir_crm} />
                 <MiniKpi rotulo="Histórico + CRM" valor={dados.reconciliacao.historico_crm} />
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                <MiniKpi rotulo="Somente ANFIR" valor={dados.reconciliacao.somente_anfir} />
+                <MiniKpi rotulo="Somente Histórico" valor={dados.reconciliacao.somente_historico} />
+                <MiniKpi rotulo="Somente CRM" valor={dados.reconciliacao.somente_crm} />
               </div>
               <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-950/10 px-4 py-3 text-xs text-slate-300">Fora do Mercado Real deste recorte: Histórico/Funil {dados.reconciliacao.historico_fora_mercado_real.toLocaleString("pt-BR")} cliente(s) · CRM {dados.reconciliacao.crm_fora_mercado_real.toLocaleString("pt-BR")} cliente(s). Estes registros permanecem auditáveis, mas não entram no denominador de mercado.</div>
             </section>
@@ -114,6 +130,25 @@ export default function Page() {
   )
 }
 
+function FechamentoEquipe({ participacoes, totalViena, totalEquipe, somaIndividual, sobreposicoes, semCarteira }: { participacoes: ParticipacaoEquipe[]; totalViena: number; totalEquipe: number; somaIndividual: number; sobreposicoes: number; semCarteira: number }) {
+  const pctEquipe = totalViena ? totalEquipe / totalViena * 100 : 0
+  return <section className="rounded-2xl border border-violet-500/30 bg-[#071226] p-5">
+    <div className="flex flex-col gap-2 lg:flex-row lg:items-end lg:justify-between">
+      <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Fechamento macro = micro</p><h2 className="mt-1 text-xl font-semibold">Participação real da equipe no Mercado Real Viena</h2></div>
+      <strong className="text-2xl text-violet-200">{totalEquipe.toLocaleString("pt-BR")} de {totalViena.toLocaleString("pt-BR")} · {pctEquipe.toFixed(1)}%</strong>
+    </div>
+    <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {participacoes.map((item) => <MiniKpi key={item.id} rotulo={item.nome} valor={`${item.mercado.toLocaleString("pt-BR")} · ${item.participacao_pct.toFixed(1)}%`} />)}
+    </div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      <MiniKpi rotulo="Soma das carteiras individuais" valor={somaIndividual} />
+      <MiniKpi rotulo="Sobreposição entre carteiras" valor={sobreposicoes} />
+      <MiniKpi rotulo="Mercado real ainda sem carteira" valor={semCarteira} />
+    </div>
+    <p className="mt-4 text-xs text-slate-400">Fechamento obrigatório: soma individual − sobreposições = carteira consolidada da equipe. Carteira consolidada + mercado sem carteira = Mercado Real Viena.</p>
+  </section>
+}
+
 function Kpi({ titulo, valor, apoio, destaque = false }: { titulo: string; valor: number | string; apoio: string; destaque?: boolean }) {
   return <div className={`rounded-2xl border bg-[#071226] p-5 ${destaque ? "border-cyan-400/50" : "border-[#17304d]"}`}><p className="text-xs font-semibold uppercase tracking-[.13em] text-cyan-300">{titulo}</p><strong className={`mt-2 block text-3xl ${destaque ? "text-cyan-300" : "text-white"}`}>{typeof valor === "number" ? valor.toLocaleString("pt-BR") : valor}</strong><p className="mt-2 text-xs text-slate-500">{apoio}</p></div>
 }
@@ -124,7 +159,7 @@ function MiniKpi({ rotulo, valor }: { rotulo: string; valor: number | string }) 
 
 function GraficoPizzaParticipacao({ percentual, selecionado, total, nome }: { percentual: number; selecionado: number; total: number; nome: string }) {
   const pct = Math.max(0, Math.min(100, percentual))
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">Participação no Mercado Real Viena</h2><div className="mt-5 flex flex-col items-center gap-6 sm:flex-row"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${pct}%, #172554 ${pct}% 100%)` }}><div className="absolute inset-7 flex items-center justify-center rounded-full bg-[#071226]"><strong className="text-2xl text-cyan-300">{pct.toFixed(1)}%</strong></div></div><div className="space-y-3 text-sm"><Legenda cor="bg-cyan-400" texto={`${nome}: ${selecionado.toLocaleString("pt-BR")}`} /><Legenda cor="bg-blue-950" texto={`Demais carteiras: ${Math.max(0, total - selecionado).toLocaleString("pt-BR")}`} /><div className="pt-2 text-xs font-semibold text-slate-400">{selecionado.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}</div></div></div></div>
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-5"><h2 className="font-semibold">Participação no Mercado Real Viena</h2><div className="mt-5 flex flex-col items-center gap-6 sm:flex-row"><div className="relative h-44 w-44 shrink-0 rounded-full" style={{ background: `conic-gradient(#22d3ee 0 ${pct}%, #172554 ${pct}% 100%)` }}><div className="absolute inset-7 flex items-center justify-center rounded-full bg-[#071226]"><strong className="text-2xl text-cyan-300">{pct.toFixed(1)}%</strong></div></div><div className="space-y-3 text-sm"><Legenda cor="bg-cyan-400" texto={`${nome}: ${selecionado.toLocaleString("pt-BR")}`} /><Legenda cor="bg-blue-950" texto={`Fora do recorte: ${Math.max(0, total - selecionado).toLocaleString("pt-BR")}`} /><div className="pt-2 text-xs font-semibold text-slate-400">{selecionado.toLocaleString("pt-BR")} de {total.toLocaleString("pt-BR")}</div></div></div></div>
 }
 
 function GraficoPizzaFamilias({ familias, total }: { familias: { trailer: number; diesel_truck: number; direct_drive: number }; total: number }) {
