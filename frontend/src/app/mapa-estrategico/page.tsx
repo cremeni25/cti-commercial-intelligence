@@ -4,25 +4,16 @@ import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { getSupabaseClient } from "@/core/database/supabase"
-import {
-  getMapaEquipeInteligencia,
-  getMapaEquipeVisao,
-  getMapaInsights,
-  perguntarMapaEquipeInteligencia,
-  type FonteContextual,
-  type MapaEquipeVisao,
-  type MapaInsights,
-  type TurnoContextual,
-} from "@/services/mapa-equipe-api"
+import { getMapaEquipeVisao, getMapaInsights, type MapaEquipeVisao, type MapaInsights } from "@/services/mapa-equipe-api"
 
 type MercadoMacro = { total: number; foraDisputa: number; real: number }
 type FocoInteligencia = "geral" | "regioes" | "linhas" | "perdas"
 
 const focos: Array<{ id: FocoInteligencia; titulo: string; apoio: string }> = [
   { id: "geral", titulo: "Visão geral", apoio: "Mercado e CRM" },
-  { id: "regioes", titulo: "Inteligência de regiões", apoio: "Território, carteira e negócios" },
+  { id: "regioes", titulo: "Inteligência de regiões", apoio: "Responsáveis, mercado e ação" },
   { id: "linhas", titulo: "Evolução por linha", apoio: "Trailer, Diesel Truck e Direct Drive" },
-  { id: "perdas", titulo: "Onde perdemos e por quê", apoio: "Linhas e motivos registrados" },
+  { id: "perdas", titulo: "Onde perdemos e por quê", apoio: "Perdas 2026 e reversão" },
 ]
 
 export default function Page() {
@@ -33,16 +24,11 @@ export default function Page() {
   const [foco, setFoco] = useState<FocoInteligencia>("geral")
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
-  const [analiseIa, setAnaliseIa] = useState("")
-  const [fontesContextuais, setFontesContextuais] = useState<FonteContextual[]>([])
-  const [loadingIa, setLoadingIa] = useState(true)
-  const [erroIa, setErroIa] = useState("")
-  const [perguntaContextual, setPerguntaContextual] = useState("")
-  const [historicoContextual, setHistoricoContextual] = useState<TurnoContextual[]>([])
-  const [perguntando, setPerguntando] = useState(false)
 
   useEffect(() => {
     let ativo = true
+    setLoading(true)
+    setErro("")
     Promise.all([getMapaEquipeVisao(responsavelId || null), getMapaInsights(responsavelId || null)])
       .then(([visao, leitura]) => {
         if (!ativo) return
@@ -76,62 +62,11 @@ export default function Page() {
           real: Number(payload.mercado_viena.mercado_disputavel_viena || 0),
         })
       } catch {
-        // A visão individual permanece disponível sem expor o consolidado.
+        // O consolidado é opcional; a visão individual permanece protegida por login.
       }
     })()
     return () => { ativo = false }
   }, [dados?.pode_selecionar_responsavel])
-
-  useEffect(() => {
-    let ativo = true
-    getMapaEquipeInteligencia(responsavelId || null)
-      .then((resposta) => {
-        if (!ativo) return
-        setAnaliseIa(resposta.analise || "")
-        setFontesContextuais(resposta.fontes_contextuais || [])
-      })
-      .catch((e) => { if (ativo) setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.") })
-      .finally(() => { if (ativo) setLoadingIa(false) })
-    return () => { ativo = false }
-  }, [responsavelId])
-
-  async function carregarInteligencia(id = responsavelId) {
-    setLoadingIa(true)
-    setErroIa("")
-    try {
-      const resposta = await getMapaEquipeInteligencia(id || null)
-      setAnaliseIa(resposta.analise || "")
-      setFontesContextuais(resposta.fontes_contextuais || [])
-      setHistoricoContextual([])
-    } catch (e) {
-      setAnaliseIa("")
-      setFontesContextuais([])
-      setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.")
-    } finally {
-      setLoadingIa(false)
-    }
-  }
-
-  async function perguntarContexto() {
-    const pergunta = perguntaContextual.trim()
-    if (!pergunta || perguntando) return
-    setPerguntando(true)
-    setErroIa("")
-    try {
-      const resposta = await perguntarMapaEquipeInteligencia(pergunta, historicoContextual, responsavelId || null)
-      const novosTurnos: TurnoContextual[] = [
-        { role: "user", content: pergunta },
-        { role: "assistant", content: resposta.analise || "" },
-      ]
-      setHistoricoContextual((atual) => [...atual, ...novosTurnos].slice(-8))
-      setFontesContextuais(resposta.fontes_contextuais || [])
-      setPerguntaContextual("")
-    } catch (e) {
-      setErroIa(e instanceof Error ? e.message : "Não foi possível aprofundar esta leitura.")
-    } finally {
-      setPerguntando(false)
-    }
-  }
 
   const familiaTotal = useMemo(() => {
     if (!dados) return 0
@@ -140,14 +75,6 @@ export default function Page() {
   }, [dados])
 
   function trocarResponsavel(novoId: string) {
-    setLoading(true)
-    setErro("")
-    setLoadingIa(true)
-    setErroIa("")
-    setAnaliseIa("")
-    setFontesContextuais([])
-    setHistoricoContextual([])
-    setPerguntaContextual("")
     setFoco("geral")
     setResponsavelId(novoId)
   }
@@ -162,14 +89,14 @@ export default function Page() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Inteligência comercial</p>
               <h1 className="mt-1 text-3xl font-bold">Mapa Comercial Estratégico</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-400">Mercado real, composição, negócios atuais e caminhos de inteligência da seleção.</p>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">Mercado, movimento comercial e ações de 2026 para a seleção atual.</p>
             </div>
             {dados?.pode_selecionar_responsavel && (
               <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-400">
-                Região / responsável
+                Responsável comercial
                 <select value={responsavelId} onChange={(e) => trocarResponsavel(e.target.value)} className="mt-2 w-full rounded-xl border border-[#214363] bg-[#071226] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400">
                   <option value="">Toda a equipe comercial</option>
-                  {dados.equipe.map((item) => <option key={item.id} value={item.id}>{item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}</option>)}
+                  {dados.equipe.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
                 </select>
               </label>
             )}
@@ -186,16 +113,6 @@ export default function Page() {
               familiaTotal={familiaTotal}
               foco={foco}
               setFoco={setFoco}
-              analiseIa={analiseIa}
-              fontesContextuais={fontesContextuais}
-              loadingIa={loadingIa}
-              erroIa={erroIa}
-              atualizarIa={() => void carregarInteligencia()}
-              perguntaContextual={perguntaContextual}
-              setPerguntaContextual={setPerguntaContextual}
-              historicoContextual={historicoContextual}
-              perguntando={perguntando}
-              perguntarContexto={() => void perguntarContexto()}
             />
           )}
         </div>
@@ -204,44 +121,15 @@ export default function Page() {
   )
 }
 
-function VisaoComercial({
-  dados,
-  insights,
-  mercadoMacro,
-  familiaTotal,
-  foco,
-  setFoco,
-  analiseIa,
-  fontesContextuais,
-  loadingIa,
-  erroIa,
-  atualizarIa,
-  perguntaContextual,
-  setPerguntaContextual,
-  historicoContextual,
-  perguntando,
-  perguntarContexto,
-}: {
+function VisaoComercial({ dados, insights, mercadoMacro, familiaTotal, foco, setFoco }: {
   dados: MapaEquipeVisao
   insights: MapaInsights
   mercadoMacro: MercadoMacro | null
   familiaTotal: number
   foco: FocoInteligencia
   setFoco: (foco: FocoInteligencia) => void
-  analiseIa: string
-  fontesContextuais: FonteContextual[]
-  loadingIa: boolean
-  erroIa: string
-  atualizarIa: () => void
-  perguntaContextual: string
-  setPerguntaContextual: (valor: string) => void
-  historicoContextual: TurnoContextual[]
-  perguntando: boolean
-  perguntarContexto: () => void
 }) {
-  const ticketPipeline = dados.evidencias.crm_ativos > 0
-    ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos
-    : 0
+  const ticketPipeline = dados.evidencias.crm_ativos > 0 ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos : 0
   const consolidado = insights.escopo.consolidado
 
   return <>
@@ -268,51 +156,12 @@ function VisaoComercial({
     {foco === "linhas" && <VisaoLinhas insights={insights} />}
     {foco === "perdas" && <VisaoPerdas insights={insights} />}
 
-    {!loadingIa && (analiseIa || erroIa) && (
-      <section className="rounded-3xl border border-violet-500/25 bg-[#081126] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Interpretação comercial</p>
-            <h2 className="mt-1 text-xl font-bold">O que merece atenção nesta seleção</h2>
-          </div>
-          <button type="button" onClick={atualizarIa} disabled={perguntando} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button>
-        </div>
-        {erroIa && <p className="mt-4 text-sm text-amber-200">A interpretação contextual não foi concluída nesta tentativa.</p>}
-        {analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
-        {analiseIa && historicoContextual.length > 0 && (
-          <div className="mt-5 space-y-3 border-t border-violet-400/15 pt-4">
-            {historicoContextual.slice(-4).map((turno, index) => (
-              <div key={`${turno.role}-${index}`} className={turno.role === "user" ? "rounded-xl bg-violet-500/10 px-3 py-2 text-sm text-violet-100" : "whitespace-pre-wrap text-sm leading-6 text-slate-300"}>{turno.content}</div>
-            ))}
-          </div>
-        )}
-        {analiseIa && (
-          <div className="mt-5 border-t border-violet-400/15 pt-4">
-            <div className="flex gap-2">
-              <input value={perguntaContextual} onChange={(e) => setPerguntaContextual(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); perguntarContexto() } }} disabled={perguntando} placeholder="Pergunte sobre esta seleção..." className="min-w-0 flex-1 rounded-xl border border-violet-400/20 bg-[#060d1d] px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-400/50 disabled:opacity-60" />
-              <button type="button" onClick={perguntarContexto} disabled={perguntando || !perguntaContextual.trim()} className="rounded-xl border border-violet-400/30 px-4 py-2.5 text-sm font-semibold text-violet-100 disabled:opacity-40">{perguntando ? "Analisando..." : "Perguntar"}</button>
-            </div>
-          </div>
-        )}
-        {analiseIa && fontesContextuais.length > 0 && (
-          <details className="mt-4 border-t border-violet-400/10 pt-3 text-xs text-slate-500">
-            <summary className="cursor-pointer list-none font-semibold text-slate-400">Contexto utilizado</summary>
-            <div className="mt-3 space-y-2">{fontesContextuais.map((fonte) => <div key={fonte.codigo}><strong className="text-slate-400">{fonte.nome}: </strong><span>{fonte.evidencia}</span></div>)}</div>
-          </details>
-        )}
-      </section>
-    )}
-
-    {loadingIa && <p className="px-1 text-xs text-slate-600">A interpretação comercial está sendo preparada sem bloquear a leitura dos gráficos.</p>}
-
     <details className="rounded-2xl border border-slate-700/50 bg-[#061126] px-5 py-4">
       <summary className="cursor-pointer list-none text-sm font-semibold text-slate-300">Dados de apoio e auditoria</summary>
-      <div className="mt-4 space-y-5 border-t border-slate-700/50 pt-4">
-        <div className="grid gap-3 sm:grid-cols-3">
-          <MiniKpi rotulo="Registros históricos 2026" valor={dados.evidencias.historico_registros_2026} />
-          <MiniKpi rotulo="Unidades históricas 2026" valor={dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} />
-          <MiniKpi rotulo="Clientes históricos" valor={dados.reconciliacao.clientes_historico} />
-        </div>
+      <div className="mt-4 grid gap-3 border-t border-slate-700/50 pt-4 sm:grid-cols-3">
+        <MiniKpi rotulo="Registros históricos 2026" valor={dados.evidencias.historico_registros_2026} />
+        <MiniKpi rotulo="Unidades históricas 2026" valor={dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} />
+        <MiniKpi rotulo="Clientes históricos" valor={dados.reconciliacao.clientes_historico} />
       </div>
     </details>
   </>
@@ -321,9 +170,13 @@ function VisaoComercial({
 function VisaoGeral({ dados, mercadoMacro, familiaTotal, consolidado, ticketPipeline }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; consolidado: boolean; ticketPipeline: number }) {
   return <section className="grid gap-4 xl:grid-cols-2">
     <div className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
-      <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Mercado 2026</p><h2 className="mt-1 text-xl font-bold">Como o mercado está dividido</h2></div>
+      <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Mercado 2026</p>
+      <h2 className="mt-1 text-xl font-bold">Como o mercado está dividido</h2>
       {consolidado && mercadoMacro ? <div className="mt-5"><BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} /></div> : <p className="mt-4 text-sm text-slate-400">Visão individual do mercado vinculado ao login atual.</p>}
-      <div className="mt-6 border-t border-slate-700/50 pt-4"><p className="mb-3 text-xs font-semibold uppercase tracking-[.14em] text-slate-500">Composição por linha</p><div className="space-y-3"><BarraComercial nome="Trailer" valor={dados.mercado.familias.trailer} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Diesel Truck" valor={dados.mercado.familias.diesel_truck} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Direct Drive" valor={dados.mercado.familias.direct_drive} total={Math.max(1, familiaTotal)} /></div></div>
+      <div className="mt-6 border-t border-slate-700/50 pt-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[.14em] text-slate-500">Composição por linha</p>
+        <div className="space-y-3"><BarraComercial nome="Trailer" valor={dados.mercado.familias.trailer} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Diesel Truck" valor={dados.mercado.familias.diesel_truck} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Direct Drive" valor={dados.mercado.familias.direct_drive} total={Math.max(1, familiaTotal)} /></div>
+      </div>
     </div>
     <div className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5">
       <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-xl font-bold">Como estão os negócios em andamento</h2></div><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativos</strong></div>
@@ -334,30 +187,95 @@ function VisaoGeral({ dados, mercadoMacro, familiaTotal, consolidado, ticketPipe
 }
 
 function VisaoRegioes({ insights }: { insights: MapaInsights }) {
-  const max = Math.max(1, ...insights.regioes.map((item) => item.mercado_2026))
-  return <section className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
-    <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Inteligência de regiões</p>
-    <h2 className="mt-1 text-xl font-bold">Território, mercado e negócios por responsável</h2>
-    <div className="mt-5 space-y-4">{insights.regioes.map((item) => <div key={item.id} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><strong>{item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}</strong><p className="mt-1 text-xs text-slate-500">DDD {item.ddds.join(", ") || "não informado"}</p></div><div className="text-right text-xs text-slate-400"><div>{item.crm_ativos} negócio(s) ativo(s)</div><strong className="text-emerald-300">{formatarMoeda(item.pipeline_ativo)}</strong></div></div><div className="mt-3"><BarraComparativa nome="Mercado 2026" valor={item.mercado_2026} maximo={max} /></div></div>)}</div>
+  return <section className="space-y-4">
+    <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
+      <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Inteligência de regiões · 2026</p>
+      <h2 className="mt-1 text-xl font-bold">Mercado e atuação por responsável comercial</h2>
+      <p className="mt-2 text-sm text-slate-400">A atribuição é pelo responsável efetivo do cliente. Região e DDD não transferem mercado entre pessoas.</p>
+    </div>
+    <div className="grid gap-4 xl:grid-cols-2">
+      {insights.regioes.map((item) => (
+        <article key={item.id} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div><p className="text-xs uppercase tracking-[.14em] text-slate-500">Responsável comercial</p><h3 className="mt-1 text-lg font-bold">{item.nome}</h3></div>
+            <div className="text-right"><strong className="text-2xl text-cyan-300">{item.mercado_2026}</strong><p className="text-xs text-slate-500">mercado atribuído 2026</p></div>
+          </div>
+          <div className="mt-4"><GraficoLinha valores={item.mercado_mensal} meses={insights.meses} rotulo="Movimento mensal do mercado atribuído" /></div>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Clientes" valor={item.clientes_mercado} /><MiniKpi rotulo="Negócios ativos" valor={item.crm_ativos} /><MiniKpi rotulo="Pipeline" valor={formatarMoeda(item.pipeline_ativo)} /></div>
+          <LeituraAcao leitura={item.leitura_comercial} acao={item.acao_recomendada} />
+        </article>
+      ))}
+    </div>
   </section>
 }
 
 function VisaoLinhas({ insights }: { insights: MapaInsights }) {
-  const max = Math.max(1, ...insights.evolucao_linhas.flatMap((item) => [item.trailer, item.diesel_truck, item.direct_drive]))
-  return <section className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
-    <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha</p>
-    <h2 className="mt-1 text-xl font-bold">Histórico comercial 2023–2026</h2>
-    <div className="mt-5 grid gap-4 xl:grid-cols-4">{insights.evolucao_linhas.map((item) => <div key={item.ano} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><strong className="text-lg">{item.ano}</strong><div className="mt-4 space-y-3"><BarraComparativa nome="Trailer" valor={item.trailer} maximo={max} /><BarraComparativa nome="Diesel Truck" valor={item.diesel_truck} maximo={max} /><BarraComparativa nome="Direct Drive" valor={item.direct_drive} maximo={max} /></div></div>)}</div>
+  return <section className="space-y-4">
+    <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
+      <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha · 2026</p>
+      <h2 className="mt-1 text-xl font-bold">Como cada linha está se movimentando no ano</h2>
+      <p className="mt-2 text-sm text-slate-400">Leitura baseada no Histórico/Funil 2026 da seleção atual. Sem comparação com anos anteriores nesta tela.</p>
+    </div>
+    <div className="grid gap-4 xl:grid-cols-3">
+      {insights.linhas_2026.linhas.map((linha) => (
+        <article key={linha.codigo} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
+          <div className="flex items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-[.14em] text-slate-500">Linha de produto</p><h3 className="mt-1 text-lg font-bold">{linha.nome}</h3></div><strong className="text-2xl text-cyan-300">{linha.total_2026}</strong></div>
+          <div className="mt-4"><GraficoLinha valores={linha.mensal} meses={insights.linhas_2026.meses} rotulo={`Movimento mensal de ${linha.nome}`} /></div>
+          <LeituraAcao leitura={linha.leitura_comercial} acao={linha.acao_recomendada} />
+        </article>
+      ))}
+    </div>
+    {insights.linhas_2026.nao_classificado_2026 > 0 && <p className="px-1 text-xs text-amber-300">Há {insights.linhas_2026.nao_classificado_2026} unidade(s) de 2026 ainda sem linha classificada; elas não foram forçadas para Trailer, Diesel Truck ou Direct Drive.</p>}
   </section>
 }
 
 function VisaoPerdas({ insights }: { insights: MapaInsights }) {
-  const totalMotivos = Math.max(1, insights.perdas.motivos.reduce((s, item) => s + item.quantidade, 0))
+  const totalMotivos = Math.max(1, insights.perdas.total_com_motivo)
   const totalLinhas = Math.max(1, insights.perdas.por_linha.reduce((s, item) => s + item.quantidade, 0))
-  return <section className="grid gap-4 xl:grid-cols-2">
-    <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Por que perdemos</p><h2 className="mt-1 text-xl font-bold">Motivos registrados</h2><div className="mt-5 space-y-3">{insights.perdas.motivos.length ? insights.perdas.motivos.map((item) => <BarraComercial key={item.nome} nome={item.nome.replaceAll("_", " ")} valor={item.quantidade} total={totalMotivos} />) : <p className="text-sm text-slate-500">Não há motivo de perda estruturado suficiente neste escopo.</p>}</div></div>
-    <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Onde perdemos</p><h2 className="mt-1 text-xl font-bold">Perdas por linha de equipamento</h2><div className="mt-5 space-y-3">{insights.perdas.por_linha.length ? insights.perdas.por_linha.map((item) => <BarraComercial key={item.nome} nome={item.nome} valor={item.quantidade} total={totalLinhas} />) : <p className="text-sm text-slate-500">Não há perda estruturada suficiente neste escopo.</p>}</div></div>
+  return <section className="space-y-4">
+    <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5">
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Perdas comerciais · 2026</p><h2 className="mt-1 text-xl font-bold">Onde perdemos e por quê</h2></div><div className="text-right"><strong className="text-3xl text-amber-300">{insights.perdas.total_perdido}</strong><p className="text-xs text-slate-500">perdas registradas</p></div></div>
+      <div className="mt-5"><GraficoLinha valores={insights.perdas.mensal} meses={insights.meses} rotulo="Evolução mensal das perdas em 2026" /></div>
+      <LeituraAcao leitura={insights.perdas.leitura_comercial} acao={insights.perdas.acao_recomendada} destaque="amber" />
+    </div>
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Por que perdemos</p><h3 className="mt-1 text-lg font-bold">Motivos registrados em 2026</h3><div className="mt-5 space-y-3">{insights.perdas.motivos.length ? insights.perdas.motivos.map((item) => <BarraComercial key={item.nome} nome={item.nome.replaceAll("_", " ")} valor={item.quantidade} total={totalMotivos} />) : <p className="text-sm text-slate-500">As perdas existem, mas ainda não há motivo estruturado suficiente para análise.</p>}</div></div>
+      <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Onde perdemos</p><h3 className="mt-1 text-lg font-bold">Perdas por linha em 2026</h3><div className="mt-5 space-y-3">{insights.perdas.por_linha.length ? insights.perdas.por_linha.map((item) => <BarraComercial key={item.nome} nome={item.nome} valor={item.quantidade} total={totalLinhas} />) : <p className="text-sm text-slate-500">Não há linha classificada nas perdas deste escopo.</p>}</div></div>
+    </div>
   </section>
+}
+
+function LeituraAcao({ leitura, acao, destaque = "cyan" }: { leitura: string; acao: string; destaque?: "cyan" | "amber" }) {
+  const titulo = destaque === "amber" ? "text-amber-300" : "text-cyan-300"
+  return <div className="mt-5 grid gap-3 border-t border-slate-700/50 pt-4 md:grid-cols-2">
+    <div><p className={`text-[11px] font-semibold uppercase tracking-[.14em] ${titulo}`}>Leitura comercial</p><p className="mt-2 text-sm leading-6 text-slate-300">{leitura}</p></div>
+    <div><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-emerald-300">O que fazer</p><p className="mt-2 text-sm leading-6 text-slate-300">{acao}</p></div>
+  </div>
+}
+
+function GraficoLinha({ valores, meses, rotulo }: { valores: number[]; meses: string[]; rotulo: string }) {
+  const serie = Array.from({ length: 12 }, (_, i) => Number(valores[i] || 0))
+  const maximo = Math.max(1, ...serie)
+  const largura = 720
+  const altura = 180
+  const margemX = 22
+  const margemY = 18
+  const passo = (largura - margemX * 2) / 11
+  const pontos = serie.map((valor, i) => {
+    const x = margemX + i * passo
+    const y = altura - margemY - (valor / maximo) * (altura - margemY * 2)
+    return { x, y, valor }
+  })
+  const caminho = pontos.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
+
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-3" aria-label={rotulo}>
+    <svg viewBox={`0 0 ${largura} ${altura + 26}`} className="h-48 w-full" role="img">
+      <line x1={margemX} y1={altura - margemY} x2={largura - margemX} y2={altura - margemY} stroke="currentColor" className="text-slate-700" strokeWidth="1" />
+      <path d={caminho} fill="none" stroke="currentColor" className="text-cyan-400" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+      {pontos.map((p, i) => <g key={i}><circle cx={p.x} cy={p.y} r="4" fill="currentColor" className="text-cyan-300" /><text x={p.x} y={Math.max(12, p.y - 9)} textAnchor="middle" fontSize="10" fill="currentColor" className="text-slate-300">{p.valor || ""}</text></g>)}
+      {meses.slice(0, 12).map((mes, i) => <text key={mes + i} x={margemX + i * passo} y={altura + 12} textAnchor="middle" fontSize="10" fill="currentColor" className="text-slate-500">{mes}</text>)}
+    </svg>
+  </div>
 }
 
 function Kpi({ titulo, valor, apoio, destaque }: { titulo: string; valor: string | number; apoio?: string; destaque?: "cyan" | "emerald" }) {
@@ -372,11 +290,6 @@ function MiniKpi({ rotulo, valor }: { rotulo: string; valor: string | number }) 
 function BarraComercial({ nome, valor, total }: { nome: string; valor: number; total: number }) {
   const percentual = pct(valor, total)
   return <div><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor} · {percentual.toFixed(0)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, percentual)}%` }} /></div></div>
-}
-
-function BarraComparativa({ nome, valor, maximo }: { nome: string; valor: number; maximo: number }) {
-  const largura = pct(valor, maximo)
-  return <div><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor}</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, largura)}%` }} /></div></div>
 }
 
 function BarraMercado({ total, fora, real }: { total: number; fora: number; real: number }) {
