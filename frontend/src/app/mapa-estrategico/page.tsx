@@ -7,9 +7,19 @@ import { getSupabaseClient } from "@/core/database/supabase"
 import { getMapaEquipeVisao, type MapaEquipeVisao } from "@/services/mapa-equipe-api"
 
 type MercadoMacro = { total: number; foraDisputa: number; real: number }
+type Visao = "executiva" | "mercado" | "equipe" | "crm" | "historico"
+
+const visoes: { id: Visao; label: string }[] = [
+  { id: "executiva", label: "Visão executiva" },
+  { id: "mercado", label: "Mercado" },
+  { id: "equipe", label: "Equipe / responsável" },
+  { id: "crm", label: "CRM atual" },
+  { id: "historico", label: "Histórico" },
+]
 
 export default function Page() {
   const [responsavelId, setResponsavelId] = useState("")
+  const [visao, setVisao] = useState<Visao>("executiva")
   const [dados, setDados] = useState<MapaEquipeVisao | null>(null)
   const [mercadoMacro, setMercadoMacro] = useState<MercadoMacro | null>(null)
   const [loading, setLoading] = useState(true)
@@ -45,7 +55,7 @@ export default function Page() {
           real: Number(payload.mercado_viena.mercado_disputavel_viena || 0),
         })
       } catch {
-        // A visão comercial segue disponível sem a leitura macro.
+        // A leitura do mapa segue disponível mesmo se a leitura macro não responder.
       }
     })()
     return () => { ativo = false }
@@ -66,6 +76,7 @@ export default function Page() {
   const gapMercado = dados ? Math.max(0, dados.mercado.mercado_real_viena_2026 - dados.mercado.mercado_real_selecao_2026) : 0
   const gapPct = dados ? Math.max(0, 100 - dados.mercado.participacao_regiao_no_mercado_real_pct) : 0
   const ticketPipeline = dados && dados.evidencias.crm_ativos > 0 ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos : 0
+  const perdasHistorico = dados ? dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0) : 0
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
@@ -89,61 +100,23 @@ export default function Page() {
             )}
           </header>
 
+          <nav className="flex flex-wrap gap-2" aria-label="Visões da Inteligência Comercial">
+            {visoes.map((item) => (
+              <button key={item.id} type="button" onClick={() => setVisao(item.id)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${visao === item.id ? "border-cyan-400 bg-cyan-400 text-slate-950" : "border-[#214363] bg-[#071226] text-slate-300 hover:border-cyan-500/60 hover:text-white"}`}>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando informações comerciais...</div>}
 
           {!loading && dados && <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="100%" destaque="emerald" />
-              <Kpi titulo="Ligado à análise" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} destaque="cyan" />
-              <Kpi titulo="Espaço disponível" valor={gapMercado} apoio={`${gapPct.toFixed(1)}%`} destaque="amber" />
-              <Kpi titulo="Negociações ativas" valor={dados.evidencias.crm_ativos} apoio={formatarMoeda(dados.evidencias.crm_valor_ativo)} />
-              <Kpi titulo="Ticket médio ativo" valor={formatarMoeda(ticketPipeline)} apoio="pipeline atual" />
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]">
-              <div className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Mercado 2026</p>
-                    <h2 className="mt-1 text-xl font-bold">Tamanho, disputa e espaço comercial</h2>
-                  </div>
-                  <span className="rounded-full border border-cyan-500/20 px-3 py-1 text-xs text-cyan-200">ANFIR 2026</span>
-                </div>
-                <div className="mt-5 grid gap-5 lg:grid-cols-[.8fr_1.2fr] lg:items-center">
-                  <GraficoPizzaParticipacao percentual={dados.mercado.participacao_regiao_no_mercado_real_pct} selecionado={dados.mercado.mercado_real_selecao_2026} total={dados.mercado.mercado_real_viena_2026} nome={dados.selecao.nome} compacto />
-                  <div className="space-y-4">
-                    {mercadoMacro && <BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} />}
-                    <div className="grid grid-cols-3 gap-2">
-                      <MiniKpi rotulo="Trailer" valor={dados.mercado.familias.trailer} apoio={`${pct(dados.mercado.familias.trailer, familiaTotal).toFixed(1)}%`} />
-                      <MiniKpi rotulo="Diesel Truck" valor={dados.mercado.familias.diesel_truck} apoio={`${pct(dados.mercado.familias.diesel_truck, familiaTotal).toFixed(1)}%`} />
-                      <MiniKpi rotulo="Direct Drive" valor={dados.mercado.familias.direct_drive} apoio={`${pct(dados.mercado.familias.direct_drive, familiaTotal).toFixed(1)}%`} />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-3xl border border-emerald-500/25 bg-[#061126] p-5">
-                <p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">Leitura executiva</p>
-                <div className="mt-4 space-y-3">
-                  <Insight valor={`${gapPct.toFixed(1)}%`} texto="do Mercado Real ainda está fora da análise selecionada." />
-                  <Insight valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} texto={`estão em ${dados.evidencias.crm_ativos} negociação(ões) ativa(s).`} />
-                  <Insight valor={`${dados.mercado.clientes_unicos}`} texto="clientes estão identificados no mercado analisado." />
-                </div>
-              </div>
-            </section>
-
-            <section className="grid gap-4 xl:grid-cols-2">
-              <div className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5">
-                <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Agora · CRM</h2><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativas</strong></div>
-                <div className="mt-4 space-y-2">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas.</p>}</div>
-              </div>
-              <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5">
-                <div className="flex items-center justify-between gap-3"><h2 className="font-bold">Histórico / Funil 2026</h2><strong className="text-amber-300">{dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} unidades</strong></div>
-                <div className="mt-4 grid grid-cols-2 gap-3"><MiniKpi rotulo="Eventos" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Perdas registradas" valor={dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0)} /></div>
-                {dados.evidencias.motivos_perda_historico.length > 0 && <div className="mt-4 space-y-2">{dados.evidencias.motivos_perda_historico.slice(0, 3).map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0))} />)}</div>}
-              </div>
-            </section>
+            {visao === "executiva" && <VisaoExecutiva dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} gapMercado={gapMercado} gapPct={gapPct} ticketPipeline={ticketPipeline} irPara={setVisao} />}
+            {visao === "mercado" && <VisaoMercado dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} gapMercado={gapMercado} gapPct={gapPct} />}
+            {visao === "equipe" && <VisaoEquipe dados={dados} familiaTotal={familiaTotal} gapMercado={gapMercado} gapPct={gapPct} />}
+            {visao === "crm" && <VisaoCrm dados={dados} ticketPipeline={ticketPipeline} />}
+            {visao === "historico" && <VisaoHistorico dados={dados} perdasHistorico={perdasHistorico} />}
 
             <details className="group rounded-2xl border border-slate-700/60 bg-[#061126] px-5 py-4">
               <summary className="cursor-pointer list-none text-sm font-semibold text-slate-300">Auditoria e origem dos dados <span className="ml-2 text-xs text-slate-500">ANFIR · Histórico/Funil · CRM</span></summary>
@@ -161,11 +134,54 @@ export default function Page() {
   )
 }
 
+function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, gapMercado, gapPct, ticketPipeline, irPara }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; gapMercado: number; gapPct: number; ticketPipeline: number; irPara: (v: Visao) => void }) {
+  return <>
+    <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="100%" destaque="emerald" onClick={() => irPara("mercado")} />
+      <Kpi titulo="Ligado à análise" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} destaque="cyan" onClick={() => irPara("equipe")} />
+      <Kpi titulo="Espaço disponível" valor={gapMercado} apoio={`${gapPct.toFixed(1)}%`} destaque="amber" onClick={() => irPara("mercado")} />
+      <Kpi titulo="Negociações ativas" valor={dados.evidencias.crm_ativos} apoio={formatarMoeda(dados.evidencias.crm_valor_ativo)} onClick={() => irPara("crm")} />
+      <Kpi titulo="Ticket médio ativo" valor={formatarMoeda(ticketPipeline)} apoio="pipeline atual" onClick={() => irPara("crm")} />
+    </section>
+
+    <section className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]">
+      <button type="button" onClick={() => irPara("mercado")} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5 text-left transition hover:border-cyan-500/50">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Mercado 2026</p><h2 className="mt-1 text-xl font-bold">Tamanho, disputa e espaço comercial</h2></div><span className="rounded-full border border-cyan-500/20 px-3 py-1 text-xs text-cyan-200">ANFIR 2026</span></div>
+        <div className="mt-5 grid gap-5 lg:grid-cols-[.8fr_1.2fr] lg:items-center"><GraficoPizzaParticipacao percentual={dados.mercado.participacao_regiao_no_mercado_real_pct} selecionado={dados.mercado.mercado_real_selecao_2026} total={dados.mercado.mercado_real_viena_2026} nome={dados.selecao.nome} compacto /><div className="space-y-4">{mercadoMacro && <BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} />}<div className="grid grid-cols-3 gap-2"><MiniKpi rotulo="Trailer" valor={dados.mercado.familias.trailer} apoio={`${pct(dados.mercado.familias.trailer, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Diesel Truck" valor={dados.mercado.familias.diesel_truck} apoio={`${pct(dados.mercado.familias.diesel_truck, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Direct Drive" valor={dados.mercado.familias.direct_drive} apoio={`${pct(dados.mercado.familias.direct_drive, familiaTotal).toFixed(1)}%`} /></div></div></div>
+      </button>
+      <div className="rounded-3xl border border-emerald-500/25 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">Leitura executiva</p><div className="mt-4 space-y-3"><Insight valor={`${gapPct.toFixed(1)}%`} texto="do Mercado Real ainda está fora da análise selecionada." /><Insight valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} texto={`estão em ${dados.evidencias.crm_ativos} negociação(ões) ativa(s).`} /><Insight valor={`${dados.mercado.clientes_unicos}`} texto="clientes estão identificados no mercado analisado." /></div></div>
+    </section>
+
+    <section className="grid gap-4 xl:grid-cols-2">
+      <button type="button" onClick={() => irPara("crm")} className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5 text-left transition hover:border-emerald-400/60"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">Agora · CRM</h2><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativas</strong></div><div className="mt-4 space-y-2">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas.</p>}</div></button>
+      <button type="button" onClick={() => irPara("historico")} className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5 text-left transition hover:border-amber-400/60"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">Histórico / Funil 2026</h2><strong className="text-amber-300">{dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} unidades</strong></div><div className="mt-4 grid grid-cols-2 gap-3"><MiniKpi rotulo="Eventos" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Perdas registradas" valor={dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0)} /></div></button>
+    </section>
+  </>
+}
+
+function VisaoMercado({ dados, mercadoMacro, familiaTotal, gapMercado, gapPct }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; gapMercado: number; gapPct: number }) {
+  return <section className="space-y-4 rounded-3xl border border-[#17304d] bg-[#061126] p-5"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-400">Mercado</p><h2 className="mt-1 text-2xl font-bold">Onde está o mercado e quanto ainda está disponível</h2></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MiniKpi rotulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="100%" /><MiniKpi rotulo="Ligado à análise" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} /><MiniKpi rotulo="Espaço disponível" valor={gapMercado} apoio={`${gapPct.toFixed(1)}%`} /><MiniKpi rotulo="Clientes identificados" valor={dados.mercado.clientes_unicos} /></div>{mercadoMacro && <BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} />}<div className="grid gap-3 md:grid-cols-3"><MiniKpi rotulo="Trailer" valor={dados.mercado.familias.trailer} apoio={`${pct(dados.mercado.familias.trailer, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Diesel Truck" valor={dados.mercado.familias.diesel_truck} apoio={`${pct(dados.mercado.familias.diesel_truck, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Direct Drive" valor={dados.mercado.familias.direct_drive} apoio={`${pct(dados.mercado.familias.direct_drive, familiaTotal).toFixed(1)}%`} /></div></section>
+}
+
+function VisaoEquipe({ dados, familiaTotal, gapMercado, gapPct }: { dados: MapaEquipeVisao; familiaTotal: number; gapMercado: number; gapPct: number }) {
+  return <section className="grid gap-4 xl:grid-cols-[.8fr_1.2fr]"><div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5"><p className="text-xs uppercase tracking-[.16em] text-cyan-400">Equipe / responsável</p><h2 className="mt-1 text-2xl font-bold">{dados.selecao.nome}</h2><div className="mt-5"><GraficoPizzaParticipacao percentual={dados.mercado.participacao_regiao_no_mercado_real_pct} selecionado={dados.mercado.mercado_real_selecao_2026} total={dados.mercado.mercado_real_viena_2026} nome={dados.selecao.nome} /></div></div><div className="space-y-4 rounded-3xl border border-[#17304d] bg-[#061126] p-5"><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Ligado à análise" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${dados.mercado.participacao_regiao_no_mercado_real_pct.toFixed(1)}%`} /><MiniKpi rotulo="Espaço disponível" valor={gapMercado} apoio={`${gapPct.toFixed(1)}%`} /><MiniKpi rotulo="Clientes identificados" valor={dados.mercado.clientes_unicos} /></div><div className="grid gap-3 md:grid-cols-3"><MiniKpi rotulo="Trailer" valor={dados.mercado.familias.trailer} apoio={`${pct(dados.mercado.familias.trailer, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Diesel Truck" valor={dados.mercado.familias.diesel_truck} apoio={`${pct(dados.mercado.familias.diesel_truck, familiaTotal).toFixed(1)}%`} /><MiniKpi rotulo="Direct Drive" valor={dados.mercado.familias.direct_drive} apoio={`${pct(dados.mercado.familias.direct_drive, familiaTotal).toFixed(1)}%`} /></div></div></section>
+}
+
+function VisaoCrm({ dados, ticketPipeline }: { dados: MapaEquipeVisao; ticketPipeline: number }) {
+  return <section className="space-y-4 rounded-3xl border border-emerald-500/20 bg-[#061126] p-5"><div><p className="text-xs uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-2xl font-bold">O que está sendo trabalhado agora</h2></div><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Negociações ativas" valor={dados.evidencias.crm_ativos} /><MiniKpi rotulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} /><MiniKpi rotulo="Ticket médio" valor={formatarMoeda(ticketPipeline)} /></div><div className="space-y-3">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas.</p>}</div></section>
+}
+
+function VisaoHistorico({ dados, perdasHistorico }: { dados: MapaEquipeVisao; perdasHistorico: number }) {
+  return <section className="space-y-4 rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><div><p className="text-xs uppercase tracking-[.16em] text-amber-300">Histórico / Funil 2026</p><h2 className="mt-1 text-2xl font-bold">O que aconteceu antes</h2></div><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Eventos registrados" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Unidades registradas" valor={dados.evidencias.historico_unidades_2026} /><MiniKpi rotulo="Perdas registradas" valor={perdasHistorico} /></div>{dados.evidencias.motivos_perda_historico.length > 0 && <div className="space-y-3">{dados.evidencias.motivos_perda_historico.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, perdasHistorico)} />)}</div>}</section>
+}
+
 function pct(parte: number, total: number) { return total > 0 ? parte / total * 100 : 0 }
 
-function Kpi({ titulo, valor, apoio, destaque = "normal" }: { titulo: string; valor: number | string; apoio: string; destaque?: "normal" | "cyan" | "emerald" | "amber" }) {
+function Kpi({ titulo, valor, apoio, destaque = "normal", onClick }: { titulo: string; valor: number | string; apoio: string; destaque?: "normal" | "cyan" | "emerald" | "amber"; onClick?: () => void }) {
   const cor = destaque === "cyan" ? "text-cyan-300" : destaque === "emerald" ? "text-emerald-300" : destaque === "amber" ? "text-amber-300" : "text-white"
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-slate-500">{titulo}</p><strong className={`mt-2 block text-3xl ${cor}`}>{typeof valor === "number" ? valor.toLocaleString("pt-BR") : valor}</strong><p className="mt-1 text-xs font-semibold text-slate-400">{apoio}</p></div>
+  const corpo = <><p className="text-[11px] font-semibold uppercase tracking-[.12em] text-slate-500">{titulo}</p><strong className={`mt-2 block text-3xl ${cor}`}>{typeof valor === "number" ? valor.toLocaleString("pt-BR") : valor}</strong><p className="mt-1 text-xs font-semibold text-slate-400">{apoio}</p></>
+  if (onClick) return <button type="button" onClick={onClick} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4 text-left transition hover:-translate-y-0.5 hover:border-cyan-500/60">{corpo}</button>
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4">{corpo}</div>
 }
 
 function MiniKpi({ rotulo, valor, apoio }: { rotulo: string; valor: number | string; apoio?: string }) {
