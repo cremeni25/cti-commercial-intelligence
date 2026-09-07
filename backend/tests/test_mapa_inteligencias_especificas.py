@@ -2,6 +2,7 @@ from pathlib import Path
 
 from core.admin_auth import UsuarioAutenticado
 from routers import crm_scope_mapa_equipe_router as mapa
+from services import commercial_client_scope as scope
 
 ROOT = Path(__file__).resolve().parents[2]
 INSIGHTS = ROOT / "backend" / "routers" / "crm_scope_mapa_insights_router.py"
@@ -41,6 +42,30 @@ def test_master_pode_consolidar_sem_responsavel(monkeypatch):
     assert len(equipe) == 2
 
 
+def test_mercado_por_responsavel_nao_usa_ddd_como_fallback(monkeypatch):
+    monkeypatch.setattr(scope, "_mapas_clientes", lambda: ({}, {}))
+    monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {"id": usuario_id, "nome": "Nathan Beljato"})
+    registro_so_territorial = {"cliente": "Cliente sem responsável", "ddd": "011"}
+
+    resultado = scope.filtrar_anfir_por_responsavel_comercial(
+        [registro_so_territorial],
+        "nathan-id",
+        "Nathan Beljato",
+    )
+
+    assert resultado == []
+
+
+def test_mercado_por_responsavel_prioriza_responsavel_comercial_do_cliente(monkeypatch):
+    cliente = {"nome": "Cliente A", "responsavel_comercial_id": "monica-id"}
+    monkeypatch.setattr(scope, "_mapas_clientes", lambda: ({scope._fold("Cliente A"): cliente}, {}))
+    monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {"id": usuario_id, "nome": "Monica Almeida" if usuario_id == "monica-id" else "Nathan Beljato"})
+    registro = {"cliente": "Cliente A", "ddd": "011"}
+
+    assert scope.filtrar_anfir_por_responsavel_comercial([registro], "nathan-id", "Nathan Beljato") == []
+    assert scope.filtrar_anfir_por_responsavel_comercial([registro], "monica-id", "Monica Almeida") == [registro]
+
+
 def test_mapa_tem_tres_caminhos_de_inteligencia_e_preserva_escopo():
     page = PAGE.read_text(encoding="utf-8")
     service = SERVICE.read_text(encoding="utf-8")
@@ -54,3 +79,6 @@ def test_mapa_tem_tres_caminhos_de_inteligencia_e_preserva_escopo():
     assert "if (!dados?.pode_selecionar_responsavel) return" in page
     assert "mercadoMacro={consolidado ? mercadoMacro : null}" in page
     assert "BarraComparativa" in page
+    assert "filtrar_anfir_por_responsavel_comercial" in insights
+    bloco_regioes = insights.split("def _regioes", 1)[1].split("@router.get", 1)[0]
+    assert "_anfir_carteira" not in bloco_regioes
