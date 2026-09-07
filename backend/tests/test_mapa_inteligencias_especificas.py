@@ -51,5 +51,6 @@ def test_mapa_tem_tres_caminhos_de_inteligencia_e_preserva_escopo():
     assert "getMapaInsights" in service
     assert '"consolidado": consolidado' in insights
     assert "DEMAIS_USUARIOS_SEMPRE_RECEBEM_APENAS_O_PROPRIO_LOGIN" in insights
-    assert "if (!dados?.pode_selecionar_responsavel)" in page
-    assert "setMercadoMacro(null)" in page
+    assert "if (!dados?.pode_selecionar_responsavel) return" in page
+    assert "mercadoMacro={consolidado ? mercadoMacro : null}" in page
+    assert "BarraComparativa" in page
