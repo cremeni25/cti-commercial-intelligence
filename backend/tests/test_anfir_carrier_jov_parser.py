@@ -15,7 +15,7 @@ def _xlsx(abas):
 
 def test_parser_carrier_jov_isola_anfir_do_bloco_lateral_e_preserva_contexto():
     cabecalho = [
-        "REPRESENTAÇÃO", None, "Mês", "REGIAO", "ESTADO", "MUNICIPIO",
+        "REPRESENTAÇÃO", None, "Mês", "REGIAO", "ESTADO", "RESPONSÁVEL", "MUNICIPIO",
         "CAMINHÃO", "MODELO", "FABRICANTE", "PRODUTO", "TIPO VEICULO",
         "CHASSI", "TOTAL", "SEGMENTO", "Cliente", "Rep", "STATUS",
         "MOTIVO CONCORRENTE", "OBSERVAÇÃO", "PLANO AÇÃO 1", "QUANDO?",
@@ -23,7 +23,7 @@ def test_parser_carrier_jov_isola_anfir_do_bloco_lateral_e_preserva_contexto():
         "DATA VENDA", "CLIENTE", "QTD", "MODELO",
     ]
     linha = [
-        "JOV", None, "Janeiro", "SUDESTE", "SP", "GUARULHOS",
+        "JOV", None, "Janeiro", "SUDESTE", "SP", "MÔNICA", "GUARULHOS",
         0, 0, "IBIPORA", "BAU FRIGORIFICO", "SEMIRREBOQUE",
         "9A9TESTE123", 1, "TRAILER", "CLIENTE ANFIR", "JOV", "TK",
         "Não participamos da proposta", "Cliente já havia decidido pelo concorrente",
@@ -46,7 +46,7 @@ def test_parser_carrier_jov_isola_anfir_do_bloco_lateral_e_preserva_contexto():
     assert registro["linha"] == "TRAILER"
     assert registro["status"] == "TK"
     assert registro["motivo"] == "Não participamos da proposta"
-    assert registro["responsavel"] == ""
+    assert registro["responsavel"] == "MÔNICA"
     assert registro["implementadora"]
     assert "REPRESENTAÇÃO: JOV" in registro["ocorrencia"]
     assert "OBSERVAÇÃO: Cliente já havia decidido pelo concorrente" in registro["ocorrencia"]
@@ -75,6 +75,7 @@ def test_parser_carrier_jov_descarta_placeholders_qualitativos_sem_perder_regist
 
     assert len(registros) == 1
     assert registros[0]["mes"] == 3
+    assert registros[0]["responsavel"] == ""
     assert registros[0]["motivo"] == ""
     assert registros[0]["ocorrencia"] == "REPRESENTAÇÃO: JOV"
 
