@@ -62,10 +62,15 @@ export type MapaEquipeVisao = {
   }
 }
 
-export async function getMapaEquipeVisao(responsavelId?: string | null): Promise<MapaEquipeVisao> {
-  const qs = new URLSearchParams({ periodo: "ANO_ATUAL", contexto: "viena_sp" })
-  if (responsavelId) qs.set("responsavel_id", responsavelId)
-  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?${qs.toString()}`, { cache: "no-store" })
+export type MapaEquipeInteligencia = {
+  analise: string
+  selecao: MapaEquipeVisao["selecao"]
+  origem: "IA_COMERCIAL_CTI"
+  somente_leitura: boolean
+  fontes?: Array<{ tipo?: string; descricao?: string; url?: string }>
+}
+
+async function interpretarResposta<T>(resposta: Response): Promise<T> {
   const payload = await resposta.json().catch(() => null)
   if (!resposta.ok) {
     const detalhe = payload && typeof payload === "object" && "detail" in payload
@@ -73,5 +78,20 @@ export async function getMapaEquipeVisao(responsavelId?: string | null): Promise
       : `Erro do backend CTI: ${resposta.status}`
     throw new Error(detalhe)
   }
-  return payload as MapaEquipeVisao
+  return payload as T
+}
+
+export async function getMapaEquipeVisao(responsavelId?: string | null): Promise<MapaEquipeVisao> {
+  const qs = new URLSearchParams({ periodo: "ANO_ATUAL", contexto: "viena_sp" })
+  if (responsavelId) qs.set("responsavel_id", responsavelId)
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?${qs.toString()}`, { cache: "no-store" })
+  return interpretarResposta<MapaEquipeVisao>(resposta)
+}
+
+export async function getMapaEquipeInteligencia(responsavelId?: string | null): Promise<MapaEquipeInteligencia> {
+  const qs = new URLSearchParams()
+  if (responsavelId) qs.set("responsavel_id", responsavelId)
+  const sufixo = qs.toString() ? `?${qs.toString()}` : ""
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia${sufixo}`, { cache: "no-store" })
+  return interpretarResposta<MapaEquipeInteligencia>(resposta)
 }
