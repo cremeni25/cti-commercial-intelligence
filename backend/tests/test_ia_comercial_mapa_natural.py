@@ -52,3 +52,11 @@ def test_mapa_remove_leitura_executiva_de_frases_fixas_e_abas_redundantes():
     assert "do Mercado Real ainda está fora da análise selecionada" not in mapa
     assert "negociação(ões) ativa(s)" not in mapa
     assert "O que os dados estão mostrando" in mapa
+
+
+def test_inteligencia_comercial_nao_cria_novo_atalho_ou_botao_de_ia():
+    mapa = MAPA.read_text(encoding="utf-8")
+    assert "Aprofundar na IA" not in mapa
+    assert "aprofundarNaIa" not in mapa
+    assert "/ia-comercial?prompt=" not in mapa
+    assert "Leitura contextual" in mapa
