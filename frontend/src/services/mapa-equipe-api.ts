@@ -62,11 +62,17 @@ export type MapaEquipeVisao = {
   }
 }
 
+export type TurnoContextual = {
+  role: string
+  content: string
+}
+
 export type MapaEquipeInteligencia = {
   analise: string
   selecao: MapaEquipeVisao["selecao"]
   origem: "IA_COMERCIAL_CTI"
   somente_leitura: boolean
+  persistido?: boolean
   fontes?: Array<{ tipo?: string; descricao?: string; url?: string }>
 }
 
@@ -93,5 +99,25 @@ export async function getMapaEquipeInteligencia(responsavelId?: string | null): 
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia${sufixo}`, { cache: "no-store" })
+  return interpretarResposta<MapaEquipeInteligencia>(resposta)
+}
+
+export async function perguntarMapaEquipeInteligencia(
+  pergunta: string,
+  historico: TurnoContextual[],
+  responsavelId?: string | null,
+): Promise<MapaEquipeInteligencia> {
+  const qs = new URLSearchParams()
+  if (responsavelId) qs.set("responsavel_id", responsavelId)
+  const sufixo = qs.toString() ? `?${qs.toString()}` : ""
+  const historicoSeguro = historico
+    .filter((turno) => turno.role === "user" || turno.role === "assistant")
+    .slice(-8)
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia/perguntar${sufixo}`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pergunta, historico: historicoSeguro }),
+  })
   return interpretarResposta<MapaEquipeInteligencia>(resposta)
 }

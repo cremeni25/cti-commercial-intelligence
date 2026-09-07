@@ -7,7 +7,9 @@ import { getSupabaseClient } from "@/core/database/supabase"
 import {
   getMapaEquipeInteligencia,
   getMapaEquipeVisao,
+  perguntarMapaEquipeInteligencia,
   type MapaEquipeVisao,
+  type TurnoContextual,
 } from "@/services/mapa-equipe-api"
 
 type MercadoMacro = { total: number; foraDisputa: number; real: number }
@@ -29,6 +31,9 @@ export default function Page() {
   const [analiseIa, setAnaliseIa] = useState("")
   const [loadingIa, setLoadingIa] = useState(true)
   const [erroIa, setErroIa] = useState("")
+  const [perguntaContextual, setPerguntaContextual] = useState("")
+  const [historicoContextual, setHistoricoContextual] = useState<TurnoContextual[]>([])
+  const [perguntando, setPerguntando] = useState(false)
 
   useEffect(() => {
     let ativo = true
@@ -81,11 +86,32 @@ export default function Page() {
     try {
       const resposta = await getMapaEquipeInteligencia(id || null)
       setAnaliseIa(resposta.analise || "")
+      setHistoricoContextual([])
     } catch (e) {
       setAnaliseIa("")
       setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.")
     } finally {
       setLoadingIa(false)
+    }
+  }
+
+  async function perguntarContexto() {
+    const pergunta = perguntaContextual.trim()
+    if (!pergunta || perguntando) return
+    setPerguntando(true)
+    setErroIa("")
+    try {
+      const resposta = await perguntarMapaEquipeInteligencia(pergunta, historicoContextual, responsavelId || null)
+      setHistoricoContextual((atual) => [
+        ...atual,
+        { role: "user", content: pergunta },
+        { role: "assistant", content: resposta.analise || "" },
+      ].slice(-8))
+      setPerguntaContextual("")
+    } catch (e) {
+      setErroIa(e instanceof Error ? e.message : "Não foi possível aprofundar esta leitura.")
+    } finally {
+      setPerguntando(false)
     }
   }
 
@@ -108,6 +134,8 @@ export default function Page() {
     setLoadingIa(true)
     setErroIa("")
     setAnaliseIa("")
+    setHistoricoContextual([])
+    setPerguntaContextual("")
     setResponsavelId(novoId)
     setVisao("executiva")
   }
@@ -146,7 +174,21 @@ export default function Page() {
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando informações comerciais...</div>}
 
           {!loading && dados && visao === "executiva" && (
-            <VisaoExecutiva dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} analiseIa={analiseIa} loadingIa={loadingIa} erroIa={erroIa} atualizarIa={() => void carregarInteligencia()} irPara={setVisao} />
+            <VisaoExecutiva
+              dados={dados}
+              mercadoMacro={mercadoMacro}
+              familiaTotal={familiaTotal}
+              analiseIa={analiseIa}
+              loadingIa={loadingIa}
+              erroIa={erroIa}
+              atualizarIa={() => void carregarInteligencia()}
+              irPara={setVisao}
+              perguntaContextual={perguntaContextual}
+              setPerguntaContextual={setPerguntaContextual}
+              historicoContextual={historicoContextual}
+              perguntando={perguntando}
+              perguntarContexto={() => void perguntarContexto()}
+            />
           )}
           {!loading && dados && visao === "crm" && <VisaoCrm dados={dados} ticketPipeline={ticketPipeline} />}
           {!loading && dados && visao === "historico" && <VisaoHistorico dados={dados} perdasHistorico={perdasHistorico} />}
@@ -168,7 +210,35 @@ export default function Page() {
   )
 }
 
-function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, analiseIa, loadingIa, erroIa, atualizarIa, irPara }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; analiseIa: string; loadingIa: boolean; erroIa: string; atualizarIa: () => void; irPara: (visao: Visao) => void }) {
+function VisaoExecutiva({
+  dados,
+  mercadoMacro,
+  familiaTotal,
+  analiseIa,
+  loadingIa,
+  erroIa,
+  atualizarIa,
+  irPara,
+  perguntaContextual,
+  setPerguntaContextual,
+  historicoContextual,
+  perguntando,
+  perguntarContexto,
+}: {
+  dados: MapaEquipeVisao
+  mercadoMacro: MercadoMacro | null
+  familiaTotal: number
+  analiseIa: string
+  loadingIa: boolean
+  erroIa: string
+  atualizarIa: () => void
+  irPara: (visao: Visao) => void
+  perguntaContextual: string
+  setPerguntaContextual: (valor: string) => void
+  historicoContextual: TurnoContextual[]
+  perguntando: boolean
+  perguntarContexto: () => void
+}) {
   return <>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="ANFIR 2026" destaque="emerald" />
@@ -192,11 +262,40 @@ function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, analiseIa, loadingI
       <div className="rounded-3xl border border-violet-500/30 bg-[#081126] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Leitura contextual</p><h2 className="mt-1 text-xl font-bold">O que os dados estão mostrando</h2></div>
-          <button type="button" onClick={atualizarIa} disabled={loadingIa} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button>
+          <button type="button" onClick={atualizarIa} disabled={loadingIa || perguntando} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button>
         </div>
         {loadingIa && <p className="mt-5 text-sm text-slate-400">Cruzando contexto, território e fontes autorizadas desta seleção...</p>}
         {!loadingIa && erroIa && <p className="mt-5 rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-sm text-amber-200">{erroIa}</p>}
-        {!loadingIa && !erroIa && analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
+        {!loadingIa && analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
+
+        {!loadingIa && analiseIa && (
+          <div className="mt-5 border-t border-violet-400/15 pt-4">
+            {historicoContextual.length > 0 && (
+              <div className="mb-4 space-y-3">
+                {historicoContextual.slice(-4).map((turno, index) => (
+                  <div key={`${turno.role}-${index}`} className={turno.role === "user" ? "rounded-xl bg-violet-500/10 px-3 py-2 text-sm text-violet-100" : "whitespace-pre-wrap text-sm leading-6 text-slate-300"}>
+                    {turno.role === "user" && <span className="mr-2 text-[10px] font-semibold uppercase tracking-[.12em] text-violet-300">Pergunta</span>}
+                    {turno.content}
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-2">
+              <input
+                value={perguntaContextual}
+                onChange={(e) => setPerguntaContextual(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); perguntarContexto() } }}
+                disabled={perguntando}
+                placeholder="Pergunte sobre esta leitura, região, clientes, perdas ou CRM..."
+                className="min-w-0 flex-1 rounded-xl border border-violet-400/20 bg-[#060d1d] px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-400/50 disabled:opacity-60"
+              />
+              <button type="button" onClick={perguntarContexto} disabled={perguntando || !perguntaContextual.trim()} className="rounded-xl border border-violet-400/30 px-4 py-2.5 text-sm font-semibold text-violet-100 disabled:opacity-40">
+                {perguntando ? "Analisando..." : "Perguntar"}
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-slate-600">A pergunta permanece nesta seleção e nesta sessão. Não cria oportunidade, não altera CRM e não grava uma nova conversa.</p>
+          </div>
+        )}
       </div>
     </section>
 

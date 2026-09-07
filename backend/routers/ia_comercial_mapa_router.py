@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from routers.crm_scope_mapa_equipe_router import visao_equipe
@@ -11,6 +12,16 @@ from services.ia_comercial_cti import IAComercialOpenAIError
 from services.ia_comercial_agente_crm import gerar_resposta_agente
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["inteligencia-comercial"])
+
+
+class TurnoContextual(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class PerguntaContextual(BaseModel):
+    pergunta: str = Field(min_length=1, max_length=2000)
+    historico: list[TurnoContextual] = Field(default_factory=list, max_length=8)
 
 
 def _perfil_analise(visao: dict[str, Any], usuario: UsuarioAutenticado) -> tuple[str, str]:
@@ -64,20 +75,71 @@ def _snapshot_comercial(visao: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _regras_contextuais() -> str:
+    return (
+        "Use exclusivamente as fontes internas autorizadas do CTI e respeite integralmente o RBAC da seleção atual. "
+        "ANFIR representa mercado realizado/referência e nunca deve virar oportunidade automática. "
+        "Histórico/Funil representa fatos comerciais anteriores; CRM representa negócios atuais em andamento. "
+        "Não atribua autoria ou território sem evidência. Não invente vínculos entre fontes. "
+        "Interprete o conjunto antes de recomendar qualquer ação e deixe claro quando os dados não sustentarem uma conclusão. "
+        "Responda em linguagem comercial natural, direta e específica ao contexto, sem tabela, checklist, quantidade fixa de insights ou frases prontas."
+    )
+
+
 def _mensagem_analise(visao: dict[str, Any]) -> str:
     snapshot = _snapshot_comercial(visao)
     return (
-        "Faça uma análise comercial da seleção abaixo usando exclusivamente as fontes internas autorizadas do CTI. "
-        "Use o snapshot apenas como ponto factual de partida e consulte o universo CTI para procurar relações que realmente acrescentem decisão: "
-        "ANFIR, Histórico/Funil, CRM, região/DDD, linhas e modelos de equipamento, implementadoras, fabricantes concorrentes, perdas e cobertura, quando houver evidência. "
-        "Não transforme ausência de vínculo histórico em oportunidade e não atribua registros a uma pessoa sem evidência de autoria ou território. "
-        "Não repita os indicadores do painel apenas em forma de frase. Procure explicar o que eles significam em conjunto, onde existe concentração, mudança de comportamento, risco, vazio de atuação ou sinal comercial relevante. "
-        "Se os dados não sustentarem uma conclusão, diga isso naturalmente. "
-        "Escreva como um profissional comercial experiente conversaria com outro profissional: linguagem natural, direta e específica ao caso. "
-        "Não use tabela, não imponha quantidade fixa de insights, não use checklist, não use títulos padronizados e não siga frases prontas. "
-        "A resposta pode ter poucos parágrafos; a profundidade deve vir da análise, não do volume de texto.\n\n"
+        "Faça uma análise comercial da seleção abaixo. "
+        + _regras_contextuais()
+        + " Procure relações que realmente acrescentem decisão entre ANFIR, Histórico/Funil, CRM, região/DDD, linhas e modelos de equipamento, implementadoras, fabricantes concorrentes, perdas e cobertura, quando houver evidência. "
+        "Não repita os indicadores do painel apenas em forma de frase; explique o que significam em conjunto, onde existe concentração, mudança de comportamento, risco, vazio de atuação ou sinal comercial relevante.\n\n"
         "SNAPSHOT INTERNO DA SELEÇÃO:\n" + json.dumps(snapshot, ensure_ascii=False, default=str)
     )
+
+
+def _mensagem_pergunta(visao: dict[str, Any], pergunta: str) -> str:
+    snapshot = _snapshot_comercial(visao)
+    return (
+        "Continue a análise comercial dentro do MESMO contexto selecionado nesta tela. "
+        + _regras_contextuais()
+        + " A pergunta abaixo é um aprofundamento da leitura atual, não uma nova conversa genérica. "
+        "Use o histórico transitório somente para manter continuidade de sentido; revalide fatos operacionais nas fontes autorizadas desta execução quando necessário.\n\n"
+        f"PERGUNTA DO USUÁRIO:\n{pergunta.strip()}\n\n"
+        "SNAPSHOT ATUAL DA SELEÇÃO:\n" + json.dumps(snapshot, ensure_ascii=False, default=str)
+    )
+
+
+def _executar_leitura(
+    visao: dict[str, Any],
+    usuario: UsuarioAutenticado,
+    mensagem: str,
+    historico: list[dict[str, str]] | None = None,
+) -> tuple[str, dict[str, Any]]:
+    usuario_analise_id, tipo_analise = _perfil_analise(visao, usuario)
+    try:
+        return gerar_resposta_agente(
+            mensagem,
+            historico or [],
+            usuario_analise_id,
+            tipo_analise,
+        )
+    except IAComercialOpenAIError as exc:
+        raise HTTPException(status_code=503, detail=exc.mensagem_publica) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="A leitura inteligente não foi concluída.") from exc
+
+
+def _resposta(texto: str, metadados: dict[str, Any], visao: dict[str, Any]) -> dict[str, Any]:
+    if not str(texto or "").strip():
+        raise HTTPException(status_code=503, detail="A leitura inteligente não produziu resposta para esta seleção.")
+    return {
+        "analise": str(texto).strip(),
+        "selecao": visao.get("selecao") or {},
+        "origem": "IA_COMERCIAL_CTI",
+        "somente_leitura": True,
+        "persistido": False,
+        "fontes": metadados.get("fontes") or [],
+    }
 
 
 @router.get("/inteligencia")
@@ -86,27 +148,26 @@ def inteligencia_comercial_natural(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     visao = visao_equipe(responsavel_id=responsavel_id, usuario=usuario)
-    usuario_analise_id, tipo_analise = _perfil_analise(visao, usuario)
+    texto, metadados = _executar_leitura(visao, usuario, _mensagem_analise(visao))
+    return _resposta(texto, metadados, visao)
 
-    try:
-        texto, metadados = gerar_resposta_agente(
-            _mensagem_analise(visao),
-            [],
-            usuario_analise_id,
-            tipo_analise,
-        )
-    except IAComercialOpenAIError as exc:
-        raise HTTPException(status_code=503, detail=exc.mensagem_publica) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="A IA Comercial não concluiu esta leitura.") from exc
 
-    if not str(texto or "").strip():
-        raise HTTPException(status_code=503, detail="A IA Comercial não produziu uma leitura para esta seleção.")
-
-    return {
-        "analise": str(texto).strip(),
-        "selecao": visao.get("selecao") or {},
-        "origem": "IA_COMERCIAL_CTI",
-        "somente_leitura": True,
-        "fontes": metadados.get("fontes") or [],
-    }
+@router.post("/inteligencia/perguntar")
+def inteligencia_comercial_contextual(
+    payload: PerguntaContextual,
+    responsavel_id: str | None = None,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    visao = visao_equipe(responsavel_id=responsavel_id, usuario=usuario)
+    historico = [
+        {"role": turno.role, "content": turno.content.strip()}
+        for turno in payload.historico[-8:]
+        if turno.content.strip()
+    ]
+    texto, metadados = _executar_leitura(
+        visao,
+        usuario,
+        _mensagem_pergunta(visao, payload.pergunta),
+        historico,
+    )
+    return _resposta(texto, metadados, visao)
