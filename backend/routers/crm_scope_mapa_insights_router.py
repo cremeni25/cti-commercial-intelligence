@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from collections import Counter, defaultdict
+from collections import Counter
 from datetime import date, datetime
 from typing import Any
 
@@ -14,14 +14,12 @@ from routers.crm_scope_estrategia_router import FECHADOS
 from routers.crm_scope_mapa_equipe_router import (
     _crm_carteira,
     _deduplicar,
-    _historico_carteira,
     _pode_gerir,
     _resolver_alvo,
     _usuario_regional,
 )
 from services.commercial_client_scope import filtrar_anfir_por_responsavel_comercial
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
-from services.historical_commercial_source import carregar_historico_comercial
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-insights"])
@@ -40,6 +38,14 @@ MESES_CHAVES = {
     "OUT": 10, "OUTUBRO": 10,
     "NOV": 11, "NOVEMBRO": 11,
     "DEZ": 12, "DEZEMBRO": 12,
+}
+
+STATUS_PERDA_ANFIR_2026 = {
+    "NACIONAL",
+    "TK",
+    "USADOCONCORRENTE",
+    "SEMCONTATO",
+    "PERDIDO",
 }
 
 
@@ -133,17 +139,6 @@ def _somar_mes(serie: list[int], item: dict[str, Any], valor: int = 1) -> bool:
     return True
 
 
-def _historico_do_escopo(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    base = [item for item in carregar_historico_comercial() if _ano_registro(item) == 2026]
-    if alvo is not None:
-        return _historico_carteira(alvo, base)
-
-    todos: list[dict[str, Any]] = []
-    for registro in equipe:
-        todos.extend(_historico_carteira(_usuario_regional(registro), base))
-    return _deduplicar(todos)
-
-
 def _mercado_anfir_2026() -> list[dict[str, Any]]:
     mercado_total, _, _ = estrategia._anfir(
         "viena-sp",
@@ -153,7 +148,7 @@ def _mercado_anfir_2026() -> list[dict[str, Any]]:
         date(2026, 1, 1),
         date(2026, 12, 31),
     )
-    return list(mercado_total)
+    return [item for item in mercado_total if _ano_registro(item) in (None, 2026)]
 
 
 def _anfir_do_escopo(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], mercado_total: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -233,8 +228,8 @@ def _leitura_linha(nome: str, serie: list[int]) -> tuple[str, str]:
     total = sum(serie)
     if total <= 0:
         return (
-            f"Não há movimento 2026 classificado com segurança para {nome} nesta seleção.",
-            "Não forçar conclusão. Primeiro garantir classificação correta da linha nos registros 2026.",
+            f"Não há movimento ANFIR 2026 classificado com segurança para {nome} nesta seleção.",
+            "Não forçar conclusão. Primeiro garantir classificação correta da linha nos registros ANFIR 2026.",
         )
     pico = max(range(12), key=lambda i: serie[i])
     ultimo_mes = max((i for i, valor in enumerate(serie) if valor > 0), default=0)
@@ -244,17 +239,17 @@ def _leitura_linha(nome: str, serie: list[int]) -> tuple[str, str]:
         tendencia = "em alta"
     elif len(janela) >= 2 and janela[-1] < janela[0]:
         tendencia = "em queda"
-    leitura = f"{nome} soma {total} unidade(s) no movimento comercial 2026; o maior volume ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}."
+    leitura = f"{nome} soma {total} registro(s) no ANFIR 2026; o maior volume ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}."
     if tendencia == "em queda":
-        acao = "Revisar clientes que compraram ou negociaram esta linha no início do ano e estão sem movimento recente; priorizar recuperação antes de ampliar prospecção fria."
+        acao = "Revisar os clientes desta linha com movimento no início do ano e queda recente, priorizando recuperação comercial antes de ampliar prospecção fria."
     elif tendencia == "em alta":
-        acao = "Proteger a aceleração: antecipar follow-up dos negócios atuais e buscar clientes com perfil semelhante aos que geraram o crescimento recente."
+        acao = "Proteger a aceleração da linha: antecipar abordagem nos clientes de perfil semelhante aos que sustentaram o crescimento recente."
     else:
-        acao = "Manter cadência sobre a base ativa e identificar clientes 2026 ainda sem abordagem para ampliar participação sem dispersar esforço."
+        acao = "Manter cadência sobre a base ANFIR 2026 e priorizar clientes da linha ainda sem captura comercial comprovada."
     return leitura, acao
 
 
-def _linhas_2026(historico: list[dict[str, Any]]) -> dict[str, Any]:
+def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
     series = {
         "Trailer": _serie_12(),
         "Diesel Truck": _serie_12(),
@@ -262,7 +257,9 @@ def _linhas_2026(historico: list[dict[str, Any]]) -> dict[str, Any]:
         "Não classificado": _serie_12(),
     }
     sem_mes = 0
-    for item in historico:
+    for item in anfir:
+        if _ano_registro(item) not in (None, 2026):
+            continue
         linha = _linha_nome(item)
         quantidade = _quantidade(item, 1)
         if not _somar_mes(series[linha], item, quantidade):
@@ -284,44 +281,56 @@ def _linhas_2026(historico: list[dict[str, Any]]) -> dict[str, Any]:
         "linhas": blocos,
         "nao_classificado_2026": sum(series["Não classificado"]),
         "unidades_sem_mes": sem_mes,
-        "fonte": "HISTORICO_FUNIL_2026",
+        "fonte": "ANFIR_2026",
     }
+
+
+def _eh_perda_anfir_2026(item: dict[str, Any]) -> bool:
+    if _ano_registro(item) not in (None, 2026):
+        return False
+    return _fold(item.get("status")) in STATUS_PERDA_ANFIR_2026
 
 
 def _acao_perda(motivos: Counter[str], linhas: Counter[str], total_perdido: int) -> tuple[str, str]:
     if total_perdido <= 0:
         return (
-            "Não há perda 2026 registrada com status PERDIDO nesta seleção.",
-            "Manter disciplina de encerramento no CRM/Funil para que toda perda futura tenha motivo comercial registrado.",
+            "Não há perda comercial identificada no ANFIR 2026 nesta seleção.",
+            "Manter disciplina de leitura do ANFIR e atuar assim que surgir perda ou ausência de captura comercial comprovada.",
         )
     if not motivos:
         return (
-            f"Há {total_perdido} perda(s) em 2026, mas os motivos não estão estruturados.",
-            "A primeira ação é qualificar o encerramento das perdas; sem motivo confiável, qualquer estratégia de reversão seria especulativa.",
+            f"Há {total_perdido} perda(s) no ANFIR 2026, mas sem motivo comercial estruturado.",
+            "Qualificar os registros sem motivo antes de definir estratégia; sem causa comprovada, a recomendação seria especulativa.",
         )
     motivo, qtd = motivos.most_common(1)[0]
     linha = linhas.most_common(1)[0][0] if linhas else "linha não classificada"
     motivo_fold = _fold(motivo)
-    if motivo_fold in {"OUTRO", "SEM RETORNO", "SEM_RETORNO", "NAO INFORMADO", "NAO_INFORMADO"}:
-        acao = "Reabrir a leitura dos casos encerrados como genéricos e capturar o motivo comercial real. Em paralelo, estabelecer follow-up obrigatório antes de classificar uma negociação como sem retorno."
+    if motivo_fold in {"OUTRO", "OUTROS", "SEM RETORNO", "SEM_RETORNO", "NAO INFORMADO", "NAO_INFORMADO"}:
+        acao = "Revisar primeiro os casos com motivo genérico e registrar a causa comercial real; sem isso, não há plano de reversão auditável."
     elif "PRECO" in motivo_fold:
         acao = "Revisar os casos de preço por produto e cliente, separar desconto de percepção de valor e preparar defesa comercial Carrier antes da próxima proposta."
+    elif "NAO PARTICIPAMOS" in motivo_fold:
+        acao = "Atacar cobertura: identificar os clientes em que não participamos da proposta e criar cadência comercial antes da próxima compra ou implementação."
+    elif "RELACIONAMENTO" in motivo_fold:
+        acao = "Priorizar recuperação de relacionamento nos clientes afetados, com responsável definido e próxima ação objetiva antes da próxima decisão de compra."
+    elif "SOLUCAO TECNICA" in motivo_fold:
+        acao = "Separar as perdas sem solução técnica por linha e aplicação e levar os casos recorrentes para tratamento técnico-comercial Carrier."
     elif "CONCOR" in motivo_fold:
-        acao = "Mapear qual concorrente venceu, por qual linha e argumento, e preparar abordagem de recuperação específica para os clientes afetados."
+        acao = "Mapear qual concorrente venceu, por linha e cliente, e preparar abordagem de recuperação específica nos casos de maior recorrência."
     else:
-        acao = "Atacar primeiro o motivo dominante com plano por cliente e linha; medir nas próximas negociações se a incidência do mesmo motivo começa a cair."
+        acao = "Atacar primeiro o motivo dominante com plano por cliente e linha; medir no ANFIR seguinte se a incidência do mesmo motivo começa a cair."
     return (
-        f"Em 2026, o motivo mais frequente é {motivo.replace('_', ' ')} ({qtd} caso(s)); a maior concentração por linha está em {linha}.",
+        f"No ANFIR 2026, o motivo mais frequente é {motivo} ({qtd} caso(s)); a maior concentração por linha está em {linha}.",
         acao,
     )
 
 
-def _perdas_2026(historico: list[dict[str, Any]]) -> dict[str, Any]:
-    perdidos = [item for item in historico if _fold(item.get("status")) == "PERDIDO"]
+def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
+    perdidos = [item for item in anfir if _eh_perda_anfir_2026(item)]
     motivos = Counter(
-        str(item.get("motivo_perda") or "").strip().upper()
+        str(item.get("motivo") or "").strip()
         for item in perdidos
-        if str(item.get("motivo_perda") or "").strip()
+        if str(item.get("motivo") or "").strip()
     )
     linhas = Counter(_linha_nome(item) for item in perdidos)
     mensal = _serie_12()
@@ -332,6 +341,7 @@ def _perdas_2026(historico: list[dict[str, Any]]) -> dict[str, Any]:
     leitura, acao = _acao_perda(motivos, linhas, len(perdidos))
     return {
         "ano": 2026,
+        "fonte": "ANFIR_2026",
         "total_perdido": len(perdidos),
         "total_com_motivo": sum(motivos.values()),
         "motivos": [{"nome": nome, "quantidade": qtd} for nome, qtd in motivos.most_common(10)],
@@ -349,8 +359,8 @@ def insights_mapa(
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     alvo, equipe = _resolver_alvo(usuario, responsavel_id)
-    historico = _historico_do_escopo(alvo, equipe)
     mercado_total = _mercado_anfir_2026()
+    anfir_escopo = _anfir_do_escopo(alvo, equipe, mercado_total)
     consolidado = _pode_gerir(usuario)
 
     return {
@@ -364,6 +374,6 @@ def insights_mapa(
             "regra": "MASTER_GESTAO_PODE_CONSOLIDAR; DEMAIS_USUARIOS_SEMPRE_RECEBEM_APENAS_O_PROPRIO_LOGIN",
         },
         "regioes": _regioes(alvo, equipe, mercado_total),
-        "linhas_2026": _linhas_2026(historico),
-        "perdas": _perdas_2026(historico),
+        "linhas_2026": _linhas_2026(anfir_escopo),
+        "perdas": _perdas_2026(anfir_escopo),
     }
