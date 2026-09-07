@@ -22,9 +22,9 @@ const menuGroups: MenuGroup[] = [
     titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" },
     itens: [
       {
-        label: { "pt-BR": "Inteligência Comercial", en: "Commercial Intelligence", es: "Inteligencia Comercial" },
-        href: "/inteligencia-comercial",
-        aliases: ["/dashboard", "/historico-comercial", "/mapa-estrategico", "/inteligencia"],
+        label: { "pt-BR": "Mapa Estratégico", en: "Strategic Map", es: "Mapa Estratégico" },
+        href: "/mapa-estrategico",
+        aliases: ["/inteligencia-comercial"],
         icon: "◎",
         type: "emoji",
       },
