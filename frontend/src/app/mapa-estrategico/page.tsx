@@ -27,8 +27,6 @@ export default function Page() {
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
-    setErro("")
     Promise.all([getMapaEquipeVisao(responsavelId || null), getMapaInsights(responsavelId || null)])
       .then(([visao, leitura]) => {
         if (!ativo) return
@@ -75,6 +73,8 @@ export default function Page() {
   }, [dados])
 
   function trocarResponsavel(novoId: string) {
+    setLoading(true)
+    setErro("")
     setFoco("geral")
     setResponsavelId(novoId)
   }
