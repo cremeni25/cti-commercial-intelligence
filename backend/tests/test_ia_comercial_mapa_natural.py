@@ -77,21 +77,24 @@ def test_proveniencia_contextual_e_canonica_e_discreta():
     assert "novosTurnos: TurnoContextual[]" in mapa
 
 
-def test_mapa_remove_leitura_executiva_de_frases_fixas_e_abas_redundantes():
+def test_mapa_remove_abas_redundantes_e_prioriza_sinais_de_decisao():
     mapa = MAPA.read_text(encoding="utf-8")
     assert 'label: "Mercado"' not in mapa
     assert 'label: "Equipe / responsável"' not in mapa
-    assert 'type Visao = "executiva" | "crm" | "historico"' in mapa
-    assert "do Mercado Real ainda está fora da análise selecionada" not in mapa
-    assert "negociação(ões) ativa(s)" not in mapa
-    assert "O que os dados estão mostrando" in mapa
+    assert 'type Visao = "executiva" | "crm" | "historico"' not in mapa
+    assert "const visoes" not in mapa
+    assert "setVisao" not in mapa
+    assert "Sinais de decisão" in mapa
+    assert "Onde a seleção pede atenção" in mapa
+    assert "Lacuna de conhecimento comercial" in mapa
+    assert "não oportunidade automática" in mapa
 
 
-def test_inteligencia_comercial_nao_cria_novo_atalho_ou_botao_de_ia():
+def test_inteligencia_comercial_permanece_embutida_sem_novo_atalho_de_ia():
     mapa = MAPA.read_text(encoding="utf-8")
     assert "Aprofundar na IA" not in mapa
     assert "aprofundarNaIa" not in mapa
     assert "/ia-comercial?prompt=" not in mapa
-    assert "Leitura contextual" in mapa
-    assert "Pergunte sobre esta leitura" in mapa
-    assert "não grava uma nova conversa" in mapa
+    assert "Interpretação contextual" in mapa
+    assert "Pergunte sobre a leitura desta seleção" in mapa
+    assert "Contexto utilizado" in mapa
