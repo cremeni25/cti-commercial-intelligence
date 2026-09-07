@@ -61,6 +61,22 @@ def test_router_e_frontend_estao_integrados():
     assert "historicoContextual" in mapa
 
 
+def test_proveniencia_contextual_e_canonica_e_discreta():
+    fonte = ROUTER.read_text(encoding="utf-8")
+    service = SERVICE.read_text(encoding="utf-8")
+    mapa = MAPA.read_text(encoding="utf-8")
+    assert '"fontes_contextuais": _fontes_contextuais(visao)' in fonte
+    assert "TERRITORIO_RESPONSAVEL" in fonte
+    assert "ANFIR_2026" in fonte
+    assert "HISTORICO_FUNIL_2026" in fonte
+    assert "CRM_ATUAL" in fonte
+    assert "FonteContextual" in service
+    assert 'role: "user" | "assistant"' in service
+    assert "Contexto utilizado" in mapa
+    assert "fontesContextuais.map" in mapa
+    assert "novosTurnos: TurnoContextual[]" in mapa
+
+
 def test_mapa_remove_leitura_executiva_de_frases_fixas_e_abas_redundantes():
     mapa = MAPA.read_text(encoding="utf-8")
     assert 'label: "Mercado"' not in mapa

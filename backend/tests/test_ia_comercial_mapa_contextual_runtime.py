@@ -71,3 +71,28 @@ def test_pergunta_contextual_reaplica_selecao_e_encaminha_historico(monkeypatch)
     assert resposta["analise"] == "Resposta contextual"
     assert resposta["somente_leitura"] is True
     assert resposta["persistido"] is False
+    assert [fonte["codigo"] for fonte in resposta["fontes_contextuais"]] == [
+        "TERRITORIO_RESPONSAVEL",
+        "ANFIR_2026",
+        "HISTORICO_FUNIL_2026",
+        "CRM_ATUAL",
+    ]
+    assert resposta["fontes_contextuais"][0]["evidencia"] == "Mônica · 011-L · DDD 011"
+    assert resposta["fontes_contextuais"][1]["evidencia"] == "15 clientes identificados · 20 registros com vínculo seguro"
+    assert resposta["fontes_contextuais"][2]["evidencia"] == "10 eventos · 12 unidades registradas"
+    assert resposta["fontes_contextuais"][3]["evidencia"] == "3 registros · 2 negociações ativas"
+
+
+def test_proveniencia_omite_historico_e_crm_quando_nao_ha_evidencia():
+    visao = _visao()
+    visao["evidencias"] = {
+        "historico_registros_2026": 0,
+        "historico_unidades_2026": 0,
+        "motivos_perda_historico": [],
+        "crm_registros": 0,
+        "crm_ativos": 0,
+        "crm_valor_ativo": 0,
+        "crm_status": [],
+    }
+    fontes = router._fontes_contextuais(visao)
+    assert [fonte["codigo"] for fonte in fontes] == ["TERRITORIO_RESPONSAVEL", "ANFIR_2026"]

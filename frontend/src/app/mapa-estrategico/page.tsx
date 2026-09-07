@@ -8,6 +8,7 @@ import {
   getMapaEquipeInteligencia,
   getMapaEquipeVisao,
   perguntarMapaEquipeInteligencia,
+  type FonteContextual,
   type MapaEquipeVisao,
   type TurnoContextual,
 } from "@/services/mapa-equipe-api"
@@ -29,6 +30,7 @@ export default function Page() {
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState("")
   const [analiseIa, setAnaliseIa] = useState("")
+  const [fontesContextuais, setFontesContextuais] = useState<FonteContextual[]>([])
   const [loadingIa, setLoadingIa] = useState(true)
   const [erroIa, setErroIa] = useState("")
   const [perguntaContextual, setPerguntaContextual] = useState("")
@@ -74,7 +76,11 @@ export default function Page() {
   useEffect(() => {
     let ativo = true
     getMapaEquipeInteligencia(responsavelId || null)
-      .then((resposta) => { if (ativo) setAnaliseIa(resposta.analise || "") })
+      .then((resposta) => {
+        if (!ativo) return
+        setAnaliseIa(resposta.analise || "")
+        setFontesContextuais(resposta.fontes_contextuais || [])
+      })
       .catch((e) => { if (ativo) setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.") })
       .finally(() => { if (ativo) setLoadingIa(false) })
     return () => { ativo = false }
@@ -86,9 +92,11 @@ export default function Page() {
     try {
       const resposta = await getMapaEquipeInteligencia(id || null)
       setAnaliseIa(resposta.analise || "")
+      setFontesContextuais(resposta.fontes_contextuais || [])
       setHistoricoContextual([])
     } catch (e) {
       setAnaliseIa("")
+      setFontesContextuais([])
       setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.")
     } finally {
       setLoadingIa(false)
@@ -102,11 +110,12 @@ export default function Page() {
     setErroIa("")
     try {
       const resposta = await perguntarMapaEquipeInteligencia(pergunta, historicoContextual, responsavelId || null)
-      setHistoricoContextual((atual) => [
-        ...atual,
+      const novosTurnos: TurnoContextual[] = [
         { role: "user", content: pergunta },
         { role: "assistant", content: resposta.analise || "" },
-      ].slice(-8))
+      ]
+      setHistoricoContextual((atual) => [...atual, ...novosTurnos].slice(-8))
+      setFontesContextuais(resposta.fontes_contextuais || [])
       setPerguntaContextual("")
     } catch (e) {
       setErroIa(e instanceof Error ? e.message : "Não foi possível aprofundar esta leitura.")
@@ -134,6 +143,7 @@ export default function Page() {
     setLoadingIa(true)
     setErroIa("")
     setAnaliseIa("")
+    setFontesContextuais([])
     setHistoricoContextual([])
     setPerguntaContextual("")
     setResponsavelId(novoId)
@@ -179,6 +189,7 @@ export default function Page() {
               mercadoMacro={mercadoMacro}
               familiaTotal={familiaTotal}
               analiseIa={analiseIa}
+              fontesContextuais={fontesContextuais}
               loadingIa={loadingIa}
               erroIa={erroIa}
               atualizarIa={() => void carregarInteligencia()}
@@ -215,6 +226,7 @@ function VisaoExecutiva({
   mercadoMacro,
   familiaTotal,
   analiseIa,
+  fontesContextuais,
   loadingIa,
   erroIa,
   atualizarIa,
@@ -229,6 +241,7 @@ function VisaoExecutiva({
   mercadoMacro: MercadoMacro | null
   familiaTotal: number
   analiseIa: string
+  fontesContextuais: FonteContextual[]
   loadingIa: boolean
   erroIa: string
   atualizarIa: () => void
@@ -267,6 +280,21 @@ function VisaoExecutiva({
         {loadingIa && <p className="mt-5 text-sm text-slate-400">Cruzando contexto, território e fontes autorizadas desta seleção...</p>}
         {!loadingIa && erroIa && <p className="mt-5 rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-sm text-amber-200">{erroIa}</p>}
         {!loadingIa && analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
+        {!loadingIa && analiseIa && fontesContextuais.length > 0 && (
+          <details className="mt-4 border-t border-violet-400/10 pt-3 text-xs text-slate-500">
+            <summary className="cursor-pointer list-none font-semibold text-slate-400">
+              Contexto utilizado <span className="ml-2 font-normal text-slate-600">{fontesContextuais.map((fonte) => fonte.nome).join(" · ")}</span>
+            </summary>
+            <div className="mt-3 space-y-2">
+              {fontesContextuais.map((fonte) => (
+                <div key={fonte.codigo} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+                  <strong className="text-slate-400">{fonte.nome}</strong>
+                  <span>{fonte.evidencia}</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
 
         {!loadingIa && analiseIa && (
           <div className="mt-5 border-t border-violet-400/15 pt-4">

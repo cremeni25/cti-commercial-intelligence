@@ -75,6 +75,63 @@ def _snapshot_comercial(visao: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _fontes_contextuais(visao: dict[str, Any]) -> list[dict[str, str]]:
+    selecao = visao.get("selecao") or {}
+    mercado = visao.get("mercado") or {}
+    evidencias = visao.get("evidencias") or {}
+    nome = str(selecao.get("nome") or "Seleção atual")
+    codigo = str(selecao.get("codigo_regional") or "").strip()
+    ddds = [str(item) for item in (selecao.get("ddds") or []) if str(item).strip()]
+    territorio = " · ".join(parte for parte in (codigo, f"DDD {', '.join(ddds)}" if ddds else "") if parte)
+
+    fontes: list[dict[str, str]] = [
+        {
+            "codigo": "TERRITORIO_RESPONSAVEL",
+            "nome": "Território e responsável",
+            "evidencia": f"{nome}{f' · {territorio}' if territorio else ''}",
+        }
+    ]
+
+    if mercado.get("mercado_real_viena_2026") is not None:
+        fontes.append(
+            {
+                "codigo": "ANFIR_2026",
+                "nome": "ANFIR 2026",
+                "evidencia": (
+                    f"{int(mercado.get('clientes_unicos') or 0)} clientes identificados · "
+                    f"{int(mercado.get('mercado_real_selecao_2026') or 0)} registros com vínculo seguro"
+                ),
+            }
+        )
+
+    historico_registros = int(evidencias.get("historico_registros_2026") or 0)
+    if historico_registros > 0:
+        fontes.append(
+            {
+                "codigo": "HISTORICO_FUNIL_2026",
+                "nome": "Histórico/Funil 2026",
+                "evidencia": (
+                    f"{historico_registros} eventos · "
+                    f"{int(evidencias.get('historico_unidades_2026') or 0)} unidades registradas"
+                ),
+            }
+        )
+
+    crm_registros = int(evidencias.get("crm_registros") or 0)
+    if crm_registros > 0:
+        fontes.append(
+            {
+                "codigo": "CRM_ATUAL",
+                "nome": "CRM atual",
+                "evidencia": (
+                    f"{crm_registros} registros · "
+                    f"{int(evidencias.get('crm_ativos') or 0)} negociações ativas"
+                ),
+            }
+        )
+    return fontes
+
+
 def _regras_contextuais() -> str:
     return (
         "Use exclusivamente as fontes internas autorizadas do CTI e respeite integralmente o RBAC da seleção atual. "
@@ -139,6 +196,7 @@ def _resposta(texto: str, metadados: dict[str, Any], visao: dict[str, Any]) -> d
         "somente_leitura": True,
         "persistido": False,
         "fontes": metadados.get("fontes") or [],
+        "fontes_contextuais": _fontes_contextuais(visao),
     }
 
 
