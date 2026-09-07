@@ -63,8 +63,14 @@ export type MapaEquipeVisao = {
 }
 
 export type TurnoContextual = {
-  role: string
+  role: "user" | "assistant"
   content: string
+}
+
+export type FonteContextual = {
+  codigo: "TERRITORIO_RESPONSAVEL" | "ANFIR_2026" | "HISTORICO_FUNIL_2026" | "CRM_ATUAL"
+  nome: string
+  evidencia: string
 }
 
 export type MapaEquipeInteligencia = {
@@ -74,6 +80,7 @@ export type MapaEquipeInteligencia = {
   somente_leitura: boolean
   persistido?: boolean
   fontes?: Array<{ tipo?: string; descricao?: string; url?: string }>
+  fontes_contextuais?: FonteContextual[]
 }
 
 async function interpretarResposta<T>(resposta: Response): Promise<T> {
@@ -110,9 +117,7 @@ export async function perguntarMapaEquipeInteligencia(
   const qs = new URLSearchParams()
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
-  const historicoSeguro = historico
-    .filter((turno) => turno.role === "user" || turno.role === "assistant")
-    .slice(-8)
+  const historicoSeguro = historico.slice(-8)
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia/perguntar${sufixo}`, {
     method: "POST",
     cache: "no-store",
