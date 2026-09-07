@@ -65,9 +65,10 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     assert "COMPLETED · ANFIR" in catalogo
     assert 'fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?' in team_service
     assert "getMapaEquipeVisao" in mapa
-    assert "Região / responsável" in mapa
+    assert "Quem você quer analisar?" in mapa
     assert "GraficoPizzaParticipacao" in mapa
     assert "GraficoPizzaFamilias" in mapa
-    assert "Conciliação das três fontes" in mapa
-    assert "Mesmo cliente · mesmo responsável · mesmo recorte" in mapa
+    assert "Do mercado observado ao mercado que realmente pode ser disputado" in mapa
+    assert "Origem e conferência dos dados" in mapa
+    assert "ANFIR = mercado realizado" in mapa
     assert "A correlação é estratégica, não uma fusão de registros." in catalogo
