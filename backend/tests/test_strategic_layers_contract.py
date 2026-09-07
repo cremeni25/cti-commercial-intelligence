@@ -67,9 +67,9 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     assert "getMapaEquipeVisao" in mapa
     assert "getMapaEquipeInteligencia" in mapa
     assert "Região / responsável" in mapa
-    assert "IA Comercial CTI" in mapa
+    assert "Leitura contextual" in mapa
     assert "O que os dados estão mostrando" in mapa
-    assert "Aprofundar na IA" in mapa
+    assert "Aprofundar na IA" not in mapa
     assert "Histórico / Funil 2026" in mapa
     assert "Auditoria e origem dos dados" in mapa
     assert "ANFIR · Histórico/Funil · CRM" in mapa
