@@ -70,7 +70,7 @@ export default function Page() {
     let ativo = true
     getMapaEquipeInteligencia(responsavelId || null)
       .then((resposta) => { if (ativo) setAnaliseIa(resposta.analise || "") })
-      .catch((e) => { if (ativo) setErroIa(e instanceof Error ? e.message : "A IA Comercial não concluiu a leitura.") })
+      .catch((e) => { if (ativo) setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.") })
       .finally(() => { if (ativo) setLoadingIa(false) })
     return () => { ativo = false }
   }, [responsavelId])
@@ -83,7 +83,7 @@ export default function Page() {
       setAnaliseIa(resposta.analise || "")
     } catch (e) {
       setAnaliseIa("")
-      setErroIa(e instanceof Error ? e.message : "A IA Comercial não concluiu a leitura.")
+      setErroIa(e instanceof Error ? e.message : "A leitura inteligente não foi concluída.")
     } finally {
       setLoadingIa(false)
     }
@@ -110,12 +110,6 @@ export default function Page() {
     setAnaliseIa("")
     setResponsavelId(novoId)
     setVisao("executiva")
-  }
-
-  function aprofundarNaIa() {
-    const nome = dados?.selecao.nome || "a seleção atual"
-    const prompt = `Aprofunde a análise comercial de ${nome}. Investigue os dados internos relevantes do CTI e explique em linguagem natural o que merece atenção, por quê e quais movimentos comerciais os dados sustentam.`
-    window.location.href = `/ia-comercial?prompt=${encodeURIComponent(prompt)}`
   }
 
   return (
@@ -152,7 +146,7 @@ export default function Page() {
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando informações comerciais...</div>}
 
           {!loading && dados && visao === "executiva" && (
-            <VisaoExecutiva dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} analiseIa={analiseIa} loadingIa={loadingIa} erroIa={erroIa} atualizarIa={() => void carregarInteligencia()} aprofundarNaIa={aprofundarNaIa} irPara={setVisao} />
+            <VisaoExecutiva dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} analiseIa={analiseIa} loadingIa={loadingIa} erroIa={erroIa} atualizarIa={() => void carregarInteligencia()} irPara={setVisao} />
           )}
           {!loading && dados && visao === "crm" && <VisaoCrm dados={dados} ticketPipeline={ticketPipeline} />}
           {!loading && dados && visao === "historico" && <VisaoHistorico dados={dados} perdasHistorico={perdasHistorico} />}
@@ -174,7 +168,7 @@ export default function Page() {
   )
 }
 
-function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, analiseIa, loadingIa, erroIa, atualizarIa, aprofundarNaIa, irPara }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; analiseIa: string; loadingIa: boolean; erroIa: string; atualizarIa: () => void; aprofundarNaIa: () => void; irPara: (visao: Visao) => void }) {
+function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, analiseIa, loadingIa, erroIa, atualizarIa, irPara }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; analiseIa: string; loadingIa: boolean; erroIa: string; atualizarIa: () => void; irPara: (visao: Visao) => void }) {
   return <>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="ANFIR 2026" destaque="emerald" />
@@ -197,10 +191,10 @@ function VisaoExecutiva({ dados, mercadoMacro, familiaTotal, analiseIa, loadingI
 
       <div className="rounded-3xl border border-violet-500/30 bg-[#081126] p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">IA Comercial CTI</p><h2 className="mt-1 text-xl font-bold">O que os dados estão mostrando</h2></div>
-          <div className="flex gap-2"><button type="button" onClick={atualizarIa} disabled={loadingIa} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button><button type="button" onClick={aprofundarNaIa} className="rounded-xl bg-violet-400 px-3 py-2 text-xs font-bold text-slate-950">Aprofundar na IA</button></div>
+          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Leitura contextual</p><h2 className="mt-1 text-xl font-bold">O que os dados estão mostrando</h2></div>
+          <button type="button" onClick={atualizarIa} disabled={loadingIa} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button>
         </div>
-        {loadingIa && <p className="mt-5 text-sm text-slate-400">A IA está cruzando as fontes autorizadas desta seleção...</p>}
+        {loadingIa && <p className="mt-5 text-sm text-slate-400">Cruzando contexto, território e fontes autorizadas desta seleção...</p>}
         {!loadingIa && erroIa && <p className="mt-5 rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-sm text-amber-200">{erroIa}</p>}
         {!loadingIa && !erroIa && analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
       </div>
