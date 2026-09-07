@@ -7,7 +7,7 @@ def test_contrato_carrier_jov_preserva_campos_e_isola_bloco_lateral():
     assert '"RELATORIO PERFORMANCE 2026"' in parser
     assert '"formato": "CARRIER_JOV"' in parser
     assert 'limite = nomes.index("STATUS PLANO AÇÃO 1") + 1' in parser
-    assert 'responsavel=""' in parser
+    assert 'responsavel=texto_util(campo_direto(row, "RESPONSÁVEL") or campo_direto(row, "RESPONSAVEL"))' in parser
     assert 'linha=texto_util(campo_direto(row, "SEGMENTO"))' in parser
     assert 'motivo=texto_util(campo_direto(row, "MOTIVO CONCORRENTE"))' in parser
     assert 'ocorrencia=_ocorrencia_carrier(row)' in parser
