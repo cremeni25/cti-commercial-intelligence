@@ -43,7 +43,6 @@ export default function Page() {
 
   useEffect(() => {
     let ativo = true
-    setLoading(true)
     Promise.all([getMapaEquipeVisao(responsavelId || null), getMapaInsights(responsavelId || null)])
       .then(([visao, leitura]) => {
         if (!ativo) return
@@ -56,10 +55,7 @@ export default function Page() {
   }, [responsavelId])
 
   useEffect(() => {
-    if (!dados?.pode_selecionar_responsavel) {
-      setMercadoMacro(null)
-      return
-    }
+    if (!dados?.pode_selecionar_responsavel) return
     let ativo = true
     void (async () => {
       try {
@@ -88,7 +84,6 @@ export default function Page() {
 
   useEffect(() => {
     let ativo = true
-    setLoadingIa(true)
     getMapaEquipeInteligencia(responsavelId || null)
       .then((resposta) => {
         if (!ativo) return
@@ -145,6 +140,7 @@ export default function Page() {
   }, [dados])
 
   function trocarResponsavel(novoId: string) {
+    setLoading(true)
     setErro("")
     setLoadingIa(true)
     setErroIa("")
@@ -342,7 +338,7 @@ function VisaoRegioes({ insights }: { insights: MapaInsights }) {
   return <section className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
     <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Inteligência de regiões</p>
     <h2 className="mt-1 text-xl font-bold">Território, mercado e negócios por responsável</h2>
-    <div className="mt-5 space-y-4">{insights.regioes.map((item) => <div key={item.id} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><strong>{item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}</strong><p className="mt-1 text-xs text-slate-500">DDD {item.ddds.join(", ") || "não informado"}</p></div><div className="text-right text-xs text-slate-400"><div>{item.crm_ativos} negócio(s) ativo(s)</div><strong className="text-emerald-300">{formatarMoeda(item.pipeline_ativo)}</strong></div></div><div className="mt-3"><BarraComercial nome="Mercado 2026" valor={item.mercado_2026} total={max} /></div></div>)}</div>
+    <div className="mt-5 space-y-4">{insights.regioes.map((item) => <div key={item.id} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><strong>{item.codigo_regional ? `${item.codigo_regional} — ` : ""}{item.nome}</strong><p className="mt-1 text-xs text-slate-500">DDD {item.ddds.join(", ") || "não informado"}</p></div><div className="text-right text-xs text-slate-400"><div>{item.crm_ativos} negócio(s) ativo(s)</div><strong className="text-emerald-300">{formatarMoeda(item.pipeline_ativo)}</strong></div></div><div className="mt-3"><BarraComparativa nome="Mercado 2026" valor={item.mercado_2026} maximo={max} /></div></div>)}</div>
   </section>
 }
 
@@ -351,7 +347,7 @@ function VisaoLinhas({ insights }: { insights: MapaInsights }) {
   return <section className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
     <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha</p>
     <h2 className="mt-1 text-xl font-bold">Histórico comercial 2023–2026</h2>
-    <div className="mt-5 grid gap-4 xl:grid-cols-4">{insights.evolucao_linhas.map((item) => <div key={item.ano} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><strong className="text-lg">{item.ano}</strong><div className="mt-4 space-y-3"><BarraComercial nome="Trailer" valor={item.trailer} total={max} /><BarraComercial nome="Diesel Truck" valor={item.diesel_truck} total={max} /><BarraComercial nome="Direct Drive" valor={item.direct_drive} total={max} /></div></div>)}</div>
+    <div className="mt-5 grid gap-4 xl:grid-cols-4">{insights.evolucao_linhas.map((item) => <div key={item.ano} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><strong className="text-lg">{item.ano}</strong><div className="mt-4 space-y-3"><BarraComparativa nome="Trailer" valor={item.trailer} maximo={max} /><BarraComparativa nome="Diesel Truck" valor={item.diesel_truck} maximo={max} /><BarraComparativa nome="Direct Drive" valor={item.direct_drive} maximo={max} /></div></div>)}</div>
   </section>
 }
 
@@ -376,6 +372,11 @@ function MiniKpi({ rotulo, valor }: { rotulo: string; valor: string | number }) 
 function BarraComercial({ nome, valor, total }: { nome: string; valor: number; total: number }) {
   const percentual = pct(valor, total)
   return <div><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor} · {percentual.toFixed(0)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, percentual)}%` }} /></div></div>
+}
+
+function BarraComparativa({ nome, valor, maximo }: { nome: string; valor: number; maximo: number }) {
+  const largura = pct(valor, maximo)
+  return <div><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor}</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, largura)}%` }} /></div></div>
 }
 
 function BarraMercado({ total, fora, real }: { total: number; fora: number; real: number }) {
