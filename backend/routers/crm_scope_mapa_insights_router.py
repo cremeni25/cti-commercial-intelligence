@@ -10,15 +10,14 @@ from core.admin_auth import UsuarioAutenticado, usuario_atual
 from routers import strategic_layers_router as estrategia
 from routers.crm_scope_estrategia_router import FECHADOS
 from routers.crm_scope_mapa_equipe_router import (
-    _anfir_carteira,
     _deduplicar,
-    _equipe_ativa,
     _historico_carteira,
     _pode_gerir,
     _resolver_alvo,
     _usuario_regional,
     _crm_carteira,
 )
+from services.commercial_client_scope import filtrar_anfir_por_responsavel_comercial
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
 from services.historical_commercial_source import carregar_historico_comercial
 from services.product_line_classifier import classificar_linha
@@ -104,7 +103,11 @@ def _regioes(usuario: UsuarioAutenticado, alvo: UsuarioAutenticado | None, equip
     saida: list[dict[str, Any]] = []
     for registro in registros:
         responsavel = _usuario_regional(registro)
-        anf = _anfir_carteira(responsavel, list(mercado_total))
+        anf = filtrar_anfir_por_responsavel_comercial(
+            list(mercado_total),
+            str(responsavel.id),
+            responsavel.nome,
+        )
         crm = _crm_carteira(responsavel, crm_base)
         ativos = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
         saida.append({
