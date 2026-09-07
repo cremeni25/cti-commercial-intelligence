@@ -234,6 +234,46 @@ def _anfir_pertence_ao_responsavel(
     return False
 
 
+def filtrar_anfir_por_responsavel_comercial(
+    registros: list[dict[str, Any]],
+    usuario_id: str,
+    nome_usuario: str,
+) -> list[dict[str, Any]]:
+    """Atribui o mercado 2026 por responsabilidade efetiva, nunca pela localização.
+
+    Esta função é deliberadamente diferente da leitura histórica territorial:
+    1. cliente reconciliado com responsavel_comercial_id define o responsável atual;
+    2. sem cliente reconciliado, aceita responsável explícito existente na fonte ANFIR;
+    3. sem uma dessas evidências, o registro fica sem atribuição individual;
+    4. DDD, sub-região e código regional não distribuem mercado entre pessoas.
+    """
+    por_nome, por_cnpj = _mapas_clientes()
+    perfil = _perfil_usuario(str(usuario_id))
+    nome_alvo = _primeiro_nome(perfil.get("nome") or nome_usuario)
+    saida: list[dict[str, Any]] = []
+
+    for registro in registros:
+        cliente = _cliente_reconciliado(registro, por_nome, por_cnpj) if (por_nome or por_cnpj) else None
+        if cliente:
+            responsavel_id = str(cliente.get("responsavel_comercial_id") or "").strip()
+            if responsavel_id:
+                if responsavel_id == str(usuario_id):
+                    saida.append(registro)
+                continue
+
+        responsavel_id_fonte = _responsavel_id_registro(registro)
+        if responsavel_id_fonte:
+            if responsavel_id_fonte == str(usuario_id):
+                saida.append(registro)
+            continue
+
+        responsavel_fonte = _primeiro_nome(_responsavel_registro(registro))
+        if responsavel_fonte and nome_alvo and responsavel_fonte == nome_alvo:
+            saida.append(registro)
+
+    return saida
+
+
 def filtrar_por_responsabilidade_cliente(
     registros: list[dict[str, Any]],
     usuario_id: str,
