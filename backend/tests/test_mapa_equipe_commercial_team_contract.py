@@ -36,5 +36,16 @@ def test_anfir_nao_retroage_responsabilidade_atual_do_cliente():
     assert 'ALIASES_RESPONSAVEL_ATUAL = {"CARLA": "MONICA"}' in fonte
     assert "DDD exclusivo" in fonte
     assert "sub_regiao = codigo_regional" in fonte
-    bloco = fonte.split("if _eh_anfir_realizado(registro):", 1)[1].split("cliente = _cliente_reconciliado", 1)[0]
+    bloco = fonte.split("if _eh_anfir_realizado(registro):", 1)[1].split("responsavel_id_fonte = _responsavel_id_registro", 1)[0]
     assert "_cliente_reconciliado" not in bloco
+
+
+def test_crm_e_historico_priorizam_autoria_da_fonte_antes_da_carteira_atual():
+    fonte = SCOPE.read_text(encoding="utf-8")
+    bloco = fonte.split("def filtrar_carteira_exata_responsavel", 1)[1]
+    pos_id_fonte = bloco.index("responsavel_id_fonte = _responsavel_id_registro")
+    pos_nome_fonte = bloco.index("responsavel_fonte = _fold(_responsavel_registro")
+    pos_cliente = bloco.index("cliente = _cliente_reconciliado")
+    assert pos_id_fonte < pos_cliente
+    assert pos_nome_fonte < pos_cliente
+    assert "a autoria do próprio registro é a verdade primária" in bloco
