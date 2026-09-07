@@ -7,7 +7,7 @@ MAPA = ROOT / "frontend" / "src" / "app" / "mapa-estrategico" / "page.tsx"
 SERVICE = ROOT / "frontend" / "src" / "services" / "mapa-equipe-api.ts"
 
 
-def test_mapa_chama_ia_comercial_real_sem_persistir_conversa():
+def test_endpoint_contextual_permanece_read_only_e_sem_persistencia():
     fonte = ROUTER.read_text(encoding="utf-8")
     assert "gerar_resposta_agente" in fonte
     assert '@router.get("/inteligencia")' in fonte
@@ -16,15 +16,6 @@ def test_mapa_chama_ia_comercial_real_sem_persistir_conversa():
     assert "cti_ia_mensagens" not in fonte
     assert '"somente_leitura": True' in fonte
     assert '"persistido": False' in fonte
-
-
-def test_prompt_exige_linguagem_natural_e_nao_formato_mockado():
-    fonte = ROUTER.read_text(encoding="utf-8")
-    assert "linguagem comercial natural" in fonte
-    assert "sem tabela" in fonte.lower()
-    assert "quantidade fixa de insights" in fonte.lower()
-    assert "frases prontas" in fonte.lower()
-    assert "Não repita os indicadores do painel" in fonte
 
 
 def test_selecao_individual_usa_escopo_do_responsavel_analisado():
@@ -36,7 +27,7 @@ def test_selecao_individual_usa_escopo_do_responsavel_analisado():
     assert "visao_equipe(responsavel_id=responsavel_id, usuario=usuario)" in fonte
 
 
-def test_continuidade_conversacional_e_transitoria_e_revalida_contexto():
+def test_continuidade_contextual_permanece_disponivel_para_uso_controlado():
     fonte = ROUTER.read_text(encoding="utf-8")
     assert "PerguntaContextual" in fonte
     assert "TurnoContextual" in fonte
@@ -48,7 +39,7 @@ def test_continuidade_conversacional_e_transitoria_e_revalida_contexto():
     assert "CRM representa negócios atuais em andamento" in fonte
 
 
-def test_router_e_frontend_estao_integrados():
+def test_router_e_servico_mantem_endpoint_sem_forcar_ia_na_tela_principal():
     api = API.read_text(encoding="utf-8")
     service = SERVICE.read_text(encoding="utf-8")
     mapa = MAPA.read_text(encoding="utf-8")
@@ -57,46 +48,30 @@ def test_router_e_frontend_estao_integrados():
     assert "getMapaEquipeInteligencia" in service
     assert "perguntarMapaEquipeInteligencia" in service
     assert "crm-seguro/mapa-equipe/inteligencia/perguntar" in service
-    assert "perguntarMapaEquipeInteligencia" in mapa
-    assert "historicoContextual" in mapa
+    assert "getMapaEquipeInteligencia" not in mapa
+    assert "perguntarMapaEquipeInteligencia" not in mapa
+    assert "historicoContextual" not in mapa
 
 
-def test_proveniencia_contextual_e_canonica_e_discreta():
-    fonte = ROUTER.read_text(encoding="utf-8")
-    service = SERVICE.read_text(encoding="utf-8")
+def test_mapa_prioriza_graficos_e_acao_comercial_em_2026():
     mapa = MAPA.read_text(encoding="utf-8")
-    assert '"fontes_contextuais": _fontes_contextuais(visao)' in fonte
-    assert "TERRITORIO_RESPONSAVEL" in fonte
-    assert "ANFIR_2026" in fonte
-    assert "HISTORICO_FUNIL_2026" in fonte
-    assert "CRM_ATUAL" in fonte
-    assert "FonteContextual" in service
-    assert 'role: "user" | "assistant"' in service
-    assert "Contexto utilizado" in mapa
-    assert "fontesContextuais.map" in mapa
-    assert "novosTurnos: TurnoContextual[]" in mapa
-
-
-def test_mapa_remove_reconciliacao_da_leitura_principal_e_restaura_graficos():
-    mapa = MAPA.read_text(encoding="utf-8")
-    assert 'type Visao = "executiva" | "crm" | "historico"' not in mapa
-    assert "const visoes" not in mapa
-    assert "setVisao" not in mapa
-    assert "Sinais de decisão" not in mapa
-    assert "Lacuna de conhecimento comercial" not in mapa
-    assert "Continuidade CRM ↔ Histórico" not in mapa
     assert "Como o mercado está dividido" in mapa
     assert "Composição por linha" in mapa
     assert "Como estão os negócios em andamento" in mapa
-    assert "BarraComercial" in mapa
+    assert "GraficoLinha" in mapa
+    assert "Leitura comercial" in mapa
+    assert "O que fazer" in mapa
+    assert "Perdas comerciais · 2026" in mapa
+    assert "Evolução por linha · 2026" in mapa
+    assert "Histórico comercial 2023–2026" not in mapa
     assert "Dados de apoio e auditoria" in mapa
 
 
-def test_inteligencia_comercial_permanece_embutida_sem_novo_atalho_de_ia():
+def test_mapa_nao_exibe_analise_web_enciclopedica_ou_novo_atalho_de_ia():
     mapa = MAPA.read_text(encoding="utf-8")
+    assert "Fatos externos verificados" not in mapa
+    assert "https://anfir" not in mapa
     assert "Aprofundar na IA" not in mapa
     assert "aprofundarNaIa" not in mapa
     assert "/ia-comercial?prompt=" not in mapa
-    assert "Interpretação comercial" in mapa
-    assert "Pergunte sobre esta seleção" in mapa
-    assert "Contexto utilizado" in mapa
+    assert "Contexto utilizado" not in mapa

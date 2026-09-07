@@ -62,7 +62,14 @@ export type MapaEquipeVisao = {
   }
 }
 
+export type LeituraComercial = {
+  leitura_comercial: string
+  acao_recomendada: string
+}
+
 export type MapaInsights = {
+  ano: 2026
+  meses: string[]
   escopo: {
     consolidado: boolean
     modo: "TODA_EQUIPE" | "RESPONSAVEL"
@@ -79,20 +86,30 @@ export type MapaInsights = {
     clientes_mercado: number
     crm_ativos: number
     pipeline_ativo: number
-  }>
-  evolucao_linhas: Array<{
-    ano: number
-    trailer: number
-    diesel_truck: number
-    direct_drive: number
-    nao_classificado: number
-  }>
+    mercado_mensal: number[]
+    registros_sem_mes: number
+  } & LeituraComercial>
+  linhas_2026: {
+    meses: string[]
+    linhas: Array<{
+      codigo: "trailer" | "diesel_truck" | "direct_drive"
+      nome: string
+      total_2026: number
+      mensal: number[]
+    } & LeituraComercial>
+    nao_classificado_2026: number
+    unidades_sem_mes: number
+    fonte: "HISTORICO_FUNIL_2026"
+  }
   perdas: {
-    total_registros_com_motivo: number
+    ano: 2026
+    total_perdido: number
+    total_com_motivo: number
     motivos: Array<{ nome: string; quantidade: number }>
     por_linha: Array<{ nome: string; quantidade: number }>
-    por_ano: Array<{ nome: string; quantidade: number }>
-  }
+    mensal: number[]
+    registros_sem_mes: number
+  } & LeituraComercial
 }
 
 export type TurnoContextual = {

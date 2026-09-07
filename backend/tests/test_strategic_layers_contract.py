@@ -64,14 +64,18 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     assert "REALIZADO · ANFIR" in catalogo
     assert "COMPLETED · ANFIR" in catalogo
     assert 'fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?' in team_service
+    assert 'fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/insights' in team_service
     assert "getMapaEquipeVisao" in mapa
-    assert "getMapaEquipeInteligencia" in mapa
-    assert "Região / responsável" in mapa
+    assert "getMapaInsights" in mapa
+    assert "Responsável comercial" in mapa
     assert "Como o mercado está dividido" in mapa
     assert "Composição por linha" in mapa
     assert "Como estão os negócios em andamento" in mapa
-    assert "Interpretação comercial" in mapa
+    assert "Leitura comercial" in mapa
+    assert "O que fazer" in mapa
+    assert "GraficoLinha" in mapa
     assert "Dados de apoio e auditoria" in mapa
+    assert "getMapaEquipeInteligencia" not in mapa
     assert "Sinais de decisão" not in mapa
     assert "Lacuna de conhecimento comercial" not in mapa
     assert "Aprofundar na IA" not in mapa

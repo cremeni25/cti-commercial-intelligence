@@ -2,6 +2,7 @@ from pathlib import Path
 
 from core.admin_auth import UsuarioAutenticado
 from routers import crm_scope_mapa_equipe_router as mapa
+from routers import crm_scope_mapa_insights_router as insights_router
 from services import commercial_client_scope as scope
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -52,7 +53,6 @@ def test_mercado_por_responsavel_nao_usa_ddd_como_fallback(monkeypatch):
         "nathan-id",
         "Nathan Beljato",
     )
-
     assert resultado == []
 
 
@@ -66,19 +66,52 @@ def test_mercado_por_responsavel_prioriza_responsavel_comercial_do_cliente(monke
     assert scope.filtrar_anfir_por_responsavel_comercial([registro], "monica-id", "Monica Almeida") == [registro]
 
 
-def test_mapa_tem_tres_caminhos_de_inteligencia_e_preserva_escopo():
+def test_mapa_tem_tres_caminhos_com_graficos_e_acao_2026():
     page = PAGE.read_text(encoding="utf-8")
     service = SERVICE.read_text(encoding="utf-8")
     insights = INSIGHTS.read_text(encoding="utf-8")
+
     assert "Inteligência de regiões" in page
     assert "Evolução por linha" in page
     assert "Onde perdemos e por quê" in page
-    assert "getMapaInsights" in service
+    assert "GraficoLinha" in page
+    assert "Leitura comercial" in page
+    assert "O que fazer" in page
+    assert "Histórico comercial 2023–2026" not in page
+    assert "getMapaEquipeInteligencia" not in page
+    assert "perguntarMapaEquipeInteligencia" not in page
+    assert "Fatos externos verificados" not in page
+    assert "linhas_2026" in service
+    assert '"ano": 2026' in insights
     assert '"consolidado": consolidado' in insights
     assert "DEMAIS_USUARIOS_SEMPRE_RECEBEM_APENAS_O_PROPRIO_LOGIN" in insights
     assert "if (!dados?.pode_selecionar_responsavel) return" in page
     assert "mercadoMacro={consolidado ? mercadoMacro : null}" in page
-    assert "BarraComparativa" in page
     assert "filtrar_anfir_por_responsavel_comercial" in insights
-    bloco_regioes = insights.split("def _regioes", 1)[1].split("@router.get", 1)[0]
-    assert "_anfir_carteira" not in bloco_regioes
+
+
+def test_perdas_e_linhas_operacionais_ficam_restritas_a_2026():
+    historico = [
+        {"ano": 2025, "mes": 12, "status": "PERDIDO", "motivo_perda": "PRECO", "linha": "TR", "quantidade": 9},
+        {"ano": 2026, "mes": 1, "status": "PERDIDO", "motivo_perda": "PRECO", "linha": "TR", "quantidade": 2},
+        {"ano": 2026, "mes": 2, "status": "GANHO", "linha": "DT", "quantidade": 3},
+    ]
+    somente_2026 = [item for item in historico if insights_router._ano_registro(item) == 2026]
+
+    perdas = insights_router._perdas_2026(somente_2026)
+    linhas = insights_router._linhas_2026(somente_2026)
+
+    assert perdas["total_perdido"] == 1
+    assert perdas["mensal"][0] == 1
+    assert perdas["motivos"][0]["nome"] == "PRECO"
+    trailer = next(item for item in linhas["linhas"] if item["codigo"] == "trailer")
+    diesel = next(item for item in linhas["linhas"] if item["codigo"] == "diesel_truck")
+    assert trailer["mensal"][0] == 2
+    assert diesel["mensal"][1] == 3
+    assert sum(trailer["mensal"]) == 2
+
+
+def test_mes_registro_aceita_mes_numerico_textual_e_data_iso():
+    assert insights_router._mes_registro({"mes": 3}) == 3
+    assert insights_router._mes_registro({"mes": "setembro"}) == 9
+    assert insights_router._mes_registro({"data": "2026-11-15"}) == 11
