@@ -14,17 +14,9 @@ import {
 } from "@/services/mapa-equipe-api"
 
 type MercadoMacro = { total: number; foraDisputa: number; real: number }
-type Visao = "executiva" | "crm" | "historico"
-
-const visoes: Array<{ id: Visao; label: string }> = [
-  { id: "executiva", label: "Visão executiva" },
-  { id: "crm", label: "CRM atual" },
-  { id: "historico", label: "Histórico" },
-]
 
 export default function Page() {
   const [responsavelId, setResponsavelId] = useState("")
-  const [visao, setVisao] = useState<Visao>("executiva")
   const [dados, setDados] = useState<MapaEquipeVisao | null>(null)
   const [mercadoMacro, setMercadoMacro] = useState<MercadoMacro | null>(null)
   const [loading, setLoading] = useState(true)
@@ -130,13 +122,6 @@ export default function Page() {
     return f.trailer + f.diesel_truck + f.direct_drive
   }, [dados])
 
-  const ticketPipeline = dados && dados.evidencias.crm_ativos > 0
-    ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos
-    : 0
-  const perdasHistorico = dados
-    ? dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0)
-    : 0
-
   function trocarResponsavel(novoId: string) {
     setLoading(true)
     setErro("")
@@ -147,7 +132,6 @@ export default function Page() {
     setHistoricoContextual([])
     setPerguntaContextual("")
     setResponsavelId(novoId)
-    setVisao("executiva")
   }
 
   return (
@@ -160,6 +144,7 @@ export default function Page() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Inteligência comercial</p>
               <h1 className="mt-1 text-3xl font-bold">Mapa Comercial Estratégico</h1>
+              <p className="mt-2 max-w-3xl text-sm text-slate-400">Mercado, cobertura comercial, continuidade entre bases e negócios em andamento na seleção atual.</p>
             </div>
             {dados?.pode_selecionar_responsavel && (
               <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-400">
@@ -172,18 +157,10 @@ export default function Page() {
             )}
           </header>
 
-          <nav className="flex flex-wrap gap-2" aria-label="Visões da Inteligência Comercial">
-            {visoes.map((item) => (
-              <button key={item.id} type="button" onClick={() => setVisao(item.id)} className={`rounded-xl border px-4 py-2.5 text-sm font-semibold transition ${visao === item.id ? "border-cyan-400 bg-cyan-400 text-slate-950" : "border-[#214363] bg-[#071226] text-slate-300 hover:border-cyan-500/60 hover:text-white"}`}>
-                {item.label}
-              </button>
-            ))}
-          </nav>
-
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando informações comerciais...</div>}
 
-          {!loading && dados && visao === "executiva" && (
+          {!loading && dados && (
             <VisaoExecutiva
               dados={dados}
               mercadoMacro={mercadoMacro}
@@ -193,27 +170,12 @@ export default function Page() {
               loadingIa={loadingIa}
               erroIa={erroIa}
               atualizarIa={() => void carregarInteligencia()}
-              irPara={setVisao}
               perguntaContextual={perguntaContextual}
               setPerguntaContextual={setPerguntaContextual}
               historicoContextual={historicoContextual}
               perguntando={perguntando}
               perguntarContexto={() => void perguntarContexto()}
             />
-          )}
-          {!loading && dados && visao === "crm" && <VisaoCrm dados={dados} ticketPipeline={ticketPipeline} />}
-          {!loading && dados && visao === "historico" && <VisaoHistorico dados={dados} perdasHistorico={perdasHistorico} />}
-
-          {!loading && dados && (
-            <details className="group rounded-2xl border border-slate-700/60 bg-[#061126] px-5 py-4">
-              <summary className="cursor-pointer list-none text-sm font-semibold text-slate-300">Auditoria e origem dos dados <span className="ml-2 text-xs text-slate-500">ANFIR · Histórico/Funil · CRM</span></summary>
-              <div className="mt-4 grid gap-3 border-t border-slate-700/60 pt-4 sm:grid-cols-2 xl:grid-cols-4">
-                <MiniKpi rotulo="Clientes ANFIR" valor={dados.reconciliacao.clientes_anfir} />
-                <MiniKpi rotulo="Clientes Histórico" valor={dados.reconciliacao.clientes_historico} />
-                <MiniKpi rotulo="Clientes CRM" valor={dados.reconciliacao.clientes_crm} />
-                <MiniKpi rotulo="Presentes nas 3 fontes" valor={dados.reconciliacao.nas_tres_fontes} />
-              </div>
-            </details>
           )}
         </div>
       </section>
@@ -230,7 +192,6 @@ function VisaoExecutiva({
   loadingIa,
   erroIa,
   atualizarIa,
-  irPara,
   perguntaContextual,
   setPerguntaContextual,
   historicoContextual,
@@ -245,25 +206,80 @@ function VisaoExecutiva({
   loadingIa: boolean
   erroIa: string
   atualizarIa: () => void
-  irPara: (visao: Visao) => void
   perguntaContextual: string
   setPerguntaContextual: (valor: string) => void
   historicoContextual: TurnoContextual[]
   perguntando: boolean
   perguntarContexto: () => void
 }) {
+  const ticketPipeline = dados.evidencias.crm_ativos > 0
+    ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos
+    : 0
+  const coberturaVinculo = pct(dados.mercado.mercado_real_selecao_2026, dados.mercado.mercado_real_viena_2026)
+  const crmComHistorico = pct(dados.ciclo.crm_com_evidencia_historico, dados.ciclo.clientes_crm)
+  const crmComAnfir = pct(dados.ciclo.crm_com_evidencia_anfir, dados.ciclo.clientes_crm)
+  const crmNasTres = pct(dados.ciclo.clientes_com_evidencia_nas_tres_fontes, dados.ciclo.clientes_crm)
+
   return <>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="ANFIR 2026" destaque="emerald" />
-      <Kpi titulo="ANFIR com vínculo seguro" valor={dados.mercado.mercado_real_selecao_2026} apoio={dados.selecao.nome} destaque="cyan" />
-      <Kpi titulo="Clientes ANFIR identificados" valor={dados.mercado.clientes_unicos} apoio="seleção atual" />
-      <Kpi titulo="Negociações CRM ativas" valor={dados.evidencias.crm_ativos} apoio="autoria operacional" destaque="emerald" onClick={() => irPara("crm")} />
-      <Kpi titulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} apoio="CRM atual" onClick={() => irPara("crm")} />
+      <Kpi titulo="Vínculos ANFIR seguros" valor={dados.mercado.mercado_real_selecao_2026} apoio={`${coberturaVinculo.toFixed(1)}% do mercado real`} destaque="cyan" />
+      <Kpi titulo="Clientes ANFIR identificados" valor={dados.mercado.clientes_unicos} apoio={dados.selecao.nome} />
+      <Kpi titulo="Negociações CRM ativas" valor={dados.evidencias.crm_ativos} apoio="autoria operacional" destaque="emerald" />
+      <Kpi titulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} apoio={dados.evidencias.crm_ativos ? `ticket médio ${formatarMoeda(ticketPipeline)}` : "sem negociações ativas"} />
+    </section>
+
+    <section className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Sinais de decisão</p>
+        <h2 className="mt-1 text-xl font-bold">Onde a seleção pede atenção</h2>
+      </div>
+      <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <Sinal
+          titulo="Cobertura do mercado"
+          valor={`${coberturaVinculo.toFixed(1)}%`}
+          texto={`${dados.mercado.mercado_real_selecao_2026} vínculos ANFIR seguros sobre ${dados.mercado.mercado_real_viena_2026} do mercado real Viena.`}
+        />
+        <Sinal
+          titulo="Continuidade CRM ↔ Histórico"
+          valor={`${crmComHistorico.toFixed(0)}%`}
+          texto={`${dados.ciclo.crm_com_evidencia_historico} de ${dados.ciclo.clientes_crm} clientes do CRM possuem evidência histórica.`}
+        />
+        <Sinal
+          titulo="Continuidade CRM ↔ ANFIR"
+          valor={`${crmComAnfir.toFixed(0)}%`}
+          texto={`${dados.ciclo.crm_com_evidencia_anfir} de ${dados.ciclo.clientes_crm} clientes do CRM possuem evidência ANFIR.`}
+        />
+        <Sinal
+          titulo="Continuidade completa"
+          valor={`${crmNasTres.toFixed(0)}%`}
+          texto={`${dados.ciclo.clientes_com_evidencia_nas_tres_fontes} cliente(s) do CRM aparecem simultaneamente em ANFIR e Histórico.`}
+        />
+      </div>
+      {(dados.reconciliacao.somente_anfir > 0 || dados.reconciliacao.crm_fora_mercado_real > 0) && (
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {dados.reconciliacao.somente_anfir > 0 && (
+            <Alerta
+              titulo="Lacuna de conhecimento comercial"
+              texto={`${dados.reconciliacao.somente_anfir} cliente(s) aparecem apenas na ANFIR, sem evidência correspondente em Histórico ou CRM. Isso é lacuna de cobertura de dados, não oportunidade automática.`}
+            />
+          )}
+          {dados.reconciliacao.crm_fora_mercado_real > 0 && (
+            <Alerta
+              titulo="CRM fora do mercado real atual"
+              texto={`${dados.reconciliacao.crm_fora_mercado_real} cliente(s) do CRM não estão reconciliados com o mercado real ANFIR desta seleção e exigem conferência de contexto, não exclusão automática.`}
+            />
+          )}
+        </div>
+      )}
     </section>
 
     <section className="grid gap-4 xl:grid-cols-[.9fr_1.1fr]">
       <div className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Base comercial 2026</p><h2 className="mt-1 text-xl font-bold">Tamanho e composição</h2></div><span className="rounded-full border border-cyan-500/20 px-3 py-1 text-xs text-cyan-200">ANFIR 2026</span></div>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Mercado 2026</p><h2 className="mt-1 text-xl font-bold">Tamanho e composição</h2></div>
+          <span className="rounded-full border border-cyan-500/20 px-3 py-1 text-xs text-cyan-200">ANFIR 2026</span>
+        </div>
         {mercadoMacro && <div className="mt-5"><BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} /></div>}
         <div className="mt-4 grid gap-2 sm:grid-cols-3">
           <MiniKpi rotulo="Trailer" valor={dados.mercado.familias.trailer} apoio={`${pct(dados.mercado.familias.trailer, familiaTotal).toFixed(1)}% dos vínculos seguros`} />
@@ -272,81 +288,108 @@ function VisaoExecutiva({
         </div>
       </div>
 
-      <div className="rounded-3xl border border-violet-500/30 bg-[#081126] p-5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Leitura contextual</p><h2 className="mt-1 text-xl font-bold">O que os dados estão mostrando</h2></div>
-          <button type="button" onClick={atualizarIa} disabled={loadingIa || perguntando} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar leitura</button>
+      <div className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-xl font-bold">Negócios em andamento</h2></div>
+          <strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativas</strong>
         </div>
-        {loadingIa && <p className="mt-5 text-sm text-slate-400">Cruzando contexto, território e fontes autorizadas desta seleção...</p>}
-        {!loadingIa && erroIa && <p className="mt-5 rounded-xl border border-amber-500/30 bg-amber-950/10 p-3 text-sm text-amber-200">{erroIa}</p>}
+        <div className="mt-4 space-y-2">
+          {dados.evidencias.crm_status.length
+            ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />)
+            : <p className="text-sm text-slate-500">Sem negociações ativas nesta seleção.</p>}
+        </div>
+      </div>
+    </section>
+
+    {(analiseIa || erroIa || loadingIa) && (
+      <section className="rounded-3xl border border-violet-500/30 bg-[#081126] p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Interpretação contextual</p><h2 className="mt-1 text-xl font-bold">Leitura da seleção atual</h2></div>
+          {!loadingIa && <button type="button" onClick={atualizarIa} disabled={perguntando} className="rounded-xl border border-violet-400/30 px-3 py-2 text-xs font-semibold text-violet-200 disabled:opacity-50">Atualizar</button>}
+        </div>
+        {loadingIa && <p className="mt-4 text-sm text-slate-500">Interpretação em processamento. Os sinais objetivos acima permanecem disponíveis.</p>}
+        {!loadingIa && erroIa && <p className="mt-4 text-sm text-amber-200">Interpretação indisponível nesta tentativa. Os indicadores objetivos acima continuam válidos.</p>}
         {!loadingIa && analiseIa && <div className="mt-5 whitespace-pre-wrap text-[15px] leading-7 text-slate-200">{analiseIa}</div>}
-        {!loadingIa && analiseIa && fontesContextuais.length > 0 && (
-          <details className="mt-4 border-t border-violet-400/10 pt-3 text-xs text-slate-500">
-            <summary className="cursor-pointer list-none font-semibold text-slate-400">
-              Contexto utilizado <span className="ml-2 font-normal text-slate-600">{fontesContextuais.map((fonte) => fonte.nome).join(" · ")}</span>
-            </summary>
-            <div className="mt-3 space-y-2">
-              {fontesContextuais.map((fonte) => (
-                <div key={fonte.codigo} className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
-                  <strong className="text-slate-400">{fonte.nome}</strong>
-                  <span>{fonte.evidencia}</span>
-                </div>
-              ))}
-            </div>
-          </details>
+
+        {!loadingIa && analiseIa && historicoContextual.length > 0 && (
+          <div className="mt-5 space-y-3 border-t border-violet-400/15 pt-4">
+            {historicoContextual.slice(-4).map((turno, index) => (
+              <div key={`${turno.role}-${index}`} className={turno.role === "user" ? "rounded-xl bg-violet-500/10 px-3 py-2 text-sm text-violet-100" : "whitespace-pre-wrap text-sm leading-6 text-slate-300"}>
+                {turno.role === "user" && <span className="mr-2 text-[10px] font-semibold uppercase tracking-[.12em] text-violet-300">Pergunta</span>}
+                {turno.content}
+              </div>
+            ))}
+          </div>
         )}
 
         {!loadingIa && analiseIa && (
           <div className="mt-5 border-t border-violet-400/15 pt-4">
-            {historicoContextual.length > 0 && (
-              <div className="mb-4 space-y-3">
-                {historicoContextual.slice(-4).map((turno, index) => (
-                  <div key={`${turno.role}-${index}`} className={turno.role === "user" ? "rounded-xl bg-violet-500/10 px-3 py-2 text-sm text-violet-100" : "whitespace-pre-wrap text-sm leading-6 text-slate-300"}>
-                    {turno.role === "user" && <span className="mr-2 text-[10px] font-semibold uppercase tracking-[.12em] text-violet-300">Pergunta</span>}
-                    {turno.content}
-                  </div>
-                ))}
-              </div>
-            )}
             <div className="flex gap-2">
               <input
                 value={perguntaContextual}
                 onChange={(e) => setPerguntaContextual(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); perguntarContexto() } }}
                 disabled={perguntando}
-                placeholder="Pergunte sobre esta leitura, região, clientes, perdas ou CRM..."
+                placeholder="Pergunte sobre a leitura desta seleção..."
                 className="min-w-0 flex-1 rounded-xl border border-violet-400/20 bg-[#060d1d] px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-400/50 disabled:opacity-60"
               />
               <button type="button" onClick={perguntarContexto} disabled={perguntando || !perguntaContextual.trim()} className="rounded-xl border border-violet-400/30 px-4 py-2.5 text-sm font-semibold text-violet-100 disabled:opacity-40">
                 {perguntando ? "Analisando..." : "Perguntar"}
               </button>
             </div>
-            <p className="mt-2 text-[11px] text-slate-600">A pergunta permanece nesta seleção e nesta sessão. Não cria oportunidade, não altera CRM e não grava uma nova conversa.</p>
           </div>
         )}
-      </div>
-    </section>
 
-    <section className="grid gap-4 xl:grid-cols-2">
-      <button type="button" onClick={() => irPara("crm")} className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5 text-left transition hover:border-emerald-400/60"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">CRM atual</h2><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativas</strong></div><div className="mt-4 space-y-2">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas nesta seleção.</p>}</div></button>
-      <button type="button" onClick={() => irPara("historico")} className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5 text-left transition hover:border-amber-400/60"><div className="flex items-center justify-between gap-3"><h2 className="font-bold">Histórico / Funil 2026</h2><strong className="text-amber-300">{dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} unidades</strong></div><div className="mt-4 grid grid-cols-2 gap-3"><MiniKpi rotulo="Eventos" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Perdas com motivo" valor={dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0)} /></div></button>
-    </section>
+        {!loadingIa && analiseIa && fontesContextuais.length > 0 && (
+          <details className="mt-4 border-t border-violet-400/10 pt-3 text-xs text-slate-500">
+            <summary className="cursor-pointer list-none font-semibold text-slate-400">Contexto utilizado</summary>
+            <div className="mt-3 space-y-2">
+              {fontesContextuais.map((fonte) => (
+                <div key={fonte.codigo}><strong className="text-slate-400">{fonte.nome}: </strong><span>{fonte.evidencia}</span></div>
+              ))}
+            </div>
+          </details>
+        )}
+      </section>
+    )}
+
+    <details className="rounded-2xl border border-amber-500/15 bg-[#061126] px-5 py-4">
+      <summary className="cursor-pointer list-none text-sm font-semibold text-slate-300">
+        Evidências históricas <span className="ml-2 text-xs font-normal text-slate-500">apoio à interpretação, não leitura principal</span>
+      </summary>
+      <div className="mt-4 grid gap-3 border-t border-slate-700/60 pt-4 sm:grid-cols-3">
+        <MiniKpi rotulo="Registros 2026" valor={dados.evidencias.historico_registros_2026} />
+        <MiniKpi rotulo="Unidades registradas" valor={dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} />
+        <MiniKpi rotulo="Clientes com histórico" valor={dados.reconciliacao.clientes_historico} />
+      </div>
+      {dados.evidencias.motivos_perda_historico.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {dados.evidencias.motivos_perda_historico.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.motivos_perda_historico.reduce((s, i) => s + i.quantidade, 0))} />)}
+        </div>
+      )}
+    </details>
+
+    <details className="rounded-2xl border border-slate-700/60 bg-[#061126] px-5 py-4">
+      <summary className="cursor-pointer list-none text-sm font-semibold text-slate-300">Auditoria e origem dos dados</summary>
+      <div className="mt-4 space-y-2 border-t border-slate-700/60 pt-4 text-sm text-slate-400">
+        <p>ANFIR: {dados.reconciliacao.clientes_anfir} clientes · Histórico: {dados.reconciliacao.clientes_historico} · CRM: {dados.reconciliacao.clientes_crm}</p>
+        <p>Interseções: ANFIR + Histórico {dados.reconciliacao.anfir_historico} · ANFIR + CRM {dados.reconciliacao.anfir_crm} · Histórico + CRM {dados.reconciliacao.historico_crm} · 3 fontes {dados.reconciliacao.nas_tres_fontes}</p>
+      </div>
+    </details>
   </>
 }
 
-function VisaoCrm({ dados, ticketPipeline }: { dados: MapaEquipeVisao; ticketPipeline: number }) {
-  return <section className="space-y-5 rounded-3xl border border-emerald-500/20 bg-[#061126] p-5"><div><p className="text-xs uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-2xl font-bold">O que está em andamento em {dados.selecao.nome}</h2></div><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Negociações ativas" valor={dados.evidencias.crm_ativos} /><MiniKpi rotulo="Pipeline ativo" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} /><MiniKpi rotulo="Ticket médio" valor={formatarMoeda(ticketPipeline)} /></div><div className="space-y-3">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem registros operacionais nesta seleção.</p>}</div></section>
-}
-
-function VisaoHistorico({ dados, perdasHistorico }: { dados: MapaEquipeVisao; perdasHistorico: number }) {
-  return <section className="space-y-5 rounded-3xl border border-amber-500/20 bg-[#061126] p-5"><div><p className="text-xs uppercase tracking-[.16em] text-amber-300">Histórico / Funil 2026</p><h2 className="mt-1 text-2xl font-bold">O que ficou registrado antes para {dados.selecao.nome}</h2></div><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Eventos" valor={dados.evidencias.historico_registros_2026} /><MiniKpi rotulo="Unidades" valor={dados.evidencias.historico_unidades_2026.toLocaleString("pt-BR")} /><MiniKpi rotulo="Perdas com motivo" valor={perdasHistorico} /></div><div className="space-y-3">{dados.evidencias.motivos_perda_historico.length ? dados.evidencias.motivos_perda_historico.map((item) => <BarraStatus key={item.nome} nome={item.nome} valor={item.quantidade} total={Math.max(1, perdasHistorico)} />) : <p className="text-sm text-slate-500">Não há motivo de perda estruturado suficiente nesta seleção.</p>}</div></section>
-}
-
-function Kpi({ titulo, valor, apoio, destaque, onClick }: { titulo: string; valor: string | number; apoio?: string; destaque?: "cyan" | "emerald"; onClick?: () => void }) {
+function Kpi({ titulo, valor, apoio, destaque }: { titulo: string; valor: string | number; apoio?: string; destaque?: "cyan" | "emerald" }) {
   const cor = destaque === "emerald" ? "text-emerald-300" : destaque === "cyan" ? "text-cyan-300" : "text-white"
-  const conteudo = <><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p><div className={`mt-2 text-2xl font-bold ${cor}`}>{valor}</div>{apoio && <p className="mt-1 text-xs text-slate-500">{apoio}</p>}</>
-  if (onClick) return <button type="button" onClick={onClick} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4 text-left transition hover:border-cyan-500/50">{conteudo}</button>
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4">{conteudo}</div>
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p><div className={`mt-2 text-2xl font-bold ${cor}`}>{valor}</div>{apoio && <p className="mt-1 text-xs text-slate-500">{apoio}</p>}</div>
+}
+
+function Sinal({ titulo, valor, texto }: { titulo: string; valor: string; texto: string }) {
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p><strong className="mt-2 block text-2xl text-cyan-300">{valor}</strong><p className="mt-2 text-sm leading-5 text-slate-400">{texto}</p></div>
+}
+
+function Alerta({ titulo, texto }: { titulo: string; texto: string }) {
+  return <div className="rounded-2xl border border-amber-500/25 bg-amber-950/10 p-4"><p className="text-sm font-semibold text-amber-200">{titulo}</p><p className="mt-1 text-sm leading-5 text-slate-400">{texto}</p></div>
 }
 
 function MiniKpi({ rotulo, valor, apoio }: { rotulo: string; valor: string | number; apoio?: string }) {
