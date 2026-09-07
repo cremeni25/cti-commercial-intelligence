@@ -88,27 +88,46 @@ def test_mapa_tem_tres_caminhos_com_graficos_e_acao_2026():
     assert "if (!dados?.pode_selecionar_responsavel) return" in page
     assert "mercadoMacro={consolidado ? mercadoMacro : null}" in page
     assert "filtrar_anfir_por_responsavel_comercial" in insights
+    assert '"fonte": "ANFIR_2026"' in insights
+    assert "HISTORICO_FUNIL_2026" not in insights
 
 
-def test_perdas_e_linhas_operacionais_ficam_restritas_a_2026():
-    historico = [
-        {"ano": 2025, "mes": 12, "status": "PERDIDO", "motivo_perda": "PRECO", "linha": "TR", "quantidade": 9},
-        {"ano": 2026, "mes": 1, "status": "PERDIDO", "motivo_perda": "PRECO", "linha": "TR", "quantidade": 2},
-        {"ano": 2026, "mes": 2, "status": "GANHO", "linha": "DT", "quantidade": 3},
+def test_perdas_e_linhas_operacionais_usam_somente_anfir_2026():
+    anfir = [
+        {"ano": 2025, "mes": 12, "status": "TK", "motivo": "Preço carrier mais alto", "linha": "TR", "quantidade": 9},
+        {"ano": 2026, "mes": 1, "status": "TK", "motivo": "Preço carrier mais alto", "linha": "TR", "quantidade": 2},
+        {"ano": 2026, "mes": 2, "status": "Carrier", "motivo": "", "linha": "DT", "quantidade": 3},
+        {"ano": 2026, "mes": 3, "status": "Nãoédessaregião", "motivo": "", "linha": "DD", "quantidade": 1},
     ]
-    somente_2026 = [item for item in historico if insights_router._ano_registro(item) == 2026]
 
-    perdas = insights_router._perdas_2026(somente_2026)
-    linhas = insights_router._linhas_2026(somente_2026)
+    perdas = insights_router._perdas_2026(anfir)
+    linhas = insights_router._linhas_2026(anfir)
 
+    assert perdas["fonte"] == "ANFIR_2026"
     assert perdas["total_perdido"] == 1
     assert perdas["mensal"][0] == 1
-    assert perdas["motivos"][0]["nome"] == "PRECO"
+    assert perdas["motivos"][0]["nome"] == "Preço carrier mais alto"
+    assert linhas["fonte"] == "ANFIR_2026"
     trailer = next(item for item in linhas["linhas"] if item["codigo"] == "trailer")
     diesel = next(item for item in linhas["linhas"] if item["codigo"] == "diesel_truck")
+    direct = next(item for item in linhas["linhas"] if item["codigo"] == "direct_drive")
     assert trailer["mensal"][0] == 2
     assert diesel["mensal"][1] == 3
+    assert direct["mensal"][2] == 1
     assert sum(trailer["mensal"]) == 2
+
+
+def test_status_anfir_carrier_e_invalidos_nao_viram_perda():
+    assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": "Carrier"}) is False
+    assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": "UsadoCarrier"}) is False
+    assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": "Nãoédessaregião"}) is False
+    assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": "Nãoébaúfrigorífico"}) is False
+    assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": ""}) is False
+
+
+def test_status_anfir_concorrentes_e_sem_contato_sao_perda_comercial():
+    for status in ("Nacional", "TK", "tk", "UsadoConcorrente", "Semcontato", "PERDIDO"):
+        assert insights_router._eh_perda_anfir_2026({"ano": 2026, "status": status}) is True
 
 
 def test_mes_registro_aceita_mes_numerico_textual_e_data_iso():
