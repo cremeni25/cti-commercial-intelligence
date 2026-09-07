@@ -264,11 +264,11 @@ def filtrar_carteira_exata_responsavel(
     usuario_id: str,
     nome_usuario: str,
 ) -> list[dict[str, Any]]:
-    """Seleciona responsabilidade canônica sem retroagir o CRM sobre a ANFIR.
+    """Seleciona a responsabilidade comercial sem transferir registros entre usuários.
 
     ANFIR = realizado passado: usa somente evidência histórica/territorial auditável.
-    Funil/Histórico e CRM = operação em trânsito/viva: preservam a identidade atual
-    do cliente e, na ausência dela, a responsabilidade explícita da própria fonte.
+    CRM e Histórico/Funil: quando o próprio registro informa responsável, essa autoria
+    prevalece. A carteira atual do cliente é somente fallback para registros sem autoria.
     """
     perfil = _perfil_usuario(str(usuario_id))
     territoriais = _usuarios_territoriais()
@@ -291,14 +291,9 @@ def filtrar_carteira_exata_responsavel(
                 saida.append(registro)
             continue
 
-        cliente = _cliente_reconciliado(registro, por_nome, por_cnpj) if (por_nome or por_cnpj) else None
-        if cliente:
-            responsavel_id = str(cliente.get("responsavel_comercial_id") or "")
-            if responsavel_id:
-                if responsavel_id == str(usuario_id):
-                    saida.append(registro)
-                continue
-
+        # Em fontes operacionais, a autoria do próprio registro é a verdade primária.
+        # Isso impede que uma oportunidade criada por Anderson apareça para Michele apenas
+        # porque o cliente foi posteriormente atribuído à carteira atual de Michele.
         responsavel_id_fonte = _responsavel_id_registro(registro)
         if responsavel_id_fonte:
             if responsavel_id_fonte == str(usuario_id):
@@ -306,10 +301,20 @@ def filtrar_carteira_exata_responsavel(
             continue
 
         responsavel_fonte = _fold(_responsavel_registro(registro))
-        if responsavel_fonte and any(
-            responsavel_fonte == chave or responsavel_fonte.startswith(chave)
-            for chave in chaves_nome
-        ):
-            saida.append(registro)
+        if responsavel_fonte:
+            if any(
+                responsavel_fonte == chave or responsavel_fonte.startswith(chave)
+                for chave in chaves_nome
+            ):
+                saida.append(registro)
+            continue
+
+        cliente = _cliente_reconciliado(registro, por_nome, por_cnpj) if (por_nome or por_cnpj) else None
+        if cliente:
+            responsavel_id = str(cliente.get("responsavel_comercial_id") or "")
+            if responsavel_id:
+                if responsavel_id == str(usuario_id):
+                    saida.append(registro)
+                continue
 
     return saida
