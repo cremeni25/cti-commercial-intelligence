@@ -62,6 +62,39 @@ export type MapaEquipeVisao = {
   }
 }
 
+export type MapaInsights = {
+  escopo: {
+    consolidado: boolean
+    modo: "TODA_EQUIPE" | "RESPONSAVEL"
+    responsavel_id?: string | null
+    responsavel_nome: string
+    regra: string
+  }
+  regioes: Array<{
+    id: string
+    nome: string
+    codigo_regional?: string | null
+    ddds: string[]
+    mercado_2026: number
+    clientes_mercado: number
+    crm_ativos: number
+    pipeline_ativo: number
+  }>
+  evolucao_linhas: Array<{
+    ano: number
+    trailer: number
+    diesel_truck: number
+    direct_drive: number
+    nao_classificado: number
+  }>
+  perdas: {
+    total_registros_com_motivo: number
+    motivos: Array<{ nome: string; quantidade: number }>
+    por_linha: Array<{ nome: string; quantidade: number }>
+    por_ano: Array<{ nome: string; quantidade: number }>
+  }
+}
+
 export type TurnoContextual = {
   role: "user" | "assistant"
   content: string
@@ -99,6 +132,14 @@ export async function getMapaEquipeVisao(responsavelId?: string | null): Promise
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?${qs.toString()}`, { cache: "no-store" })
   return interpretarResposta<MapaEquipeVisao>(resposta)
+}
+
+export async function getMapaInsights(responsavelId?: string | null): Promise<MapaInsights> {
+  const qs = new URLSearchParams()
+  if (responsavelId) qs.set("responsavel_id", responsavelId)
+  const sufixo = qs.toString() ? `?${qs.toString()}` : ""
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/insights${sufixo}`, { cache: "no-store" })
+  return interpretarResposta<MapaInsights>(resposta)
 }
 
 export async function getMapaEquipeInteligencia(responsavelId?: string | null): Promise<MapaEquipeInteligencia> {
