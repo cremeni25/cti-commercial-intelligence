@@ -63,7 +63,7 @@ export type MapaEquipeVisao = {
 }
 
 export type TurnoContextual = {
-  role: "user" | "assistant"
+  role: string
   content: string
 }
 
@@ -110,11 +110,14 @@ export async function perguntarMapaEquipeInteligencia(
   const qs = new URLSearchParams()
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
+  const historicoSeguro = historico
+    .filter((turno) => turno.role === "user" || turno.role === "assistant")
+    .slice(-8)
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia/perguntar${sufixo}`, {
     method: "POST",
     cache: "no-store",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pergunta, historico: historico.slice(-8) }),
+    body: JSON.stringify({ pergunta, historico: historicoSeguro }),
   })
   return interpretarResposta<MapaEquipeInteligencia>(resposta)
 }
