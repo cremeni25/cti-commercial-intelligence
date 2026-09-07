@@ -14,16 +14,20 @@ import { useI18n, type MessageKey } from "@/core/i18n"
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 
 type LocalizedLabel = { "pt-BR": string; en: string; es: string }
-type MenuItem = { labelKey?: MessageKey; label?: LocalizedLabel; href: string; icon: string | StaticImageData; type: "emoji" | "image" }
+type MenuItem = { labelKey?: MessageKey; label?: LocalizedLabel; href: string; icon: string | StaticImageData; type: "emoji" | "image"; aliases?: string[] }
 type MenuGroup = { tituloKey?: MessageKey; titulo?: LocalizedLabel; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
   {
     titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" },
     itens: [
-      { labelKey: "nav.dashboard", href: "/dashboard", icon: "📊", type: "emoji" },
-      { labelKey: "nav.history", href: "/historico-comercial", icon: "🗂️", type: "emoji" },
-      { label: { "pt-BR": "Mapa Comercial Estratégico", en: "Strategic Commercial Map", es: "Mapa Comercial Estratégico" }, href: "/mapa-estrategico", icon: "🌎", type: "emoji" },
+      {
+        label: { "pt-BR": "Inteligência Comercial", en: "Commercial Intelligence", es: "Inteligencia Comercial" },
+        href: "/inteligencia-comercial",
+        aliases: ["/dashboard", "/historico-comercial", "/mapa-estrategico", "/inteligencia"],
+        icon: "◎",
+        type: "emoji",
+      },
       { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
     ],
   },
@@ -81,7 +85,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
   if (href === "/upload") return gestao
-  if (href === "/dashboard" || href === "/inteligencia") return gestao || tem(permissoes, "dashboard_executivo")
+  if (href === "/dashboard" || href === "/inteligencia" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
   if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")
@@ -115,7 +119,7 @@ export default function Sidebar() {
             <div key={`${grupo.tituloKey || tituloGrupo}-${index}`}>
               <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{tituloGrupo}</p>
               {itensPermitidos.map((item) => {
-                const active = pathname === item.href
+                const active = pathname === item.href || Boolean(item.aliases?.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`)))
                 const label = item.labelKey ? t(item.labelKey) : item.label?.[locale] || item.href
                 return (
                   <Link
