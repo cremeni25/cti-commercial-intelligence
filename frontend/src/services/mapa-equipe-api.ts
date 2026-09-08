@@ -99,7 +99,7 @@ export type MapaInsights = {
     } & LeituraComercial>
     nao_classificado_2026: number
     unidades_sem_mes: number
-    fonte: "HISTORICO_FUNIL_2026"
+    fonte: "ANFIR_2026"
   }
   perdas: {
     ano: 2026
@@ -133,6 +133,8 @@ export type MapaEquipeInteligencia = {
   fontes_contextuais?: FonteContextual[]
 }
 
+const MAPA_TIMEOUT_MS = 25000
+
 async function interpretarResposta<T>(resposta: Response): Promise<T> {
   const payload = await resposta.json().catch(() => null)
   if (!resposta.ok) {
@@ -144,10 +146,25 @@ async function interpretarResposta<T>(resposta: Response): Promise<T> {
   return payload as T
 }
 
+async function fetchMapaComTimeout(path: string): Promise<Response> {
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), MAPA_TIMEOUT_MS)
+  try {
+    return await fetchCrmSeguroProxy(path, { cache: "no-store", signal: controller.signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("A leitura comercial demorou além do limite seguro. Atualize a tela para tentar novamente.")
+    }
+    throw error
+  } finally {
+    window.clearTimeout(timer)
+  }
+}
+
 export async function getMapaEquipeVisao(responsavelId?: string | null): Promise<MapaEquipeVisao> {
   const qs = new URLSearchParams({ periodo: "ANO_ATUAL", contexto: "viena_sp" })
   if (responsavelId) qs.set("responsavel_id", responsavelId)
-  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?${qs.toString()}`, { cache: "no-store" })
+  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/visao?${qs.toString()}`)
   return interpretarResposta<MapaEquipeVisao>(resposta)
 }
 
@@ -155,7 +172,7 @@ export async function getMapaInsights(responsavelId?: string | null): Promise<Ma
   const qs = new URLSearchParams()
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
-  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/insights${sufixo}`, { cache: "no-store" })
+  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/insights${sufixo}`)
   return interpretarResposta<MapaInsights>(resposta)
 }
 
