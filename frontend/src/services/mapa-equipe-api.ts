@@ -25,6 +25,8 @@ export type MapaEquipeVisao = {
     participacao_regiao_no_mercado_real_pct: number
     familias: { trailer: number; diesel_truck: number; direct_drive: number }
     clientes_unicos: number
+    participacoes_equipe?: Array<{ id: string; nome: string; mercado: number; participacao_pct?: number }>
+    mercado_real_sem_carteira?: number
   }
   evidencias: {
     historico_registros_2026: number
@@ -112,6 +114,19 @@ export type MapaInsights = {
   } & LeituraComercial
 }
 
+export type MapaDrilldown = {
+  camada: "anfir" | "historico" | "crm"
+  campo?: string | null
+  valor?: string | null
+  familia?: string | null
+  total_registros: number
+  pagina: number
+  limite: number
+  total_paginas: number
+  metadata?: Record<string, unknown>
+  registros: Record<string, unknown>[]
+}
+
 export type TurnoContextual = {
   role: "user" | "assistant"
   content: string
@@ -174,6 +189,11 @@ export async function getMapaInsights(responsavelId?: string | null): Promise<Ma
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
   const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/insights${sufixo}`)
   return interpretarResposta<MapaInsights>(resposta)
+}
+
+export async function getMapaDrilldown(query: string): Promise<MapaDrilldown> {
+  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/detalhamento?${query}`)
+  return interpretarResposta<MapaDrilldown>(resposta)
 }
 
 export async function getMapaEquipeInteligencia(responsavelId?: string | null): Promise<MapaEquipeInteligencia> {
