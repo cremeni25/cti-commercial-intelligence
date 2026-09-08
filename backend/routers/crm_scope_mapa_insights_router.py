@@ -232,15 +232,22 @@ def _leitura_linha(nome: str, serie: list[int], total_real: int | None = None) -
             f"Não há movimento ANFIR 2026 classificado com segurança para {nome} nesta seleção.",
             "Não forçar conclusão. Primeiro garantir classificação correta da linha nos registros ANFIR 2026.",
         )
+    total_com_mes = sum(serie)
+    if total_com_mes <= 0:
+        return (
+            f"{nome} soma {total} unidade(s) no mercado ANFIR 2026, mas não há competência mensal suficiente para afirmar pico, crescimento ou retração.",
+            "Preservar o total da linha e qualificar a competência mensal antes de produzir leitura de tendência.",
+        )
     pico = max(range(12), key=lambda i: serie[i])
-    ultimo_mes = max((i for i, valor in enumerate(serie) if valor > 0), default=0)
+    ultimo_mes = max(i for i, valor in enumerate(serie) if valor > 0)
     janela = serie[max(0, ultimo_mes - 2): ultimo_mes + 1]
     tendencia = "estável"
     if len(janela) >= 2 and janela[-1] > janela[0]:
         tendencia = "em alta"
     elif len(janela) >= 2 and janela[-1] < janela[0]:
         tendencia = "em queda"
-    leitura = f"{nome} soma {total} unidade(s) no mercado ANFIR 2026; o maior volume mensal ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}."
+    cobertura = "" if total_com_mes == total else f" A leitura mensal cobre {total_com_mes} de {total} unidade(s) com competência identificada."
+    leitura = f"{nome} soma {total} unidade(s) no mercado ANFIR 2026; entre as unidades com mês informado, o maior volume ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}.{cobertura}"
     if tendencia == "em queda":
         acao = "Revisar os clientes desta linha com movimento no início do ano e queda recente, priorizando recuperação comercial antes de ampliar prospecção fria."
     elif tendencia == "em alta":
