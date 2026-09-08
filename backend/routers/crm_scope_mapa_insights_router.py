@@ -20,6 +20,7 @@ from routers.crm_scope_mapa_equipe_router import (
 )
 from services.commercial_client_scope import filtrar_anfir_por_responsavel_comercial
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
+from services.mapa_line_market import composicao_marca_linha
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-insights"])
@@ -224,8 +225,8 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
     return sorted(saida, key=lambda item: (-int(item["mercado_2026"]), str(item["nome"])))
 
 
-def _leitura_linha(nome: str, serie: list[int]) -> tuple[str, str]:
-    total = sum(serie)
+def _leitura_linha(nome: str, serie: list[int], total_real: int | None = None) -> tuple[str, str]:
+    total = sum(serie) if total_real is None else total_real
     if total <= 0:
         return (
             f"Não há movimento ANFIR 2026 classificado com segurança para {nome} nesta seleção.",
@@ -239,7 +240,7 @@ def _leitura_linha(nome: str, serie: list[int]) -> tuple[str, str]:
         tendencia = "em alta"
     elif len(janela) >= 2 and janela[-1] < janela[0]:
         tendencia = "em queda"
-    leitura = f"{nome} soma {total} registro(s) no ANFIR 2026; o maior volume ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}."
+    leitura = f"{nome} soma {total} unidade(s) no mercado ANFIR 2026; o maior volume mensal ocorreu em {MESES[pico]} e a sequência mais recente está {tendencia}."
     if tendencia == "em queda":
         acao = "Revisar os clientes desta linha com movimento no início do ano e queda recente, priorizando recuperação comercial antes de ampliar prospecção fria."
     elif tendencia == "em alta":
@@ -256,32 +257,38 @@ def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
         "Direct Drive": _serie_12(),
         "Não classificado": _serie_12(),
     }
+    itens_por_linha: dict[str, list[dict[str, Any]]] = {nome: [] for nome in series}
     sem_mes = 0
     for item in anfir:
         if _ano_registro(item) not in (None, 2026):
             continue
         linha = _linha_nome(item)
+        itens_por_linha[linha].append(item)
         quantidade = _quantidade(item, 1)
         if not _somar_mes(series[linha], item, quantidade):
             sem_mes += quantidade
 
     blocos = []
     for chave, codigo in (("Trailer", "trailer"), ("Diesel Truck", "diesel_truck"), ("Direct Drive", "direct_drive")):
-        leitura, acao = _leitura_linha(chave, series[chave])
+        composicao = composicao_marca_linha(itens_por_linha[chave])
+        total_real = int(composicao["mercado"])
+        leitura, acao = _leitura_linha(chave, series[chave], total_real)
         blocos.append({
             "codigo": codigo,
             "nome": chave,
-            "total_2026": sum(series[chave]),
+            "total_2026": total_real,
             "mensal": series[chave],
+            "composicao_marca": composicao,
             "leitura_comercial": leitura,
             "acao_recomendada": acao,
         })
     return {
         "meses": list(MESES),
         "linhas": blocos,
-        "nao_classificado_2026": sum(series["Não classificado"]),
+        "nao_classificado_2026": sum(_quantidade(item, 1) for item in itens_por_linha["Não classificado"]),
         "unidades_sem_mes": sem_mes,
         "fonte": "ANFIR_2026",
+        "regra_calculo": "PRIMEIRO_LINHA_DEPOIS_MARCA; MESMO_DENOMINADOR; FECHAMENTO_100_PCT",
     }
 
 
