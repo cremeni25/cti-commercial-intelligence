@@ -1,12 +1,30 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { getSupabaseClient } from "@/core/database/supabase"
 import { getMapaEquipeVisao, getMapaInsights, type MapaEquipeVisao, type MapaInsights } from "@/services/mapa-equipe-api"
 
-type MercadoMacro = { total: number; foraDisputa: number; real: number }
+type MercadoMacro = {
+  total: number
+  foraDisputa: number
+  real: number
+  segmentos: Array<{
+    codigo: "TR" | "DT" | "DD"
+    segmento: string
+    mercado: number
+    carrier: number
+    carrier_percentual_observado: number
+    tk: number
+    nacional: number
+    usado_concorrente: number
+    usado_carrier: number
+    sem_contato: number
+    nao_classificado: number
+  }>
+}
 type FocoInteligencia = "geral" | "regioes" | "linhas" | "perdas"
 
 const focos: Array<{ id: FocoInteligencia; titulo: string; apoio: string }> = [
@@ -39,7 +57,6 @@ export default function Page() {
   }, [responsavelId])
 
   useEffect(() => {
-    if (!dados?.pode_selecionar_responsavel) return
     let ativo = true
     void (async () => {
       try {
@@ -47,24 +64,30 @@ export default function Page() {
         const { data, error } = await supabase.auth.getSession()
         const token = data.session?.access_token
         if (error || !token) return
-        const resposta = await fetch("/api/cti/analytics/anfir-workbook-2026", {
+        const qs = new URLSearchParams()
+        if (responsavelId) qs.set("responsavel_id", responsavelId)
+        const resposta = await fetch(`/api/cti/analytics/anfir-workbook-2026${qs.toString() ? `?${qs.toString()}` : ""}`, {
           cache: "no-store",
           headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
         })
         if (!resposta.ok) return
-        const payload = await resposta.json() as { mercado_viena?: { mercado_anfir_total?: number; mercado_fora_escopo_comercial?: number; mercado_disputavel_viena?: number } }
+        const payload = await resposta.json() as {
+          mercado_viena?: { mercado_anfir_total?: number; mercado_fora_escopo_comercial?: number; mercado_disputavel_viena?: number }
+          inteligencia_viena?: { segmentos?: MercadoMacro["segmentos"] }
+        }
         if (!ativo || !payload.mercado_viena) return
         setMercadoMacro({
           total: Number(payload.mercado_viena.mercado_anfir_total || 0),
           foraDisputa: Number(payload.mercado_viena.mercado_fora_escopo_comercial || 0),
           real: Number(payload.mercado_viena.mercado_disputavel_viena || 0),
+          segmentos: Array.isArray(payload.inteligencia_viena?.segmentos) ? payload.inteligencia_viena!.segmentos! : [],
         })
       } catch {
-        // O consolidado é opcional; a visão individual permanece protegida por login.
+        // Complemento de leitura; a visão principal permanece protegida pelo backend seguro.
       }
     })()
     return () => { ativo = false }
-  }, [dados?.pode_selecionar_responsavel])
+  }, [responsavelId])
 
   const familiaTotal = useMemo(() => {
     if (!dados) return 0
@@ -106,14 +129,7 @@ export default function Page() {
           {loading && <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando informações comerciais...</div>}
 
           {!loading && dados && insights && (
-            <VisaoComercial
-              dados={dados}
-              insights={insights}
-              mercadoMacro={mercadoMacro}
-              familiaTotal={familiaTotal}
-              foco={foco}
-              setFoco={setFoco}
-            />
+            <VisaoComercial dados={dados} insights={insights} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} foco={foco} setFoco={setFoco} />
           )}
         </div>
       </section>
@@ -131,15 +147,15 @@ function VisaoComercial({ dados, insights, mercadoMacro, familiaTotal, foco, set
 }) {
   const ticketPipeline = dados.evidencias.crm_ativos > 0 ? dados.evidencias.crm_valor_ativo / dados.evidencias.crm_ativos : 0
   const consolidado = insights.escopo.consolidado
+  const hrefAnfir = detalheHref({ camada: "anfir", titulo: "Mercado ANFIR 2026", subtitulo: "Unidades que formam este total" })
+  const hrefCrm = detalheHref({ camada: "crm", titulo: "Negociações em andamento", subtitulo: "Negócios ativos que formam este total" })
 
   return <>
     <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {consolidado
-        ? <Kpi titulo="Mercado Real Viena" valor={dados.mercado.mercado_real_viena_2026} apoio="ANFIR 2026" destaque="emerald" />
-        : <Kpi titulo="Meu mercado 2026" valor={dados.mercado.mercado_real_selecao_2026} apoio={dados.selecao.nome} destaque="emerald" />}
-      <Kpi titulo={consolidado ? "Mercado identificado" : "Clientes no meu mercado"} valor={consolidado ? dados.mercado.mercado_real_selecao_2026 : dados.mercado.clientes_unicos} apoio={dados.selecao.nome} destaque="cyan" />
-      <Kpi titulo="Negociações em andamento" valor={dados.evidencias.crm_ativos} apoio="CRM atual" destaque="emerald" />
-      <Kpi titulo="Pipeline atual" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} apoio={dados.evidencias.crm_ativos ? `ticket médio ${formatarMoeda(ticketPipeline)}` : "sem negócios ativos"} />
+      <Kpi href={detalheHref({ camada: "anfir", mercado: "DISPUTAVEL_VIENA", titulo: consolidado ? "Mercado Real Viena 2026" : "Meu mercado 2026", subtitulo: "Registros ANFIR do mercado comercial disputável" })} titulo={consolidado ? "Mercado Real Viena" : "Meu mercado 2026"} valor={consolidado ? dados.mercado.mercado_real_viena_2026 : dados.mercado.mercado_real_selecao_2026} apoio="ANFIR 2026 · abrir unidades" destaque="emerald" />
+      <Kpi href={hrefAnfir} titulo={consolidado ? "Mercado identificado" : "Clientes no meu mercado"} valor={consolidado ? dados.mercado.mercado_real_selecao_2026 : dados.mercado.clientes_unicos} apoio={`${dados.selecao.nome} · abrir evidências`} destaque="cyan" />
+      <Kpi href={hrefCrm} titulo="Negociações em andamento" valor={dados.evidencias.crm_ativos} apoio="CRM atual · abrir negócios" destaque="emerald" />
+      <Kpi href={hrefCrm} titulo="Pipeline atual" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} apoio={dados.evidencias.crm_ativos ? `ticket médio ${formatarMoeda(ticketPipeline)}` : "sem negócios ativos"} />
     </section>
 
     <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -151,9 +167,9 @@ function VisaoComercial({ dados, insights, mercadoMacro, familiaTotal, foco, set
       ))}
     </section>
 
-    {foco === "geral" && <VisaoGeral dados={dados} mercadoMacro={consolidado ? mercadoMacro : null} familiaTotal={familiaTotal} consolidado={consolidado} ticketPipeline={ticketPipeline} />}
+    {foco === "geral" && <VisaoGeral dados={dados} mercadoMacro={mercadoMacro} familiaTotal={familiaTotal} consolidado={consolidado} ticketPipeline={ticketPipeline} />}
     {foco === "regioes" && <VisaoRegioes insights={insights} />}
-    {foco === "linhas" && <VisaoLinhas insights={insights} />}
+    {foco === "linhas" && <VisaoLinhas insights={insights} mercadoMacro={mercadoMacro} />}
     {foco === "perdas" && <VisaoPerdas insights={insights} />}
 
     <details className="rounded-2xl border border-slate-700/50 bg-[#061126] px-5 py-4">
@@ -168,20 +184,46 @@ function VisaoComercial({ dados, insights, mercadoMacro, familiaTotal, foco, set
 }
 
 function VisaoGeral({ dados, mercadoMacro, familiaTotal, consolidado, ticketPipeline }: { dados: MapaEquipeVisao; mercadoMacro: MercadoMacro | null; familiaTotal: number; consolidado: boolean; ticketPipeline: number }) {
-  return <section className="grid gap-4 xl:grid-cols-2">
-    <div className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
-      <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Mercado 2026</p>
-      <h2 className="mt-1 text-xl font-bold">Como o mercado está dividido</h2>
-      {consolidado && mercadoMacro ? <div className="mt-5"><BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} /></div> : <p className="mt-4 text-sm text-slate-400">Visão individual do mercado vinculado ao login atual.</p>}
-      <div className="mt-6 border-t border-slate-700/50 pt-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[.14em] text-slate-500">Composição por linha</p>
-        <div className="space-y-3"><BarraComercial nome="Trailer" valor={dados.mercado.familias.trailer} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Diesel Truck" valor={dados.mercado.familias.diesel_truck} total={Math.max(1, familiaTotal)} /><BarraComercial nome="Direct Drive" valor={dados.mercado.familias.direct_drive} total={Math.max(1, familiaTotal)} /></div>
+  const semCrm = Math.max(0, dados.ciclo.clientes_mercado_real - dados.ciclo.crm_com_evidencia_anfir)
+  return <section className="space-y-4">
+    <div className="grid gap-4 xl:grid-cols-2">
+      <div className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Base executiva auditável · ANFIR 2026</p>
+        <h2 className="mt-1 text-xl font-bold">Mercado total → retiradas → mercado real Viena</h2>
+        <p className="mt-2 text-sm text-slate-400">Número e percentual sobre a mesma base. Toque nos totais para abrir as unidades que os formam.</p>
+        {mercadoMacro ? <div className="mt-5"><BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} /></div> : <p className="mt-4 text-sm text-slate-500">Aguardando composição auditável do mercado.</p>}
+        <div className="mt-6 border-t border-slate-700/50 pt-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[.14em] text-slate-500">Composição por linha</p>
+          <div className="space-y-3">
+            <BarraComercial href={detalheHref({ camada: "anfir", familia: "trailer", titulo: "Trailer · ANFIR 2026", subtitulo: "Unidades que formam o total de Trailer" })} nome="Trailer" valor={dados.mercado.familias.trailer} total={Math.max(1, familiaTotal)} />
+            <BarraComercial href={detalheHref({ camada: "anfir", familia: "diesel_truck", titulo: "Diesel Truck · ANFIR 2026", subtitulo: "Unidades que formam o total de Diesel Truck" })} nome="Diesel Truck" valor={dados.mercado.familias.diesel_truck} total={Math.max(1, familiaTotal)} />
+            <BarraComercial href={detalheHref({ camada: "anfir", familia: "direct_drive", titulo: "Direct Drive · ANFIR 2026", subtitulo: "Unidades que formam o total de Direct Drive" })} nome="Direct Drive" valor={dados.mercado.familias.direct_drive} total={Math.max(1, familiaTotal)} />
+          </div>
+        </div>
+      </div>
+      <div className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5">
+        <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-xl font-bold">Como estão os negócios em andamento</h2></div><Link href={detalheHref({ camada: "crm", titulo: "CRM atual", subtitulo: "Negócios ativos da seleção atual" })} className="text-right"><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativos</strong><span className="block text-[10px] text-slate-500">abrir negócios</span></Link></div>
+        <div className="mt-5 space-y-3">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraComercial key={item.nome} nome={item.nome.replaceAll("_", " ")} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas nesta seleção.</p>}</div>
+        <div className="mt-6 grid gap-3 border-t border-slate-700/50 pt-4 sm:grid-cols-2"><MiniKpi rotulo="Pipeline" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} /><MiniKpi rotulo="Ticket médio" valor={formatarMoeda(ticketPipeline)} /></div>
       </div>
     </div>
-    <div className="rounded-3xl border border-emerald-500/20 bg-[#061126] p-5">
-      <div className="flex items-center justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-emerald-300">CRM atual</p><h2 className="mt-1 text-xl font-bold">Como estão os negócios em andamento</h2></div><strong className="text-emerald-300">{dados.evidencias.crm_ativos} ativos</strong></div>
-      <div className="mt-5 space-y-3">{dados.evidencias.crm_status.length ? dados.evidencias.crm_status.map((item) => <BarraComercial key={item.nome} nome={item.nome.replaceAll("_", " ")} valor={item.quantidade} total={Math.max(1, dados.evidencias.crm_registros)} />) : <p className="text-sm text-slate-500">Sem negociações ativas nesta seleção.</p>}</div>
-      <div className="mt-6 grid gap-3 border-t border-slate-700/50 pt-4 sm:grid-cols-2"><MiniKpi rotulo="Pipeline" valor={formatarMoeda(dados.evidencias.crm_valor_ativo)} /><MiniKpi rotulo="Ticket médio" valor={formatarMoeda(ticketPipeline)} /></div>
+
+    <div className="rounded-3xl border border-violet-500/20 bg-[#061126] p-5">
+      <p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Caminho comercial</p>
+      <h2 className="mt-1 text-xl font-bold">Do mercado observado ao acompanhamento comercial</h2>
+      <p className="mt-2 text-sm text-slate-400">As fontes permanecem separadas; a correlação mostra onde houve acompanhamento e onde o mercado apareceu sem evidência de CRM.</p>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <MiniKpi rotulo="Clientes no mercado ANFIR" valor={dados.ciclo.clientes_mercado_real} />
+        <MiniKpi rotulo="Clientes no Histórico/Funil" valor={dados.ciclo.clientes_historico_2026} />
+        <MiniKpi rotulo="Clientes no CRM" valor={dados.ciclo.clientes_crm} />
+        <MiniKpi rotulo="CRM com evidência ANFIR" valor={dados.ciclo.crm_com_evidencia_anfir} />
+        <MiniKpi rotulo="Mercado sem evidência de CRM" valor={semCrm} destaque="amber" />
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+        <Link className="rounded-lg border border-cyan-700 px-3 py-2 text-cyan-200 hover:border-cyan-400" href={detalheHref({ camada: "anfir", titulo: "Mercado ANFIR 2026", subtitulo: "Registros que sustentam o mercado observado" })}>Abrir ANFIR</Link>
+        <Link className="rounded-lg border border-violet-700 px-3 py-2 text-violet-200 hover:border-violet-400" href={detalheHref({ camada: "historico", titulo: "Histórico/Funil 2026", subtitulo: "Registros comerciais históricos da seleção" })}>Abrir Histórico/Funil</Link>
+        <Link className="rounded-lg border border-emerald-700 px-3 py-2 text-emerald-200 hover:border-emerald-400" href={detalheHref({ camada: "crm", titulo: "CRM atual", subtitulo: "Negócios ativos da seleção" })}>Abrir CRM</Link>
+      </div>
     </div>
   </section>
 }
@@ -209,21 +251,25 @@ function VisaoRegioes({ insights }: { insights: MapaInsights }) {
   </section>
 }
 
-function VisaoLinhas({ insights }: { insights: MapaInsights }) {
+function VisaoLinhas({ insights, mercadoMacro }: { insights: MapaInsights; mercadoMacro: MercadoMacro | null }) {
   return <section className="space-y-4">
     <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
       <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha · 2026</p>
       <h2 className="mt-1 text-xl font-bold">Como cada linha está se movimentando no ano</h2>
-      <p className="mt-2 text-sm text-slate-400">Leitura baseada no Histórico/Funil 2026 da seleção atual. Sem comparação com anos anteriores nesta tela.</p>
+      <p className="mt-2 text-sm text-slate-400">Movimento mensal ANFIR 2026 e leitura competitiva observada na própria base. Carrier observado não é apresentado como market share oficial.</p>
     </div>
     <div className="grid gap-4 xl:grid-cols-3">
-      {insights.linhas_2026.linhas.map((linha) => (
-        <article key={linha.codigo} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
-          <div className="flex items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-[.14em] text-slate-500">Linha de produto</p><h3 className="mt-1 text-lg font-bold">{linha.nome}</h3></div><strong className="text-2xl text-cyan-300">{linha.total_2026}</strong></div>
+      {insights.linhas_2026.linhas.map((linha) => {
+        const codigo = linha.codigo === "trailer" ? "TR" : linha.codigo === "diesel_truck" ? "DT" : "DD"
+        const competitivo = mercadoMacro?.segmentos.find((item) => item.codigo === codigo)
+        const concorrencia = competitivo ? competitivo.tk + competitivo.nacional + competitivo.usado_concorrente : 0
+        return <article key={linha.codigo} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5">
+          <div className="flex items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-[.14em] text-slate-500">Linha de produto</p><h3 className="mt-1 text-lg font-bold">{linha.nome}</h3></div><Link href={detalheHref({ camada: "anfir", familia: linha.codigo, titulo: `${linha.nome} · ANFIR 2026`, subtitulo: "Unidades individualizadas desta linha" })} className="text-right"><strong className="text-2xl text-cyan-300">{linha.total_2026}</strong><span className="block text-[10px] text-slate-500">abrir unidades</span></Link></div>
           <div className="mt-4"><GraficoLinha valores={linha.mensal} meses={insights.linhas_2026.meses} rotulo={`Movimento mensal de ${linha.nome}`} /></div>
+          {competitivo && <div className="mt-4"><ComparativoCompetitivo mercado={competitivo.mercado} carrier={competitivo.carrier} concorrencia={concorrencia} semContato={competitivo.sem_contato} /></div>}
           <LeituraAcao leitura={linha.leitura_comercial} acao={linha.acao_recomendada} />
         </article>
-      ))}
+      })}
     </div>
     {insights.linhas_2026.nao_classificado_2026 > 0 && <p className="px-1 text-xs text-amber-300">Há {insights.linhas_2026.nao_classificado_2026} unidade(s) de 2026 ainda sem linha classificada; elas não foram forçadas para Trailer, Diesel Truck ou Direct Drive.</p>}
   </section>
@@ -234,7 +280,7 @@ function VisaoPerdas({ insights }: { insights: MapaInsights }) {
   const totalLinhas = Math.max(1, insights.perdas.por_linha.reduce((s, item) => s + item.quantidade, 0))
   return <section className="space-y-4">
     <div className="rounded-3xl border border-amber-500/20 bg-[#061126] p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Perdas comerciais · 2026</p><h2 className="mt-1 text-xl font-bold">Onde perdemos e por quê</h2></div><div className="text-right"><strong className="text-3xl text-amber-300">{insights.perdas.total_perdido}</strong><p className="text-xs text-slate-500">perdas registradas</p></div></div>
+      <div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[.16em] text-amber-300">Perdas comerciais · 2026</p><h2 className="mt-1 text-xl font-bold">Onde perdemos e por quê</h2></div><Link href={detalheHref({ camada: "anfir", titulo: "Perdas identificadas · ANFIR 2026", subtitulo: "Registros ANFIR para análise de perda" })} className="text-right"><strong className="text-3xl text-amber-300">{insights.perdas.total_perdido}</strong><p className="text-xs text-slate-500">perdas registradas · abrir base</p></Link></div>
       <div className="mt-5"><GraficoLinha valores={insights.perdas.mensal} meses={insights.meses} rotulo="Evolução mensal das perdas em 2026" /></div>
       <LeituraAcao leitura={insights.perdas.leitura_comercial} acao={insights.perdas.acao_recomendada} destaque="amber" />
     </div>
@@ -261,13 +307,8 @@ function GraficoLinha({ valores, meses, rotulo }: { valores: number[]; meses: st
   const margemX = 22
   const margemY = 18
   const passo = (largura - margemX * 2) / 11
-  const pontos = serie.map((valor, i) => {
-    const x = margemX + i * passo
-    const y = altura - margemY - (valor / maximo) * (altura - margemY * 2)
-    return { x, y, valor }
-  })
+  const pontos = serie.map((valor, i) => ({ x: margemX + i * passo, y: altura - margemY - (valor / maximo) * (altura - margemY * 2), valor }))
   const caminho = pontos.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
-
   return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-3" aria-label={rotulo}>
     <svg viewBox={`0 0 ${largura} ${altura + 26}`} className="h-48 w-full" role="img">
       <line x1={margemX} y1={altura - margemY} x2={largura - margemX} y2={altura - margemY} stroke="currentColor" className="text-slate-700" strokeWidth="1" />
@@ -278,24 +319,49 @@ function GraficoLinha({ valores, meses, rotulo }: { valores: number[]; meses: st
   </div>
 }
 
-function Kpi({ titulo, valor, apoio, destaque }: { titulo: string; valor: string | number; apoio?: string; destaque?: "cyan" | "emerald" }) {
+function ComparativoCompetitivo({ mercado, carrier, concorrencia, semContato }: { mercado: number; carrier: number; concorrencia: number; semContato: number }) {
+  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4">
+    <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-slate-500">Leitura competitiva observada</p>
+    <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"><MiniKpi rotulo="Mercado" valor={mercado} /><MiniKpi rotulo="Carrier observado" valor={`${carrier} · ${pct(carrier, mercado).toFixed(1)}%`} /><MiniKpi rotulo="Concorrência identificada" valor={`${concorrencia} · ${pct(concorrencia, mercado).toFixed(1)}%`} destaque="amber" /><MiniKpi rotulo="Sem contato" valor={semContato} /></div>
+  </div>
+}
+
+function Kpi({ titulo, valor, apoio, destaque, href }: { titulo: string; valor: string | number; apoio?: string; destaque?: "cyan" | "emerald"; href?: string }) {
   const cor = destaque === "emerald" ? "text-emerald-300" : destaque === "cyan" ? "text-cyan-300" : "text-white"
-  return <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4"><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p><div className={`mt-2 text-2xl font-bold ${cor}`}>{valor}</div>{apoio && <p className="mt-1 text-xs text-slate-500">{apoio}</p>}</div>
+  const conteudo = <><p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p><div className={`mt-2 text-2xl font-bold ${cor}`}>{valor}</div>{apoio && <p className="mt-1 text-xs text-slate-500">{apoio}</p>}</>
+  return href ? <Link href={href} className="rounded-2xl border border-[#17304d] bg-[#071226] p-4 transition hover:border-cyan-500/60 hover:bg-[#08162d]">{conteudo}</Link> : <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-4">{conteudo}</div>
 }
 
-function MiniKpi({ rotulo, valor }: { rotulo: string; valor: string | number }) {
-  return <div className="rounded-xl border border-[#17304d] bg-[#09152a] p-3"><p className="text-[10px] uppercase tracking-[.12em] text-slate-500">{rotulo}</p><strong className="mt-1 block text-lg text-white">{valor}</strong></div>
+function MiniKpi({ rotulo, valor, destaque }: { rotulo: string; valor: string | number; destaque?: "amber" }) {
+  return <div className="rounded-xl border border-[#17304d] bg-[#09152a] p-3"><p className="text-[10px] uppercase tracking-[.12em] text-slate-500">{rotulo}</p><strong className={`mt-1 block text-lg ${destaque === "amber" ? "text-amber-300" : "text-white"}`}>{valor}</strong></div>
 }
 
-function BarraComercial({ nome, valor, total }: { nome: string; valor: number; total: number }) {
+function BarraComercial({ nome, valor, total, href }: { nome: string; valor: number; total: number; href?: string }) {
   const percentual = pct(valor, total)
-  return <div><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor} · {percentual.toFixed(0)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, percentual)}%` }} /></div></div>
+  const corpo = <><div className="mb-1.5 flex items-center justify-between gap-3 text-xs"><span className="font-medium text-slate-300">{nome}</span><span className="font-semibold text-cyan-300">{valor} · {percentual.toFixed(0)}%</span></div><div className="h-3 overflow-hidden rounded-full bg-[#0b2040]"><div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, percentual)}%` }} /></div></>
+  return href ? <Link href={href} className="block rounded-lg p-1 transition hover:bg-cyan-500/5" title="Abrir registros que formam este total">{corpo}</Link> : <div>{corpo}</div>
 }
 
 function BarraMercado({ total, fora, real }: { total: number; fora: number; real: number }) {
   const foraPct = pct(fora, total)
   const realPct = pct(real, total)
-  return <div><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Mercado total" valor={total} /><MiniKpi rotulo="Fora da disputa" valor={fora} /><MiniKpi rotulo="Mercado real Viena" valor={real} /></div><div className="mt-4 flex h-5 overflow-hidden rounded-full bg-slate-900" aria-label="Composição do mercado ANFIR 2026"><div className="bg-amber-500" style={{ width: `${foraPct}%` }} /><div className="bg-emerald-500" style={{ width: `${realPct}%` }} /></div><div className="mt-2 flex flex-wrap justify-end gap-4 text-xs"><span className="text-amber-300">Fora da disputa {foraPct.toFixed(1)}%</span><span className="text-emerald-300">Mercado real {realPct.toFixed(1)}%</span></div></div>
+  return <div>
+    <div className="grid gap-3 sm:grid-cols-3">
+      <Link href={detalheHref({ camada: "anfir", titulo: "Mercado total ANFIR 2026", subtitulo: "Todos os registros da base ANFIR no recorte autorizado" })}><MiniKpi rotulo="1 · Mercado total ANFIR" valor={`${total} · 100%`} /></Link>
+      <MiniKpi rotulo="2 · Empresas retiradas" valor={`${fora} · ${foraPct.toFixed(1)}%`} destaque="amber" />
+      <Link href={detalheHref({ camada: "anfir", mercado: "DISPUTAVEL_VIENA", titulo: "Mercado Real Viena 2026", subtitulo: "Registros após retirada das implementadoras fora do escopo comercial" })}><MiniKpi rotulo="3 · Mercado Real Viena" valor={`${real} · ${realPct.toFixed(1)}%`} /></Link>
+    </div>
+    <div className="mt-4 flex h-5 overflow-hidden rounded-full bg-slate-900" aria-label="Composição do mercado ANFIR 2026"><div className="bg-amber-500" style={{ width: `${foraPct}%` }} /><div className="bg-emerald-500" style={{ width: `${realPct}%` }} /></div>
+    <div className="mt-2 flex flex-wrap justify-end gap-4 text-xs"><span className="text-amber-300">Retirado {foraPct.toFixed(1)}%</span><span className="text-emerald-300">Mercado real {realPct.toFixed(1)}%</span></div>
+  </div>
+}
+
+function detalheHref({ camada, familia, mercado, titulo, subtitulo }: { camada: "anfir" | "historico" | "crm"; familia?: string; mercado?: string; titulo: string; subtitulo: string }) {
+  const qs = new URLSearchParams({ camada, titulo, subtitulo })
+  if (camada !== "crm") { qs.set("contexto", "viena_sp"); qs.set("periodo", "ANO_ATUAL") }
+  if (familia) qs.set("familia", familia)
+  if (mercado) qs.set("mercado", mercado)
+  return `/detalhamento?${qs.toString()}`
 }
 
 function pct(valor: number, total: number) { return total > 0 ? (valor / total) * 100 : 0 }
