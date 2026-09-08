@@ -44,27 +44,24 @@ def test_master_pode_consolidar_sem_responsavel(monkeypatch):
     assert len(equipe) == 2
 
 
-def test_mercado_por_responsavel_nao_usa_ddd_como_fallback(monkeypatch):
-    monkeypatch.setattr(scope, "_mapas_clientes", lambda: ({}, {}))
-    monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {"id": usuario_id, "nome": "Nathan Beljato"})
-    registro_so_territorial = {"cliente": "Cliente sem responsável", "ddd": "011"}
-
-    resultado = scope.filtrar_anfir_por_responsavel_comercial(
-        [registro_so_territorial],
-        "nathan-id",
-        "Nathan Beljato",
-    )
-    assert resultado == []
-
-
-def test_mercado_por_responsavel_prioriza_responsavel_comercial_do_cliente(monkeypatch):
+def test_mercado_por_responsavel_nao_usa_ddd_nem_carteira_atual_como_fallback(monkeypatch):
     cliente = {"nome": "Cliente A", "responsavel_comercial_id": "monica-id"}
     monkeypatch.setattr(scope, "_mapas_clientes", lambda: ({scope._fold("Cliente A"): cliente}, {}))
     monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {"id": usuario_id, "nome": "Monica Almeida" if usuario_id == "monica-id" else "Nathan Beljato"})
-    registro = {"cliente": "Cliente A", "ddd": "011"}
+    sem_autor = {"ano": 2026, "cliente": "Cliente A", "ddd": "011"}
 
-    assert scope.filtrar_anfir_por_responsavel_comercial([registro], "nathan-id", "Nathan Beljato") == []
-    assert scope.filtrar_anfir_por_responsavel_comercial([registro], "monica-id", "Monica Almeida") == [registro]
+    assert scope.filtrar_anfir_por_responsavel_comercial([sem_autor], "nathan-id", "Nathan Beljato") == []
+    assert scope.filtrar_anfir_por_responsavel_comercial([sem_autor], "monica-id", "Monica Almeida") == []
+
+
+def test_mercado_por_responsavel_preserva_autoria_explicita_da_anfir(monkeypatch):
+    cliente = {"nome": "Cliente A", "responsavel_comercial_id": "monica-id"}
+    monkeypatch.setattr(scope, "_mapas_clientes", lambda: ({scope._fold("Cliente A"): cliente}, {}))
+    monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {"id": usuario_id, "nome": "Monica Almeida" if usuario_id == "monica-id" else "Nathan Beljato"})
+    registro_nathan = {"ano": 2026, "cliente": "Cliente A", "ddd": "011", "responsavel": "NATHAN"}
+
+    assert scope.filtrar_anfir_por_responsavel_comercial([registro_nathan], "nathan-id", "Nathan Beljato") == [registro_nathan]
+    assert scope.filtrar_anfir_por_responsavel_comercial([registro_nathan], "monica-id", "Monica Almeida") == []
 
 
 def test_carteira_de_clientes_nao_inferida_por_regiao():
@@ -112,8 +109,8 @@ def test_perdas_e_linhas_operacionais_usam_somente_anfir_2026():
     linhas = insights_router._linhas_2026(anfir)
 
     assert perdas["fonte"] == "ANFIR_2026"
-    assert perdas["total_perdido"] == 1
-    assert perdas["mensal"][0] == 1
+    assert perdas["total_perdido"] == 2
+    assert perdas["mensal"][0] == 2
     assert perdas["motivos"][0]["nome"] == "Preço carrier mais alto"
     assert linhas["fonte"] == "ANFIR_2026"
     trailer = next(item for item in linhas["linhas"] if item["codigo"] == "trailer")

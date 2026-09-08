@@ -5,7 +5,6 @@ import unicodedata
 from typing import Any
 
 from core.supabase_client import supabase
-from services.operational_filters import resolver_ddd_registro
 
 CAMPOS_EMPRESA = (
     "empresa",
@@ -29,8 +28,8 @@ CAMPOS_RESPONSAVEL = (
 CAMPOS_RESPONSAVEL_ID = ("responsavel_id", "responsavel_comercial_id", "vendedor_id", "consultor_id")
 
 # Continuidade comercial homologada: CARLA é referência histórica e MÔNICA
-# assumiu integralmente a região. O alias só interpreta a fonte; nunca altera
-# o registro bruto.
+# assumiu integralmente a região. O alias interpreta a identidade histórica;
+# nunca altera o registro bruto nem transfere registros por território.
 ALIASES_RESPONSAVEL_ATUAL = {"CARLA": "MONICA"}
 
 
@@ -129,7 +128,8 @@ def _eh_anfir_realizado(registro: dict[str, Any]) -> bool:
     return (
         aba.startswith("RELATORIO PERFORMANCE ")
         or versao.startswith("3.1")
-        or pipeline == "UPLOAD_ANFIR_OPERACIONAL" and "REPRESENTACAO: JOV" in str(registro.get("ocorrencia") or "").upper()
+        or pipeline == "UPLOAD_ANFIR_OPERACIONAL"
+        and "REPRESENTACAO: JOV" in str(registro.get("ocorrencia") or "").upper()
     )
 
 
@@ -158,80 +158,27 @@ def _perfil_usuario(usuario_id: str) -> dict[str, Any]:
     return dados[0] if dados else {}
 
 
-def _usuarios_territoriais() -> list[dict[str, Any]]:
-    """Usuários comerciais com território explícito; gestores não recebem mercado por inferência."""
-    try:
-        dados = (
-            supabase.table("cti_users")
-            .select("id,nome,tipo_usuario,ddds,codigo_regional,ativo")
-            .eq("ativo", True)
-            .execute()
-            .data
-            or []
-        )
-    except Exception:
-        return []
-
-    saida = []
-    for item in dados:
-        tipo = str(item.get("tipo_usuario") or "").upper()
-        if tipo in {"ADMIN_MASTER", "DIRETOR_VIENA_SP"}:
-            continue
-        if not (tipo.startswith("REPRES_") or tipo.startswith("INDICADOR_")):
-            continue
-        if not item.get("ddds"):
-            continue
-        saida.append(item)
-    return saida
-
-
 def _anfir_pertence_ao_responsavel(
     registro: dict[str, Any],
     usuario_id: str,
     nome_usuario: str,
-    perfil: dict[str, Any],
-    territoriais: list[dict[str, Any]],
+    perfil: dict[str, Any] | None = None,
+    territoriais: list[dict[str, Any]] | None = None,
 ) -> bool:
-    """Resolve passado realizado somente com evidência auditável.
+    """Resolve ANFIR realizada exclusivamente pela autoria gravada na fonte.
 
-    1. Responsável explícito na própria ANFIR prevalece.
-    2. Sem responsável, DDD exclusivo pode atribuir ao único vendedor territorial.
-    3. Em DDD compartilhado, exige sub_regiao = codigo_regional.
-    4. Sem evidência suficiente, não atribui a ninguém.
+    Responsável explícito (id ou nome) prevalece. Registro sem responsável permanece
+    sem atribuição individual. DDD, sub-região, carteira atual e território nunca
+    reescrevem a autoria histórica da ANFIR.
     """
+    responsavel_id = _responsavel_id_registro(registro)
+    if responsavel_id:
+        return responsavel_id == str(usuario_id)
+
+    perfil = perfil or _perfil_usuario(str(usuario_id))
     nome_alvo = _primeiro_nome(perfil.get("nome") or nome_usuario)
     responsavel_fonte = _primeiro_nome(_responsavel_registro(registro))
-    if responsavel_fonte:
-        return bool(nome_alvo and responsavel_fonte == nome_alvo)
-
-    ddd = resolver_ddd_registro(registro)
-    if not ddd:
-        return False
-
-    candidatos = []
-    for item in territoriais:
-        ddds = {
-            _somente_digitos(valor)[-3:].zfill(3)
-            for valor in item.get("ddds") or []
-            if _somente_digitos(valor)
-        }
-        if ddd in ddds:
-            candidatos.append(item)
-
-    if len(candidatos) == 1:
-        return str(candidatos[0].get("id") or "") == str(usuario_id)
-
-    if len(candidatos) > 1:
-        sub_regiao = _fold(registro.get("sub_regiao"))
-        codigo_regional = _fold(perfil.get("codigo_regional"))
-        return bool(
-            sub_regiao
-            and codigo_regional
-            and sub_regiao == codigo_regional
-            and any(str(item.get("id") or "") == str(usuario_id) for item in candidatos)
-        )
-
-    return False
+    return bool(responsavel_fonte and nome_alvo and responsavel_fonte == nome_alvo)
 
 
 def filtrar_anfir_por_responsavel_comercial(
@@ -239,56 +186,36 @@ def filtrar_anfir_por_responsavel_comercial(
     usuario_id: str,
     nome_usuario: str,
 ) -> list[dict[str, Any]]:
-    """Atribui o mercado 2026 por responsabilidade efetiva, nunca pela localização.
+    """Filtra ANFIR 2026 pela autoria da própria ANFIR, sem transferência posterior.
 
-    Esta função é deliberadamente diferente da leitura histórica territorial:
-    1. cliente reconciliado com responsavel_comercial_id define o responsável atual;
-    2. sem cliente reconciliado, aceita responsável explícito existente na fonte ANFIR;
-    3. sem uma dessas evidências, o registro fica sem atribuição individual;
-    4. DDD, sub-região e código regional não distribuem mercado entre pessoas.
+    A carteira atual do cliente é outra dimensão comercial e não pode sobrescrever o
+    responsável histórico. Registros sem responsável não são inferidos por DDD.
     """
-    por_nome, por_cnpj = _mapas_clientes()
     perfil = _perfil_usuario(str(usuario_id))
-    nome_alvo = _primeiro_nome(perfil.get("nome") or nome_usuario)
-    saida: list[dict[str, Any]] = []
-
-    for registro in registros:
-        cliente = _cliente_reconciliado(registro, por_nome, por_cnpj) if (por_nome or por_cnpj) else None
-        if cliente:
-            responsavel_id = str(cliente.get("responsavel_comercial_id") or "").strip()
-            if responsavel_id:
-                if responsavel_id == str(usuario_id):
-                    saida.append(registro)
-                continue
-
-        responsavel_id_fonte = _responsavel_id_registro(registro)
-        if responsavel_id_fonte:
-            if responsavel_id_fonte == str(usuario_id):
-                saida.append(registro)
-            continue
-
-        responsavel_fonte = _primeiro_nome(_responsavel_registro(registro))
-        if responsavel_fonte and nome_alvo and responsavel_fonte == nome_alvo:
-            saida.append(registro)
-
-    return saida
+    return [
+        registro
+        for registro in registros
+        if _anfir_pertence_ao_responsavel(registro, str(usuario_id), nome_usuario, perfil)
+    ]
 
 
 def filtrar_por_responsabilidade_cliente(
     registros: list[dict[str, Any]],
     usuario_id: str,
 ) -> list[dict[str, Any]]:
-    """Refina um escopo territorial usando a responsabilidade comercial efetiva.
+    """Refina fontes de carteira atual pela responsabilidade comercial do cliente.
 
-    Registros sem cliente reconciliado continuam obedecendo ao filtro territorial anterior.
-    Quando há cliente reconciliado e responsável explícito, este prevalece. Assim uma conta
-    direta Master não reaparece para o vendedor apenas porque está fisicamente no território.
+    Esta função não deve ser usada para reatribuir ANFIR realizada.
     """
     por_nome, por_cnpj = _mapas_clientes()
     if not por_nome and not por_cnpj:
         return registros
     saida: list[dict[str, Any]] = []
     for registro in registros:
+        if _eh_anfir_realizado(registro):
+            # ANFIR não recebe responsabilidade a partir da carteira atual.
+            saida.append(registro)
+            continue
         cliente = _cliente_reconciliado(registro, por_nome, por_cnpj)
         if not cliente:
             saida.append(registro)
@@ -304,15 +231,12 @@ def filtrar_carteira_exata_responsavel(
     usuario_id: str,
     nome_usuario: str,
 ) -> list[dict[str, Any]]:
-    """Seleciona a responsabilidade comercial sem transferir registros entre usuários.
+    """Seleciona responsabilidade sem misturar autoria, carteira e território.
 
-    ANFIR = realizado passado: usa somente evidência histórica/territorial auditável.
-    CRM e Histórico/Funil: quando o próprio registro informa responsável, essa autoria
-    prevalece. A carteira atual do cliente é somente fallback para registros sem autoria.
+    ANFIR realizada usa exclusivamente a autoria da própria fonte. CRM e Funil usam a
+    autoria do registro; somente quando ela inexiste a carteira atual pode ser fallback.
     """
     perfil = _perfil_usuario(str(usuario_id))
-    territoriais = _usuarios_territoriais()
-
     por_nome, por_cnpj = _mapas_clientes()
     nome = str(nome_usuario or "").strip()
     primeiro_nome = nome.split(" ", 1)[0] if nome else ""
@@ -321,19 +245,10 @@ def filtrar_carteira_exata_responsavel(
 
     for registro in registros:
         if _eh_anfir_realizado(registro):
-            if _anfir_pertence_ao_responsavel(
-                registro,
-                str(usuario_id),
-                nome_usuario,
-                perfil,
-                territoriais,
-            ):
+            if _anfir_pertence_ao_responsavel(registro, str(usuario_id), nome_usuario, perfil):
                 saida.append(registro)
             continue
 
-        # Em fontes operacionais, a autoria do próprio registro é a verdade primária.
-        # Isso impede que uma oportunidade criada por Anderson apareça para Michele apenas
-        # porque o cliente foi posteriormente atribuído à carteira atual de Michele.
         responsavel_id_fonte = _responsavel_id_registro(registro)
         if responsavel_id_fonte:
             if responsavel_id_fonte == str(usuario_id):
@@ -352,9 +267,7 @@ def filtrar_carteira_exata_responsavel(
         cliente = _cliente_reconciliado(registro, por_nome, por_cnpj) if (por_nome or por_cnpj) else None
         if cliente:
             responsavel_id = str(cliente.get("responsavel_comercial_id") or "")
-            if responsavel_id:
-                if responsavel_id == str(usuario_id):
-                    saida.append(registro)
-                continue
+            if responsavel_id and responsavel_id == str(usuario_id):
+                saida.append(registro)
 
     return saida
