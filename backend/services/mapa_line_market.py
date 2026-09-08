@@ -5,6 +5,8 @@ import unicodedata
 from collections import Counter
 from typing import Any
 
+from core.supabase_client import supabase
+
 
 def _fold(valor: Any) -> str:
     texto = unicodedata.normalize("NFD", str(valor or "").strip().upper())
@@ -22,9 +24,9 @@ def _quantidade(item: dict[str, Any]) -> int:
         return 1
 
 
-def _fabricante_estruturado(item: dict[str, Any]) -> str | None:
-    bruto = _fold(item.get("fabricante_equipamento"))
-    if bruto in {"", "NAN", "NONE", "80", "#N/A", "N/A", "DOCUMENTACAO"}:
+def _normalizar_fabricante(valor: Any) -> str | None:
+    bruto = _fold(valor)
+    if bruto in {"", "0", "NAN", "NONE", "80", "#N/A", "N/A", "DOCUMENTACAO"}:
         return None
     aliases = {
         "CARRRIER": "CARRIER",
@@ -37,7 +39,44 @@ def _fabricante_estruturado(item: dict[str, Any]) -> str | None:
     return aliases.get(bruto, bruto)
 
 
-def composicao_marca_linha(registros: list[dict[str, Any]]) -> dict[str, Any]:
+def _fabricante_estruturado(item: dict[str, Any]) -> str | None:
+    return _normalizar_fabricante(item.get("fabricante_equipamento"))
+
+
+def _classificacoes_cti() -> dict[str, str]:
+    try:
+        dados = (
+            supabase.table("cti_anfir_concorrente_classificacao")
+            .select("anf_ir_id,fabricante_cti")
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return {}
+    return {
+        str(item.get("anf_ir_id")): str(item.get("fabricante_cti") or "").strip()
+        for item in dados
+        if item.get("anf_ir_id") and str(item.get("fabricante_cti") or "").strip()
+    }
+
+
+def _fabricante_override(item: dict[str, Any], overrides: dict[str, str], status: str) -> str | None:
+    registro_id = str(item.get("id") or "")
+    fabricante = _normalizar_fabricante(overrides.get(registro_id))
+    if not fabricante or fabricante == "CARRIER":
+        return None
+    if status in {"CARRIER", "TK"}:
+        return None
+    if status == "NACIONAL" and fabricante == "THERMO KING":
+        return None
+    return fabricante
+
+
+def composicao_marca_linha(
+    registros: list[dict[str, Any]],
+    classificacoes_cti: dict[str, str] | None = None,
+) -> dict[str, Any]:
     """Fecha 100% do mercado da linha antes de qualquer interpretação competitiva.
 
     Hierarquia obrigatória:
@@ -46,18 +85,24 @@ def composicao_marca_linha(registros: list[dict[str, Any]]) -> dict[str, Any]:
     3) depois outras marcas confirmadas;
     4) o que não tem evidência suficiente permanece como marca não discriminada.
 
-    Nenhuma unidade some do denominador e nenhuma marca é inventada.
+    Nenhuma unidade some do denominador e nenhuma marca é inventada. Quando existe uma
+    classificação de fabricante confirmada pelo Master na camada CTI, ela pode enriquecer a
+    marca sem alterar status/fabricante da fonte ANFIR original.
     """
     carrier = 0
     concorrentes: Counter[str] = Counter()
     nao_discriminada = 0
     total = 0
+    overrides = _classificacoes_cti() if classificacoes_cti is None else classificacoes_cti
 
     for item in registros:
         quantidade = _quantidade(item)
         total += quantidade
         status = _fold(item.get("status")).replace(" ", "")
         fabricante = _fabricante_estruturado(item)
+        fabricante_cti = _fabricante_override(item, overrides, status)
+        if fabricante_cti:
+            fabricante = fabricante_cti
 
         if status in {"CARRIER", "USADOCARRIER"}:
             carrier += quantidade
@@ -104,5 +149,5 @@ def composicao_marca_linha(registros: list[dict[str, Any]]) -> dict[str, Any]:
             {"nome": nome, "quantidade": quantidade, "percentual_mercado": pct(quantidade)}
             for nome, quantidade in concorrentes.most_common()
         ],
-        "regra": "LINHA_PRIMEIRO_DEPOIS_MARCA; TOTAL=100%; SEM_INFERENCIA_DE_MARCA",
+        "regra": "LINHA_PRIMEIRO_DEPOIS_MARCA; TOTAL=100%; SEM_INFERENCIA_DE_MARCA; CLASSIFICACAO_CTI_NAO_ALTERA_FONTE",
     }
