@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from services import commercial_client_scope as scope
+
 ROOT = Path(__file__).resolve().parents[2]
 ROUTER = ROOT / "backend" / "routers" / "crm_scope_mapa_equipe_router.py"
 SCOPE = ROOT / "backend" / "services" / "commercial_client_scope.py"
@@ -28,16 +30,25 @@ def test_macro_continua_sendo_uniao_das_mesmas_carteiras_individuais():
     assert '"mercado_real_sem_carteira"' in fonte
 
 
-def test_anfir_nao_retroage_responsabilidade_atual_do_cliente():
+def test_anfir_realizado_preserva_autoria_da_fonte_e_nao_usa_ddd(monkeypatch):
     fonte = SCOPE.read_text(encoding="utf-8")
-    assert "_eh_anfir_realizado" in fonte
-    assert "_anfir_pertence_ao_responsavel" in fonte
-    assert "resolver_ddd_registro" in fonte
-    assert 'ALIASES_RESPONSAVEL_ATUAL = {"CARLA": "MONICA"}' in fonte
-    assert "DDD exclusivo" in fonte
-    assert "sub_regiao = codigo_regional" in fonte
-    bloco = fonte.split("if _eh_anfir_realizado(registro):", 1)[1].split("responsavel_id_fonte = _responsavel_id_registro", 1)[0]
-    assert "_cliente_reconciliado" not in bloco
+    assert "resolver_ddd_registro" not in fonte
+    assert "_usuarios_territoriais" not in fonte
+
+    monkeypatch.setattr(scope, "_perfil_usuario", lambda usuario_id: {
+        "id": usuario_id,
+        "nome": "Monica Almeida" if usuario_id == "monica-id" else "Nathan Beljato",
+    })
+
+    sem_autor = {"ano": 2026, "cliente": "Cliente A", "ddd": "011"}
+    autor_monica = {"ano": 2026, "cliente": "Cliente A", "ddd": "011", "responsavel": "MÔNICA"}
+    autor_nathan = {"ano": 2026, "cliente": "Cliente A", "ddd": "011", "responsavel": "NATHAN"}
+
+    assert scope.filtrar_anfir_por_responsavel_comercial([sem_autor], "monica-id", "Monica Almeida") == []
+    assert scope.filtrar_anfir_por_responsavel_comercial([sem_autor], "nathan-id", "Nathan Beljato") == []
+    assert scope.filtrar_anfir_por_responsavel_comercial([autor_monica], "monica-id", "Monica Almeida") == [autor_monica]
+    assert scope.filtrar_anfir_por_responsavel_comercial([autor_monica], "nathan-id", "Nathan Beljato") == []
+    assert scope.filtrar_anfir_por_responsavel_comercial([autor_nathan], "nathan-id", "Nathan Beljato") == [autor_nathan]
 
 
 def test_crm_e_historico_priorizam_autoria_da_fonte_antes_da_carteira_atual():
@@ -48,4 +59,3 @@ def test_crm_e_historico_priorizam_autoria_da_fonte_antes_da_carteira_atual():
     pos_cliente = bloco.index("cliente = _cliente_reconciliado")
     assert pos_id_fonte < pos_cliente
     assert pos_nome_fonte < pos_cliente
-    assert "a autoria do próprio registro é a verdade primária" in bloco
