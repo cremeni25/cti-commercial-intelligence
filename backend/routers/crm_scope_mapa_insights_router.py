@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Depends
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.supabase_client import supabase
 from routers import strategic_layers_router as estrategia
 from routers.crm_scope_estrategia_router import FECHADOS
 from routers.crm_scope_mapa_equipe_router import (
@@ -88,7 +89,7 @@ def _ano_registro(item: dict[str, Any]) -> int | None:
     except (TypeError, ValueError):
         pass
 
-    for campo in ("data", "data_evento", "data_negociacao", "created_at", "updated_at"):
+    for campo in ("data", "data_evento", "data_negociacao", "data_abertura", "created_at", "updated_at"):
         bruto = str(item.get(campo) or "").strip()
         if not bruto:
             continue
@@ -110,7 +111,7 @@ def _mes_registro(item: dict[str, Any]) -> int | None:
             if chave in MESES_CHAVES:
                 return MESES_CHAVES[chave]
 
-    for campo in ("data", "data_evento", "data_negociacao", "created_at", "updated_at"):
+    for campo in ("data", "data_evento", "data_negociacao", "data_abertura", "created_at", "updated_at"):
         bruto = str(item.get(campo) or "").strip()
         if not bruto:
             continue
@@ -163,25 +164,55 @@ def _anfir_do_escopo(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any
     return _deduplicar(todos)
 
 
+def _clientes_carteira_atual(responsavel_id: str) -> int:
+    """Quantidade de clientes cuja responsabilidade comercial está explicitamente atribuída ao usuário."""
+    try:
+        resposta = (
+            supabase.table("clientes")
+            .select("id", count="exact")
+            .eq("responsavel_comercial_id", responsavel_id)
+            .execute()
+        )
+        count = getattr(resposta, "count", None)
+        if count is not None:
+            return int(count)
+        return len(resposta.data or [])
+    except Exception:
+        return 0
+
+
+def _clientes_anfir_unicos(registros: list[dict[str, Any]]) -> int:
+    return len({
+        str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip().upper()
+        for item in registros
+        if str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip()
+    })
+
+
+def _crm_2026(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """O bloco Regiões é 2026: CRM sem competência 2026 não entra nessa leitura."""
+    return [item for item in registros if _ano_registro(item) == 2026]
+
+
 def _acao_regiao(mercado: int, crm_ativos: int, pipeline: float) -> tuple[str, str]:
     if mercado <= 0:
         return (
-            "Não há mercado 2026 atribuído com responsabilidade comercial comprovada para este responsável.",
+            "Não há unidades ANFIR 2026 atribuídas com responsabilidade comercial comprovada para este responsável.",
             "Revisar somente a atribuição cadastral dos clientes; não redistribuir mercado por DDD.",
         )
     if crm_ativos == 0:
         return (
-            f"Há {mercado} registros de mercado atribuídos em 2026 e nenhuma negociação ativa no CRM.",
-            "Priorizar os clientes de maior recorrência/volume desta carteira e abrir atuação apenas quando houver contato comercial real.",
+            f"Há {mercado} unidade(s) de mercado atribuída(s) em 2026 e nenhuma negociação ativa de 2026 no CRM.",
+            "Priorizar os clientes da carteira com presença ANFIR e abrir atuação apenas quando houver contato comercial real.",
         )
     densidade = crm_ativos / mercado
     if densidade < 0.05:
         return (
-            f"O mercado atribuído é maior que a presença atual no CRM: {crm_ativos} negócio(s) ativo(s) para {mercado} registros de mercado.",
+            f"O mercado atribuído é maior que a presença atual no CRM 2026: {crm_ativos} negócio(s) ativo(s) para {mercado} unidade(s) de mercado.",
             "Aumentar cobertura comercial dos clientes já pertencentes ao responsável, começando pelos que aparecem no mercado 2026 e ainda não têm negociação ativa.",
         )
     return (
-        f"A carteira tem {crm_ativos} negócio(s) ativo(s), somando R$ {pipeline:,.0f}, sobre {mercado} registros de mercado 2026.",
+        f"A carteira tem {crm_ativos} negócio(s) ativo(s) de 2026, somando R$ {pipeline:,.0f}, sobre {mercado} unidade(s) de mercado 2026.",
         "Concentrar acompanhamento nos negócios ativos e replicar a abordagem nos clientes do mesmo perfil que ainda não entraram no CRM.",
     )
 
@@ -194,14 +225,17 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
     for registro in registros:
         responsavel = _usuario_regional(registro)
         anf = filtrar_anfir_por_responsavel_comercial(list(mercado_total), str(responsavel.id), responsavel.nome)
-        crm = _crm_carteira(responsavel, crm_base)
+        crm = _crm_2026(_crm_carteira(responsavel, crm_base))
         ativos = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
         serie = _serie_12()
         sem_mes = 0
         for item in anf:
-            if not _somar_mes(serie, item, 1):
-                sem_mes += 1
-        mercado = len(anf)
+            quantidade = _quantidade(item, 1)
+            if not _somar_mes(serie, item, quantidade):
+                sem_mes += quantidade
+        mercado = sum(_quantidade(item, 1) for item in anf)
+        clientes_carteira = _clientes_carteira_atual(str(responsavel.id))
+        clientes_anfir = _clientes_anfir_unicos(anf)
         pipeline = round(sum(_valor(item) for item in ativos), 2)
         leitura, acao = _acao_regiao(mercado, len(ativos), pipeline)
         saida.append({
@@ -210,15 +244,15 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
             "codigo_regional": registro.get("codigo_regional"),
             "ddds": registro.get("ddds") or [],
             "mercado_2026": mercado,
-            "clientes_mercado": len({
-                str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip().upper()
-                for item in anf
-                if str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip()
-            }),
+            "clientes_mercado": clientes_carteira,
+            "clientes_carteira": clientes_carteira,
+            "clientes_anfir_2026": clientes_anfir,
             "crm_ativos": len(ativos),
+            "crm_registros_2026": len(crm),
             "pipeline_ativo": pipeline,
             "mercado_mensal": serie,
             "registros_sem_mes": sem_mes,
+            "regra_metricas": "MERCADO=UNIDADES_ANFIR_2026; CLIENTES=CARTEIRA_EXPLICITA; CRM=OPORTUNIDADES_2026",
             "leitura_comercial": leitura,
             "acao_recomendada": acao,
         })
