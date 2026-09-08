@@ -29,6 +29,20 @@ def _fold(valor: Any) -> str:
     return " ".join(texto.split())
 
 
+def _quantidade(item: dict[str, Any], padrao: int = 1) -> int:
+    try:
+        valor = item.get("quantidade")
+        if valor in (None, ""):
+            return padrao
+        return max(0, int(float(valor)))
+    except (TypeError, ValueError):
+        return padrao
+
+
+def _unidades(registros: list[dict[str, Any]], padrao: int = 1) -> int:
+    return sum(_quantidade(item, padrao) for item in registros)
+
+
 def _pode_gerir(usuario: UsuarioAutenticado) -> bool:
     return _consolidado(usuario) or usuario.tipo_usuario == "DIRETOR_VIENA_SP"
 
@@ -80,7 +94,9 @@ def _resolver_alvo(usuario: UsuarioAutenticado, responsavel_id: str | None) -> t
 
 
 def _familias(registros: list[dict[str, Any]]) -> dict[str, int]:
-    contagem = Counter(classificar_linha(item) for item in registros)
+    contagem: Counter[str] = Counter()
+    for item in registros:
+        contagem[classificar_linha(item)] += _quantidade(item, 1)
     return {"trailer": int(contagem.get("TR", 0)), "diesel_truck": int(contagem.get("DT", 0)), "direct_drive": int(contagem.get("DD", 0))}
 
 
@@ -156,9 +172,10 @@ def _agregar_equipe(equipe: list[dict[str, Any]], mercado_total: list[dict[str, 
         anf_individual = _anfir_carteira(alvo, mercado_total)
         hist_individual = _historico_carteira(alvo, historico_base)
         crm_individual = _crm_carteira(alvo, crm_base)
-        soma_individual += len(anf_individual)
+        unidades_individuais = _unidades(anf_individual, 1)
+        soma_individual += unidades_individuais
         anf_todos.extend(anf_individual); hist_todos.extend(hist_individual); crm_todos.extend(crm_individual)
-        participacoes.append({"id": alvo.id, "nome": alvo.nome, "mercado": len(anf_individual)})
+        participacoes.append({"id": alvo.id, "nome": alvo.nome, "mercado": unidades_individuais})
     return _deduplicar(anf_todos), _deduplicar(hist_todos), _deduplicar(crm_todos), participacoes, soma_individual
 
 
@@ -191,18 +208,18 @@ def visao_equipe(responsavel_id: str | None = None, contexto: str = "viena-sp", 
     motivos_perda = Counter(str(item.get("motivo_perda") or "").strip().upper() for item in historico if item.get("motivo_perda"))
     clientes_anfir = _clientes(anf, _nome_cliente_anfir); clientes_hist = _clientes(historico, _nome_cliente_historico); clientes_crm = _clientes(crm, _nome_cliente_crm)
     universo_clientes = clientes_anfir | clientes_hist | clientes_crm; anf_hist = clientes_anfir & clientes_hist; anf_crm = clientes_anfir & clientes_crm; hist_crm = clientes_hist & clientes_crm; ponta_a_ponta = clientes_anfir & clientes_hist & clientes_crm
-    total_viena = len(mercado_total); total_regiao = len(anf); percentual_regiao = round((total_regiao / total_viena * 100), 1) if total_viena else 0.0; sobreposicoes = max(0, soma_individual - total_regiao) if alvo is None else 0
+    total_viena = _unidades(mercado_total, 1); total_regiao = _unidades(anf, 1); percentual_regiao = round((total_regiao / total_viena * 100), 1) if total_viena else 0.0; sobreposicoes = max(0, soma_individual - total_regiao) if alvo is None else 0
     for item in participacoes_equipe: item["participacao_pct"] = round((int(item["mercado"]) / total_viena * 100), 1) if total_viena else 0.0
     return {
         "regra": "ESCOPO_COMERCIAL_CANONICO_SOBRE_MERCADO_REAL_VIENA",
-        "metadata": {"contexto": "viena-sp", "periodo": "PERSONALIZADO", "inicio": inicio_efetivo.isoformat(), "fim": fim_efetivo.isoformat(), "escopo": escopo, "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026", "regra_identidade": "CLIENTE_RECONCILIADO_CTI > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE"},
+        "metadata": {"contexto": "viena-sp", "periodo": "PERSONALIZADO", "inicio": inicio_efetivo.isoformat(), "fim": fim_efetivo.isoformat(), "escopo": escopo, "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026", "regra_identidade": "ANFIR=AUTORIA_DA_FONTE; HISTORICO_CRM=AUTORIA_DO_REGISTRO_COM_CARTEIRA_ATUAL_APENAS_COMO_FALLBACK; DDD_NAO_ATRIBUI_RESPONSAVEL"},
         "pode_selecionar_responsavel": _pode_gerir(usuario),
         "equipe": [{"id": item.get("id"), "nome": item.get("nome"), "tipo_usuario": item.get("tipo_usuario"), "codigo_regional": item.get("codigo_regional"), "ddds": item.get("ddds") or []} for item in equipe],
         "selecao": selecao,
         "mercado": {"mercado_real_viena_2026": total_viena, "mercado_real_selecao_2026": total_regiao, "participacao_regiao_no_mercado_real_pct": percentual_regiao, "familias": _familias(anf), "clientes_unicos": len(clientes_anfir), "participacoes_equipe": participacoes_equipe, "soma_mercado_individual": soma_individual if alvo is None else total_regiao, "sobreposicoes_entre_carteiras": sobreposicoes, "mercado_real_sem_carteira": max(0, total_viena - total_regiao)},
-        "evidencias": {"historico_registros_2026": len(historico), "historico_unidades_2026": int(sum(int(item.get("quantidade") or 0) for item in historico)), "crm_registros": len(crm), "crm_ativos": len(crm_ativos), "crm_valor_ativo": round(sum(float(item.get("valor_estimado") or 0) for item in crm_ativos), 2), "crm_status": _ranking(status_crm), "motivos_perda_historico": _ranking(motivos_perda)},
+        "evidencias": {"historico_registros_2026": len(historico), "historico_unidades_2026": _unidades(historico, 0), "crm_registros": len(crm), "crm_ativos": len(crm_ativos), "crm_valor_ativo": round(sum(float(item.get("valor_estimado") or 0) for item in crm_ativos), 2), "crm_status": _ranking(status_crm), "motivos_perda_historico": _ranking(motivos_perda)},
         "reconciliacao": {"universo_clientes": len(universo_clientes), "clientes_anfir": len(clientes_anfir), "clientes_historico": len(clientes_hist), "clientes_crm": len(clientes_crm), "anfir_historico": len(anf_hist), "anfir_crm": len(anf_crm), "historico_crm": len(hist_crm), "nas_tres_fontes": len(ponta_a_ponta), "somente_anfir": len(clientes_anfir - clientes_hist - clientes_crm), "somente_historico": len(clientes_hist - clientes_anfir - clientes_crm), "somente_crm": len(clientes_crm - clientes_anfir - clientes_hist), "historico_fora_mercado_real": len(clientes_hist - clientes_anfir), "crm_fora_mercado_real": len(clientes_crm - clientes_anfir), "regra": "MESMO_CLIENTE_MESMO_RESPONSAVEL_MESMO_RECORTE; FONTES SAO EVIDENCIAS DIFERENTES"},
-        "ciclo": {"clientes_mercado_real": len(clientes_anfir), "clientes_historico_2026": len(clientes_hist), "clientes_crm": len(clientes_crm), "crm_com_evidencia_historico": len(hist_crm), "crm_com_evidencia_anfir": len(anf_crm), "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta), "nota": "As três fontes usam a mesma carteira canônica. A conciliação separa o mesmo universo de clientes do número de eventos registrados em cada fonte."},
+        "ciclo": {"clientes_mercado_real": len(clientes_anfir), "clientes_historico_2026": len(clientes_hist), "clientes_crm": len(clientes_crm), "crm_com_evidencia_historico": len(hist_crm), "crm_com_evidencia_anfir": len(anf_crm), "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta), "nota": "As fontes permanecem separadas: cliente é identidade única; ANFIR mede mercado realizado; Histórico/Funil mede eventos históricos; CRM mede oportunidades."},
     }
 
 
@@ -233,4 +250,5 @@ def detalhamento_mapa(camada: str, responsavel_id: str | None = None, campo: str
         else: registros = [item for item in registros if drill._corresponde(item, drill.CAMPOS[camada][campo], valor)]
     registros = drill._buscar(list(registros), busca); registros = drill._ordenar(registros, ordenar, direcao)
     pagina = max(1, pagina); limite = max(10, min(limite, 100)); total = len(registros); total_paginas = max(1, math.ceil(total / limite)) if total else 1; pagina = min(pagina, total_paginas); inicio = (pagina - 1) * limite; recorte = registros[inicio: inicio + limite]
-    return {"camada": camada, "campo": campo, "valor": valor, "familia": familia, "total_registros": total, "pagina": pagina, "limite": limite, "total_paginas": total_paginas, "metadata": {"origem": "MAPA_ESTRATEGICO_2026", "responsavel_id": str(alvo.id) if alvo is not None else None, "responsavel_nome": alvo.nome if alvo is not None else "Toda a equipe comercial", "escopo": "RESPONSAVEL" if alvo is not None else "TODA_EQUIPE", "somente_perdas": somente_perdas}, "registros": [drill._projetar(item, camada) for item in recorte]}
+    total_unidades = _unidades(registros, 1) if camada == "anfir" else None
+    return {"camada": camada, "campo": campo, "valor": valor, "familia": familia, "total_registros": total, "pagina": pagina, "limite": limite, "total_paginas": total_paginas, "metadata": {"origem": "MAPA_ESTRATEGICO_2026", "responsavel_id": str(alvo.id) if alvo is not None else None, "responsavel_nome": alvo.nome if alvo is not None else "Toda a equipe comercial", "escopo": "RESPONSAVEL" if alvo is not None else "TODA_EQUIPE", "somente_perdas": somente_perdas, "total_unidades": total_unidades, "regra_contagem": "ANFIR: total_registros=ocorrencias; total_unidades=soma_quantidade" if camada == "anfir" else "total_registros=eventos_da_fonte"}, "registros": [drill._projetar(item, camada) for item in recorte]}
