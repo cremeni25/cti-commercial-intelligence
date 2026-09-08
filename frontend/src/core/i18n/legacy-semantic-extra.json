@@ -18,5 +18,6 @@
   "Cidade": {"en": "City", "es": "Ciudad"},
   "Ação Master": {"en": "Master action", "es": "Acción Master"},
   "a edição acima cria apenas uma classificação comercial CTI vinculada ao registro. Status, fabricante e observação originais Carrier/JOV não são alterados.": {"en": "the edit above creates only a CTI commercial classification linked to the record. Original Carrier/JOV status, manufacturer and notes are not changed.", "es": "la edición anterior crea únicamente una clasificación comercial CTI vinculada al registro. El estado, fabricante y observación originales de Carrier/JOV no se modifican."},
-  "Buscar cliente, CNPJ, cidade ou concorrente...": {"en": "Search customer, tax ID, city or competitor...", "es": "Buscar cliente, CNPJ, ciudad o competidor..."}
+  "Buscar cliente, CNPJ, cidade ou concorrente...": {"en": "Search customer, tax ID, city or competitor...", "es": "Buscar cliente, CNPJ, ciudad o competidor..."},
+  "Abrir marcas informadas no arquivo": {"en": "Open brands identified in the source file", "es": "Abrir marcas identificadas en el archivo fuente"}
 }
