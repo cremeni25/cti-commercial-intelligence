@@ -235,6 +235,7 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
         mercado = sum(_quantidade(item, 1) for item in anf)
         clientes_carteira = _clientes_carteira_atual(str(responsavel.id))
         clientes_anfir = _clientes_anfir_unicos(anf)
+        negociacoes_anfir = len(anf)
         pipeline = round(sum(_valor(item) for item in ativos), 2)
         leitura, acao = _acao_regiao(mercado, len(ativos), pipeline)
         saida.append({
@@ -243,15 +244,16 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
             "codigo_regional": registro.get("codigo_regional"),
             "ddds": registro.get("ddds") or [],
             "mercado_2026": mercado,
-            "clientes_mercado": clientes_carteira,
+            "clientes_mercado": clientes_anfir,
             "clientes_carteira": clientes_carteira,
             "clientes_anfir_2026": clientes_anfir,
+            "negociacoes_anfir_2026": negociacoes_anfir,
             "crm_ativos": len(ativos),
             "crm_registros_2026": len(crm),
             "pipeline_ativo": pipeline,
             "mercado_mensal": serie,
             "registros_sem_mes": sem_mes,
-            "regra_metricas": "MERCADO=UNIDADES_ANFIR_2026; CLIENTES=CARTEIRA_EXPLICITA; CRM=OPORTUNIDADES_2026",
+            "regra_metricas": "MERCADO=UNIDADES_ANFIR_2026; CLIENTES=CLIENTES_UNICOS_ANFIR_2026; NEGOCIACOES=OCORRENCIAS_ANFIR_2026; CARTEIRA=RESPONSABILIDADE_ATUAL; CRM=OPORTUNIDADES_2026",
             "leitura_comercial": leitura,
             "acao_recomendada": acao,
         })
@@ -367,30 +369,35 @@ def _acao_perda(motivos: Counter[str], linhas: Counter[str], total_perdido: int)
     else:
         acao = "Atacar primeiro o motivo dominante com plano por cliente e linha; medir no ANFIR seguinte se a incidência do mesmo motivo começa a cair."
     return (
-        f"No ANFIR 2026, o motivo mais frequente é {motivo} ({qtd} caso(s)); a maior concentração por linha está em {linha}.",
+        f"No ANFIR 2026, o motivo mais frequente é {motivo} ({qtd} unidade(s)); a maior concentração por linha está em {linha}.",
         acao,
     )
 
 
 def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
     perdidos = [item for item in anfir if _eh_perda_anfir_2026(item)]
-    motivos = Counter(
-        str(item.get("motivo") or "").strip()
-        for item in perdidos
-        if str(item.get("motivo") or "").strip()
-    )
-    linhas = Counter(_linha_nome(item) for item in perdidos)
+    motivos: Counter[str] = Counter()
+    linhas: Counter[str] = Counter()
     mensal = _serie_12()
     sem_mes = 0
+    total_perdido = 0
+    total_com_motivo = 0
     for item in perdidos:
-        if not _somar_mes(mensal, item, 1):
-            sem_mes += 1
-    leitura, acao = _acao_perda(motivos, linhas, len(perdidos))
+        quantidade = _quantidade(item, 1)
+        total_perdido += quantidade
+        motivo = str(item.get("motivo") or "").strip()
+        if motivo:
+            motivos[motivo] += quantidade
+            total_com_motivo += quantidade
+        linhas[_linha_nome(item)] += quantidade
+        if not _somar_mes(mensal, item, quantidade):
+            sem_mes += quantidade
+    leitura, acao = _acao_perda(motivos, linhas, total_perdido)
     return {
         "ano": 2026,
         "fonte": "ANFIR_2026",
-        "total_perdido": len(perdidos),
-        "total_com_motivo": sum(motivos.values()),
+        "total_perdido": total_perdido,
+        "total_com_motivo": total_com_motivo,
         "motivos": [{"nome": nome, "quantidade": qtd} for nome, qtd in motivos.most_common(10)],
         "por_linha": [{"nome": nome, "quantidade": qtd} for nome, qtd in linhas.most_common()],
         "mensal": mensal,
