@@ -68,8 +68,6 @@ def _perfil_usuario(usuario_id: str) -> dict[str, Any]:
             or []
         )
     except Exception:
-        # Segurança fail-closed: se o perfil territorial não puder ser resolvido,
-        # o usuário não recebe clientes sem responsabilidade explícita.
         return {}
     return dados[0] if dados else {}
 
@@ -79,13 +77,11 @@ def _cliente_no_escopo(cliente: dict[str, Any], usuario: UsuarioAutenticado) -> 
         return True
 
     responsavel = str(cliente.get("responsavel_comercial_id") or "").strip()
-    if responsavel:
-        return responsavel == str(usuario.id)
-
-    perfil = _perfil_usuario(str(usuario.id))
-    codigo_usuario = _codigo_regional(perfil.get("codigo_regional"))
-    codigo_cliente = _codigo_regional(cliente.get("sub_regiao"))
-    return bool(codigo_usuario and codigo_cliente and codigo_usuario == codigo_cliente)
+    if not responsavel:
+        # Fail-closed: carteira comercial é responsabilidade explícita.
+        # DDD, região ou sub-região não atribuem automaticamente um cliente a um usuário.
+        return False
+    return responsavel == str(usuario.id)
 
 
 def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None = None) -> list[dict[str, Any]]:
