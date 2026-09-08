@@ -6,68 +6,25 @@ import { useRouter, useSearchParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { getDrilldown, type DrilldownResultado } from "@/services/modulos-api"
+import { getMapaDrilldown } from "@/services/mapa-equipe-api"
 
 const ROTULOS: Record<string, string> = {
-  aba_origem: "Aba",
-  linha_origem: "Linha",
-  data: "Data",
-  ano: "Ano",
-  cliente: "Cliente",
-  cliente_nome: "Cliente",
-  empresa: "Empresa",
-  transportadora: "Transportadora",
-  equipamento: "Equipamento",
-  modelo: "Modelo",
-  linha: "Linha / família",
-  linha_equipamentos: "Linha / família",
-  produto: "Produto",
-  quantidade: "Quantidade",
-  valor_unitario: "Valor unitário",
-  valor_total: "Valor total",
-  valor_estimado: "Valor estimado",
-  valor: "Valor",
-  representante_original: "Responsável original",
-  representante_atual: "Responsável atual",
-  status: "Status",
-  motivo_perda: "Motivo de perda",
-  canal_venda: "Canal",
-  implementadora: "Implementadora",
-  estado: "UF",
-  cidade: "Cidade",
-  municipio: "Município",
-  ddd: "DDD",
-  ddd_workbook: "DDD auditado",
-  categoria_workbook: "Categoria ANFIR",
-  causa_workbook: "Causa estratégica",
-  temas_workbook: "Temas da observação",
-  previsao: "Previsão",
-  probabilidade: "Probabilidade",
-  observacao: "Observação",
-  titulo: "Título",
-  data_fechamento_prevista: "Fechamento previsto",
-  created_at: "Criado em",
+  aba_origem: "Aba", linha_origem: "Linha", data: "Data", ano: "Ano", cliente: "Cliente", cliente_nome: "Cliente",
+  empresa: "Empresa", transportadora: "Transportadora", equipamento: "Equipamento", modelo: "Modelo", linha: "Linha / família",
+  linha_equipamentos: "Linha / família", produto: "Produto", quantidade: "Quantidade", valor_unitario: "Valor unitário",
+  valor_total: "Valor total", valor_estimado: "Valor estimado", valor: "Valor", representante_original: "Responsável original",
+  representante_atual: "Responsável atual", status: "Status", motivo_perda: "Motivo de perda", canal_venda: "Canal",
+  implementadora: "Implementadora", estado: "UF", cidade: "Cidade", municipio: "Município", ddd: "DDD", ddd_workbook: "DDD auditado",
+  categoria_workbook: "Categoria ANFIR", causa_workbook: "Causa estratégica", temas_workbook: "Temas da observação", previsao: "Previsão",
+  probabilidade: "Probabilidade", observacao: "Observação", titulo: "Título", data_fechamento_prevista: "Fechamento previsto", created_at: "Criado em",
 }
 
 export default function DetalhamentoPage() {
-  return (
-    <Suspense fallback={<TelaCarregando />}>
-      <DetalhamentoContent />
-    </Suspense>
-  )
+  return <Suspense fallback={<TelaCarregando />}><DetalhamentoContent /></Suspense>
 }
 
 function TelaCarregando() {
-  return (
-    <main className="flex min-h-screen bg-[#020817] text-white">
-      <Sidebar />
-      <section className="min-w-0 flex-1 overflow-x-hidden">
-        <Topbar />
-        <div className="p-4 sm:p-6 lg:p-8">
-          <div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando detalhamento do indicador...</div>
-        </div>
-      </section>
-    </main>
-  )
+  return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar /><section className="min-w-0 flex-1 overflow-x-hidden"><Topbar /><div className="p-4 sm:p-6 lg:p-8"><div className="rounded-2xl border border-[#17304d] bg-[#071226] p-6 text-slate-400">Carregando detalhamento do indicador...</div></div></section></main>
 }
 
 function DetalhamentoContent() {
@@ -82,16 +39,19 @@ function DetalhamentoContent() {
 
   const titulo = params.get("titulo") || "Detalhamento do indicador"
   const subtitulo = params.get("subtitulo") || "Registros que formam o total selecionado"
+  const origemMapa = params.get("origem") === "mapa"
 
   const queryBase = useMemo(() => {
-    const permitido = ["camada", "campo", "valor", "familia", "empresa", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao", "mercado"]
+    const permitido = origemMapa
+      ? ["camada", "campo", "valor", "familia", "responsavel_id", "ordenar", "direcao", "somente_perdas"]
+      : ["camada", "campo", "valor", "familia", "empresa", "contexto", "periodo", "uf", "ddd", "inicio", "fim", "ordenar", "direcao", "mercado"]
     const destino = new URLSearchParams()
     permitido.forEach((chave) => {
       const valor = params.get(chave)
       if (valor) destino.set(chave, valor)
     })
     return destino
-  }, [params])
+  }, [params, origemMapa])
 
   useEffect(() => {
     let ativo = true
@@ -103,13 +63,14 @@ function DetalhamentoContent() {
       if (buscaAplicada.trim()) query.set("busca", buscaAplicada.trim())
       setLoading(true)
       setErro("")
-      getDrilldown(query.toString())
-        .then((resultado) => { if (ativo) setDados(resultado) })
+      const requisicao = origemMapa ? getMapaDrilldown(query.toString()) : getDrilldown(query.toString())
+      requisicao
+        .then((resultado) => { if (ativo) setDados(resultado as DrilldownResultado) })
         .catch((error) => { if (ativo) setErro(error instanceof Error ? error.message : "Não foi possível carregar os registros deste indicador.") })
         .finally(() => { if (ativo) setLoading(false) })
     })
     return () => { ativo = false }
-  }, [queryBase, pagina, buscaAplicada])
+  }, [queryBase, pagina, buscaAplicada, origemMapa])
 
   const colunas = useMemo(() => {
     const conjunto = new Set<string>()
@@ -131,12 +92,11 @@ function DetalhamentoContent() {
         <div className="space-y-5 p-4 sm:p-6 lg:p-8">
           <header className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <button onClick={() => router.back()} className="mb-4 inline-flex items-center gap-2 rounded-xl border border-[#17304d] bg-[#071226] px-4 py-2 text-sm text-cyan-200 transition hover:border-cyan-500/60 hover:bg-[#0a1b32]">
-                <ArrowLeft size={16} /> Voltar à tela anterior
-              </button>
+              <button onClick={() => router.back()} className="mb-4 inline-flex items-center gap-2 rounded-xl border border-[#17304d] bg-[#071226] px-4 py-2 text-sm text-cyan-200 transition hover:border-cyan-500/60 hover:bg-[#0a1b32]"><ArrowLeft size={16} /> Voltar à tela anterior</button>
               <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Rastreabilidade do indicador</p>
               <h1 className="mt-2 text-2xl font-bold sm:text-3xl">{titulo}</h1>
               <p className="mt-2 text-sm text-slate-400">{subtitulo}</p>
+              {origemMapa && <p className="mt-2 text-xs text-emerald-300">Recorte protegido pelo mesmo escopo comercial do Mapa Estratégico.</p>}
             </div>
             {dados && <div className="rounded-2xl border border-cyan-500/30 bg-cyan-950/20 px-5 py-4 text-right"><p className="text-xs uppercase tracking-wider text-slate-500">Total do recorte</p><strong className="mt-1 block text-3xl text-cyan-300">{dados.total_registros.toLocaleString("pt-BR")}</strong></div>}
           </header>
@@ -153,11 +113,7 @@ function DetalhamentoContent() {
             <section className="overflow-hidden rounded-2xl border border-[#17304d] bg-[#071226]">
               {dados.registros.length === 0 ? <div className="p-8 text-center text-slate-500">Nenhum registro encontrado neste recorte.</div> : <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-[#08162d] text-left text-xs uppercase tracking-wide text-slate-500"><tr>{colunas.map((chave) => <th key={chave} className="whitespace-nowrap px-4 py-3">{ROTULOS[chave] || chave.replaceAll("_", " ")}</th>)}</tr></thead><tbody className="divide-y divide-[#13203f]">{dados.registros.map((registro, indice) => <tr key={`${pagina}-${indice}`} className="align-top hover:bg-[#08162d]/60">{colunas.map((chave) => <td key={chave} className="max-w-[360px] whitespace-normal px-4 py-3 text-slate-300">{formatar(registro[chave], chave)}</td>)}</tr>)}</tbody></table></div>}
             </section>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#17304d] bg-[#071226] p-3 text-sm">
-              <span className="text-slate-400">Página {dados.pagina} de {dados.total_paginas} · até {dados.limite} registros por página</span>
-              <div className="flex gap-2"><button disabled={dados.pagina <= 1} onClick={() => setPagina((p) => Math.max(1, p - 1))} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40"><ChevronLeft size={16}/> Anterior</button><button disabled={dados.pagina >= dados.total_paginas} onClick={() => setPagina((p) => p + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40">Próxima <ChevronRight size={16}/></button></div>
-            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#17304d] bg-[#071226] p-3 text-sm"><span className="text-slate-400">Página {dados.pagina} de {dados.total_paginas} · até {dados.limite} registros por página</span><div className="flex gap-2"><button disabled={dados.pagina <= 1} onClick={() => setPagina((p) => Math.max(1, p - 1))} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40"><ChevronLeft size={16}/> Anterior</button><button disabled={dados.pagina >= dados.total_paginas} onClick={() => setPagina((p) => p + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40">Próxima <ChevronRight size={16}/></button></div></div>
           </>}
         </div>
       </section>
