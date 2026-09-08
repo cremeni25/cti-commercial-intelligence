@@ -167,16 +167,15 @@ def _anfir_do_escopo(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any
 def _clientes_carteira_atual(responsavel_id: str) -> int:
     """Quantidade de clientes cuja responsabilidade comercial está explicitamente atribuída ao usuário."""
     try:
-        resposta = (
+        dados = (
             supabase.table("clientes")
-            .select("id", count="exact")
+            .select("id")
             .eq("responsavel_comercial_id", responsavel_id)
             .execute()
+            .data
+            or []
         )
-        count = getattr(resposta, "count", None)
-        if count is not None:
-            return int(count)
-        return len(resposta.data or [])
+        return len(dados)
     except Exception:
         return 0
 
