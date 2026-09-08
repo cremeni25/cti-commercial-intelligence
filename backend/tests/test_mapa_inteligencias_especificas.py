@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from core.admin_auth import UsuarioAutenticado
+from routers import crm_scope_clientes_router as clientes_router
 from routers import crm_scope_mapa_equipe_router as mapa
 from routers import crm_scope_mapa_insights_router as insights_router
 from services import commercial_client_scope as scope
@@ -66,6 +67,13 @@ def test_mercado_por_responsavel_prioriza_responsavel_comercial_do_cliente(monke
     assert scope.filtrar_anfir_por_responsavel_comercial([registro], "monica-id", "Monica Almeida") == [registro]
 
 
+def test_carteira_de_clientes_nao_inferida_por_regiao():
+    usuario = _usuario(user_id="u1")
+    assert clientes_router._cliente_no_escopo({"id": "c1", "sub_regiao": "REGIAO 01"}, usuario) is False
+    assert clientes_router._cliente_no_escopo({"id": "c2", "responsavel_comercial_id": "u2", "sub_regiao": "REGIAO 01"}, usuario) is False
+    assert clientes_router._cliente_no_escopo({"id": "c3", "responsavel_comercial_id": "u1"}, usuario) is True
+
+
 def test_mapa_tem_tres_caminhos_com_graficos_e_acao_2026():
     page = PAGE.read_text(encoding="utf-8")
     service = SERVICE.read_text(encoding="utf-8")
@@ -85,8 +93,8 @@ def test_mapa_tem_tres_caminhos_com_graficos_e_acao_2026():
     assert '"ano": 2026' in insights
     assert '"consolidado": consolidado' in insights
     assert "DEMAIS_USUARIOS_SEMPRE_RECEBEM_APENAS_O_PROPRIO_LOGIN" in insights
-    assert "if (!dados?.pode_selecionar_responsavel) return" in page
-    assert "mercadoMacro={consolidado ? mercadoMacro : null}" in page
+    assert 'if (responsavelId) qs.set("responsavel_id", responsavelId)' in page
+    assert "mercadoMacro={mercadoMacro}" in page
     assert "filtrar_anfir_por_responsavel_comercial" in insights
     assert '"fonte": "ANFIR_2026"' in insights
     assert "HISTORICO_FUNIL_2026" not in insights

@@ -46,6 +46,7 @@ def test_router_estrategico_esta_registrado_no_backend():
     assert "app.include_router(crm_scope_mapa_equipe_router)" in fonte
     assert 'prefix="/crm-seguro/mapa-equipe"' in equipe
     assert '@router.get("/visao")' in equipe
+    assert '@router.get("/detalhamento")' in equipe
 
 
 def test_frontend_consume_projecao_estrategica_real_autenticada():
@@ -63,14 +64,16 @@ def test_frontend_consume_projecao_estrategica_real_autenticada():
     assert 't("equipment.live")' in equipment
     assert "REALIZADO · ANFIR" in catalogo
     assert "COMPLETED · ANFIR" in catalogo
-    assert 'fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/visao?' in team_service
-    assert 'fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/insights' in team_service
+    assert "fetchMapaComTimeout" in team_service
+    assert 'crm-seguro/mapa-equipe/visao?' in team_service
+    assert 'crm-seguro/mapa-equipe/insights' in team_service
+    assert 'crm-seguro/mapa-equipe/detalhamento?' in team_service
     assert "getMapaEquipeVisao" in mapa
     assert "getMapaInsights" in mapa
     assert "Responsável comercial" in mapa
-    assert "Como o mercado está dividido" in mapa
+    assert "Mercado total → retiradas → mercado real Viena" in mapa
     assert "Composição por linha" in mapa
-    assert "Como estão os negócios em andamento" in mapa
+    assert "Caminho comercial" in mapa
     assert "Leitura comercial" in mapa
     assert "O que fazer" in mapa
     assert "GraficoLinha" in mapa

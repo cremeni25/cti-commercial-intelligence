@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import Counter
 from datetime import date
 from typing import Any
@@ -8,24 +9,18 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
+from routers import drilldown_router as drill
 from routers import strategic_layers_router as estrategia
 from routers.crm_scope_estrategia_router import FECHADOS, _consolidado, _metadata_escopo
 from services.commercial_client_scope import filtrar_carteira_exata_responsavel
-from services.crm_live_projection import carregar_oportunidades_enriquecidas
+from services.crm_live_projection import carregar_oportunidades_enriquecidas, familias_registro
 from services.historical_commercial_source import carregar_historico_comercial
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-equipe"])
 
-# O Mapa Comercial representa a equipe Viena que efetivamente possui carteira/demanda.
-# Perfis corporativos Carrier, gestores institucionais e registros técnicos não podem
-# entrar na soma da equipe, pois inflariam ou distorceriam o fechamento micro = macro.
 PERFIS_COMERCIAIS_DIRETOS = {
-    "ADMIN_MASTER",
-    "DIRETOR_VIENA_SP",
-    "REPRES_REGIAO_01",
-    "REPRES_REGIAO_02",
-    "INDICADOR_VIENA_SP",
+    "ADMIN_MASTER", "DIRETOR_VIENA_SP", "REPRES_REGIAO_01", "REPRES_REGIAO_02", "INDICADOR_VIENA_SP",
 }
 
 
@@ -43,20 +38,12 @@ def _ids_com_carteira_explicita() -> set[str]:
         dados = supabase.table("clientes").select("responsavel_comercial_id").execute().data or []
     except Exception:
         return set()
-    return {
-        str(item.get("responsavel_comercial_id") or "").strip()
-        for item in dados
-        if str(item.get("responsavel_comercial_id") or "").strip()
-    }
+    return {str(item.get("responsavel_comercial_id") or "").strip() for item in dados if str(item.get("responsavel_comercial_id") or "").strip()}
 
 
 def _perfil_comercial(tipo: str) -> bool:
     perfil = str(tipo or "").strip().upper()
-    return (
-        perfil in PERFIS_COMERCIAIS_DIRETOS
-        or perfil.startswith("REPRES_")
-        or perfil.startswith("INDICADOR_")
-    )
+    return perfil in PERFIS_COMERCIAIS_DIRETOS or perfil.startswith("REPRES_") or perfil.startswith("INDICADOR_")
 
 
 def _equipe_ativa() -> list[dict[str, Any]]:
@@ -64,32 +51,19 @@ def _equipe_ativa() -> list[dict[str, Any]]:
         dados = (
             supabase.table("cti_users")
             .select("id,nome,email,tipo_usuario,ddds,codigo_regional,ativo")
-            .eq("ativo", True)
-            .execute()
-            .data
-            or []
+            .eq("ativo", True).execute().data or []
         )
     except Exception:
         dados = []
-
     ids_carteira = _ids_com_carteira_explicita()
-    equipe = [
-        item
-        for item in dados
-        if _perfil_comercial(str(item.get("tipo_usuario") or ""))
-        or str(item.get("id") or "") in ids_carteira
-    ]
+    equipe = [item for item in dados if _perfil_comercial(str(item.get("tipo_usuario") or "")) or str(item.get("id") or "") in ids_carteira]
     return sorted(equipe, key=lambda item: str(item.get("nome") or ""))
 
 
 def _usuario_regional(registro: dict[str, Any]) -> UsuarioAutenticado:
     return UsuarioAutenticado(
-        id=str(registro.get("id") or ""),
-        auth_id="",
-        email=str(registro.get("email") or ""),
-        nome=str(registro.get("nome") or ""),
-        tipo_usuario=str(registro.get("tipo_usuario") or "USUARIO_CTI").upper(),
-        permissoes={},
+        id=str(registro.get("id") or ""), auth_id="", email=str(registro.get("email") or ""),
+        nome=str(registro.get("nome") or ""), tipo_usuario=str(registro.get("tipo_usuario") or "USUARIO_CTI").upper(), permissoes={},
     )
 
 
@@ -107,11 +81,7 @@ def _resolver_alvo(usuario: UsuarioAutenticado, responsavel_id: str | None) -> t
 
 def _familias(registros: list[dict[str, Any]]) -> dict[str, int]:
     contagem = Counter(classificar_linha(item) for item in registros)
-    return {
-        "trailer": int(contagem.get("TR", 0)),
-        "diesel_truck": int(contagem.get("DT", 0)),
-        "direct_drive": int(contagem.get("DD", 0)),
-    }
+    return {"trailer": int(contagem.get("TR", 0)), "diesel_truck": int(contagem.get("DT", 0)), "direct_drive": int(contagem.get("DD", 0))}
 
 
 def _nome_cliente_anfir(item: dict[str, Any]) -> str:
@@ -135,11 +105,7 @@ def _ranking(counter: Counter, limite: int = 8) -> list[dict[str, Any]]:
 
 
 def _historico_base(inicio: date, fim: date) -> list[dict[str, Any]]:
-    return [
-        item
-        for item in carregar_historico_comercial()
-        if estrategia._data_no_intervalo(item.get("data"), inicio, fim)
-    ]
+    return [item for item in carregar_historico_comercial() if estrategia._data_no_intervalo(item.get("data"), inicio, fim)]
 
 
 def _carteira_canonica(alvo: UsuarioAutenticado, registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -163,14 +129,7 @@ def _chave_registro(item: dict[str, Any], indice: int) -> str:
         valor = item.get(campo)
         if valor not in (None, ""):
             return f"{campo}:{valor}"
-    partes = [
-        str(item.get("cliente") or item.get("cliente_nome") or item.get("empresa") or item.get("transportadora") or ""),
-        str(item.get("implementadora") or ""),
-        str(item.get("equipamento") or item.get("modelo") or ""),
-        str(item.get("data") or item.get("mes") or ""),
-        str(item.get("quantidade") or ""),
-        str(indice),
-    ]
+    partes = [str(item.get("cliente") or item.get("cliente_nome") or item.get("empresa") or item.get("transportadora") or ""), str(item.get("implementadora") or ""), str(item.get("equipamento") or item.get("modelo") or ""), str(item.get("data") or item.get("mes") or ""), str(item.get("quantidade") or ""), str(indice)]
     return "|".join(partes)
 
 
@@ -186,184 +145,92 @@ def _deduplicar(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return saida
 
 
-def _agregar_equipe(
-    equipe: list[dict[str, Any]],
-    mercado_total: list[dict[str, Any]],
-    historico_base: list[dict[str, Any]],
-    crm_base: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], int]:
+def _agregar_equipe(equipe: list[dict[str, Any]], mercado_total: list[dict[str, Any]], historico_base: list[dict[str, Any]], crm_base: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], int]:
     anf_todos: list[dict[str, Any]] = []
     hist_todos: list[dict[str, Any]] = []
     crm_todos: list[dict[str, Any]] = []
     participacoes: list[dict[str, Any]] = []
     soma_individual = 0
-
     for registro in equipe:
         alvo = _usuario_regional(registro)
         anf_individual = _anfir_carteira(alvo, mercado_total)
         hist_individual = _historico_carteira(alvo, historico_base)
         crm_individual = _crm_carteira(alvo, crm_base)
         soma_individual += len(anf_individual)
-        anf_todos.extend(anf_individual)
-        hist_todos.extend(hist_individual)
-        crm_todos.extend(crm_individual)
-        participacoes.append({
-            "id": alvo.id,
-            "nome": alvo.nome,
-            "mercado": len(anf_individual),
-        })
+        anf_todos.extend(anf_individual); hist_todos.extend(hist_individual); crm_todos.extend(crm_individual)
+        participacoes.append({"id": alvo.id, "nome": alvo.nome, "mercado": len(anf_individual)})
+    return _deduplicar(anf_todos), _deduplicar(hist_todos), _deduplicar(crm_todos), participacoes, soma_individual
 
-    return (
-        _deduplicar(anf_todos),
-        _deduplicar(hist_todos),
-        _deduplicar(crm_todos),
-        participacoes,
-        soma_individual,
-    )
+
+def _bases_mapa(usuario: UsuarioAutenticado, responsavel_id: str | None):
+    alvo, equipe = _resolver_alvo(usuario, responsavel_id)
+    inicio = date(2026, 1, 1); fim = date(2026, 12, 31)
+    mercado_total, _, _ = estrategia._anfir("viena-sp", "PERSONALIZADO", None, None, inicio, fim)
+    historico_base = _historico_base(inicio, fim)
+    crm_base = carregar_oportunidades_enriquecidas()
+    if alvo is None:
+        anf, historico, crm, _, _ = _agregar_equipe(equipe, list(mercado_total), historico_base, crm_base)
+    else:
+        anf = _anfir_carteira(alvo, list(mercado_total)); historico = _historico_carteira(alvo, historico_base); crm = _crm_carteira(alvo, crm_base)
+    return alvo, equipe, list(mercado_total), anf, historico, crm
 
 
 @router.get("/visao")
-def visao_equipe(
-    responsavel_id: str | None = None,
-    contexto: str = "viena-sp",
-    periodo: str = "PERSONALIZADO",
-    uf: str | None = None,
-    ddd: str | None = None,
-    inicio: date | None = None,
-    fim: date | None = None,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
-    alvo, equipe = _resolver_alvo(usuario, responsavel_id)
-
-    inicio_efetivo = date(2026, 1, 1)
-    fim_efetivo = date(2026, 12, 31)
-    contexto_efetivo = "viena-sp"
-    periodo_efetivo = "PERSONALIZADO"
-
-    mercado_total, _, _ = estrategia._anfir(
-        contexto_efetivo,
-        periodo_efetivo,
-        None,
-        None,
-        inicio_efetivo,
-        fim_efetivo,
-    )
-    historico_base = _historico_base(inicio_efetivo, fim_efetivo)
-    crm_base = carregar_oportunidades_enriquecidas()
-
-    participacoes_equipe: list[dict[str, Any]] = []
-    soma_individual = 0
-
+def visao_equipe(responsavel_id: str | None = None, contexto: str = "viena-sp", periodo: str = "PERSONALIZADO", uf: str | None = None, ddd: str | None = None, inicio: date | None = None, fim: date | None = None, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    alvo, equipe, mercado_total, anf, historico, crm = _bases_mapa(usuario, responsavel_id)
+    inicio_efetivo = date(2026, 1, 1); fim_efetivo = date(2026, 12, 31)
+    participacoes_equipe: list[dict[str, Any]] = []; soma_individual = 0
     if alvo is None:
-        anf, historico, crm, participacoes_equipe, soma_individual = _agregar_equipe(
-            equipe,
-            list(mercado_total),
-            historico_base,
-            crm_base,
-        )
-        selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}
-        escopo = {"modo": "TODA_EQUIPE", "usuario": "Toda a equipe comercial"}
+        _, _, _, participacoes_equipe, soma_individual = _agregar_equipe(equipe, list(mercado_total), _historico_base(inicio_efetivo, fim_efetivo), carregar_oportunidades_enriquecidas())
+        selecao = {"modo": "TODA_EQUIPE", "id": None, "nome": "Toda a equipe comercial", "codigo_regional": None, "ddds": []}; escopo = {"modo": "TODA_EQUIPE", "usuario": "Toda a equipe comercial"}
     else:
-        anf = _anfir_carteira(alvo, list(mercado_total))
-        historico = _historico_carteira(alvo, historico_base)
-        crm = _crm_carteira(alvo, crm_base)
         registro_alvo = next((item for item in equipe if str(item.get("id")) == str(alvo.id)), {})
-        selecao = {
-            "modo": "RESPONSAVEL",
-            "id": alvo.id,
-            "nome": alvo.nome,
-            "codigo_regional": registro_alvo.get("codigo_regional"),
-            "ddds": registro_alvo.get("ddds") or [],
-        }
-        escopo = _metadata_escopo(alvo)
-
+        selecao = {"modo": "RESPONSAVEL", "id": alvo.id, "nome": alvo.nome, "codigo_regional": registro_alvo.get("codigo_regional"), "ddds": registro_alvo.get("ddds") or []}; escopo = _metadata_escopo(alvo)
     crm_ativos = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
     status_crm = Counter(str(item.get("status") or "SEM_STATUS").upper() for item in crm)
     motivos_perda = Counter(str(item.get("motivo_perda") or "").strip().upper() for item in historico if item.get("motivo_perda"))
-
-    clientes_anfir = _clientes(anf, _nome_cliente_anfir)
-    clientes_hist = _clientes(historico, _nome_cliente_historico)
-    clientes_crm = _clientes(crm, _nome_cliente_crm)
-    universo_clientes = clientes_anfir | clientes_hist | clientes_crm
-    anf_hist = clientes_anfir & clientes_hist
-    anf_crm = clientes_anfir & clientes_crm
-    hist_crm = clientes_hist & clientes_crm
-    ponta_a_ponta = clientes_anfir & clientes_hist & clientes_crm
-
-    total_viena = len(mercado_total)
-    total_regiao = len(anf)
-    percentual_regiao = round((total_regiao / total_viena * 100), 1) if total_viena else 0.0
-    sobreposicoes = max(0, soma_individual - total_regiao) if alvo is None else 0
-
-    for item in participacoes_equipe:
-        item["participacao_pct"] = round((int(item["mercado"]) / total_viena * 100), 1) if total_viena else 0.0
-
+    clientes_anfir = _clientes(anf, _nome_cliente_anfir); clientes_hist = _clientes(historico, _nome_cliente_historico); clientes_crm = _clientes(crm, _nome_cliente_crm)
+    universo_clientes = clientes_anfir | clientes_hist | clientes_crm; anf_hist = clientes_anfir & clientes_hist; anf_crm = clientes_anfir & clientes_crm; hist_crm = clientes_hist & clientes_crm; ponta_a_ponta = clientes_anfir & clientes_hist & clientes_crm
+    total_viena = len(mercado_total); total_regiao = len(anf); percentual_regiao = round((total_regiao / total_viena * 100), 1) if total_viena else 0.0; sobreposicoes = max(0, soma_individual - total_regiao) if alvo is None else 0
+    for item in participacoes_equipe: item["participacao_pct"] = round((int(item["mercado"]) / total_viena * 100), 1) if total_viena else 0.0
     return {
         "regra": "ESCOPO_COMERCIAL_CANONICO_SOBRE_MERCADO_REAL_VIENA",
-        "metadata": {
-            "contexto": contexto_efetivo,
-            "periodo": periodo_efetivo,
-            "inicio": inicio_efetivo.isoformat(),
-            "fim": fim_efetivo.isoformat(),
-            "escopo": escopo,
-            "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026",
-            "regra_identidade": "CLIENTE_RECONCILIADO_CTI > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE",
-        },
+        "metadata": {"contexto": "viena-sp", "periodo": "PERSONALIZADO", "inicio": inicio_efetivo.isoformat(), "fim": fim_efetivo.isoformat(), "escopo": escopo, "fonte_denominador": "MESMA_BASE_DASHBOARD_ANFIR_2026", "regra_identidade": "CLIENTE_RECONCILIADO_CTI > RESPONSAVEL_ID_FONTE > RESPONSAVEL_NOME_FONTE"},
         "pode_selecionar_responsavel": _pode_gerir(usuario),
-        "equipe": [
-            {
-                "id": item.get("id"),
-                "nome": item.get("nome"),
-                "tipo_usuario": item.get("tipo_usuario"),
-                "codigo_regional": item.get("codigo_regional"),
-                "ddds": item.get("ddds") or [],
-            }
-            for item in equipe
-        ],
+        "equipe": [{"id": item.get("id"), "nome": item.get("nome"), "tipo_usuario": item.get("tipo_usuario"), "codigo_regional": item.get("codigo_regional"), "ddds": item.get("ddds") or []} for item in equipe],
         "selecao": selecao,
-        "mercado": {
-            "mercado_real_viena_2026": total_viena,
-            "mercado_real_selecao_2026": total_regiao,
-            "participacao_regiao_no_mercado_real_pct": percentual_regiao,
-            "familias": _familias(anf),
-            "clientes_unicos": len(clientes_anfir),
-            "participacoes_equipe": participacoes_equipe,
-            "soma_mercado_individual": soma_individual if alvo is None else total_regiao,
-            "sobreposicoes_entre_carteiras": sobreposicoes,
-            "mercado_real_sem_carteira": max(0, total_viena - total_regiao),
-        },
-        "evidencias": {
-            "historico_registros_2026": len(historico),
-            "historico_unidades_2026": int(sum(int(item.get("quantidade") or 0) for item in historico)),
-            "crm_registros": len(crm),
-            "crm_ativos": len(crm_ativos),
-            "crm_valor_ativo": round(sum(float(item.get("valor_estimado") or 0) for item in crm_ativos), 2),
-            "crm_status": _ranking(status_crm),
-            "motivos_perda_historico": _ranking(motivos_perda),
-        },
-        "reconciliacao": {
-            "universo_clientes": len(universo_clientes),
-            "clientes_anfir": len(clientes_anfir),
-            "clientes_historico": len(clientes_hist),
-            "clientes_crm": len(clientes_crm),
-            "anfir_historico": len(anf_hist),
-            "anfir_crm": len(anf_crm),
-            "historico_crm": len(hist_crm),
-            "nas_tres_fontes": len(ponta_a_ponta),
-            "somente_anfir": len(clientes_anfir - clientes_hist - clientes_crm),
-            "somente_historico": len(clientes_hist - clientes_anfir - clientes_crm),
-            "somente_crm": len(clientes_crm - clientes_anfir - clientes_hist),
-            "historico_fora_mercado_real": len(clientes_hist - clientes_anfir),
-            "crm_fora_mercado_real": len(clientes_crm - clientes_anfir),
-            "regra": "MESMO_CLIENTE_MESMO_RESPONSAVEL_MESMO_RECORTE; FONTES SAO EVIDENCIAS DIFERENTES",
-        },
-        "ciclo": {
-            "clientes_mercado_real": len(clientes_anfir),
-            "clientes_historico_2026": len(clientes_hist),
-            "clientes_crm": len(clientes_crm),
-            "crm_com_evidencia_historico": len(hist_crm),
-            "crm_com_evidencia_anfir": len(anf_crm),
-            "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta),
-            "nota": "As três fontes usam a mesma carteira canônica. A conciliação separa o mesmo universo de clientes do número de eventos registrados em cada fonte.",
-        },
+        "mercado": {"mercado_real_viena_2026": total_viena, "mercado_real_selecao_2026": total_regiao, "participacao_regiao_no_mercado_real_pct": percentual_regiao, "familias": _familias(anf), "clientes_unicos": len(clientes_anfir), "participacoes_equipe": participacoes_equipe, "soma_mercado_individual": soma_individual if alvo is None else total_regiao, "sobreposicoes_entre_carteiras": sobreposicoes, "mercado_real_sem_carteira": max(0, total_viena - total_regiao)},
+        "evidencias": {"historico_registros_2026": len(historico), "historico_unidades_2026": int(sum(int(item.get("quantidade") or 0) for item in historico)), "crm_registros": len(crm), "crm_ativos": len(crm_ativos), "crm_valor_ativo": round(sum(float(item.get("valor_estimado") or 0) for item in crm_ativos), 2), "crm_status": _ranking(status_crm), "motivos_perda_historico": _ranking(motivos_perda)},
+        "reconciliacao": {"universo_clientes": len(universo_clientes), "clientes_anfir": len(clientes_anfir), "clientes_historico": len(clientes_hist), "clientes_crm": len(clientes_crm), "anfir_historico": len(anf_hist), "anfir_crm": len(anf_crm), "historico_crm": len(hist_crm), "nas_tres_fontes": len(ponta_a_ponta), "somente_anfir": len(clientes_anfir - clientes_hist - clientes_crm), "somente_historico": len(clientes_hist - clientes_anfir - clientes_crm), "somente_crm": len(clientes_crm - clientes_anfir - clientes_hist), "historico_fora_mercado_real": len(clientes_hist - clientes_anfir), "crm_fora_mercado_real": len(clientes_crm - clientes_anfir), "regra": "MESMO_CLIENTE_MESMO_RESPONSAVEL_MESMO_RECORTE; FONTES SAO EVIDENCIAS DIFERENTES"},
+        "ciclo": {"clientes_mercado_real": len(clientes_anfir), "clientes_historico_2026": len(clientes_hist), "clientes_crm": len(clientes_crm), "crm_com_evidencia_historico": len(hist_crm), "crm_com_evidencia_anfir": len(anf_crm), "clientes_com_evidencia_nas_tres_fontes": len(ponta_a_ponta), "nota": "As três fontes usam a mesma carteira canônica. A conciliação separa o mesmo universo de clientes do número de eventos registrados em cada fonte."},
     }
+
+
+@router.get("/detalhamento")
+def detalhamento_mapa(camada: str, responsavel_id: str | None = None, campo: str | None = None, valor: str | None = None, familia: str | None = None, busca: str | None = None, ordenar: str | None = None, direcao: str = "asc", pagina: int = 1, limite: int = 50, somente_perdas: bool = False, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    camada = camada.strip().lower()
+    if camada not in drill.CAMPOS: raise HTTPException(status_code=422, detail="Camada de detalhamento inválida.")
+    if campo and campo not in drill.CAMPOS[camada] and campo != "familia": raise HTTPException(status_code=422, detail="Campo de detalhamento não suportado para esta camada.")
+    alvo, _, _, anf, historico, crm = _bases_mapa(usuario, responsavel_id)
+    if camada == "anfir":
+        registros = list(anf)
+        if somente_perdas:
+            perdas = {"NACIONAL", "TK", "USADOCONCORRENTE", "SEMCONTATO", "PERDIDO"}
+            registros = [item for item in registros if drill._fold(item.get("status")) in perdas]
+        if familia: registros = [item for item in registros if estrategia._familia_registro_anfir(item) == familia]
+    elif camada == "historico":
+        registros = list(historico)
+        if familia: registros = [item for item in registros if estrategia._familia_historico(item) == familia]
+    else:
+        registros = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
+        if familia: registros = [item for item in registros if familia in familias_registro(item)]
+    if campo == "familia" and valor:
+        if camada == "anfir": registros = [item for item in registros if estrategia._familia_registro_anfir(item) == valor]
+        elif camada == "historico": registros = [item for item in registros if estrategia._familia_historico(item) == valor]
+        else: registros = [item for item in registros if valor in familias_registro(item)]
+    elif campo and valor:
+        if camada == "anfir": registros = drill._filtrar_anfir_semantico(list(registros), campo, valor)
+        else: registros = [item for item in registros if drill._corresponde(item, drill.CAMPOS[camada][campo], valor)]
+    registros = drill._buscar(list(registros), busca); registros = drill._ordenar(registros, ordenar, direcao)
+    pagina = max(1, pagina); limite = max(10, min(limite, 100)); total = len(registros); total_paginas = max(1, math.ceil(total / limite)) if total else 1; pagina = min(pagina, total_paginas); inicio = (pagina - 1) * limite; recorte = registros[inicio: inicio + limite]
+    return {"camada": camada, "campo": campo, "valor": valor, "familia": familia, "total_registros": total, "pagina": pagina, "limite": limite, "total_paginas": total_paginas, "metadata": {"origem": "MAPA_ESTRATEGICO_2026", "responsavel_id": str(alvo.id) if alvo is not None else None, "responsavel_nome": alvo.nome if alvo is not None else "Toda a equipe comercial", "escopo": "RESPONSAVEL" if alvo is not None else "TODA_EQUIPE", "somente_perdas": somente_perdas}, "registros": [drill._projetar(item, camada) for item in recorte]}

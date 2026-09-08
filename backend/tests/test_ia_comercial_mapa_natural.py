@@ -55,14 +55,15 @@ def test_router_e_servico_mantem_endpoint_sem_forcar_ia_na_tela_principal():
 
 def test_mapa_prioriza_graficos_e_acao_comercial_em_2026():
     mapa = MAPA.read_text(encoding="utf-8")
-    assert "Como o mercado está dividido" in mapa
+    assert "Mercado total → retiradas → mercado real Viena" in mapa
     assert "Composição por linha" in mapa
-    assert "Como estão os negócios em andamento" in mapa
+    assert "Caminho comercial" in mapa
+    assert "Mercado sem CRM" in mapa
     assert "GraficoLinha" in mapa
     assert "Leitura comercial" in mapa
     assert "O que fazer" in mapa
-    assert "Perdas comerciais · 2026" in mapa
-    assert "Evolução por linha · 2026" in mapa
+    assert "Perdas comerciais · ANFIR 2026" in mapa
+    assert "Evolução por linha · ANFIR 2026" in mapa
     assert "Histórico comercial 2023–2026" not in mapa
     assert "Dados de apoio e auditoria" in mapa
 
