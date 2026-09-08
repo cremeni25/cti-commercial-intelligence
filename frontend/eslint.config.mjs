@@ -9,6 +9,7 @@ const eslintConfig = defineConfig([
     files: [
       "src/app/configuracoes/page.tsx",
       "src/app/crm-app/**/page.tsx",
+      "src/app/mapa-estrategico/page.tsx",
     ],
     rules: {
       "react-hooks/set-state-in-effect": "off",
