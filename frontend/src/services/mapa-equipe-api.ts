@@ -69,6 +69,20 @@ export type LeituraComercial = {
   acao_recomendada: string
 }
 
+export type ComposicaoMarcaLinha = {
+  mercado: number
+  carrier: number
+  outras_marcas: number
+  marca_nao_discriminada: number
+  carrier_pct: number
+  outras_marcas_pct: number
+  marca_nao_discriminada_pct: number
+  fechamento_total: number
+  fechamento_ok: boolean
+  marcas_concorrentes: Array<{ nome: string; quantidade: number; percentual_mercado: number }>
+  regra: string
+}
+
 export type MapaInsights = {
   ano: 2026
   meses: string[]
@@ -98,10 +112,12 @@ export type MapaInsights = {
       nome: string
       total_2026: number
       mensal: number[]
+      composicao_marca: ComposicaoMarcaLinha
     } & LeituraComercial>
     nao_classificado_2026: number
     unidades_sem_mes: number
     fonte: "ANFIR_2026"
+    regra_calculo?: string
   }
   perdas: {
     ano: 2026
