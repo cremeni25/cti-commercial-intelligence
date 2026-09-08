@@ -1,27 +1,24 @@
 name: CTI map line market patch
 on:
   push:
-    branches: [fix/mapa-linhas-fechamento-100]
+    branches:
+      - fix/mapa-linhas-fechamento-100
 permissions:
   contents: write
 jobs:
   patch:
-    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: fix/mapa-linhas-fechamento-100
-      - name: Apply audited line-market UI contract
-        shell: python
+      - name: Patch UI contract
         run: |
+          python - <<'PY'
           from pathlib import Path
-
           service = Path('frontend/src/services/mapa-equipe-api.ts')
           text = service.read_text()
-          old = '''      total_2026: number
-      mensal: number[]
-    } & LeituraComercial>'''
+          old = '      total_2026: number\n      mensal: number[]\n    } & LeituraComercial>'
           new = '''      total_2026: number
       mensal: number[]
       composicao_marca: {
@@ -38,8 +35,7 @@ jobs:
         regra: string
       }
     } & LeituraComercial>'''
-          if old not in text:
-              raise SystemExit('MapaInsights contract anchor not found')
+          if old not in text: raise SystemExit('service anchor not found')
           service.write_text(text.replace(old, new, 1))
 
           page = Path('frontend/src/app/mapa-estrategico/page.tsx')
@@ -54,11 +50,10 @@ jobs:
           text = text.replace('<VisaoLinhas insights={insights} mercadoMacro={mercadoMacro} responsavelId={responsavelId} />', '<VisaoLinhas insights={insights} responsavelId={responsavelId} />')
           page.write_text(text)
 
-          tests = Path('backend/tests/test_mapa_line_market.py')
-          tests.write_text('''from services.mapa_line_market import composicao_marca_linha\n\n\ndef test_linha_fecha_mercado_antes_de_marca():\n    registros = [\n        {"quantidade": 2, "status": "Carrier", "fabricante_equipamento": "Carrier"},\n        {"quantidade": 3, "status": "TK", "fabricante_equipamento": "Thermo King"},\n        {"quantidade": 4, "status": "Nacional", "fabricante_equipamento": "Zanotti"},\n        {"quantidade": 1, "status": "", "fabricante_equipamento": ""},\n    ]\n    c = composicao_marca_linha(registros)\n    assert c["mercado"] == 10\n    assert c["carrier"] == 2\n    assert c["outras_marcas"] == 7\n    assert c["marca_nao_discriminada"] == 1\n    assert c["fechamento_total"] == 10\n    assert c["fechamento_ok"] is True\n    assert c["carrier_pct"] + c["outras_marcas_pct"] + c["marca_nao_discriminada_pct"] == 100.0\n\n\ndef test_marca_ausente_nao_e_inventada():\n    c = composicao_marca_linha([{"quantidade": 5, "status": "Nacional", "fabricante_equipamento": ""}])\n    assert c["mercado"] == 5\n    assert c["carrier"] == 0\n    assert c["outras_marcas"] == 5\n    assert c["marcas_concorrentes"][0]["nome"] == "OUTRA MARCA — NÃO DISCRIMINADA"\n    assert c["fechamento_ok"] is True\n''')
-      - name: Remove temporary workflow and commit patch
+          Path('backend/tests/test_mapa_line_market.py').write_text('''from services.mapa_line_market import composicao_marca_linha\n\ndef test_linha_fecha_mercado_antes_de_marca():\n    c = composicao_marca_linha([{\"quantidade\":2,\"status\":\"Carrier\",\"fabricante_equipamento\":\"Carrier\"},{\"quantidade\":3,\"status\":\"TK\",\"fabricante_equipamento\":\"Thermo King\"},{\"quantidade\":4,\"status\":\"Nacional\",\"fabricante_equipamento\":\"Zanotti\"},{\"quantidade\":1,\"status\":\"\",\"fabricante_equipamento\":\"\"}])\n    assert c[\"mercado\"] == 10\n    assert c[\"carrier\"] == 2\n    assert c[\"outras_marcas\"] == 7\n    assert c[\"marca_nao_discriminada\"] == 1\n    assert c[\"fechamento_total\"] == 10\n    assert c[\"fechamento_ok\"] is True\n    assert c[\"carrier_pct\"] + c[\"outras_marcas_pct\"] + c[\"marca_nao_discriminada_pct\"] == 100.0\n\ndef test_marca_ausente_nao_e_inventada():\n    c = composicao_marca_linha([{\"quantidade\":5,\"status\":\"Nacional\",\"fabricante_equipamento\":\"\"}])\n    assert c[\"mercado\"] == 5\n    assert c[\"carrier\"] == 0\n    assert c[\"outras_marcas\"] == 5\n    assert c[\"marcas_concorrentes\"][0][\"nome\"] == \"OUTRA MARCA — NÃO DISCRIMINADA\"\n    assert c[\"fechamento_ok\"] is True\n''')
+          PY
+      - name: Commit generated patch
         run: |
-          git rm .github/workflows/cti-map-line-market-patch.yml
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
           git add frontend/src/app/mapa-estrategico/page.tsx frontend/src/services/mapa-equipe-api.ts backend/tests/test_mapa_line_market.py
