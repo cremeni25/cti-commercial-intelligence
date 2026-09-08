@@ -1,0 +1,66 @@
+name: CTI map line market patch
+on:
+  push:
+    branches: [fix/mapa-linhas-fechamento-100]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/mapa-linhas-fechamento-100
+      - name: Apply audited line-market UI contract
+        shell: python
+        run: |
+          from pathlib import Path
+
+          service = Path('frontend/src/services/mapa-equipe-api.ts')
+          text = service.read_text()
+          old = '''      total_2026: number
+      mensal: number[]
+    } & LeituraComercial>'''
+          new = '''      total_2026: number
+      mensal: number[]
+      composicao_marca: {
+        mercado: number
+        carrier: number
+        outras_marcas: number
+        marca_nao_discriminada: number
+        carrier_pct: number
+        outras_marcas_pct: number
+        marca_nao_discriminada_pct: number
+        fechamento_total: number
+        fechamento_ok: boolean
+        marcas_concorrentes: Array<{ nome: string; quantidade: number; percentual_mercado: number }>
+        regra: string
+      }
+    } & LeituraComercial>'''
+          if old not in text:
+              raise SystemExit('MapaInsights contract anchor not found')
+          service.write_text(text.replace(old, new, 1))
+
+          page = Path('frontend/src/app/mapa-estrategico/page.tsx')
+          text = page.read_text()
+          start = text.index('function VisaoLinhas(')
+          end = text.index('\nfunction VisaoPerdas(', start)
+          new_fn = '''function VisaoLinhas({ insights, responsavelId }: { insights: MapaInsights; responsavelId?: string }) {
+  return <section className="space-y-4"><div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5"><p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha · ANFIR 2026</p><h2 className="mt-1 text-xl font-bold">Mercado primeiro. Marca depois.</h2><p className="mt-2 text-sm text-slate-400">TR/Trailer, DT/Diesel Truck e DD/Direct Drive fecham primeiro o mercado da linha. Carrier e demais marcas são abertas depois, sempre sobre o mesmo total.</p></div><div className="grid gap-4 xl:grid-cols-3">{insights.linhas_2026.linhas.map((linha) => { const familia = linha.codigo === "diesel_truck" ? "diesel-truck" : linha.codigo === "direct_drive" ? "direct-drive" : "trailer"; const c = linha.composicao_marca; return <article key={linha.codigo} className="rounded-3xl border border-[#17304d] bg-[#061126] p-5"><div className="flex items-end justify-between gap-3"><div><p className="text-xs uppercase tracking-[.14em] text-slate-500">Mercado da linha</p><h3 className="mt-1 text-lg font-bold">{linha.nome}</h3></div><Link href={mapaDetalhe({ camada: "anfir", responsavelId, familia, titulo: `${linha.nome} · ANFIR 2026`, subtitulo: "Unidades individualizadas desta linha" })} className="text-right"><strong className="text-2xl text-cyan-300 underline decoration-cyan-500/40 underline-offset-4">{linha.total_2026}</strong><span className="block text-[10px] text-slate-500">abrir unidades</span></Link></div><div className="mt-4"><GraficoLinha valores={linha.mensal} meses={insights.linhas_2026.meses} rotulo={`Mercado mensal de ${linha.nome}`} /></div><div className="mt-4 rounded-2xl border border-[#17304d] bg-[#071226] p-4"><div className="grid gap-3 sm:grid-cols-3"><MiniKpi rotulo="Carrier" valor={`${c.carrier} · ${c.carrier_pct.toLocaleString("pt-BR")}%`} /><MiniKpi rotulo="Outras marcas" valor={`${c.outras_marcas} · ${c.outras_marcas_pct.toLocaleString("pt-BR")}%`} /><MiniKpi rotulo="Marca não discriminada" valor={`${c.marca_nao_discriminada} · ${c.marca_nao_discriminada_pct.toLocaleString("pt-BR")}%`} destaque={c.marca_nao_discriminada > 0 ? "amber" : undefined} /></div><p className={`mt-3 text-xs ${c.fechamento_ok ? "text-emerald-300" : "text-red-300"}`}>Fechamento: {c.fechamento_total}/{c.mercado} unidades · {c.fechamento_ok ? "100% auditável" : "INCONSISTÊNCIA — não homologar"}</p>{c.marcas_concorrentes.length > 0 && <details className="mt-3"><summary className="cursor-pointer text-xs font-semibold text-cyan-300">Abrir marcas identificadas</summary><div className="mt-2 space-y-1">{c.marcas_concorrentes.map((m) => <div key={m.nome} className="flex justify-between gap-3 text-xs text-slate-300"><span>{m.nome}</span><strong>{m.quantidade} · {m.percentual_mercado.toLocaleString("pt-BR")}%</strong></div>)}</div></details>}</div><LeituraAcao leitura={linha.leitura_comercial} acao={linha.acao_recomendada} /></article> })}</div>{insights.linhas_2026.nao_classificado_2026 > 0 && <p className="px-1 text-xs text-amber-300">Há {insights.linhas_2026.nao_classificado_2026} unidade(s) ainda sem linha classificada; nenhuma foi forçada para TR, DT ou DD.</p>}</section>
+}
+'''
+          text = text[:start] + new_fn + text[end:]
+          text = text.replace('<VisaoLinhas insights={insights} mercadoMacro={mercadoMacro} responsavelId={responsavelId} />', '<VisaoLinhas insights={insights} responsavelId={responsavelId} />')
+          page.write_text(text)
+
+          tests = Path('backend/tests/test_mapa_line_market.py')
+          tests.write_text('''from services.mapa_line_market import composicao_marca_linha\n\n\ndef test_linha_fecha_mercado_antes_de_marca():\n    registros = [\n        {"quantidade": 2, "status": "Carrier", "fabricante_equipamento": "Carrier"},\n        {"quantidade": 3, "status": "TK", "fabricante_equipamento": "Thermo King"},\n        {"quantidade": 4, "status": "Nacional", "fabricante_equipamento": "Zanotti"},\n        {"quantidade": 1, "status": "", "fabricante_equipamento": ""},\n    ]\n    c = composicao_marca_linha(registros)\n    assert c["mercado"] == 10\n    assert c["carrier"] == 2\n    assert c["outras_marcas"] == 7\n    assert c["marca_nao_discriminada"] == 1\n    assert c["fechamento_total"] == 10\n    assert c["fechamento_ok"] is True\n    assert c["carrier_pct"] + c["outras_marcas_pct"] + c["marca_nao_discriminada_pct"] == 100.0\n\n\ndef test_marca_ausente_nao_e_inventada():\n    c = composicao_marca_linha([{"quantidade": 5, "status": "Nacional", "fabricante_equipamento": ""}])\n    assert c["mercado"] == 5\n    assert c["carrier"] == 0\n    assert c["outras_marcas"] == 5\n    assert c["marcas_concorrentes"][0]["nome"] == "OUTRA MARCA — NÃO DISCRIMINADA"\n    assert c["fechamento_ok"] is True\n''')
+      - name: Remove temporary workflow and commit patch
+        run: |
+          git rm .github/workflows/cti-map-line-market-patch.yml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add frontend/src/app/mapa-estrategico/page.tsx frontend/src/services/mapa-equipe-api.ts backend/tests/test_mapa_line_market.py
+          git commit -m "Mapa: usar o mesmo total da linha na composição de marcas"
+          git push origin HEAD:fix/mapa-linhas-fechamento-100
