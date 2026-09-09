@@ -222,9 +222,11 @@ def _fontes_do_escopo(
 def _enriquecer_direcionamento(
     direcionamento: dict[str, Any],
     anfir: list[dict[str, Any]],
-    historico: list[dict[str, Any]],
-    crm: list[dict[str, Any]],
+    historico: list[dict[str, Any]] | None = None,
+    crm: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
+    historico = historico or []
+    crm = crm or []
     for alvo in direcionamento.get("alvos") or []:
         chave = _fold(alvo.get("cliente"))
         if not chave:
@@ -321,7 +323,7 @@ def _regioes(
     alvo: UsuarioAutenticado | None,
     equipe: list[dict[str, Any]],
     mercado_total: list[dict[str, Any]],
-    historico_escopo: list[dict[str, Any]],
+    historico_escopo: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     crm_base = carregar_oportunidades_enriquecidas()
     registros = equipe if alvo is None else [item for item in equipe if str(item.get("id")) == str(alvo.id)]
@@ -331,7 +333,7 @@ def _regioes(
         responsavel = _usuario_regional(registro)
         anf = filtrar_anfir_por_responsavel_comercial(list(mercado_total), str(responsavel.id), responsavel.nome)
         crm = _crm_2026(_crm_carteira(responsavel, crm_base))
-        historico = _historico_carteira(responsavel, historico_escopo)
+        historico = _historico_carteira(responsavel, historico_escopo or [])
         ativos = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
         serie = _serie_12()
         sem_mes = 0
@@ -418,8 +420,8 @@ def _leitura_linha(nome: str, serie: list[int], total_real: int | None = None) -
 
 def _linhas_2026(
     anfir: list[dict[str, Any]],
-    historico: list[dict[str, Any]],
-    crm: list[dict[str, Any]],
+    historico: list[dict[str, Any]] | None = None,
+    crm: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     series = {
         "Trailer": _serie_12(),
@@ -520,8 +522,8 @@ def _acao_perda(motivos: Counter[str], linhas: Counter[str], total_perdido: int)
 
 def _perdas_2026(
     anfir: list[dict[str, Any]],
-    historico: list[dict[str, Any]],
-    crm: list[dict[str, Any]],
+    historico: list[dict[str, Any]] | None = None,
+    crm: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     perdidos = [item for item in anfir if _eh_perda_anfir_2026(item)]
     motivos: Counter[str] = Counter()
@@ -553,7 +555,8 @@ def _perdas_2026(
         acao = f'{acao} {direcionamento["texto"]}'
     return {
         "ano": 2026,
-        "fonte": "ANFIR_2026+HISTORICO_FUNIL_2026+CRM_ATUAL",
+        "fonte": "ANFIR_2026",
+        "fontes_decisao": ["ANFIR_2026", "HISTORICO_FUNIL_2026", "CRM_ATUAL"],
         "total_perdido": total_perdido,
         "total_com_motivo": total_com_motivo,
         "motivos": [{"nome": nome, "quantidade": qtd} for nome, qtd in motivos.most_common(10)],
