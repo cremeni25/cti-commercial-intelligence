@@ -219,11 +219,75 @@ def _fontes_do_escopo(
     return _deduplicar(historico), _deduplicar(crm)
 
 
+def _decisao_do_alvo(
+    alvo: dict[str, Any],
+    contexto_leitura: str,
+) -> tuple[str, str]:
+    cliente = str(alvo.get("cliente") or "Cliente prioritário").strip()
+    responsavel = str(alvo.get("responsavel") or "Responsável comercial").strip()
+    linha = str(alvo.get("linha_principal") or "linha não classificada").strip()
+    unidades = int(alvo.get("unidades") or 0)
+    ocorrencias = int(alvo.get("ocorrencias") or 0)
+    cobertura = str(alvo.get("cobertura") or "")
+    concorrencia = str(alvo.get("concorrencia") or "").strip()
+    fontes = alvo.get("fontes") or {}
+    historico = fontes.get("historico") or {}
+    crm = fontes.get("crm") or {}
+    hist_registros = int(historico.get("registros") or 0)
+    crm_registros = int(crm.get("registros") or 0)
+    crm_ativos = int(crm.get("ativos") or 0)
+    temporalidade = alvo.get("temporalidade") or {}
+    ultimo_anfir = temporalidade.get("ultimo_anfir")
+    ultimo_historico = temporalidade.get("ultimo_historico")
+    ultimo_crm = temporalidade.get("ultimo_crm")
+
+    partes = [
+        f"{cliente} concentra {unidades} unidade(s) em {ocorrencias} ocorrência(s) ANFIR 2026 na linha {linha}.",
+    ]
+    if cobertura == "SEM_CRM":
+        partes.append("Não há registro de CRM para este cliente no escopo atual, portanto existe exposição de mercado sem cobertura comercial registrada.")
+    elif cobertura == "CRM_SEM_ATIVO":
+        partes.append(f"Há {crm_registros} registro(s) no CRM, mas nenhum negócio ativo; a exposição ANFIR está sem negociação ativa neste momento.")
+    elif cobertura == "CRM_ATIVO":
+        partes.append(f"Há {crm_ativos} negócio(s) ativo(s) no CRM; a prioridade é garantir que a negociação cubra a exposição identificada no ANFIR.")
+    if hist_registros > 0:
+        partes.append(f"O Histórico/Funil 2026 possui {hist_registros} registro(s) conciliado(s) para o mesmo cliente.")
+    else:
+        partes.append("Não há Histórico/Funil 2026 conciliado para este cliente; isso é uma lacuna de evidência, não prova de ausência de relacionamento anterior.")
+    if concorrencia:
+        partes.append(f"A evidência ANFIR registra presença competitiva classificada como {concorrencia}.")
+    datas = [valor for valor in (ultimo_anfir, ultimo_historico, ultimo_crm) if valor]
+    if datas:
+        partes.append(f"A evidência mais recente disponível é de {max(datas)}.")
+    partes.append(f"Contexto do ranking: {contexto_leitura}")
+    leitura = " ".join(partes)
+
+    if cobertura == "SEM_CRM":
+        acao = (
+            f"{responsavel}: qualificar {cliente}, registrar a interação no CRM e definir a próxima ação com data. "
+            f"A prioridade é cobrir as {unidades} unidade(s) de {linha} já evidenciadas no ANFIR 2026."
+        )
+    elif cobertura == "CRM_SEM_ATIVO":
+        acao = (
+            f"{responsavel}: revisar os registros de {cliente}, identificar por que não existe negócio ativo e registrar a próxima ação comercial. "
+            f"Usar as {unidades} unidade(s) ANFIR de {linha} como evidência objetiva para decidir reativação ou encerramento qualificado."
+        )
+    else:
+        acao = (
+            f"{responsavel}: avançar o negócio ativo de {cliente} e validar se o escopo comercial cobre as {unidades} unidade(s) de {linha} identificadas no ANFIR 2026. "
+            "Registrar o próximo marco e a data prevista no CRM."
+        )
+    if concorrencia:
+        acao += f" Tratar explicitamente a presença {concorrencia} na abordagem e registrar o resultado."
+    return leitura, acao
+
+
 def _enriquecer_direcionamento(
     direcionamento: dict[str, Any],
     anfir: list[dict[str, Any]],
     historico: list[dict[str, Any]] | None = None,
     crm: list[dict[str, Any]] | None = None,
+    contexto_leitura: str = "",
 ) -> dict[str, Any]:
     historico = historico or []
     crm = crm or []
@@ -269,8 +333,24 @@ def _enriquecer_direcionamento(
             "ultimo_historico": _ultima_evidencia(hist_cliente),
             "ultimo_crm": _ultima_evidencia(crm_cliente),
         }
+        alvo["leitura_decisao"], alvo["acao_decisao"] = _decisao_do_alvo(alvo, contexto_leitura)
     direcionamento["regra_evidencia"] = "CLIENTE_EXATO_NORMALIZADO; ANFIR_2026 + HISTORICO_FUNIL_2026 + CRM_ATUAL; SEM_INFERENCIA_POR_DDD"
     return direcionamento
+
+
+def _aplicar_decisao_prioritaria(
+    direcionamento: dict[str, Any],
+    leitura_padrao: str,
+    acao_padrao: str,
+) -> tuple[str, str]:
+    alvos = direcionamento.get("alvos") or []
+    if not alvos:
+        return leitura_padrao, acao_padrao
+    principal = alvos[0]
+    return (
+        str(principal.get("leitura_decisao") or leitura_padrao),
+        str(principal.get("acao_decisao") or acao_padrao),
+    )
 
 
 def _clientes_carteira_atual(responsavel_id: str) -> int:
@@ -359,7 +439,8 @@ def _regioes(
             responsavel_padrao=responsavel.nome,
             rotulo=rotulo,
         )
-        direcionamento = _enriquecer_direcionamento(direcionamento, anf, historico, crm)
+        direcionamento = _enriquecer_direcionamento(direcionamento, anf, historico, crm, leitura)
+        leitura, acao = _aplicar_decisao_prioritaria(direcionamento, leitura, acao)
         if direcionamento["texto"]:
             acao = f'{acao} {direcionamento["texto"]}'
 
@@ -456,7 +537,8 @@ def _linhas_2026(
             _linha_nome,
             rotulo=rotulo,
         )
-        direcionamento = _enriquecer_direcionamento(direcionamento, registros_linha, historico, crm)
+        direcionamento = _enriquecer_direcionamento(direcionamento, registros_linha, historico, crm, leitura)
+        leitura, acao = _aplicar_decisao_prioritaria(direcionamento, leitura, acao)
         if direcionamento["texto"]:
             acao = f'{acao} {direcionamento["texto"]}'
 
@@ -550,7 +632,8 @@ def _perdas_2026(
         _quantidade,
         _linha_nome,
     )
-    direcionamento = _enriquecer_direcionamento(direcionamento, perdidos, historico, crm)
+    direcionamento = _enriquecer_direcionamento(direcionamento, perdidos, historico, crm, leitura)
+    leitura, acao = _aplicar_decisao_prioritaria(direcionamento, leitura, acao)
     if direcionamento["texto"]:
         acao = f'{acao} {direcionamento["texto"]}'
     return {
