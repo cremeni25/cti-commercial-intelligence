@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import ComposicaoMercadoLinha from "@/components/mapa/ComposicaoMercadoLinha"
+import SinalDecisaoInterativo from "@/components/mapa/SinalDecisaoInterativo"
 import { getSupabaseClient } from "@/core/database/supabase"
 import { getMapaEquipeVisao, getMapaInsights, type MapaEquipeVisao, type MapaInsights } from "@/services/mapa-equipe-api"
 
@@ -521,7 +522,7 @@ function VisaoRegioes({ insights }: { insights: MapaInsights }) {
               <MiniKpi rotulo="Pipeline" valor={formatarMoeda(item.pipeline_ativo)} />
             </div>
 
-            <SinalDecisao
+            <SinalDecisaoInterativo
               leitura={item.leitura_comercial}
               acao={item.acao_recomendada}
               direcionamento={obterDirecionamento(item)}
@@ -589,7 +590,7 @@ function VisaoLinhas({ insights, responsavelId }: { insights: MapaInsights; resp
                 <ComposicaoMercadoLinha dados={linha.composicao_marca} />
               </div>
 
-              <SinalDecisao
+              <SinalDecisaoInterativo
                 leitura={linha.leitura_comercial}
                 acao={linha.acao_recomendada}
                 direcionamento={obterDirecionamento(linha)}
@@ -640,7 +641,7 @@ function VisaoPerdas({ insights, responsavelId }: { insights: MapaInsights; resp
         <div className="mt-5">
           <GraficoLinha valores={insights.perdas.mensal} meses={insights.meses} rotulo="Evolução mensal das perdas" />
         </div>
-        <SinalDecisao
+        <SinalDecisaoInterativo
           leitura={insights.perdas.leitura_comercial}
           acao={insights.perdas.acao_recomendada}
           direcionamento={obterDirecionamento(insights.perdas)}
