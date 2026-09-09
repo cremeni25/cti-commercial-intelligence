@@ -94,7 +94,11 @@ def test_mapa_tem_tres_caminhos_com_graficos_e_acao_2026():
     assert "mercadoMacro={mercadoMacro}" in page
     assert "filtrar_anfir_por_responsavel_comercial" in insights
     assert '"fonte": "ANFIR_2026"' in insights
-    assert "HISTORICO_FUNIL_2026" not in insights
+    assert "_historico_base" in insights
+    assert "_historico_carteira" in insights
+    assert "CRM_ATUAL" in insights
+    assert "SEM_INFERENCIA_POR_DDD" in insights
+    assert "Evidência cruzada" in page
 
 
 def test_perdas_e_linhas_operacionais_usam_somente_anfir_2026():
@@ -120,6 +124,30 @@ def test_perdas_e_linhas_operacionais_usam_somente_anfir_2026():
     assert diesel["mensal"][1] == 3
     assert direct["mensal"][2] == 1
     assert sum(trailer["mensal"]) == 2
+
+
+def test_direcionamento_cruza_anfir_historico_e_crm_sem_alterar_total_anfir():
+    anfir = [
+        {"ano": 2026, "mes": 8, "cliente": "CLIENTE A", "status": "TK", "motivo": "Concorrência", "linha": "TR", "quantidade": 4},
+    ]
+    historico = [
+        {"ano": 2026, "cliente": "Cliente A", "linha": "TR", "quantidade": 2, "data": "2026-05-10"},
+    ]
+    crm = [
+        {"ano": 2026, "cliente": "cliente a", "status": "ABERTO", "valor_estimado": 120000, "updated_at": "2026-09-01"},
+    ]
+
+    perdas = insights_router._perdas_2026(anfir, historico, crm)
+    alvo = perdas["direcionamento"]["alvos"][0]
+
+    assert perdas["total_perdido"] == 4
+    assert perdas["fonte"] == "ANFIR_2026"
+    assert alvo["fontes"]["anfir"]["unidades"] == 4
+    assert alvo["fontes"]["historico"]["registros"] == 1
+    assert alvo["fontes"]["crm"]["ativos"] == 1
+    assert alvo["cobertura"] == "CRM_ATIVO"
+    assert alvo["concorrencia"] == "TK"
+    assert alvo["temporalidade"]["ultimo_crm"] == "2026-09-01"
 
 
 def test_status_anfir_carrier_e_invalidos_nao_viram_perda():
