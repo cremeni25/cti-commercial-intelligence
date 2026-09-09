@@ -174,7 +174,8 @@ export type MapaAlvoInteligencia = {
   fontes?: Array<{ tipo?: string; descricao?: string; url?: string }>
 }
 
-const MAPA_TIMEOUT_MS = 25000
+const MAPA_INITIAL_TIMEOUT_MS = 5000
+const MAPA_DEFAULT_TIMEOUT_MS = 25000
 
 async function interpretarResposta<T>(resposta: Response): Promise<T> {
   const payload = await resposta.json().catch(() => null)
@@ -187,14 +188,14 @@ async function interpretarResposta<T>(resposta: Response): Promise<T> {
   return payload as T
 }
 
-async function fetchMapaComTimeout(path: string): Promise<Response> {
+async function fetchMapaComTimeout(path: string, timeoutMs = MAPA_DEFAULT_TIMEOUT_MS): Promise<Response> {
   const controller = new AbortController()
-  const timer = window.setTimeout(() => controller.abort(), MAPA_TIMEOUT_MS)
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetchCrmSeguroProxy(path, { cache: "no-store", signal: controller.signal })
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("A leitura comercial demorou além do limite seguro. Atualize a tela para tentar novamente.")
+      throw new Error("A leitura comercial não respondeu em até 5 segundos. Atualize a tela para tentar novamente.")
     }
     throw error
   } finally {
@@ -205,7 +206,7 @@ async function fetchMapaComTimeout(path: string): Promise<Response> {
 export async function getMapaEquipeVisao(responsavelId?: string | null): Promise<MapaEquipeVisao> {
   const qs = new URLSearchParams({ periodo: "ANO_ATUAL", contexto: "viena_sp" })
   if (responsavelId) qs.set("responsavel_id", responsavelId)
-  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/visao?${qs.toString()}`)
+  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/visao?${qs.toString()}`, MAPA_INITIAL_TIMEOUT_MS)
   return interpretarResposta<MapaEquipeVisao>(resposta)
 }
 
@@ -213,7 +214,7 @@ export async function getMapaInsights(responsavelId?: string | null): Promise<Ma
   const qs = new URLSearchParams()
   if (responsavelId) qs.set("responsavel_id", responsavelId)
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
-  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/insights${sufixo}`)
+  const resposta = await fetchMapaComTimeout(`crm-seguro/mapa-equipe/insights${sufixo}`, MAPA_INITIAL_TIMEOUT_MS)
   return interpretarResposta<MapaInsights>(resposta)
 }
 
