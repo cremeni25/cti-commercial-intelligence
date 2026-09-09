@@ -15,6 +15,8 @@ from routers.crm_scope_estrategia_router import FECHADOS
 from routers.crm_scope_mapa_equipe_router import (
     _crm_carteira,
     _deduplicar,
+    _historico_base,
+    _historico_carteira,
     _pode_gerir,
     _resolver_alvo,
     _usuario_regional,
@@ -147,6 +149,23 @@ def _mes_registro(item: dict[str, Any]) -> int | None:
     return None
 
 
+def _data_evidencia(item: dict[str, Any]) -> str | None:
+    for campo in ("data", "data_evento", "data_negociacao", "data_abertura", "updated_at", "created_at"):
+        valor = str(item.get(campo) or "").strip()
+        if valor:
+            return valor[:10]
+    mes = _mes_registro(item)
+    ano = _ano_registro(item)
+    if mes and ano:
+        return f"{ano:04d}-{mes:02d}"
+    return None
+
+
+def _ultima_evidencia(registros: list[dict[str, Any]]) -> str | None:
+    datas = [data for item in registros if (data := _data_evidencia(item))]
+    return max(datas) if datas else None
+
+
 def _serie_12() -> list[int]:
     return [0 for _ in range(12)]
 
@@ -182,8 +201,77 @@ def _anfir_do_escopo(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any
     return _deduplicar(todos)
 
 
+def _fontes_do_escopo(
+    alvo: UsuarioAutenticado | None,
+    equipe: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    historico_base = _historico_base(date(2026, 1, 1), date(2026, 12, 31))
+    crm_base = carregar_oportunidades_enriquecidas()
+    if alvo is not None:
+        return _historico_carteira(alvo, historico_base), _crm_carteira(alvo, crm_base)
+
+    historico: list[dict[str, Any]] = []
+    crm: list[dict[str, Any]] = []
+    for registro in equipe:
+        responsavel = _usuario_regional(registro)
+        historico.extend(_historico_carteira(responsavel, historico_base))
+        crm.extend(_crm_carteira(responsavel, crm_base))
+    return _deduplicar(historico), _deduplicar(crm)
+
+
+def _enriquecer_direcionamento(
+    direcionamento: dict[str, Any],
+    anfir: list[dict[str, Any]],
+    historico: list[dict[str, Any]],
+    crm: list[dict[str, Any]],
+) -> dict[str, Any]:
+    for alvo in direcionamento.get("alvos") or []:
+        chave = _fold(alvo.get("cliente"))
+        if not chave:
+            continue
+        anf_cliente = [item for item in anfir if _fold(_cliente_nome(item)) == chave]
+        hist_cliente = [item for item in historico if _fold(_cliente_nome(item)) == chave]
+        crm_cliente = [item for item in crm if _fold(_cliente_nome(item)) == chave]
+        crm_ativos = [item for item in crm_cliente if str(item.get("status") or "").upper() not in FECHADOS]
+        concorrentes = Counter()
+        for item in anf_cliente:
+            status = str(item.get("status") or item.get("fabricante_equipamento") or "").strip()
+            if status and not _carrier_confirmado(item):
+                concorrentes[status] += _quantidade(item, 1)
+        concorrente = concorrentes.most_common(1)[0][0] if concorrentes else None
+        if crm_ativos:
+            cobertura = "CRM_ATIVO"
+        elif crm_cliente:
+            cobertura = "CRM_SEM_ATIVO"
+        else:
+            cobertura = "SEM_CRM"
+        alvo["fontes"] = {
+            "anfir": {
+                "ocorrencias": len(anf_cliente),
+                "unidades": sum(_quantidade(item, 1) for item in anf_cliente),
+            },
+            "historico": {
+                "registros": len(hist_cliente),
+                "unidades": sum(_quantidade(item, 0) for item in hist_cliente),
+            },
+            "crm": {
+                "registros": len(crm_cliente),
+                "ativos": len(crm_ativos),
+                "pipeline": round(sum(_valor(item) for item in crm_ativos), 2),
+            },
+        }
+        alvo["cobertura"] = cobertura
+        alvo["concorrencia"] = concorrente
+        alvo["temporalidade"] = {
+            "ultimo_anfir": _ultima_evidencia(anf_cliente),
+            "ultimo_historico": _ultima_evidencia(hist_cliente),
+            "ultimo_crm": _ultima_evidencia(crm_cliente),
+        }
+    direcionamento["regra_evidencia"] = "CLIENTE_EXATO_NORMALIZADO; ANFIR_2026 + HISTORICO_FUNIL_2026 + CRM_ATUAL; SEM_INFERENCIA_POR_DDD"
+    return direcionamento
+
+
 def _clientes_carteira_atual(responsavel_id: str) -> int:
-    """Quantidade de clientes cuja responsabilidade comercial está explicitamente atribuída ao usuário."""
     try:
         dados = (
             supabase.table("clientes")
@@ -199,15 +287,10 @@ def _clientes_carteira_atual(responsavel_id: str) -> int:
 
 
 def _clientes_anfir_unicos(registros: list[dict[str, Any]]) -> int:
-    return len({
-        _cliente_nome(item).upper()
-        for item in registros
-        if _cliente_nome(item)
-    })
+    return len({_cliente_nome(item).upper() for item in registros if _cliente_nome(item)})
 
 
 def _crm_2026(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """O bloco Regiões é 2026: CRM sem competência 2026 não entra nessa leitura."""
     return [item for item in registros if _ano_registro(item) == 2026]
 
 
@@ -234,7 +317,12 @@ def _acao_regiao(mercado: int, crm_ativos: int, pipeline: float) -> tuple[str, s
     )
 
 
-def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], mercado_total: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _regioes(
+    alvo: UsuarioAutenticado | None,
+    equipe: list[dict[str, Any]],
+    mercado_total: list[dict[str, Any]],
+    historico_escopo: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     crm_base = carregar_oportunidades_enriquecidas()
     registros = equipe if alvo is None else [item for item in equipe if str(item.get("id")) == str(alvo.id)]
     saida: list[dict[str, Any]] = []
@@ -243,6 +331,7 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
         responsavel = _usuario_regional(registro)
         anf = filtrar_anfir_por_responsavel_comercial(list(mercado_total), str(responsavel.id), responsavel.nome)
         crm = _crm_2026(_crm_carteira(responsavel, crm_base))
+        historico = _historico_carteira(responsavel, historico_escopo)
         ativos = [item for item in crm if str(item.get("status") or "").upper() not in FECHADOS]
         serie = _serie_12()
         sem_mes = 0
@@ -268,6 +357,7 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
             responsavel_padrao=responsavel.nome,
             rotulo=rotulo,
         )
+        direcionamento = _enriquecer_direcionamento(direcionamento, anf, historico, crm)
         if direcionamento["texto"]:
             acao = f'{acao} {direcionamento["texto"]}'
 
@@ -326,7 +416,11 @@ def _leitura_linha(nome: str, serie: list[int], total_real: int | None = None) -
     return leitura, acao
 
 
-def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
+def _linhas_2026(
+    anfir: list[dict[str, Any]],
+    historico: list[dict[str, Any]],
+    crm: list[dict[str, Any]],
+) -> dict[str, Any]:
     series = {
         "Trailer": _serie_12(),
         "Diesel Truck": _serie_12(),
@@ -360,6 +454,7 @@ def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
             _linha_nome,
             rotulo=rotulo,
         )
+        direcionamento = _enriquecer_direcionamento(direcionamento, registros_linha, historico, crm)
         if direcionamento["texto"]:
             acao = f'{acao} {direcionamento["texto"]}'
 
@@ -423,7 +518,11 @@ def _acao_perda(motivos: Counter[str], linhas: Counter[str], total_perdido: int)
     )
 
 
-def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
+def _perdas_2026(
+    anfir: list[dict[str, Any]],
+    historico: list[dict[str, Any]],
+    crm: list[dict[str, Any]],
+) -> dict[str, Any]:
     perdidos = [item for item in anfir if _eh_perda_anfir_2026(item)]
     motivos: Counter[str] = Counter()
     linhas: Counter[str] = Counter()
@@ -449,11 +548,12 @@ def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
         _quantidade,
         _linha_nome,
     )
+    direcionamento = _enriquecer_direcionamento(direcionamento, perdidos, historico, crm)
     if direcionamento["texto"]:
         acao = f'{acao} {direcionamento["texto"]}'
     return {
         "ano": 2026,
-        "fonte": "ANFIR_2026",
+        "fonte": "ANFIR_2026+HISTORICO_FUNIL_2026+CRM_ATUAL",
         "total_perdido": total_perdido,
         "total_com_motivo": total_com_motivo,
         "motivos": [{"nome": nome, "quantidade": qtd} for nome, qtd in motivos.most_common(10)],
@@ -474,6 +574,7 @@ def insights_mapa(
     alvo, equipe = _resolver_alvo(usuario, responsavel_id)
     mercado_total = _mercado_anfir_2026()
     anfir_escopo = _anfir_do_escopo(alvo, equipe, mercado_total)
+    historico_escopo, crm_escopo = _fontes_do_escopo(alvo, equipe)
     consolidado = _pode_gerir(usuario)
 
     return {
@@ -486,7 +587,7 @@ def insights_mapa(
             "responsavel_nome": "Toda a equipe comercial" if alvo is None else alvo.nome,
             "regra": "MASTER_GESTAO_PODE_CONSOLIDAR; DEMAIS_USUARIOS_SEMPRE_RECEBEM_APENAS_O_PROPRIO_LOGIN",
         },
-        "regioes": _regioes(alvo, equipe, mercado_total),
-        "linhas_2026": _linhas_2026(anfir_escopo),
-        "perdas": _perdas_2026(anfir_escopo),
+        "regioes": _regioes(alvo, equipe, mercado_total, historico_escopo),
+        "linhas_2026": _linhas_2026(anfir_escopo, historico_escopo, crm_escopo),
+        "perdas": _perdas_2026(anfir_escopo, historico_escopo, crm_escopo),
     }
