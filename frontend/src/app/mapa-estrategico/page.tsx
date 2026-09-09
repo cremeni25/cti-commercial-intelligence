@@ -31,17 +31,32 @@ type MercadoMacro = {
 
 type FocoInteligencia = "geral" | "regioes" | "linhas" | "perdas"
 
+type FontesDirecionamento = {
+  anfir?: { ocorrencias?: number; unidades?: number }
+  historico?: { registros?: number; unidades?: number }
+  crm?: { registros?: number; ativos?: number; pipeline?: number }
+}
+
 type AlvoDirecionamento = {
   responsavel: string
   cliente: string
   unidades: number
   ocorrencias: number
   linha_principal: string
+  fontes?: FontesDirecionamento
+  cobertura?: "CRM_ATIVO" | "CRM_SEM_ATIVO" | "SEM_CRM" | string
+  concorrencia?: string | null
+  temporalidade?: {
+    ultimo_anfir?: string | null
+    ultimo_historico?: string | null
+    ultimo_crm?: string | null
+  }
 }
 
 type Direcionamento = {
   alvos: AlvoDirecionamento[]
   texto: string
+  regra_evidencia?: string
 }
 
 const focos: Array<{ id: FocoInteligencia; titulo: string; apoio: string }> = [
@@ -625,9 +640,10 @@ function VisaoPerdas({ insights, responsavelId }: { insights: MapaInsights; resp
         <div className="mt-5">
           <GraficoLinha valores={insights.perdas.mensal} meses={insights.meses} rotulo="Evolução mensal das perdas" />
         </div>
-        <LeituraAcao
+        <SinalDecisao
           leitura={insights.perdas.leitura_comercial}
           acao={insights.perdas.acao_recomendada}
+          direcionamento={obterDirecionamento(insights.perdas)}
           destaque="amber"
         />
       </div>
@@ -687,43 +703,73 @@ function rotuloPrioridade(direcionamento?: Direcionamento) {
   if (prefixo === "Prioridade comercial fora da captura Carrier") return "Fora da captura Carrier"
   if (prefixo === "Prioridade de proteção Carrier") return "Proteção Carrier"
   if (prefixo === "Prioridade de acompanhamento") return "Acompanhamento"
+  if (prefixo === "Quem deve agir / para quem") return "Recuperação prioritária"
   return prefixo || "Prioridade comercial"
+}
+
+function rotuloCobertura(alvo?: AlvoDirecionamento) {
+  if (alvo?.cobertura === "CRM_ATIVO") return "CRM ativo"
+  if (alvo?.cobertura === "CRM_SEM_ATIVO") return "CRM sem ativo"
+  if (alvo?.cobertura === "SEM_CRM") return "Sem CRM"
+  return null
 }
 
 function SinalDecisao({
   leitura,
   acao,
   direcionamento,
+  destaque = "cyan",
 }: {
   leitura: string
   acao: string
   direcionamento?: Direcionamento
+  destaque?: "cyan" | "amber"
 }) {
   const alvo = direcionamento?.alvos?.[0]
   const acaoLimpa = limparAcao(acao, direcionamento)
 
   if (!alvo) {
-    return <LeituraAcao leitura={leitura} acao={acaoLimpa || acao} />
+    return <LeituraAcao leitura={leitura} acao={acaoLimpa || acao} destaque={destaque} />
   }
+
+  const cobertura = rotuloCobertura(alvo)
+  const historico = Number(alvo.fontes?.historico?.registros || 0)
+  const crmAtivos = Number(alvo.fontes?.crm?.ativos || 0)
+  const ultimoAnfir = alvo.temporalidade?.ultimo_anfir
+  const borda = destaque === "amber" ? "border-amber-500/30 bg-amber-500/[.04]" : "border-cyan-500/20 bg-cyan-500/[.04]"
 
   return (
     <div className="mt-5 border-t border-slate-700/50 pt-4">
-      <div className="flex flex-col gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/[.04] p-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className={`flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${borda}`}>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-amber-200">
               {rotuloPrioridade(direcionamento)}
             </span>
-            <span className="text-[10px] uppercase tracking-[.12em] text-slate-500">cliente prioritário</span>
+            {cobertura && (
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.1em] ${crmAtivos > 0 ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-rose-400/30 bg-rose-400/10 text-rose-200"}`}>
+                {cobertura}
+              </span>
+            )}
+            {historico > 0 && (
+              <span className="rounded-full border border-violet-400/30 bg-violet-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.1em] text-violet-200">
+                Histórico {historico}
+              </span>
+            )}
+            {alvo.concorrencia && (
+              <span className="rounded-full border border-slate-500/40 bg-slate-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.1em] text-slate-300">
+                {alvo.concorrencia}
+              </span>
+            )}
           </div>
           <p className="mt-2 truncate text-base font-semibold text-white">{alvo.cliente}</p>
           <p className="mt-1 text-xs text-slate-400">
-            {alvo.responsavel} · {alvo.linha_principal}
+            {alvo.responsavel} · {alvo.linha_principal}{ultimoAnfir ? ` · ANFIR ${ultimoAnfir}` : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2 text-center">
           <div className="min-w-[68px] rounded-xl border border-[#17304d] bg-[#08152a] px-3 py-2">
-            <strong className="block text-base text-cyan-300">{alvo.unidades}</strong>
+            <strong className={destaque === "amber" ? "block text-base text-amber-300" : "block text-base text-cyan-300"}>{alvo.unidades}</strong>
             <span className="text-[9px] uppercase tracking-[.1em] text-slate-500">unidades</span>
           </div>
           <div className="min-w-[68px] rounded-xl border border-[#17304d] bg-[#08152a] px-3 py-2">
@@ -734,14 +780,14 @@ function SinalDecisao({
       </div>
 
       <details className="group mt-2">
-        <summary className="cursor-pointer list-none py-2 text-xs font-semibold text-cyan-300">
+        <summary className={`cursor-pointer list-none py-2 text-xs font-semibold ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>
           <span className="group-open:hidden">Ver decisão e evidências ↓</span>
           <span className="hidden group-open:inline">Recolher decisão ↑</span>
         </summary>
 
         <div className="grid gap-3 rounded-2xl border border-[#17304d] bg-[#071226] p-4 md:grid-cols-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-cyan-300">Interpretação</p>
+            <p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>Interpretação</p>
             <p className="mt-2 text-sm leading-6 text-slate-300">{leitura}</p>
           </div>
           <div>
@@ -749,13 +795,28 @@ function SinalDecisao({
             <p className="mt-2 text-sm leading-6 text-slate-300">{acaoLimpa || acao}</p>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-violet-300">Evidência</p>
-            <div className="mt-2 space-y-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-violet-300">Evidência cruzada</p>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl border border-cyan-500/20 px-2 py-2">
+                <strong className="block text-sm text-cyan-200">{alvo.fontes?.anfir?.unidades ?? alvo.unidades}</strong>
+                <span className="text-[9px] uppercase text-slate-500">ANFIR</span>
+              </div>
+              <div className="rounded-xl border border-violet-500/20 px-2 py-2">
+                <strong className="block text-sm text-violet-200">{alvo.fontes?.historico?.registros ?? 0}</strong>
+                <span className="text-[9px] uppercase text-slate-500">Histórico</span>
+              </div>
+              <div className="rounded-xl border border-emerald-500/20 px-2 py-2">
+                <strong className="block text-sm text-emerald-200">{alvo.fontes?.crm?.ativos ?? 0}</strong>
+                <span className="text-[9px] uppercase text-slate-500">CRM ativo</span>
+              </div>
+            </div>
+            <div className="mt-3 space-y-2">
               {direcionamento?.alvos.slice(0, 5).map((item, index) => (
                 <div key={`${item.responsavel}-${item.cliente}-${index}`} className="rounded-xl border border-slate-700/50 px-3 py-2">
                   <p className="truncate text-xs font-semibold text-slate-200">{item.cliente}</p>
                   <p className="mt-1 text-[10px] text-slate-500">
                     {item.responsavel} · {item.unidades} un. · {item.ocorrencias} ocorr. · {item.linha_principal}
+                    {item.fontes?.crm?.ativos ? ` · CRM ${item.fontes.crm.ativos}` : " · sem CRM ativo"}
                   </p>
                 </div>
               ))}
