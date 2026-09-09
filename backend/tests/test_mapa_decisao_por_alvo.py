@@ -38,7 +38,7 @@ def test_decisao_prioritaria_permanece_no_cliente_escolhido():
         "ação agregada",
     )
 
-    assert leitura.startswith("CLIENTE ALVO concentra 5 unidade(s) em 1 ocorrência(s) ANFIR 2026")
+    assert leitura.startswith("CLIENTE ALVO concentra 5 unidade(s) em 5 ocorrência(s) ANFIR 2026")
     assert "sem cobertura comercial registrada" in leitura
     assert "lacuna de evidência" in leitura
     assert "Contexto do ranking:" in leitura
