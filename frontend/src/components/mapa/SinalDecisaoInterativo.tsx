@@ -8,6 +8,21 @@ type FontesDirecionamento = {
   crm?: { registros?: number; ativos?: number; pipeline?: number }
 }
 
+type CicloComercial = {
+  estado?: "NOVO_SINAL" | "ESTAGNADO" | "ACAO_NECESSARIA" | "EM_ACOMPANHAMENTO" | "CONVERTIDO" | string
+  rotulo?: string
+  oportunidades?: number
+  oportunidades_ativas?: number
+  ganhos?: number
+  atividades?: number
+  atividades_pendentes?: number
+  ultima_movimentacao?: string | null
+  proxima_atividade?: string | null
+  dias_sem_movimento?: number | null
+  leitura?: string
+  acao?: string
+}
+
 type AlvoDirecionamento = {
   responsavel: string
   cliente: string
@@ -19,6 +34,9 @@ type AlvoDirecionamento = {
   concorrencia?: string | null
   leitura_decisao?: string
   acao_decisao?: string
+  leitura_ciclo?: string
+  acao_ciclo?: string
+  ciclo_comercial?: CicloComercial
   temporalidade?: {
     ultimo_anfir?: string | null
     ultimo_historico?: string | null
@@ -30,6 +48,7 @@ type Direcionamento = {
   alvos: AlvoDirecionamento[]
   texto: string
   regra_evidencia?: string
+  regra_ranking?: string
 }
 
 function limparAcao(acao: string, direcionamento?: Direcionamento) {
@@ -56,6 +75,14 @@ function rotuloCobertura(alvo?: AlvoDirecionamento) {
   return null
 }
 
+function classeCiclo(estado?: string) {
+  if (estado === "CONVERTIDO") return "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
+  if (estado === "EM_ACOMPANHAMENTO") return "border-cyan-400/30 bg-cyan-400/10 text-cyan-200"
+  if (estado === "ESTAGNADO") return "border-rose-400/30 bg-rose-400/10 text-rose-200"
+  if (estado === "ACAO_NECESSARIA") return "border-orange-400/30 bg-orange-400/10 text-orange-200"
+  return "border-amber-400/30 bg-amber-400/10 text-amber-200"
+}
+
 export default function SinalDecisaoInterativo({
   leitura,
   acao,
@@ -74,8 +101,9 @@ export default function SinalDecisaoInterativo({
 
   if (!alvo) return null
 
-  const leituraSelecionada = alvo.leitura_decisao || (indiceSeguro === 0 ? leitura : "Sem interpretação específica disponível para este alvo.")
-  const acaoSelecionada = alvo.acao_decisao || (indiceSeguro === 0 ? limparAcao(acao, direcionamento) || acao : "Sem ação específica disponível para este alvo.")
+  const ciclo = alvo.ciclo_comercial
+  const leituraSelecionada = alvo.leitura_ciclo || ciclo?.leitura || alvo.leitura_decisao || (indiceSeguro === 0 ? leitura : "Sem interpretação específica disponível para este alvo.")
+  const acaoSelecionada = alvo.acao_ciclo || ciclo?.acao || alvo.acao_decisao || (indiceSeguro === 0 ? limparAcao(acao, direcionamento) || acao : "Sem ação específica disponível para este alvo.")
   const cobertura = rotuloCobertura(alvo)
   const historico = Number(alvo.fontes?.historico?.registros || 0)
   const crmAtivos = Number(alvo.fontes?.crm?.ativos || 0)
@@ -90,6 +118,11 @@ export default function SinalDecisaoInterativo({
             <span className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] text-amber-200">
               {rotuloPrioridade(direcionamento)}
             </span>
+            {ciclo?.rotulo && (
+              <span className={`rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[.12em] ${classeCiclo(ciclo.estado)}`}>
+                {ciclo.rotulo}
+              </span>
+            )}
             {cobertura && (
               <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[.1em] ${crmAtivos > 0 ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-rose-400/30 bg-rose-400/10 text-rose-200"}`}>
                 {cobertura}
@@ -110,6 +143,11 @@ export default function SinalDecisaoInterativo({
           <p className="mt-1 text-xs text-slate-400">
             {alvo.responsavel} · {alvo.linha_principal}{ultimoAnfir ? ` · ANFIR ${ultimoAnfir}` : ""}
           </p>
+          {ciclo && (
+            <p className="mt-1 text-[10px] text-slate-500">
+              {ciclo.proxima_atividade ? `Próxima ação ${ciclo.proxima_atividade}` : ciclo.ultima_movimentacao ? `Última movimentação ${ciclo.ultima_movimentacao}` : "Sem movimentação CRM registrada"}
+            </p>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-2 text-center sm:flex sm:shrink-0">
           <div className="min-w-[68px] rounded-xl border border-[#17304d] bg-[#08152a] px-3 py-2">
@@ -153,7 +191,7 @@ export default function SinalDecisaoInterativo({
                 <span className="block truncate text-[8px] uppercase text-slate-500 sm:text-[9px]">HIST/FUNIL</span>
               </div>
               <div className="min-w-0 rounded-xl border border-emerald-500/20 px-2 py-2">
-                <strong className="block text-sm text-emerald-200">{alvo.fontes?.crm?.ativos ?? 0}</strong>
+                <strong className="block text-sm text-emerald-200">{alvo.fontes?.crm?.ativos ?? ciclo?.oportunidades_ativas ?? 0}</strong>
                 <span className="block truncate text-[8px] uppercase text-slate-500 sm:text-[9px]">CRM ativo</span>
               </div>
             </div>
@@ -176,7 +214,10 @@ export default function SinalDecisaoInterativo({
                       aria-pressed={selecionado}
                       className={`min-w-0 rounded-xl border px-3 py-3 text-left transition ${selecionado ? "border-cyan-400/60 bg-cyan-500/10" : "border-slate-700/50 bg-[#08152a] hover:border-cyan-500/30"}`}
                     >
-                      <p className={`break-words text-xs font-semibold ${selecionado ? "text-cyan-200" : "text-slate-200"}`}>{item.cliente}</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className={`break-words text-xs font-semibold ${selecionado ? "text-cyan-200" : "text-slate-200"}`}>{item.cliente}</p>
+                        {item.ciclo_comercial?.rotulo && <span className={`rounded-full border px-1.5 py-0.5 text-[8px] font-semibold uppercase ${classeCiclo(item.ciclo_comercial.estado)}`}>{item.ciclo_comercial.rotulo}</span>}
+                      </div>
                       <p className="mt-1 break-words text-[10px] leading-4 text-slate-500">
                         {item.responsavel} · {item.unidades} un. · {item.ocorrencias} ocorr. · {item.linha_principal}
                         {item.fontes?.crm?.ativos ? ` · CRM ${item.fontes.crm.ativos}` : " · sem CRM ativo"}
