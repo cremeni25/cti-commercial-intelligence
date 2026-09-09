@@ -7,17 +7,15 @@ HISTORICO = ROOT / "frontend" / "src" / "app" / "historico-comercial" / "page.ts
 CATALOGO_ESTRATEGICO = ROOT / "frontend" / "src" / "core" / "i18n" / "strategic.ts"
 
 
-def test_dashboard_executivo_nao_repete_operacao_crm_e_mantem_anfir_2026():
+def test_dashboard_legado_redireciona_para_mapa_estrategico():
     fonte = DASHBOARD.read_text(encoding="utf-8")
 
-    assert "AnfirWorkbookPanel" in fonte
-    assert "AnfirWorkbookCharts" in fonte
-    assert "/dashboard/anfir-historico" in fonte
+    assert 'redirect("/mapa-estrategico")' in fonte
+    assert "AnfirWorkbookPanel" not in fonte
+    assert "AnfirWorkbookCharts" not in fonte
+    assert "Dashboard Executivo" not in fonte
     assert "crm/nucleo-comercial" not in fonte
     assert "crm/oportunidades" not in fonte
-    assert "pipelineAberto" not in fonte
-    assert "negociacoesAtivas" not in fonte
-    assert "RETRY_MS" not in fonte
 
 
 def test_historico_explicita_que_e_somente_consulta():
