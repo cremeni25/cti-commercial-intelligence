@@ -110,10 +110,9 @@ export default function SinalDecisaoInterativo({
   const chaveAlvo = alvo ? `${origem}::${alvo.responsavel}::${alvo.cliente}` : ""
 
   useEffect(() => {
-    if (!aberto || !alvo || !chaveAlvo || leiturasIA[chaveAlvo] || carregandoChave === chaveAlvo) return
+    if (!aberto || !alvo || !chaveAlvo || leiturasIA[chaveAlvo] || carregandoChave === chaveAlvo || erroChave === chaveAlvo) return
     let ativo = true
     setCarregandoChave(chaveAlvo)
-    setErroChave(null)
     void getMapaAlvoInteligencia(origem, alvo.cliente, alvo.responsavel, responsavelId)
       .then((resultado) => {
         if (!ativo) return
@@ -126,7 +125,7 @@ export default function SinalDecisaoInterativo({
         if (ativo) setCarregandoChave((atual) => atual === chaveAlvo ? null : atual)
       })
     return () => { ativo = false }
-  }, [aberto, alvo, chaveAlvo, leiturasIA, carregandoChave, origem, responsavelId])
+  }, [aberto, alvo, chaveAlvo, leiturasIA, carregandoChave, erroChave, origem, responsavelId])
 
   if (!alvo) return null
 
@@ -136,8 +135,6 @@ export default function SinalDecisaoInterativo({
   const acaoFactual = alvo.acao_decisao || (indiceSeguro === 0 ? limparAcao(acao, direcionamento) || acao : "Sem ação factual específica disponível para este alvo.")
   const leituraSelecionada = inteligencia?.interpretacao || leituraFactual
   const acaoSelecionada = inteligencia?.acao || acaoFactual
-  const carregandoIA = carregandoChave === chaveAlvo
-  const erroIA = erroChave === chaveAlvo
   const cobertura = rotuloCobertura(alvo)
   const historico = Number(alvo.fontes?.historico?.registros || 0)
   const crmAtivos = Number(alvo.fontes?.crm?.ativos || 0)
@@ -170,8 +167,7 @@ export default function SinalDecisaoInterativo({
         <div className="space-y-4 rounded-2xl border border-[#17304d] bg-[#071226] p-3 sm:p-4">
           <div className="flex flex-wrap items-center gap-2">
             {inteligencia && <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[.12em] text-cyan-200">IA Comercial CTI · leitura contextual</span>}
-            {carregandoIA && <span className="text-[10px] text-cyan-300">Interpretando o contexto real deste cliente...</span>}
-            {erroIA && <span className="text-[10px] text-amber-300">Leitura natural indisponível; exibindo somente a leitura factual auditável.</span>}
+            {carregandoChave === chaveAlvo && <span aria-hidden="true" className="inline-flex gap-1 text-cyan-300"><span>•</span><span>•</span><span>•</span></span>}
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="min-w-0"><p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>Interpretação</p><p className="mt-2 break-words text-sm leading-6 text-slate-300">{leituraSelecionada}</p></div>
