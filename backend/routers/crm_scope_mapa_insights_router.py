@@ -22,6 +22,7 @@ from routers.crm_scope_mapa_equipe_router import (
 from services.commercial_client_scope import filtrar_anfir_por_responsavel_comercial
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
 from services.mapa_line_market import composicao_marca_linha
+from services.mapa_perdas_direcionamento import direcionar_perda_dominante
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-insights"])
@@ -393,6 +394,15 @@ def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
         if not _somar_mes(mensal, item, quantidade):
             sem_mes += quantidade
     leitura, acao = _acao_perda(motivos, linhas, total_perdido)
+    motivo_dominante = motivos.most_common(1)[0][0] if motivos else None
+    direcionamento = direcionar_perda_dominante(
+        perdidos,
+        motivo_dominante,
+        _quantidade,
+        _linha_nome,
+    )
+    if direcionamento["texto"]:
+        acao = f'{acao} {direcionamento["texto"]}'
     return {
         "ano": 2026,
         "fonte": "ANFIR_2026",
@@ -404,6 +414,7 @@ def _perdas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
         "registros_sem_mes": sem_mes,
         "leitura_comercial": leitura,
         "acao_recomendada": acao,
+        "direcionamento": direcionamento,
     }
 
 
