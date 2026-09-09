@@ -25,7 +25,7 @@ def direcionar_perda_dominante(
     linha_fn: Callable[[dict[str, Any]], str],
     limite: int = 5,
 ) -> dict[str, Any]:
-    """Transforma uma causa de perda em alvo comercial auditável por cliente e responsável."""
+    """Transforma a causa dominante de perda em alvo comercial auditável."""
     if not motivo_dominante:
         return {"motivo": None, "alvos": [], "texto": ""}
 
@@ -71,11 +71,10 @@ def direcionar_perda_dominante(
     alvos.sort(key=lambda item: (-int(item["unidades"]), str(item["responsavel"]), str(item["cliente"])))
     alvos = alvos[: max(1, limite)]
 
-    partes = []
-    for item in alvos:
-        partes.append(
-            f'{item["responsavel"]} → {item["cliente"]} '
-            f'({item["unidades"]} un.; {item["linha_principal"]})'
-        )
-    texto = "Prioridade por responsável e cliente: " + "; ".join(partes) + "." if partes else ""
+    partes = [
+        f'{item["responsavel"]} → {item["cliente"]} '
+        f'({item["unidades"]} un.; {item["ocorrencias"]} ocorrência(s); {item["linha_principal"]})'
+        for item in alvos
+    ]
+    texto = "Quem deve agir / para quem: " + "; ".join(partes) + "." if partes else ""
     return {"motivo": motivo_dominante, "alvos": alvos, "texto": texto}
