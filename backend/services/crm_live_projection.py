@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import os
 from collections import defaultdict
+from threading import RLock
+from time import monotonic
 from typing import Any
 
 from core.supabase_client import supabase
@@ -10,6 +13,17 @@ FAMILIAS = {
     "trailer": ("TRAILER", "VECTOR", "X4"),
     "diesel-truck": ("DIESEL", "SUPRA"),
     "direct-drive": ("DIRECT", "CITIMAX", "XARIOS", "D6", "D7"),
+}
+
+# O Mapa dispara leituras de visão e insights praticamente ao mesmo tempo.
+# Sem esta janela curta, cada chamada repete quatro consultas completas ao CRM.
+# O TTL é deliberadamente pequeno para preservar a percepção de tempo real.
+_CRM_CACHE_TTL_SECONDS = float(os.getenv("CTI_CRM_READ_CACHE_SECONDS", "5") or 5)
+_crm_cache_lock = RLock()
+_crm_cache: dict[str, Any] = {
+    "expires_at": 0.0,
+    "source_id": None,
+    "registros": None,
 }
 
 
@@ -22,6 +36,11 @@ def _lista_segura(tabela: str) -> list[dict[str, Any]]:
         return supabase.table(tabela).select("*").execute().data or []
     except Exception:
         return []
+
+
+def _source_id() -> int:
+    # Mantém os testes isolados: monkeypatch de _lista_segura invalida o cache.
+    return id(_lista_segura)
 
 
 def _unicos(valores: list[Any]) -> list[str]:
@@ -77,7 +96,7 @@ def equipamentos_registro(registro: dict[str, Any]) -> list[str]:
     return _unicos([valor])
 
 
-def carregar_oportunidades_enriquecidas() -> list[dict[str, Any]]:
+def _carregar_oportunidades_enriquecidas_sem_cache() -> list[dict[str, Any]]:
     oportunidades = _lista_segura("cti_oportunidades")
     itens_ativos = [item for item in _lista_segura("cti_oportunidade_itens") if not item.get("arquivado_em")]
     por_oportunidade: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -121,3 +140,41 @@ def carregar_oportunidades_enriquecidas() -> list[dict[str, Any]]:
         }
         saida.append(enriquecida)
     return saida
+
+
+def carregar_oportunidades_enriquecidas() -> list[dict[str, Any]]:
+    agora = monotonic()
+    origem = _source_id()
+    registros = _crm_cache.get("registros")
+    if (
+        registros is not None
+        and _crm_cache.get("source_id") == origem
+        and agora < float(_crm_cache.get("expires_at") or 0)
+    ):
+        return [dict(item) for item in registros]
+
+    # Serializa somente a reconstrução da projeção. A segunda leitura concorrente
+    # do Mapa recebe a projeção já pronta, em vez de disparar quatro SELECTs novos.
+    with _crm_cache_lock:
+        agora = monotonic()
+        origem = _source_id()
+        registros = _crm_cache.get("registros")
+        if (
+            registros is not None
+            and _crm_cache.get("source_id") == origem
+            and agora < float(_crm_cache.get("expires_at") or 0)
+        ):
+            return [dict(item) for item in registros]
+
+        carregados = _carregar_oportunidades_enriquecidas_sem_cache()
+        _crm_cache["registros"] = carregados
+        _crm_cache["source_id"] = origem
+        _crm_cache["expires_at"] = monotonic() + max(_CRM_CACHE_TTL_SECONDS, 1.0)
+        return [dict(item) for item in carregados]
+
+
+def invalidar_cache_oportunidades_enriquecidas() -> None:
+    with _crm_cache_lock:
+        _crm_cache["expires_at"] = 0.0
+        _crm_cache["source_id"] = None
+        _crm_cache["registros"] = None
