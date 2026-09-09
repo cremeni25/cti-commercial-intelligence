@@ -21,6 +21,8 @@ def test_direciona_por_responsavel_cliente_e_unidades_sem_duplicar_cliente():
     assert resultado["alvos"][0]["cliente"] == "CLIENTE A"
     assert resultado["alvos"][0]["unidades"] == 5
     assert resultado["alvos"][0]["ocorrencias"] == 2
+    assert resultado["alvos"][0]["ciclo_comercial"]["estado"] == "NOVO_SINAL"
     assert "Quem deve agir / para quem:" in resultado["texto"]
-    assert "ANDRÉ → CLIENTE A (5 un.; 2 ocorrência(s); Direct Drive)" in resultado["texto"]
-    assert "MÔNICA → CLIENTE B (4 un.; 1 ocorrência(s); Trailer)" in resultado["texto"]
+    assert "ANDRÉ → CLIENTE A (5 un.; 2 ocorrência(s); Direct Drive; Novo sinal)" in resultado["texto"]
+    assert "MÔNICA → CLIENTE B (4 un.; 1 ocorrência(s); Trailer; Novo sinal)" in resultado["texto"]
+    assert "CICLO_CRM_DETERMINISTICO" in str(resultado.get("regra_ranking"))
