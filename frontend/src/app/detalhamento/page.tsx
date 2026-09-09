@@ -19,6 +19,9 @@ const ROTULOS: Record<string, string> = {
   probabilidade: "Probabilidade", observacao: "Observação", titulo: "Título", data_fechamento_prevista: "Fechamento previsto", created_at: "Criado em",
 }
 
+const COLUNAS_LONGAS = new Set(["observacao", "ocorrencia", "temas_workbook", "motivo_perda", "titulo"])
+const COLUNAS_MEDIAS = new Set(["cliente", "cliente_nome", "empresa", "transportadora", "implementadora", "equipamento", "modelo", "produto", "causa_workbook"])
+
 export default function DetalhamentoPage() {
   return <Suspense fallback={<TelaCarregando />}><DetalhamentoContent /></Suspense>
 }
@@ -111,7 +114,28 @@ function DetalhamentoContent() {
 
           {!loading && dados && <>
             <section className="overflow-hidden rounded-2xl border border-[#17304d] bg-[#071226]">
-              {dados.registros.length === 0 ? <div className="p-8 text-center text-slate-500">Nenhum registro encontrado neste recorte.</div> : <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead className="bg-[#08162d] text-left text-xs uppercase tracking-wide text-slate-500"><tr>{colunas.map((chave) => <th key={chave} className="whitespace-nowrap px-4 py-3">{ROTULOS[chave] || chave.replaceAll("_", " ")}</th>)}</tr></thead><tbody className="divide-y divide-[#13203f]">{dados.registros.map((registro, indice) => <tr key={`${pagina}-${indice}`} className="align-top hover:bg-[#08162d]/60">{colunas.map((chave) => <td key={chave} className="max-w-[360px] whitespace-normal px-4 py-3 text-slate-300">{formatar(registro[chave], chave)}</td>)}</tr>)}</tbody></table></div>}
+              {dados.registros.length === 0 ? <div className="p-8 text-center text-slate-500">Nenhum registro encontrado neste recorte.</div> : (
+                <div className="max-h-[68vh] overflow-auto">
+                  <table className="w-max min-w-full table-auto border-collapse text-sm">
+                    <thead className="sticky top-0 z-10 bg-[#08162d] text-left text-xs uppercase tracking-wide text-slate-500">
+                      <tr>{colunas.map((chave) => <th key={chave} className={`${larguraColuna(chave)} whitespace-nowrap px-4 py-3 align-middle`}>{ROTULOS[chave] || chave.replaceAll("_", " ")}</th>)}</tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#13203f]">
+                      {dados.registros.map((registro, indice) => (
+                        <tr key={`${pagina}-${indice}`} className="h-auto align-top hover:bg-[#08162d]/60">
+                          {colunas.map((chave) => (
+                            <td key={chave} className={`${larguraColuna(chave)} px-4 py-3 align-top text-slate-300`}>
+                              <div className={`${COLUNAS_LONGAS.has(chave) ? "max-h-24 overflow-y-auto pr-1" : "max-h-16 overflow-hidden"} break-words leading-5`} title={textoTitulo(registro[chave], chave)}>
+                                {formatar(registro[chave], chave)}
+                              </div>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </section>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#17304d] bg-[#071226] p-3 text-sm"><span className="text-slate-400">Página {dados.pagina} de {dados.total_paginas} · até {dados.limite} registros por página</span><div className="flex gap-2"><button disabled={dados.pagina <= 1} onClick={() => setPagina((p) => Math.max(1, p - 1))} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40"><ChevronLeft size={16}/> Anterior</button><button disabled={dados.pagina >= dados.total_paginas} onClick={() => setPagina((p) => p + 1)} className="inline-flex items-center gap-1 rounded-lg border border-[#17304d] px-3 py-2 disabled:opacity-40">Próxima <ChevronRight size={16}/></button></div></div>
           </>}
@@ -119,6 +143,18 @@ function DetalhamentoContent() {
       </section>
     </main>
   )
+}
+
+function larguraColuna(chave: string) {
+  if (COLUNAS_LONGAS.has(chave)) return "w-[320px] min-w-[320px] max-w-[320px]"
+  if (COLUNAS_MEDIAS.has(chave)) return "w-[190px] min-w-[190px] max-w-[190px]"
+  if (["estado", "ano", "mes", "ddd", "ddd_workbook", "quantidade", "probabilidade"].includes(chave)) return "w-[96px] min-w-[96px] max-w-[96px]"
+  return "w-[140px] min-w-[140px] max-w-[140px]"
+}
+
+function textoTitulo(valor: unknown, chave: string) {
+  const formatado = formatar(valor, chave)
+  return typeof formatado === "string" ? formatado : undefined
 }
 
 function formatar(valor: unknown, chave: string) {
