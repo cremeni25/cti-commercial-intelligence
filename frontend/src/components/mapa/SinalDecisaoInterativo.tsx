@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { getMapaAlvoInteligencia, type MapaAlvoInteligencia } from "@/services/mapa-equipe-api"
 
 type FontesDirecionamento = {
@@ -103,16 +103,16 @@ export default function SinalDecisaoInterativo({
   const [indiceSelecionado, setIndiceSelecionado] = useState(0)
   const [aberto, setAberto] = useState(false)
   const [leiturasIA, setLeiturasIA] = useState<Record<string, MapaAlvoInteligencia>>({})
-  const [carregandoChave, setCarregandoChave] = useState<string | null>(null)
   const [erroChave, setErroChave] = useState<string | null>(null)
+  const requisicoesEmCurso = useRef<Set<string>>(new Set())
   const indiceSeguro = Math.min(indiceSelecionado, Math.max(0, alvos.length - 1))
   const alvo = alvos[indiceSeguro]
   const chaveAlvo = alvo ? `${origem}::${alvo.responsavel}::${alvo.cliente}` : ""
 
   useEffect(() => {
-    if (!aberto || !alvo || !chaveAlvo || leiturasIA[chaveAlvo] || carregandoChave === chaveAlvo || erroChave === chaveAlvo) return
+    if (!aberto || !alvo || !chaveAlvo || leiturasIA[chaveAlvo] || erroChave === chaveAlvo || requisicoesEmCurso.current.has(chaveAlvo)) return
     let ativo = true
-    setCarregandoChave(chaveAlvo)
+    requisicoesEmCurso.current.add(chaveAlvo)
     void getMapaAlvoInteligencia(origem, alvo.cliente, alvo.responsavel, responsavelId)
       .then((resultado) => {
         if (!ativo) return
@@ -122,10 +122,10 @@ export default function SinalDecisaoInterativo({
         if (ativo) setErroChave(chaveAlvo)
       })
       .finally(() => {
-        if (ativo) setCarregandoChave((atual) => atual === chaveAlvo ? null : atual)
+        requisicoesEmCurso.current.delete(chaveAlvo)
       })
     return () => { ativo = false }
-  }, [aberto, alvo, chaveAlvo, leiturasIA, carregandoChave, erroChave, origem, responsavelId])
+  }, [aberto, alvo, chaveAlvo, leiturasIA, erroChave, origem, responsavelId])
 
   if (!alvo) return null
 
@@ -165,10 +165,7 @@ export default function SinalDecisaoInterativo({
       <details className="group mt-2" onToggle={(evento) => setAberto(evento.currentTarget.open)}>
         <summary className={`cursor-pointer list-none py-2 text-xs font-semibold ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}><span className="group-open:hidden">Ver decisão e evidências ↓</span><span className="hidden group-open:inline">Recolher decisão ↑</span></summary>
         <div className="space-y-4 rounded-2xl border border-[#17304d] bg-[#071226] p-3 sm:p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            {inteligencia && <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[.12em] text-cyan-200">IA Comercial CTI · leitura contextual</span>}
-            {carregandoChave === chaveAlvo && <span aria-hidden="true" className="inline-flex gap-1 text-cyan-300"><span>•</span><span>•</span><span>•</span></span>}
-          </div>
+          {inteligencia && <div className="flex flex-wrap items-center gap-2"><span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[.12em] text-cyan-200">IA Comercial CTI · leitura contextual</span></div>}
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="min-w-0"><p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>Interpretação</p><p className="mt-2 break-words text-sm leading-6 text-slate-300">{leituraSelecionada}</p></div>
             <div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-emerald-300">Ação</p><p className="mt-2 break-words text-sm leading-6 text-slate-300">{acaoSelecionada}</p></div>
