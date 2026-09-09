@@ -150,7 +150,7 @@ export default function SinalDecisaoInterativo({
               </div>
               <div className="min-w-0 rounded-xl border border-violet-500/20 px-2 py-2">
                 <strong className="block text-sm text-violet-200">{alvo.fontes?.historico?.registros ?? 0}</strong>
-                <span className="block truncate text-[8px] uppercase text-slate-500 sm:text-[9px]">Histórico</span>
+                <span className="block truncate text-[8px] uppercase text-slate-500 sm:text-[9px]">HIST/FUNIL</span>
               </div>
               <div className="min-w-0 rounded-xl border border-emerald-500/20 px-2 py-2">
                 <strong className="block text-sm text-emerald-200">{alvo.fontes?.crm?.ativos ?? 0}</strong>
