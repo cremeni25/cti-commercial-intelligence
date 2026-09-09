@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { getMapaAlvoInteligencia, type MapaAlvoInteligencia } from "@/services/mapa-equipe-api"
 
 type FontesDirecionamento = {
   anfir?: { ocorrencias?: number; unidades?: number }
@@ -87,23 +88,56 @@ export default function SinalDecisaoInterativo({
   leitura,
   acao,
   direcionamento,
+  origem,
+  responsavelId,
   destaque = "cyan",
 }: {
   leitura: string
   acao: string
   direcionamento?: Direcionamento
+  origem: string
+  responsavelId?: string | null
   destaque?: "cyan" | "amber"
 }) {
   const alvos = direcionamento?.alvos || []
   const [indiceSelecionado, setIndiceSelecionado] = useState(0)
+  const [aberto, setAberto] = useState(false)
+  const [leiturasIA, setLeiturasIA] = useState<Record<string, MapaAlvoInteligencia>>({})
+  const [carregandoChave, setCarregandoChave] = useState<string | null>(null)
+  const [erroChave, setErroChave] = useState<string | null>(null)
   const indiceSeguro = Math.min(indiceSelecionado, Math.max(0, alvos.length - 1))
   const alvo = alvos[indiceSeguro]
+  const chaveAlvo = alvo ? `${origem}::${alvo.responsavel}::${alvo.cliente}` : ""
+
+  useEffect(() => {
+    if (!aberto || !alvo || !chaveAlvo || leiturasIA[chaveAlvo] || carregandoChave === chaveAlvo) return
+    let ativo = true
+    setCarregandoChave(chaveAlvo)
+    setErroChave(null)
+    void getMapaAlvoInteligencia(origem, alvo.cliente, alvo.responsavel, responsavelId)
+      .then((resultado) => {
+        if (!ativo) return
+        setLeiturasIA((atual) => ({ ...atual, [chaveAlvo]: resultado }))
+      })
+      .catch(() => {
+        if (ativo) setErroChave(chaveAlvo)
+      })
+      .finally(() => {
+        if (ativo) setCarregandoChave((atual) => atual === chaveAlvo ? null : atual)
+      })
+    return () => { ativo = false }
+  }, [aberto, alvo, chaveAlvo, leiturasIA, carregandoChave, origem, responsavelId])
 
   if (!alvo) return null
 
   const ciclo = alvo.ciclo_comercial
-  const leituraSelecionada = alvo.leitura_ciclo || ciclo?.leitura || alvo.leitura_decisao || (indiceSeguro === 0 ? leitura : "Sem interpretação específica disponível para este alvo.")
-  const acaoSelecionada = alvo.acao_ciclo || ciclo?.acao || alvo.acao_decisao || (indiceSeguro === 0 ? limparAcao(acao, direcionamento) || acao : "Sem ação específica disponível para este alvo.")
+  const inteligencia = leiturasIA[chaveAlvo]
+  const leituraFactual = alvo.leitura_decisao || (indiceSeguro === 0 ? leitura : "Sem interpretação factual específica disponível para este alvo.")
+  const acaoFactual = alvo.acao_decisao || (indiceSeguro === 0 ? limparAcao(acao, direcionamento) || acao : "Sem ação factual específica disponível para este alvo.")
+  const leituraSelecionada = inteligencia?.interpretacao || leituraFactual
+  const acaoSelecionada = inteligencia?.acao || acaoFactual
+  const carregandoIA = carregandoChave === chaveAlvo
+  const erroIA = erroChave === chaveAlvo
   const cobertura = rotuloCobertura(alvo)
   const historico = Number(alvo.fontes?.historico?.registros || 0)
   const crmAtivos = Number(alvo.fontes?.crm?.ativos || 0)
@@ -161,13 +195,19 @@ export default function SinalDecisaoInterativo({
         </div>
       </div>
 
-      <details className="group mt-2">
+      <details className="group mt-2" onToggle={(evento) => setAberto(evento.currentTarget.open)}>
         <summary className={`cursor-pointer list-none py-2 text-xs font-semibold ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>
           <span className="group-open:hidden">Ver decisão e evidências ↓</span>
           <span className="hidden group-open:inline">Recolher decisão ↑</span>
         </summary>
 
         <div className="space-y-4 rounded-2xl border border-[#17304d] bg-[#071226] p-3 sm:p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            {inteligencia && <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[.12em] text-cyan-200">IA Comercial CTI · leitura contextual</span>}
+            {carregandoIA && <span className="text-[10px] text-cyan-300">Interpretando o contexto real deste cliente...</span>}
+            {erroIA && <span className="text-[10px] text-amber-300">Leitura natural indisponível; exibindo somente a leitura factual auditável.</span>}
+          </div>
+
           <div className="grid gap-4 lg:grid-cols-2">
             <div className="min-w-0">
               <p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>Interpretação</p>
