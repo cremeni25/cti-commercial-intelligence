@@ -37,6 +37,29 @@ def test_oportunidade_usa_todos_os_itens_ativos(monkeypatch):
     assert registro["ddd"] == "11"
 
 
+def test_projecao_crm_reutiliza_leitura_durante_rajada_do_mapa(monkeypatch):
+    chamadas = []
+
+    def fake_lista(tabela):
+        chamadas.append(tabela)
+        return {
+            "cti_oportunidades": [{"id": "opp-cache", "cliente_id": "cli-cache", "status": "PROPOSTA"}],
+            "cti_oportunidade_itens": [],
+            "clientes": [{"id": "cli-cache", "razao_social": "CLIENTE CACHE"}],
+            "cti_clientes": [],
+        }.get(tabela, [])
+
+    monkeypatch.setattr(projection, "_lista_segura", fake_lista)
+    projection.invalidar_cache_oportunidades_enriquecidas()
+
+    primeira = projection.carregar_oportunidades_enriquecidas()
+    segunda = projection.carregar_oportunidades_enriquecidas()
+
+    assert primeira[0]["cliente_nome"] == "CLIENTE CACHE"
+    assert segunda[0]["cliente_nome"] == "CLIENTE CACHE"
+    assert chamadas == ["cti_oportunidades", "cti_oportunidade_itens", "clientes", "cti_clientes"]
+
+
 def test_mapa_crm_rankeia_equipamentos_sem_inflar_negociacoes():
     camada = _camada_crm([
         {"status": "PROPOSTA", "valor_estimado": 100, "equipamentos": ["SUPRA 750", "SUPRA 1150"], "estado": "SP", "municipio": "BARUERI", "ddd": "11"},
