@@ -18,27 +18,20 @@ def _texto(item: dict[str, Any], *campos: str) -> str:
     return ""
 
 
-def direcionar_perda_dominante(
-    perdidos: list[dict[str, Any]],
-    motivo_dominante: str | None,
+def direcionar_registros(
+    registros: list[dict[str, Any]],
     quantidade_fn: Callable[[dict[str, Any], int], int],
     linha_fn: Callable[[dict[str, Any]], str],
     limite: int = 5,
+    responsavel_padrao: str | None = None,
+    rotulo: str = "Quem deve agir / para quem",
 ) -> dict[str, Any]:
-    """Transforma a causa dominante de perda em alvo comercial auditável."""
-    if not motivo_dominante:
-        return {"motivo": None, "alvos": [], "texto": ""}
-
-    alvo_fold = _fold(motivo_dominante)
+    """Agrupa evidências por responsável + cliente sem misturar cliente, ocorrência e unidade."""
     agrupados: dict[tuple[str, str], dict[str, Any]] = {}
 
-    for item in perdidos:
-        motivo = _texto(item, "motivo")
-        if _fold(motivo) != alvo_fold:
-            continue
-
+    for item in registros:
         cliente = _texto(item, "cliente", "empresa", "transportadora") or "Cliente não identificado"
-        responsavel = _texto(
+        responsavel = responsavel_padrao or _texto(
             item,
             "responsavel",
             "responsável",
@@ -70,11 +63,37 @@ def direcionar_perda_dominante(
 
     alvos.sort(key=lambda item: (-int(item["unidades"]), str(item["responsavel"]), str(item["cliente"])))
     alvos = alvos[: max(1, limite)]
-
     partes = [
         f'{item["responsavel"]} → {item["cliente"]} '
         f'({item["unidades"]} un.; {item["ocorrencias"]} ocorrência(s); {item["linha_principal"]})'
         for item in alvos
     ]
-    texto = "Quem deve agir / para quem: " + "; ".join(partes) + "." if partes else ""
-    return {"motivo": motivo_dominante, "alvos": alvos, "texto": texto}
+    texto = f"{rotulo}: " + "; ".join(partes) + "." if partes else ""
+    return {"alvos": alvos, "texto": texto}
+
+
+def direcionar_perda_dominante(
+    perdidos: list[dict[str, Any]],
+    motivo_dominante: str | None,
+    quantidade_fn: Callable[[dict[str, Any], int], int],
+    linha_fn: Callable[[dict[str, Any]], str],
+    limite: int = 5,
+) -> dict[str, Any]:
+    """Transforma a causa dominante de perda em alvo comercial auditável."""
+    if not motivo_dominante:
+        return {"motivo": None, "alvos": [], "texto": ""}
+
+    alvo_fold = _fold(motivo_dominante)
+    filtrados = [item for item in perdidos if _fold(_texto(item, "motivo")) == alvo_fold]
+    direcionamento = direcionar_registros(
+        filtrados,
+        quantidade_fn,
+        linha_fn,
+        limite=limite,
+        rotulo="Quem deve agir / para quem",
+    )
+    return {
+        "motivo": motivo_dominante,
+        "alvos": direcionamento["alvos"],
+        "texto": direcionamento["texto"],
+    }

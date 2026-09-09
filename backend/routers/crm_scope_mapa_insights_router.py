@@ -22,7 +22,7 @@ from routers.crm_scope_mapa_equipe_router import (
 from services.commercial_client_scope import filtrar_anfir_por_responsavel_comercial
 from services.crm_live_projection import carregar_oportunidades_enriquecidas
 from services.mapa_line_market import composicao_marca_linha
-from services.mapa_perdas_direcionamento import direcionar_perda_dominante
+from services.mapa_perdas_direcionamento import direcionar_perda_dominante, direcionar_registros
 from services.product_line_classifier import classificar_linha
 
 router = APIRouter(prefix="/crm-seguro/mapa-equipe", tags=["crm-seguro-mapa-insights"])
@@ -78,6 +78,23 @@ def _quantidade(item: dict[str, Any], padrao: int = 1) -> int:
 def _linha_nome(item: dict[str, Any]) -> str:
     codigo = classificar_linha(item)
     return {"TR": "Trailer", "DT": "Diesel Truck", "DD": "Direct Drive"}.get(codigo, "Não classificado")
+
+
+def _cliente_nome(item: dict[str, Any]) -> str:
+    return str(
+        item.get("cliente")
+        or item.get("cliente_nome")
+        or item.get("empresa")
+        or item.get("transportadora")
+        or item.get("razao_social")
+        or ""
+    ).strip()
+
+
+def _carrier_confirmado(item: dict[str, Any]) -> bool:
+    status = _fold(item.get("status")).replace(" ", "")
+    fabricante = _fold(item.get("fabricante_equipamento"))
+    return status in {"CARRIER", "USADOCARRIER"} or fabricante == "CARRIER"
 
 
 def _ano_registro(item: dict[str, Any]) -> int | None:
@@ -183,9 +200,9 @@ def _clientes_carteira_atual(responsavel_id: str) -> int:
 
 def _clientes_anfir_unicos(registros: list[dict[str, Any]]) -> int:
     return len({
-        str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip().upper()
+        _cliente_nome(item).upper()
         for item in registros
-        if str(item.get("cliente") or item.get("empresa") or item.get("transportadora") or "").strip()
+        if _cliente_nome(item)
     })
 
 
@@ -239,6 +256,21 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
         negociacoes_anfir = len(anf)
         pipeline = round(sum(_valor(item) for item in ativos), 2)
         leitura, acao = _acao_regiao(mercado, len(ativos), pipeline)
+
+        clientes_com_crm_ativo = {_fold(_cliente_nome(item)) for item in ativos if _cliente_nome(item)}
+        sem_crm = [item for item in anf if _cliente_nome(item) and _fold(_cliente_nome(item)) not in clientes_com_crm_ativo]
+        base_direcionamento = sem_crm if sem_crm else anf
+        rotulo = "Prioridade sem CRM ativo" if sem_crm else "Prioridade de acompanhamento"
+        direcionamento = direcionar_registros(
+            base_direcionamento,
+            _quantidade,
+            _linha_nome,
+            responsavel_padrao=responsavel.nome,
+            rotulo=rotulo,
+        )
+        if direcionamento["texto"]:
+            acao = f'{acao} {direcionamento["texto"]}'
+
         saida.append({
             "id": responsavel.id,
             "nome": responsavel.nome,
@@ -257,6 +289,7 @@ def _regioes(alvo: UsuarioAutenticado | None, equipe: list[dict[str, Any]], merc
             "regra_metricas": "MERCADO=UNIDADES_ANFIR_2026; CLIENTES=CLIENTES_UNICOS_ANFIR_2026; NEGOCIACOES=OCORRENCIAS_ANFIR_2026; CARTEIRA=RESPONSABILIDADE_ATUAL; CRM=OPORTUNIDADES_2026",
             "leitura_comercial": leitura,
             "acao_recomendada": acao,
+            "direcionamento": direcionamento,
         })
     return sorted(saida, key=lambda item: (-int(item["mercado_2026"]), str(item["nome"])))
 
@@ -313,9 +346,23 @@ def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
 
     blocos = []
     for chave, codigo in (("Trailer", "trailer"), ("Diesel Truck", "diesel_truck"), ("Direct Drive", "direct_drive")):
-        composicao = composicao_marca_linha(itens_por_linha[chave])
+        registros_linha = itens_por_linha[chave]
+        composicao = composicao_marca_linha(registros_linha)
         total_real = int(composicao["mercado"])
         leitura, acao = _leitura_linha(chave, series[chave], total_real)
+
+        nao_capturados_carrier = [item for item in registros_linha if not _carrier_confirmado(item)]
+        base_direcionamento = nao_capturados_carrier if nao_capturados_carrier else registros_linha
+        rotulo = "Prioridade comercial fora da captura Carrier" if nao_capturados_carrier else "Prioridade de proteção Carrier"
+        direcionamento = direcionar_registros(
+            base_direcionamento,
+            _quantidade,
+            _linha_nome,
+            rotulo=rotulo,
+        )
+        if direcionamento["texto"]:
+            acao = f'{acao} {direcionamento["texto"]}'
+
         blocos.append({
             "codigo": codigo,
             "nome": chave,
@@ -324,6 +371,7 @@ def _linhas_2026(anfir: list[dict[str, Any]]) -> dict[str, Any]:
             "composicao_marca": composicao,
             "leitura_comercial": leitura,
             "acao_recomendada": acao,
+            "direcionamento": direcionamento,
         })
     return {
         "meses": list(MESES),
