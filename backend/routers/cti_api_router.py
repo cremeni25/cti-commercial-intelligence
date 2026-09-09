@@ -25,6 +25,7 @@ from routers.ia_comercial_acoes_router import router as ia_comercial_acoes_route
 from routers.ia_comercial_artefatos_router import router as ia_comercial_artefatos_router
 from routers.ia_comercial_anexos_router import router as ia_comercial_anexos_router
 from routers.ia_comercial_mapa_router import router as ia_comercial_mapa_router
+from routers.ia_comercial_alvo_mapa_router import router as ia_comercial_alvo_mapa_router
 from routers.crm_scope_mapa_insights_router import router as crm_scope_mapa_insights_router
 from routers.crm_app_clientes_edicao_router import router as crm_app_clientes_edicao_router
 from routers.crm_app_cnpj_router import router as crm_app_cnpj_router
@@ -67,6 +68,7 @@ router.include_router(ia_comercial_acoes_router)
 router.include_router(ia_comercial_artefatos_router)
 router.include_router(ia_comercial_anexos_router)
 router.include_router(ia_comercial_mapa_router)
+router.include_router(ia_comercial_alvo_mapa_router)
 router.include_router(crm_scope_mapa_insights_router)
 router.include_router(crm_app_clientes_edicao_router)
 router.include_router(crm_app_cnpj_router)

@@ -164,6 +164,16 @@ export type MapaEquipeInteligencia = {
   fontes_contextuais?: FonteContextual[]
 }
 
+export type MapaAlvoInteligencia = {
+  interpretacao: string
+  acao: string
+  cliente: string
+  responsavel: string
+  origem: "IA_COMERCIAL_CTI"
+  somente_leitura: boolean
+  fontes?: Array<{ tipo?: string; descricao?: string; url?: string }>
+}
+
 const MAPA_TIMEOUT_MS = 25000
 
 async function interpretarResposta<T>(resposta: Response): Promise<T> {
@@ -218,6 +228,24 @@ export async function getMapaEquipeInteligencia(responsavelId?: string | null): 
   const sufixo = qs.toString() ? `?${qs.toString()}` : ""
   const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia${sufixo}`, { cache: "no-store" })
   return interpretarResposta<MapaEquipeInteligencia>(resposta)
+}
+
+export async function getMapaAlvoInteligencia(
+  origem: string,
+  cliente: string,
+  responsavel: string,
+  responsavelId?: string | null,
+): Promise<MapaAlvoInteligencia> {
+  const qs = new URLSearchParams()
+  if (responsavelId) qs.set("responsavel_id", responsavelId)
+  const sufixo = qs.toString() ? `?${qs.toString()}` : ""
+  const resposta = await fetchCrmSeguroProxy(`crm-seguro/mapa-equipe/inteligencia/alvo${sufixo}`, {
+    method: "POST",
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ origem, cliente, responsavel }),
+  })
+  return interpretarResposta<MapaAlvoInteligencia>(resposta)
 }
 
 export async function perguntarMapaEquipeInteligencia(
