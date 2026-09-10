@@ -18,7 +18,6 @@ const ROTAS_LEGADAS_SEGURAS: Record<string, string> = {
   "/crm/propostas": "crm-seguro/propostas",
   "/crm/pedidos": "crm-seguro/pedidos",
   "/crm/vendas": "crm-seguro/vendas",
-  "/vendas": "crm-seguro/vendas",
   "/crm-documentos/propostas": "crm-seguro/propostas",
   "/crm-documentos/pedidos": "crm-seguro/pedidos",
   "/carrier-operacional/pedidos": "crm-seguro/pedidos",
