@@ -14,7 +14,7 @@ def test_conclusao_operacional_grava_na_tabela_base():
 
 
 def test_conclusao_nao_escreve_na_view_operacional():
-    trecho = GOVERNANANCA = GOVERNANCA.split('@router.put("/atividades/{atividade_id}/concluir")', 1)[1].split('@router.put("/atividades/{atividade_id}/administrar")', 1)[0]
+    trecho = GOVERNANCA.split('@router.put("/atividades/{atividade_id}/concluir")', 1)[1].split('@router.put("/atividades/{atividade_id}/administrar")', 1)[0]
     assert 'supabase.table(TABELA_ATIVIDADES)' in trecho
     assert 'supabase.table(VIEW_ATIVIDADES_ATIVAS).update' not in trecho
 
