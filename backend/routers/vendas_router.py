@@ -46,6 +46,42 @@ def _normalizar(valor: object) -> str:
     return "".join(caractere for caractere in texto.upper() if caractere.isalnum())
 
 
+def _contexto_pedido(pedido: dict):
+    proposta_id = pedido.get("proposta_id") or pedido.get("proposta_aceita_id")
+    proposta = _opcional("cti_propostas", str(proposta_id or "")) or {}
+    item_id = pedido.get("item_oportunidade_id") or proposta.get("item_oportunidade_id")
+    item = _opcional("cti_oportunidade_itens", str(item_id or "")) or {}
+    oportunidade_id = pedido.get("oportunidade_id") or proposta.get("oportunidade_id") or item.get("oportunidade_id")
+    oportunidade = _opcional("cti_oportunidades", str(oportunidade_id or "")) or {}
+    return proposta, item, oportunidade, oportunidade_id, item_id
+
+
+def pedido_venda_indireta(pedido: dict) -> bool:
+    _, _, oportunidade, _, _ = _contexto_pedido(pedido)
+    return _normalizar(oportunidade.get("titulo")) == "VENDAINDIRETA"
+
+
+def _marco_comercial_venda(pedido: dict, oportunidade: dict) -> tuple[str, str]:
+    indireta = _normalizar(oportunidade.get("titulo")) == "VENDAINDIRETA"
+    if indireta:
+        encerrado_em = str(pedido.get("encerrado_em") or "").strip()
+        if not encerrado_em:
+            raise HTTPException(
+                status_code=409,
+                detail="Venda indireta permanece em acompanhamento e só vira venda após o encerramento operacional do pós-venda.",
+            )
+        return "VENDA_INDIRETA", encerrado_em[:10]
+
+    faturado_em = str(pedido.get("faturado_em") or "").strip()
+    numero_nf = str(pedido.get("numero_nf") or "").strip()
+    if not faturado_em or not numero_nf:
+        raise HTTPException(
+            status_code=409,
+            detail="Venda direta só pode ser reconhecida após a confirmação da Nota Fiscal.",
+        )
+    return "VENDA_DIRETA", faturado_em[:10]
+
+
 def _resolver_equipamento_codigo(item: dict, snapshot: dict) -> str | None:
     candidatos = [
         item.get("equipamento_codigo"),
@@ -175,12 +211,8 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     if existentes:
         return {"status": "JA_REGISTRADA", "venda": existentes[0]}
 
-    proposta_id = pedido.get("proposta_id") or pedido.get("proposta_aceita_id")
-    proposta = _opcional("cti_propostas", str(proposta_id or "")) or {}
-    item_id = pedido.get("item_oportunidade_id") or proposta.get("item_oportunidade_id")
-    item = _opcional("cti_oportunidade_itens", str(item_id or "")) or {}
-    oportunidade_id = pedido.get("oportunidade_id") or proposta.get("oportunidade_id") or item.get("oportunidade_id")
-    oportunidade = _opcional("cti_oportunidades", str(oportunidade_id or "")) or {}
+    proposta, item, oportunidade, oportunidade_id, item_id = _contexto_pedido(pedido)
+    modalidade, data_venda = _marco_comercial_venda(pedido, oportunidade)
 
     snapshot = proposta.get("snapshot_dados") if isinstance(proposta, dict) else {}
     snapshot = snapshot if isinstance(snapshot, dict) else {}
@@ -203,7 +235,9 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     numero = str(pedido.get("numero") or pedido_id)
     equipamento = str(item.get("equipamento") or snapshot_contexto.get("equipamento") or equipamento_codigo)
     marcador = f"CTI_PEDIDO:{pedido_id}"
-    observacoes = [marcador, f"Pedido {numero}", f"Equipamento {equipamento}"]
+    observacoes = [marcador, f"Pedido {numero}", f"Equipamento {equipamento}", f"Modalidade {modalidade}"]
+    if modalidade == "VENDA_DIRETA":
+        observacoes.append(f"NF {pedido.get('numero_nf')}")
     if dados.observacao:
         observacoes.append(dados.observacao.strip())
 
@@ -216,7 +250,7 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
         "implementadora_id": implementadora_id,
         "tipo_venda": dados.tipo_venda.strip().upper() or "EQUIPAMENTO",
         "valor": valor,
-        "data_venda": datetime.now(timezone.utc).date().isoformat(),
+        "data_venda": data_venda,
         "observacao": " | ".join(observacoes),
     }
 
@@ -228,4 +262,4 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     if not criado:
         raise HTTPException(status_code=500, detail="A venda não confirmou gravação na base.")
 
-    return {"status": "REGISTRADA", "venda": criado[0]}
+    return {"status": "REGISTRADA", "modalidade": modalidade, "venda": criado[0]}
