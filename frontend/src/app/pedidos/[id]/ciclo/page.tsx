@@ -7,6 +7,7 @@ import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { API_URL } from "@/lib/api"
+import { useOperationalI18n } from "@/core/i18n/operational"
 
 type Ciclo = {
   pedido_id:string
@@ -39,18 +40,40 @@ const ETAPAS=[
   {id:"ENCERRADO",rotulo:"Encerrado"},
 ]
 
+const REGRA_COPY={
+ "pt-BR":{
+  titulo:"Pedido, venda e acompanhamento até instalação",
+  subtitulo:"Venda direta é reconhecida quando a NF é confirmada. Entrega e instalação continuam depois como acompanhamento operacional e conciliação com a ANFIR. Venda indireta permanece em acompanhamento até o encerramento do pós-venda.",
+  diretaRegistrada:"NF confirmada. A venda direta foi registrada; entrega e instalação permanecem em acompanhamento operacional e ANFIR.",
+  indiretaRegistrada:"Acompanhamento pós-venda encerrado. A venda indireta foi registrada.",
+ },
+ en:{
+  titulo:"Order, sale and follow-up through installation",
+  subtitulo:"A direct sale is recognized when the invoice is confirmed. Delivery and installation continue afterwards as operational follow-up and ANFIR reconciliation. An indirect sale remains under follow-up until post-sale closure.",
+  diretaRegistrada:"Invoice confirmed. The direct sale was recorded; delivery and installation remain under operational and ANFIR follow-up.",
+  indiretaRegistrada:"Post-sale follow-up closed. The indirect sale was recorded.",
+ },
+ es:{
+  titulo:"Pedido, venta y seguimiento hasta la instalación",
+  subtitulo:"La venta directa se reconoce cuando se confirma la factura. La entrega y la instalación continúan después como seguimiento operativo y conciliación con ANFIR. La venta indirecta permanece en seguimiento hasta el cierre de posventa.",
+  diretaRegistrada:"Factura confirmada. La venta directa fue registrada; la entrega y la instalación permanecen en seguimiento operativo y ANFIR.",
+  indiretaRegistrada:"Seguimiento posventa cerrado. La venta indirecta fue registrada.",
+ },
+} as const
+
 function dataHora(valor?:string|null){if(!valor)return"-";const d=new Date(valor);return Number.isNaN(d.getTime())?valor:d.toLocaleString("pt-BR")}
 
 export default function CicloPedidoPage(){
  const params=useParams<{id:string}>(),id=String(params?.id||"")
+ const {locale}=useOperationalI18n(),rc=REGRA_COPY[locale]
  const[dados,setDados]=useState<Ciclo|null>(null),[loading,setLoading]=useState(true),[salvando,setSalvando]=useState(false),[erro,setErro]=useState(""),[mensagem,setMensagem]=useState(""),[nf,setNf]=useState(""),[serieNf,setSerieNf]=useState(""),[serieInstalada,setSerieInstalada]=useState(""),[observacao,setObservacao]=useState("")
  async function carregar(){setLoading(true);setErro("");try{const r=await fetch(`${API_URL}/carrier-operacional/pedidos/${id}/ciclo`,{cache:"no-store"});const p=await r.json().catch(()=>null);if(!r.ok)throw new Error(p?.detail||"Falha ao carregar ciclo.");setDados(p);setNf(String(p.numero_nf||""));setSerieNf(String(p.numero_serie_nf||""));setSerieInstalada(String(p.numero_serie_instalado||""));setObservacao(String(p.observacao_acompanhamento||""))}catch(e){setErro(e instanceof Error?e.message:"Falha ao carregar ciclo.")}finally{setLoading(false)}}
  useEffect(()=>{if(id)void carregar()},[id])
  const atual=dados?.status_ciclo||"PEDIDO",indiceAtual=ETAPAS.findIndex(e=>e.id===atual),proxima=ETAPAS[indiceAtual+1]
- async function avancar(etapa:string){setSalvando(true);setErro("");setMensagem("");try{const r=await fetch(`${API_URL}/carrier-operacional/pedidos/${id}/ciclo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({etapa,numero_nf:nf||null,numero_serie_nf:serieNf||null,numero_serie_instalado:serieInstalada||null,observacao:observacao||null})});const p=await r.json().catch(()=>null);if(!r.ok)throw new Error(p?.detail||"Não foi possível atualizar o ciclo.");if(p?.venda_registrada&&etapa==="FATURADO"&&p?.modalidade_venda==="DIRETA")setMensagem("NF confirmada. A venda direta foi registrada; entrega e instalação permanecem em acompanhamento operacional e ANFIR.");else if(p?.venda_registrada&&etapa==="ENCERRADO"&&p?.modalidade_venda==="INDIRETA")setMensagem("Acompanhamento pós-venda encerrado. A venda indireta foi registrada.");else setMensagem(`Etapa ${etapa.replaceAll("_"," ")} confirmada.`);await carregar()}catch(e){setErro(e instanceof Error?e.message:"Falha ao atualizar ciclo.")}finally{setSalvando(false)}}
+ async function avancar(etapa:string){setSalvando(true);setErro("");setMensagem("");try{const r=await fetch(`${API_URL}/carrier-operacional/pedidos/${id}/ciclo`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({etapa,numero_nf:nf||null,numero_serie_nf:serieNf||null,numero_serie_instalado:serieInstalada||null,observacao:observacao||null})});const p=await r.json().catch(()=>null);if(!r.ok)throw new Error(p?.detail||"Não foi possível atualizar o ciclo.");if(p?.venda_registrada&&etapa==="FATURADO"&&p?.modalidade_venda==="DIRETA")setMensagem(rc.diretaRegistrada);else if(p?.venda_registrada&&etapa==="ENCERRADO"&&p?.modalidade_venda==="INDIRETA")setMensagem(rc.indiretaRegistrada);else setMensagem(`Etapa ${etapa.replaceAll("_"," ")} confirmada.`);await carregar()}catch(e){setErro(e instanceof Error?e.message:"Falha ao atualizar ciclo.")}finally{setSalvando(false)}}
  const bloqueado=salvando||(proxima?.id==="FATURADO"&&(!nf.trim()||!serieNf.trim()))||(proxima?.id==="INSTALADO"&&!serieInstalada.trim())
  return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="space-y-6 p-4 sm:p-6 lg:p-8">
-  <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6"><Link href={`/pedidos/${id}`} className="text-sm font-semibold text-cyan-300">← Voltar ao pedido</Link><p className="mt-5 text-xs font-semibold uppercase tracking-[.22em] text-cyan-400">Ciclo comercial e operacional</p><h1 className="mt-2 text-3xl font-bold">Pedido, venda e acompanhamento até instalação</h1><p className="mt-2 text-sm text-slate-400">Venda direta é reconhecida quando a NF é confirmada. Entrega e instalação continuam depois como acompanhamento operacional e conciliação com a ANFIR. Venda indireta permanece em acompanhamento até o encerramento do pós-venda.</p></header>
+  <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6"><Link href={`/pedidos/${id}`} className="text-sm font-semibold text-cyan-300">← Voltar ao pedido</Link><p className="mt-5 text-xs font-semibold uppercase tracking-[.22em] text-cyan-400">Ciclo comercial e operacional</p><h1 className="mt-2 text-3xl font-bold">{rc.titulo}</h1><p className="mt-2 text-sm text-slate-400">{rc.subtitulo}</p></header>
   {loading&&<div className="rounded-2xl border border-[#13203f] p-6 text-slate-400">Carregando...</div>}{erro&&<div className="rounded-2xl border border-red-900 bg-red-950/30 p-4 text-red-200">{erro}</div>}{mensagem&&<div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-emerald-200">{mensagem}</div>}
   {dados&&<>
    <section className={`rounded-2xl border p-5 ${dados.venda_registrada?"border-emerald-700 bg-emerald-950/20":"border-cyan-900 bg-cyan-950/10"}`}><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-300">Regra de reconhecimento comercial</p><h2 className="mt-2 text-lg font-bold">{dados.modalidade_venda==="INDIRETA"?"Venda indireta":"Venda direta"}</h2><p className="mt-2 text-sm text-slate-300">{dados.modalidade_venda==="INDIRETA"?"A venda será reconhecida no encerramento do acompanhamento pós-venda. A instalação integra esse fechamento operacional.":"A venda é reconhecida pela confirmação da NF. A instalação não impede nem posterga a venda; permanece como dado de acompanhamento e futura conciliação ANFIR."}</p>{dados.venda_registrada&&<p className="mt-3 font-semibold text-emerald-300">Venda registrada{dados.data_venda?` em ${dataHora(dados.data_venda)}`:""}.</p>}</section>
