@@ -231,6 +231,30 @@ def listar_atividades_arquivadas(usuario_id: str):
     return _enriquecer(registros)
 
 
+@router.put("/atividades/{atividade_id}/concluir")
+def concluir_atividade_operacional(atividade_id: str):
+    anterior = _atividade(atividade_id)
+    if str(anterior.get("status") or "").upper() in {"CONCLUIDA", "CONCLUÍDA", "REALIZADA", "FINALIZADA"}:
+        return _enriquecer([anterior])[0]
+
+    agora = _now()
+    payload = {
+        "status": "CONCLUIDA",
+        "concluida_em": agora,
+        "updated_at": agora,
+    }
+    resultado = (
+        supabase.table(TABELA_ATIVIDADES)
+        .update(payload)
+        .eq("id", atividade_id)
+        .is_("arquivado_em", "null")
+        .execute()
+    )
+    if not resultado.data:
+        raise HTTPException(status_code=409, detail="Atividade não encontrada ou já arquivada.")
+    return _enriquecer([resultado.data[0]])[0]
+
+
 @router.put("/atividades/{atividade_id}/administrar")
 def administrar_atividade(atividade_id: str, alteracao: AtividadeAdminUpdate):
     _master(alteracao.administrador_id)
