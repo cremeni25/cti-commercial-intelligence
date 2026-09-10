@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 CANONICAL = ROOT / "frontend" / "src" / "lib" / "crm-canonical.ts"
 BRIDGE = ROOT / "frontend" / "src" / "components" / "security" / "AuthenticatedAnfirFetchBridge.tsx"
+VENDAS_PAGE = ROOT / "frontend" / "src" / "app" / "vendas" / "page.tsx"
 SCOPE = ROOT / "backend" / "routers" / "crm_scope_router.py"
 
 
@@ -17,18 +18,26 @@ def test_listagens_documentais_e_operacionais_usam_rotas_seguras():
     assert 'return "crm-seguro/ciclos"' in canonical
 
 
-def test_bridge_intercepta_leituras_legadas_que_antes_devolviam_dados_globais():
+def test_bridge_intercepta_leituras_legadas_sem_capturar_rota_visual_de_vendas():
     bridge = BRIDGE.read_text(encoding="utf-8")
     for rota in (
-        '"/vendas": "crm-seguro/vendas"',
+        '"/crm/vendas": "crm-seguro/vendas"',
         '"/crm-documentos/propostas": "crm-seguro/propostas"',
         '"/crm-documentos/pedidos": "crm-seguro/pedidos"',
         '"/carrier-operacional/pedidos": "crm-seguro/pedidos"',
         '"/carrier-operacional/ciclos": "crm-seguro/ciclos"',
     ):
         assert rota in bridge
+    assert '"/vendas": "crm-seguro/vendas"' not in bridge
     assert 'carrier-operacional\\/pedidos\\/([^/]+)\\/ciclo' in bridge
     assert 'crm-seguro/pedidos/${encodeURIComponent(cicloPedido[1])}/ciclo' in bridge
+
+
+def test_pagina_vendas_usa_proxy_autenticado_sem_depender_da_rota_visual():
+    pagina = VENDAS_PAGE.read_text(encoding="utf-8")
+    assert 'fetchCrmSeguroProxy("crm-seguro/vendas"' in pagina
+    assert 'fetchCrmSeguroProxy("crm-seguro/nucleo-comercial"' in pagina
+    assert '`${API_URL}/vendas`' not in pagina
 
 
 def test_backend_expoe_ciclos_somente_de_pedidos_autorizados():
