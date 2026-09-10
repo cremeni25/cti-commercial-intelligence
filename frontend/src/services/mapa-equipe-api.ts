@@ -108,7 +108,7 @@ export type MapaInsights = {
   linhas_2026: {
     meses: string[]
     linhas: Array<{
-      codigo: "trailer" | "diesel_truck" | "direct-drive"
+      codigo: "trailer" | "diesel_truck" | "direct_drive"
       nome: string
       total_2026: number
       mensal: number[]
