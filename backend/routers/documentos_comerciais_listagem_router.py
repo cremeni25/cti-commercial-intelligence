@@ -66,11 +66,18 @@ def _nome_cliente(item: dict[str, Any] | None) -> str | None:
     return item.get("razao_social") or item.get("nome_fantasia") or item.get("nome") or item.get("empresa")
 
 
+def _proposta_convertida_em_pedido(item: dict[str, Any]) -> bool:
+    status = str(item.get("status_documento") or item.get("status") or "").upper()
+    normalizado = "".join(caractere for caractere in status if caractere.isalnum())
+    return normalizado == "CONVERTIDAPEDIDO"
+
+
 @router.get("/propostas")
 def listar_propostas_operacionais():
     propostas = _leitura_resiliente(
         lambda: supabase.table("cti_propostas").select("*").order("created_at", desc=True)
     )
+    propostas = [proposta for proposta in propostas if not _proposta_convertida_em_pedido(proposta)]
     clientes = _mapa_clientes({str(item.get("cliente_id")) for item in propostas if item.get("cliente_id")})
     itens = _mapa_itens({str(item.get("item_oportunidade_id")) for item in propostas if item.get("item_oportunidade_id")})
     return [
