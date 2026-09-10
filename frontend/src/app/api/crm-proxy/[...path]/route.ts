@@ -9,8 +9,7 @@ export const maxDuration = 300
 
 const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com").replace(/\/$/, "")
 const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
-const ATRASOS_RETRY_MS = [0, 180, 450]
-const ATRASOS_RETRY_ESTRATEGICO_MS = [0, 500, 1500, 3000, 5000, 8000]
+const ATRASOS_RETRY_LEITURA_MS = [0, 500, 1500, 3000, 5000, 8000]
 
 type Registro = Record<string, unknown>
 
@@ -26,7 +25,7 @@ async function fetchBackend(
   destino: URL | string,
   init: RequestInit,
   permitirRetry: boolean,
-  atrasosRetry: number[] = ATRASOS_RETRY_MS,
+  atrasosRetry: number[] = ATRASOS_RETRY_LEITURA_MS,
 ) {
   let ultimoErro: unknown = null
   let ultimaResposta: Response | null = null
@@ -146,12 +145,11 @@ async function encaminhar(
 
   try {
     const leitura = ["GET", "HEAD"].includes(request.method)
-    const leituraEstrategica = leitura && caminhoSolicitado.startsWith("crm-seguro/mapa-equipe/")
     const resposta = await fetchBackend(destino, {
       method: request.method,
       headers,
       body: leitura ? undefined : await request.arrayBuffer(),
-    }, leitura, leituraEstrategica ? ATRASOS_RETRY_ESTRATEGICO_MS : ATRASOS_RETRY_MS)
+    }, leitura)
 
     if (!resposta.ok && request.method === "GET") {
       const alternativa = await fallbackSeguro(caminhoSolicitado)
