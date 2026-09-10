@@ -306,7 +306,7 @@ def arquivar_atividade(atividade_id: str, comando: AtividadeArquivar):
         atual = _atividade(atividade_id, incluir_arquivadas=True)
         return _enriquecer([atual])[0]
     atualizado = resultado.data[0]
-    _auditar(atividade_id, "ARQUIVAMENTO_ADMIN_MASTER", alteracao.administrador_id if False else comando.administrador_id, anterior, atualizado, motivo)
+    _auditar(atividade_id, "ARQUIVAMENTO_ADMIN_MASTER", comando.administrador_id, anterior, atualizado, motivo)
     return _enriquecer([atualizado])[0]
 
 
