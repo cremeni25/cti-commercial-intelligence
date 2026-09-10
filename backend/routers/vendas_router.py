@@ -28,6 +28,8 @@ class ConcluirVendaPedidoRequest(BaseModel):
     confirmar: bool = False
     tipo_venda: str = "EQUIPAMENTO"
     observacao: str | None = None
+    origem_confirmacao: str | None = None
+    anfir_registro_id: str | None = None
 
 
 def _opcional(tabela: str, registro_id: str | None):
@@ -61,16 +63,90 @@ def pedido_venda_indireta(pedido: dict) -> bool:
     return _normalizar(oportunidade.get("titulo")) == "VENDAINDIRETA"
 
 
-def _marco_comercial_venda(pedido: dict, oportunidade: dict) -> tuple[str, str]:
+def _cliente_do_pedido(pedido: dict, proposta: dict, oportunidade: dict) -> dict:
+    cliente_id = pedido.get("cliente_id") or proposta.get("cliente_id") or oportunidade.get("cliente_id")
+    return _opcional("clientes", str(cliente_id or "")) or {}
+
+
+def _data_anfir(registro: dict) -> str | None:
+    bruto = str(registro.get("data_venda") or "").strip()
+    if bruto:
+        try:
+            return datetime.fromisoformat(bruto.replace("Z", "+00:00")).date().isoformat()
+        except Exception:
+            pass
+    ano = registro.get("ano")
+    mes = registro.get("mes")
+    try:
+        if ano and mes:
+            return f"{int(ano):04d}-{int(mes):02d}-01"
+    except Exception:
+        pass
+    return None
+
+
+def _evidencia_anfir_pedido_indireto(pedido: dict, proposta: dict, oportunidade: dict, item: dict) -> dict | None:
+    cliente = _cliente_do_pedido(pedido, proposta, oportunidade)
+    cnpj = _normalizar(cliente.get("cnpj"))
+    if not cnpj:
+        return None
+
+    equipamento = _normalizar(item.get("equipamento") or item.get("modelo_base") or item.get("nome_comercial"))
+    data_pedido = str(pedido.get("data_pedido") or pedido.get("created_at") or "")[:10]
+    try:
+        registros = (
+            supabase.table("cti_anfir")
+            .select("id,cnpj,cliente,implementadora,linha,equipamento,modelo,fabricante_equipamento,data_venda,ano,mes,quantidade")
+            .eq("ativo", True)
+            .execute()
+            .data
+            or []
+        )
+    except Exception:
+        return None
+
+    candidatos = []
+    for registro in registros:
+        if _normalizar(registro.get("cnpj")) != cnpj:
+            continue
+        modelo = _normalizar(registro.get("equipamento") or registro.get("modelo"))
+        if equipamento and modelo and equipamento != modelo and equipamento not in modelo and modelo not in equipamento:
+            continue
+        data_registro = _data_anfir(registro)
+        if data_pedido and data_registro and data_registro < data_pedido:
+            continue
+        candidatos.append((data_registro or "", registro))
+
+    if not candidatos:
+        return None
+    candidatos.sort(key=lambda par: par[0], reverse=True)
+    return candidatos[0][1]
+
+
+def evidencia_anfir_pedido_indireto(pedido_id: str) -> dict | None:
+    pedido = _opcional("cti_pedidos", pedido_id)
+    if not pedido or not pedido_venda_indireta(pedido):
+        return None
+    proposta, item, oportunidade, _, _ = _contexto_pedido(pedido)
+    return _evidencia_anfir_pedido_indireto(pedido, proposta, oportunidade, item)
+
+
+def _marco_comercial_venda(pedido: dict, oportunidade: dict, dados: ConcluirVendaPedidoRequest) -> tuple[str, str, str]:
     indireta = _normalizar(oportunidade.get("titulo")) == "VENDAINDIRETA"
     if indireta:
-        encerrado_em = str(pedido.get("encerrado_em") or "").strip()
-        if not encerrado_em:
+        origem = _normalizar(dados.origem_confirmacao)
+        if origem not in {"VENDEDOR", "ANFIR"}:
             raise HTTPException(
                 status_code=409,
-                detail="Venda indireta permanece em acompanhamento e só vira venda após o encerramento operacional do pós-venda.",
+                detail="Venda indireta só pode ser reconhecida pela ANFIR ou pela confirmação expressa do vendedor de que o pedido foi finalizado pelo cliente e pela implementadora.",
             )
-        return "VENDA_INDIRETA", encerrado_em[:10]
+        if origem == "ANFIR":
+            registro = _opcional("cti_anfir", dados.anfir_registro_id)
+            if not registro:
+                raise HTTPException(status_code=409, detail="A evidência ANFIR informada não foi localizada.")
+            data_venda = _data_anfir(registro) or datetime.now(timezone.utc).date().isoformat()
+            return "VENDA_INDIRETA", data_venda, "ANFIR"
+        return "VENDA_INDIRETA", datetime.now(timezone.utc).date().isoformat(), "VENDEDOR"
 
     faturado_em = str(pedido.get("faturado_em") or "").strip()
     numero_nf = str(pedido.get("numero_nf") or "").strip()
@@ -79,7 +155,7 @@ def _marco_comercial_venda(pedido: dict, oportunidade: dict) -> tuple[str, str]:
             status_code=409,
             detail="Venda direta só pode ser reconhecida após a confirmação da Nota Fiscal.",
         )
-    return "VENDA_DIRETA", faturado_em[:10]
+    return "VENDA_DIRETA", faturado_em[:10], "NF"
 
 
 def _resolver_equipamento_codigo(item: dict, snapshot: dict) -> str | None:
@@ -212,7 +288,7 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
         return {"status": "JA_REGISTRADA", "venda": existentes[0]}
 
     proposta, item, oportunidade, oportunidade_id, item_id = _contexto_pedido(pedido)
-    modalidade, data_venda = _marco_comercial_venda(pedido, oportunidade)
+    modalidade, data_venda, origem_reconhecimento = _marco_comercial_venda(pedido, oportunidade, dados)
 
     snapshot = proposta.get("snapshot_dados") if isinstance(proposta, dict) else {}
     snapshot = snapshot if isinstance(snapshot, dict) else {}
@@ -235,9 +311,11 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     numero = str(pedido.get("numero") or pedido_id)
     equipamento = str(item.get("equipamento") or snapshot_contexto.get("equipamento") or equipamento_codigo)
     marcador = f"CTI_PEDIDO:{pedido_id}"
-    observacoes = [marcador, f"Pedido {numero}", f"Equipamento {equipamento}", f"Modalidade {modalidade}"]
+    observacoes = [marcador, f"Pedido {numero}", f"Equipamento {equipamento}", f"Modalidade {modalidade}", f"Reconhecimento {origem_reconhecimento}"]
     if modalidade == "VENDA_DIRETA":
         observacoes.append(f"NF {pedido.get('numero_nf')}")
+    if dados.anfir_registro_id:
+        observacoes.append(f"ANFIR {dados.anfir_registro_id}")
     if dados.observacao:
         observacoes.append(dados.observacao.strip())
 
@@ -262,4 +340,4 @@ def concluir_pedido_em_venda(pedido_id: str, dados: ConcluirVendaPedidoRequest):
     if not criado:
         raise HTTPException(status_code=500, detail="A venda não confirmou gravação na base.")
 
-    return {"status": "REGISTRADA", "modalidade": modalidade, "venda": criado[0]}
+    return {"status": "REGISTRADA", "modalidade": modalidade, "origem_reconhecimento": origem_reconhecimento, "venda": criado[0]}
