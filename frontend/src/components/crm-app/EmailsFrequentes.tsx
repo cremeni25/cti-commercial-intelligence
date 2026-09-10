@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
@@ -32,7 +32,7 @@ function extrair(lista: unknown): Sugestao[] {
       }
     }
   }
-  return [...mapa.values()].sort((a, b) => b.usos - a.usos || b.ultima.localeCompare(a.ultima)).slice(0, 8)
+  return [...mapa.values()].sort((a, b) => b.usos - a.usos || b.ultima.localeCompare(a.ultima))
 }
 
 async function buscarSugestoes(): Promise<Sugestao[]> {
@@ -54,10 +54,23 @@ async function buscarSugestoes(): Promise<Sugestao[]> {
   return carregamento
 }
 
-function acrescentar(valor: string, email: string): string {
-  const atuais = valor.split(/[;,\n]+/).map((item) => item.trim()).filter(Boolean)
-  if (atuais.some((item) => item.toLowerCase() === email.toLowerCase())) return valor
-  return [...atuais, email].join("; ")
+function termoAtual(valor: string): string {
+  const partes = valor.split(/[;,\n]+/)
+  return (partes.at(-1) || "").trim().toLowerCase()
+}
+
+function selecionar(valor: string, email: string): string {
+  const partes = valor.split(/([;,\n]+)/)
+  let ultimoConteudo = -1
+  for (let i = partes.length - 1; i >= 0; i -= 1) {
+    if (!/^[;,\n]+$/.test(partes[i])) {
+      ultimoConteudo = i
+      break
+    }
+  }
+  if (ultimoConteudo < 0) return email
+  partes[ultimoConteudo] = email
+  return partes.join("").replace(/\s*([;,])\s*/g, "$1 ").trim()
 }
 
 export default function EmailsFrequentes({ valor, alterar }: { valor: string; alterar: (valor: string) => void }) {
@@ -69,10 +82,28 @@ export default function EmailsFrequentes({ valor, alterar }: { valor: string; al
     return () => { ativo = false }
   }, [])
 
-  if (!sugestoes.length) return null
-  return <div className="mt-2 flex flex-wrap gap-2">
-    {sugestoes.map((item) => <button key={item.email} type="button" onClick={() => alterar(acrescentar(valor, item.email))} className="rounded-full border border-[#24466f] bg-[#061326] px-3 py-1.5 text-xs text-cyan-200 hover:border-cyan-600">
-      {item.email}{item.usos > 1 ? ` · ${item.usos}x` : ""}
+  const termo = termoAtual(valor)
+  const correspondencias = useMemo(() => {
+    if (termo.length < 2) return []
+    const existentes = new Set(valor.split(/[;,\n]+/).map((item) => item.trim().toLowerCase()).filter(Boolean))
+    return sugestoes
+      .filter((item) => !existentes.has(item.email) || item.email.includes(termo))
+      .filter((item) => item.email.includes(termo))
+      .slice(0, 5)
+  }, [sugestoes, termo, valor])
+
+  if (!correspondencias.length) return null
+
+  return <div className="mt-1 overflow-hidden rounded-xl border border-[#24466f] bg-[#061326] shadow-xl">
+    {correspondencias.map((item) => <button
+      key={item.email}
+      type="button"
+      onMouseDown={(evento) => evento.preventDefault()}
+      onClick={() => alterar(selecionar(valor, item.email))}
+      className="flex w-full items-center justify-between gap-3 border-b border-[#173354] px-3 py-2 text-left text-sm text-cyan-100 last:border-b-0 hover:bg-[#0b2038]"
+    >
+      <span className="truncate">{item.email}</span>
+      {item.usos > 1 ? <span className="shrink-0 text-[11px] text-slate-500">{item.usos}x</span> : null}
     </button>)}
   </div>
 }
