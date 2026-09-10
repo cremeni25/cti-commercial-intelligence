@@ -73,6 +73,10 @@ export default function PropostaPage() {
   const encerrada = ["ACEITA", "CONVERTIDA_PEDIDO", "REJEITADA", "EXPIRADA", "CANCELADA", "SUBSTITUIDA"].includes(status)
   const snapshot = useMemo(() => (dados?.proposta.snapshot_dados || {}) as Record<string, unknown>, [dados])
   const aceiteValido = dados?.aceites.find((item) => String(item.status || "").toUpperCase() === "ACEITO")
+  const aceitePresencialPendente = dados?.aceites.find((item) => {
+    const statusAceite = String(item.status || "").toUpperCase()
+    return String(item.metodo || "").toUpperCase() === "PRESENCIAL_TELA" && ["PENDENTE", "VISUALIZADO"].includes(statusAceite)
+  })
   const pedido = dados?.pedidos[0]
 
   async function executar(sufixo: string, body?: Record<string, unknown>) {
@@ -105,9 +109,51 @@ export default function PropostaPage() {
     finally { setProcessando(false) }
   }
 
+  async function confirmarAceitePresencial(aceiteId: string, nome: string) {
+    const resposta = await fetch(`/api/crm-proxy/crm-documentos/aceites/${encodeURIComponent(aceiteId)}/confirmar`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        aceite_termos: true,
+        user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        evidencias: { origem: "CTI_WEB", modalidade: "PRESENCIAL_TELA", proposta_id: id, nome_signatario: nome, confirmado_em: new Date().toISOString() },
+      }),
+    })
+    const payload = await resposta.json().catch(() => null)
+    if (!resposta.ok) throw new Error(payload?.detail || tc("common.error"))
+  }
+
   async function solicitarAceite(metodo: "PRESENCIAL_TELA" | "REMOTO_LINK") {
-    const nome = window.prompt(tc("proposal.signerName"))?.trim(); if (!nome) return
-    const email = window.prompt(tc("proposal.signerEmail"))?.trim() || null
+    const nomeExistente = texto(aceitePresencialPendente?.nome_signatario, "")
+    const emailExistente = texto(aceitePresencialPendente?.email_signatario, "")
+    const nome = metodo === "PRESENCIAL_TELA" && nomeExistente ? nomeExistente : window.prompt(tc("proposal.signerName"))?.trim()
+    if (!nome) return
+    const email = metodo === "PRESENCIAL_TELA" && emailExistente ? emailExistente : window.prompt(tc("proposal.signerEmail"))?.trim() || null
+
+    if (metodo === "PRESENCIAL_TELA") {
+      if (!window.confirm(`${nome} confirma o aceite integral desta proposta?`)) return
+      setProcessando(true); setMensagem(""); setErro("")
+      try {
+        let aceiteId = texto(aceitePresencialPendente?.id, "")
+        if (!aceiteId) {
+          const resposta = await fetchCrmSeguroProxy(`crm-seguro/propostas/${encodeURIComponent(id)}/aceites`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ metodo, nome_signatario: nome, email_signatario: email }),
+          })
+          const payload = await resposta.json().catch(() => null)
+          if (!resposta.ok) throw new Error(payload?.detail || tc("common.error"))
+          aceiteId = texto(payload?.aceite?.id, "")
+          if (!aceiteId) throw new Error(tc("common.error"))
+        }
+        await confirmarAceitePresencial(aceiteId, nome)
+        setMensagem(tc("common.success"))
+        await carregar()
+      } catch (falha) { setErro(falha instanceof Error ? falha.message : tc("common.error")) }
+      finally { setProcessando(false) }
+      return
+    }
+
     const payload = await executar("/aceites", { metodo, nome_signatario: nome, email_signatario: email })
     const token = payload?.link_token
     if (token) { const link = `${window.location.origin}/aceite/${token}`; await navigator.clipboard?.writeText(link); setMensagem(tc("proposal.linkCopied", { link })) }
