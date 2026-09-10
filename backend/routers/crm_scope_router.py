@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from routers.crm_app_proposta_envio_router import EnviarPropostaRequest, enviar_proposta_por_email
+from routers.crm_atividades_governanca_router import _enriquecer as _enriquecer_atividades
 from routers.crm_core_extension import nucleo_comercial
 from routers.crm_router import (
     OportunidadeUpdate,
@@ -159,6 +160,77 @@ def _pedido_autorizado(pedido_id: str, usuario: UsuarioAutenticado) -> dict:
     return _exigir_acesso(obter_pedido(pedido_id), usuario)
 
 
+def _cliente_id_oportunidade(oportunidade_id: str) -> str:
+    if not oportunidade_id:
+        return ""
+    try:
+        oportunidade = obter_oportunidade(oportunidade_id)
+    except HTTPException:
+        return ""
+    return str(oportunidade.get("cliente_id") or "").strip()
+
+
+def _cliente_id_proposta(proposta_id: str) -> str:
+    if not proposta_id:
+        return ""
+    try:
+        proposta = obter_proposta(proposta_id)
+    except HTTPException:
+        return ""
+    cliente_id = str(proposta.get("cliente_id") or "").strip()
+    if cliente_id:
+        return cliente_id
+    return _cliente_id_oportunidade(str(proposta.get("oportunidade_id") or "").strip())
+
+
+def _cliente_id_pedido(pedido_id: str) -> str:
+    if not pedido_id:
+        return ""
+    try:
+        pedido = obter_pedido(pedido_id)
+    except HTTPException:
+        return ""
+    cliente_id = str(pedido.get("cliente_id") or "").strip()
+    if cliente_id:
+        return cliente_id
+    proposta_id = str(pedido.get("proposta_id") or pedido.get("proposta_aceita_id") or "").strip()
+    return _cliente_id_proposta(proposta_id)
+
+
+def _vincular_clientes_atividades(registros: list[dict]) -> list[dict]:
+    saida: list[dict] = []
+    for item in registros:
+        registro = dict(item)
+        if str(registro.get("cliente_id") or "").strip():
+            saida.append(registro)
+            continue
+
+        cliente_id = ""
+        origem = ""
+        oportunidade_id = str(registro.get("oportunidade_id") or "").strip()
+        if oportunidade_id:
+            cliente_id = _cliente_id_oportunidade(oportunidade_id)
+            origem = "OPORTUNIDADE" if cliente_id else ""
+
+        if not cliente_id:
+            proposta_id = str(registro.get("proposta_id") or registro.get("proposta_aceita_id") or "").strip()
+            if proposta_id:
+                cliente_id = _cliente_id_proposta(proposta_id)
+                origem = "PROPOSTA" if cliente_id else ""
+
+        if not cliente_id:
+            pedido_id = str(registro.get("pedido_id") or "").strip()
+            if pedido_id:
+                cliente_id = _cliente_id_pedido(pedido_id)
+                origem = "PEDIDO" if cliente_id else ""
+
+        if cliente_id:
+            registro["cliente_id"] = cliente_id
+            registro["vinculo_cliente_origem"] = origem
+        saida.append(registro)
+    return saida
+
+
 @router.get("/nucleo-comercial")
 def nucleo_comercial_seguro(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return _filtrar_por_usuario(nucleo_comercial(), usuario)
@@ -176,7 +248,9 @@ def listar_pipeline_seguro(usuario: UsuarioAutenticado = Depends(usuario_atual))
 
 @router.get("/atividades")
 def listar_atividades_seguras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    return _filtrar_por_usuario(listar_atividades() or [], usuario)
+    registros = _filtrar_por_usuario(listar_atividades() or [], usuario)
+    registros = _vincular_clientes_atividades(registros)
+    return _enriquecer_atividades(registros)
 
 
 @router.get("/propostas")
