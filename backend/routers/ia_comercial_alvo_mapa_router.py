@@ -86,9 +86,20 @@ def _direcionamento_origem(insights: dict[str, Any], origem: str) -> tuple[dict[
 def _localizar_alvo(direcionamento: dict[str, Any], cliente: str, responsavel: str) -> dict[str, Any] | None:
     cliente_fold = _fold(cliente)
     responsavel_fold = _fold(responsavel)
+    candidatos_cliente: list[dict[str, Any]] = []
     for alvo in direcionamento.get("alvos") or []:
-        if _fold(alvo.get("cliente")) == cliente_fold and _fold(alvo.get("responsavel")) == responsavel_fold:
+        if _fold(alvo.get("cliente")) != cliente_fold:
+            continue
+        candidatos_cliente.append(alvo)
+        if _fold(alvo.get("responsavel")) == responsavel_fold:
             return alvo
+
+    # A leitura já está limitada pelo RBAC do usuário. Se o mesmo cliente aparece
+    # com um único responsável autorizado, uma variação apenas textual do nome do
+    # responsável não deve invalidar o alvo nem gerar 404 na camada de IA.
+    responsaveis = {_fold(item.get("responsavel")) for item in candidatos_cliente if _fold(item.get("responsavel"))}
+    if candidatos_cliente and len(responsaveis) <= 1:
+        return candidatos_cliente[0]
     return None
 
 
