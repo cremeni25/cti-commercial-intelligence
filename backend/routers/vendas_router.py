@@ -28,7 +28,7 @@ class ConcluirVendaPedidoRequest(BaseModel):
     confirmar: bool = False
     tipo_venda: str = "EQUIPAMENTO"
     observacao: str | None = None
-    origem_confirmacao: str | None = None
+    origem_confirmacao: str | None = "VENDEDOR"
     anfir_registro_id: str | None = None
 
 
