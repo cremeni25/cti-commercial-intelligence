@@ -3,6 +3,7 @@ from fastapi.testclient import TestClient
 
 import routers.propostas_primeira_pagina_router as primeira_pagina_router
 from routers.propostas_primeira_pagina_router import (
+    campos_documentais,
     campos_pendentes_documento,
     validar_documento_para_emissao,
 )
@@ -11,6 +12,16 @@ from routers.cti_api_router import router as cti_router
 
 def _proposta(documento_final: dict | None = None):
     return {"snapshot_dados": {"documento_final": documento_final or {}}}
+
+
+def _proposta_indireta(documento_final: dict | None = None):
+    return {
+        "valor": 0,
+        "snapshot_dados": {
+            "oportunidade": {"titulo": "Venda Indireta", "descricao": "Acompanhamento de pós-venda"},
+            "documento_final": documento_final or {},
+        },
+    }
 
 
 def _item(equipamento: str = "CITIMAX 400"):
@@ -97,6 +108,18 @@ def test_regras_condicionais_de_entrada():
     pendentes = campos_pendentes_documento(_proposta(dados), _item())
     assert "valor da entrada" in pendentes
     assert "nome e endereço da autorizada Carrier" not in pendentes
+
+
+def test_venda_indireta_zero_e_sem_entrada_e_valida():
+    dados = _completo()
+    dados.pop("possui_entrada")
+    dados["valor_entrada"] = None
+    proposta = _proposta_indireta(dados)
+    campos = campos_documentais(proposta, _item())
+    assert campos["possui_entrada"] is False
+    assert campos["valor_entrada"] == 0
+    assert "definição de entrada" not in campos_pendentes_documento(proposta, _item())
+    assert validar_documento_para_emissao(proposta, _item())["possui_entrada"] is False
 
 
 def test_rota_emitir_bloqueia_documento_incompleto(monkeypatch):

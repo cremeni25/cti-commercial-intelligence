@@ -26,6 +26,7 @@ type Resposta = {
   editavel: boolean
   pode_abrir_revisao?: boolean
   revisao_documental?: number
+  modalidade_comercial?: "VENDA_DIRETA" | "VENDA_INDIRETA"
   campos: Campos
   valores_negociados?: { quantidade?: number; preco_unitario?: number | string; desconto_percentual?: number | string; valor_proposta?: number | string }
 }
@@ -79,11 +80,12 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
 
   if (!dados && !erro) return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4 text-sm text-slate-400">Carregando dados complementares da proposta...</div>
 
+  const vendaIndireta = dados?.modalidade_comercial === "VENDA_INDIRETA"
   return <section className={`rounded-3xl border border-[#16325c] bg-[#07162b] ${compacto ? "p-4" : "p-6"}`}>
-    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados complementares da proposta</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • mesmo conteúdo documental para proposta e pedido</p>}</div>
+    <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados complementares da proposta</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • {vendaIndireta ? "venda indireta / acompanhamento pós-venda" : "mesmo conteúdo documental para proposta e pedido"}</p>}</div>
     {erro && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{erro}</div>}
     {mensagem && <div className="mt-4 rounded-xl border border-emerald-900 bg-emerald-950/30 p-3 text-sm text-emerald-200">{mensagem}</div>}
-    {dados?.valores_negociados && <div className="mt-4 grid gap-2 rounded-2xl border border-[#16325c] bg-[#020817] p-4 text-sm sm:grid-cols-4"><Resumo label="Quantidade" valor={String(dados.valores_negociados.quantidade ?? 1)}/><Resumo label="Valor unitário" valor={moeda(dados.valores_negociados.preco_unitario)}/><Resumo label="Desconto" valor={`${Number(dados.valores_negociados.desconto_percentual || 0).toLocaleString("pt-BR")}%`}/><Resumo label="Valor proposta" valor={moeda(dados.valores_negociados.valor_proposta)}/></div>}
+    {dados?.valores_negociados && <div className="mt-4 grid gap-2 rounded-2xl border border-[#16325c] bg-[#020817] p-4 text-sm sm:grid-cols-4"><Resumo label="Quantidade" valor={String(dados.valores_negociados.quantidade ?? 1)}/><Resumo label="Valor unitário" valor={moeda(dados.valores_negociados.preco_unitario)}/><Resumo label="Desconto" valor={vendaIndireta ? "Não aplicável" : `${Number(dados.valores_negociados.desconto_percentual || 0).toLocaleString("pt-BR")}%`}/><Resumo label="Valor proposta" valor={moeda(dados.valores_negociados.valor_proposta)}/></div>}
     {dados && <div className="mt-5 space-y-6">
       <div><h3 className="mb-3 font-semibold text-cyan-200">Tabela técnica e complementos</h3><div className="grid gap-4 sm:grid-cols-2">
         <Campo label="Voltagem"><input disabled={!dados.editavel} value={campos.voltagem ?? ""} onChange={(e) => setCampos({ ...campos, voltagem: e.target.value || null })} className="entrada" placeholder="Ex.: 12V / 24V" /></Campo>
@@ -93,7 +95,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
       </div></div>
       <div><h3 className="mb-3 font-semibold text-cyan-200">Condições de pagamento, entrega e validade</h3><div className="grid gap-4 sm:grid-cols-2">
         <Campo label="Condições de pagamentos"><textarea disabled={!dados.editavel} rows={2} value={campos.condicao_pagamento ?? ""} onChange={(e) => setCampos({ ...campos, condicao_pagamento: e.target.value || null })} className="entrada" placeholder="Ex.: 30/60/90 dias" /></Campo>
-        <Campo label="Possui entrada?"><select disabled={!dados.editavel} value={campos.possui_entrada === null ? "" : campos.possui_entrada ? "SIM" : "NAO"} onChange={(e) => setCampos({ ...campos, possui_entrada: e.target.value === "" ? null : e.target.value === "SIM", valor_entrada: e.target.value === "NAO" ? null : campos.valor_entrada })} className="entrada"><option value="">Selecione</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></Campo>
+        <Campo label="Possui entrada?"><select disabled={!dados.editavel} value={campos.possui_entrada === null ? "" : campos.possui_entrada ? "SIM" : "NAO"} onChange={(e) => setCampos({ ...campos, possui_entrada: e.target.value === "" ? null : e.target.value === "SIM", valor_entrada: e.target.value === "NAO" ? 0 : campos.valor_entrada })} className="entrada"><option value="">Selecione</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></Campo>
         <Campo label="Valor da entrada"><input disabled={!dados.editavel || campos.possui_entrada === false} type="number" min="0" step="0.01" value={campos.valor_entrada ?? ""} onChange={(e) => setCampos({ ...campos, valor_entrada: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" placeholder="0,00" /></Campo>
         <Campo label="Entrega"><select disabled={!dados.editavel} value={campos.local_entrega ?? ""} onChange={(e) => setCampos({ ...campos, local_entrega: e.target.value || null })} className="entrada"><option value="">Selecione</option><option value="AUTORIZADA CARRIER">Autorizada Carrier</option><option value="ENDEREÇO CLIENTE">Endereço do cliente</option></select></Campo>
         <Campo label="Nome e endereço da Autorizada"><textarea disabled={!dados.editavel} rows={3} value={campos.autorizada_nome_endereco ?? ""} onChange={(e) => setCampos({ ...campos, autorizada_nome_endereco: e.target.value || null })} className="entrada" /></Campo>

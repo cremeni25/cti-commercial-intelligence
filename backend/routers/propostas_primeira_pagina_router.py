@@ -56,6 +56,16 @@ def _documento_final(proposta: dict[str, Any]) -> dict[str, Any]:
     return dict(raw) if isinstance(raw, dict) else {}
 
 
+def _venda_indireta(proposta: dict[str, Any]) -> bool:
+    snapshot = _snapshot(proposta)
+    oportunidade = snapshot.get("oportunidade")
+    if not isinstance(oportunidade, dict):
+        return False
+    titulo = str(oportunidade.get("titulo") or "").strip().upper()
+    descricao = str(oportunidade.get("descricao") or "").strip().upper()
+    return titulo == "VENDA INDIRETA" or "TIPO DA OPORTUNIDADE: VENDA INDIRETA" in descricao
+
+
 def _contexto(proposta_id: str) -> tuple[dict[str, Any], dict[str, Any]]:
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
     item_id = str(proposta.get("item_oportunidade_id") or "").strip()
@@ -99,6 +109,13 @@ def _campo_existe_no_documento(item: dict[str, Any], nome: str) -> bool:
 
 def campos_documentais(proposta: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
     final = _documento_final(proposta)
+    venda_indireta = _venda_indireta(proposta)
+    possui_entrada = final.get("possui_entrada")
+    valor_entrada = final.get("valor_entrada")
+    if venda_indireta and possui_entrada is None:
+        possui_entrada = False
+    if venda_indireta and valor_entrada is None:
+        valor_entrada = 0
     return {
         "voltagem": _valor(final, item, "voltagem"),
         "tipo_equipamento": _valor(final, item, "tipo_equipamento", "configuracao", "tipo_equipamento"),
@@ -107,8 +124,8 @@ def campos_documentais(proposta: dict[str, Any], item: dict[str, Any]) -> dict[s
             ", ".join(str(v) for v in (item.get("opcionais") or [])) if isinstance(item.get("opcionais"), list) else item.get("opcionais")
         ),
         "condicao_pagamento": _valor(final, item, "condicao_pagamento", "condicao_pagamento"),
-        "possui_entrada": final.get("possui_entrada"),
-        "valor_entrada": final.get("valor_entrada"),
+        "possui_entrada": possui_entrada,
+        "valor_entrada": valor_entrada,
         "local_entrega": _valor(final, item, "local_entrega", "local_entrega", "tipo_entrega"),
         "autorizada_nome_endereco": final.get("autorizada_nome_endereco"),
         "frete": _valor(final, item, "frete", "frete"),
@@ -147,8 +164,6 @@ def campos_pendentes_documento(proposta: dict[str, Any], item: dict[str, Any]) -
         if valor_entrada <= 0:
             pendentes.append("valor da entrada")
 
-    # Validade, acessórios, Lynx e nome/endereço da autorizada podem ser deixados em branco.
-    # Quando houver conteúdo, ele continua sendo preservado e aplicado ao documento oficial.
     return pendentes
 
 
@@ -168,6 +183,7 @@ def consultar_primeira_pagina(proposta_id: str):
     snapshot = _snapshot(proposta)
     campos = campos_documentais(proposta, item)
     pendentes = campos_pendentes_documento(proposta, item)
+    venda_indireta = _venda_indireta(proposta)
     return {
         "proposta_id": proposta_id,
         "item_id": item.get("id"),
@@ -175,6 +191,7 @@ def consultar_primeira_pagina(proposta_id: str):
         "editavel": _editavel(proposta),
         "revisao_documental": int(snapshot.get("revisao_documental") or 1),
         "pode_abrir_revisao": _arquivo_atual(proposta) is not None,
+        "modalidade_comercial": "VENDA_INDIRETA" if venda_indireta else "VENDA_DIRETA",
         "campos": campos,
         "campos_pendentes": pendentes,
         "pronto_para_emitir": not pendentes,
@@ -234,6 +251,10 @@ def atualizar_primeira_pagina(proposta_id: str, dados: PrimeiraPaginaUpdate):
     campos_texto = {"voltagem", "tipo_equipamento", "impostos", "acessorios", "condicao_pagamento", "local_entrega", "autorizada_nome_endereco", "frete", "prazo_entrega", "validade"}
     for chave, valor in supplied.items():
         final[chave] = _normalizar(valor) if chave in campos_texto else valor
+    if _venda_indireta(proposta) and final.get("possui_entrada") is None:
+        final["possui_entrada"] = False
+    if final.get("possui_entrada") is False:
+        final["valor_entrada"] = 0
     final["atualizado_em"] = _agora()
     final["revisao_documental"] = int(snapshot.get("revisao_documental") or 1)
     snapshot["documento_final"] = final
