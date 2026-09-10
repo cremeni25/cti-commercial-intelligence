@@ -1,0 +1,1 @@
+Contrato funcional: as sugestões de e-mail são derivadas do histórico real de envios disponível em crm-seguro/propostas, respeitam o escopo autenticado e são apenas atalhos de preenchimento; não substituem o valor digitado pelo usuário.
