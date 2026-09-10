@@ -67,6 +67,44 @@ def _sincronizar_carrier(pedido: dict[str, Any]) -> dict[str, Any]:
     return pedido
 
 
+def _venda_existente(pedido_id: str) -> dict[str, Any] | None:
+    try:
+        vendas = supabase.table("vendas").select("id,data_venda,tipo_venda").eq("pedido_id", pedido_id).limit(1).execute().data or []
+    except Exception:
+        vendas = []
+    return vendas[0] if vendas else None
+
+
+def _modalidade_venda(pedido: dict[str, Any]) -> str:
+    from routers.vendas_router import pedido_venda_indireta
+
+    return "INDIRETA" if pedido_venda_indireta(pedido) else "DIRETA"
+
+
+def _sincronizar_venda_por_marco(pedido: dict[str, Any], etapa: str) -> dict[str, Any] | None:
+    modalidade = _modalidade_venda(pedido)
+    deve_registrar = (modalidade == "DIRETA" and etapa == "FATURADO") or (modalidade == "INDIRETA" and etapa == "ENCERRADO")
+    if not deve_registrar:
+        return _venda_existente(str(pedido["id"]))
+
+    from routers.vendas_router import ConcluirVendaPedidoRequest, concluir_pedido_em_venda
+
+    resultado = concluir_pedido_em_venda(
+        str(pedido["id"]),
+        ConcluirVendaPedidoRequest(
+            confirmar=True,
+            tipo_venda="EQUIPAMENTO",
+            observacao=(
+                "Venda direta reconhecida automaticamente pela confirmação da NF."
+                if modalidade == "DIRETA"
+                else "Venda indireta reconhecida após encerramento operacional do acompanhamento pós-venda."
+            ),
+        ),
+    )
+    venda = resultado.get("venda") if isinstance(resultado, dict) else None
+    return venda if isinstance(venda, dict) else _venda_existente(str(pedido["id"]))
+
+
 @router.get("/ciclos")
 def listar_ciclos():
     pedidos = supabase.table("cti_pedidos").select("*").order("created_at", desc=True).execute().data or []
@@ -86,6 +124,8 @@ def obter_ciclo(pedido_id: str):
     pedido = _sincronizar_carrier(buscar_pedido(pedido_id))
     atual = str(pedido.get("status_ciclo") or "PEDIDO").upper()
     envio_confirmado, _ = _envio_real_confirmado(pedido)
+    modalidade = _modalidade_venda(pedido)
+    venda = _venda_existente(pedido_id)
     return {
         "pedido_id": pedido_id,
         "status_ciclo": atual,
@@ -100,6 +140,10 @@ def obter_ciclo(pedido_id: str):
         "numero_serie_instalado": pedido.get("numero_serie_instalado"),
         "encerrado_em": pedido.get("encerrado_em"),
         "observacao_acompanhamento": pedido.get("observacao_acompanhamento"),
+        "modalidade_venda": modalidade,
+        "marco_venda": "NF_CONFIRMADA" if modalidade == "DIRETA" else "ENCERRAMENTO_POS_VENDA",
+        "venda_registrada": bool(venda),
+        "data_venda": venda.get("data_venda") if venda else None,
         "pode_encerrar": bool(pedido.get("instalado_em")),
         "serie_divergente": bool(
             pedido.get("numero_serie_nf")
@@ -156,7 +200,14 @@ def atualizar_ciclo(pedido_id: str, dados: AtualizarCicloRequest):
         payload["status"] = "CONCLUIDO"
 
     atualizado = supabase.table("cti_pedidos").update(payload).eq("id", pedido_id).execute().data or []
-    return atualizado[0] if atualizado else {**pedido, **payload}
+    registro = atualizado[0] if atualizado else {**pedido, **payload}
+    venda = _sincronizar_venda_por_marco(registro, etapa)
+    return {
+        **registro,
+        "modalidade_venda": _modalidade_venda(registro),
+        "venda_registrada": bool(venda),
+        "data_venda": venda.get("data_venda") if venda else None,
+    }
 
 
 @router.get("/ciclo-resumo")
