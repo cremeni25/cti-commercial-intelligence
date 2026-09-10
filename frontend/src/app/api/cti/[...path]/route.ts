@@ -7,8 +7,8 @@ export const maxDuration = 60
 
 const BACKEND_URL = "https://cti-backend-5ugf.onrender.com"
 const METODOS_COM_CORPO = new Set(["POST", "PUT", "PATCH", "DELETE"])
-const STATUS_TRANSITORIOS = new Set([502, 503, 504])
-const ATRASOS_RETRY_GET_MS = [500, 1500, 3000]
+const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
+const ATRASOS_RETRY_LEITURA_MS = [500, 1500, 3000, 5000, 8000]
 
 type ContextoRota = { params: Promise<{ path: string[] }> }
 
@@ -17,8 +17,8 @@ function aguardar(ms: number) {
 }
 
 async function buscarBackend(destino: URL, request: NextRequest, headers: Headers, corpo?: ArrayBuffer) {
-  const podeRepetir = request.method === "GET"
-  const totalTentativas = podeRepetir ? ATRASOS_RETRY_GET_MS.length + 1 : 1
+  const podeRepetir = ["GET", "HEAD"].includes(request.method)
+  const totalTentativas = podeRepetir ? ATRASOS_RETRY_LEITURA_MS.length + 1 : 1
   let ultimaFalha: unknown = null
 
   for (let tentativa = 0; tentativa < totalTentativas; tentativa += 1) {
@@ -39,7 +39,7 @@ async function buscarBackend(destino: URL, request: NextRequest, headers: Header
       if (!podeRepetir || tentativa === totalTentativas - 1) throw erro
     }
 
-    await aguardar(ATRASOS_RETRY_GET_MS[tentativa])
+    await aguardar(ATRASOS_RETRY_LEITURA_MS[tentativa])
   }
 
   throw ultimaFalha instanceof Error ? ultimaFalha : new Error("Backend CTI indisponível")
