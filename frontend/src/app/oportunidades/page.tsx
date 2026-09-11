@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
 import Link from "next/link"
@@ -6,108 +5,33 @@ import { useEffect, useMemo, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import JornadaComercialNav from "@/components/crm/JornadaComercialNav"
-import { API_URL } from "@/lib/api"
-import { lerContextoOportunidade } from "@/lib/crm-opportunity"
+import CrmFiltrosComerciais from "@/components/crm-app/CrmFiltrosComerciais"
+import { useAuth } from "@/core/auth/AuthContext"
 import { useOperationalI18n } from "@/core/i18n/operational"
+import { pertenceAoEscopoDoUsuario } from "@/core/rbac/commercial-scope"
+import { aplicarFiltrosComerciais, calcularMetricasPrazo, FILTROS_CRM_VAZIOS, montarRegistroAnalitico, opcoesUnicas, type CrmFiltrosComerciais as FiltrosComerciais } from "@/lib/crm-analise-comercial"
+import { exportarRelatorioCrmPdf } from "@/lib/crm-relatorio-pdf"
 
-type Oportunidade = {
-  id: string
-  titulo: string
-  cliente_nome: string
-  status: string
-  descricao?: string
-  valor_estimado: number
-  probabilidade: number
-  data_fechamento_prevista?: string | null
-  equipamento?: string
-  linha_equipamentos?: string
-  created_at?: string
-}
-type ItemOportunidade = { nome_comercial?: string; equipamento?: string; modelo_base?: string; linha_produto?: string; quantidade?: number; arquivado_em?: string | null }
-type VisaoOportunidade = "TODAS" | "ABERTAS"
-
-function percentual(valor?: number) { const numero = Number(valor || 0); return Math.round(numero <= 1 ? numero * 100 : numero) }
-function chanceDaOportunidade(item: Oportunidade) {
-  const status = String(item.status || "").toUpperCase()
-  if (["GANHO", "PEDIDO", "DOSSIÊ", "CARRIER", "FATURADO", "ENCERRADO"].includes(status)) return 100
-  if (["PERDIDO", "CANCELADO"].includes(status)) return 0
-  return percentual(item.probabilidade)
-}
-function oportunidadeAberta(item: Oportunidade) { return !["GANHO", "PERDIDO", "CANCELADO"].includes(String(item.status || "").toUpperCase()) }
-function dataIsoValida(valor?: string | null) { return Boolean(valor && /^\d{4}-\d{2}-\d{2}$/.test(valor.slice(0, 10)) && !Number.isNaN(new Date(`${valor.slice(0, 10)}T12:00:00`).getTime())) }
-function inicioMesAtual() { const agora = new Date(); return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-01` }
-function fimMesAtual() { const agora = new Date(); return new Date(agora.getFullYear(), agora.getMonth() + 1, 0).toISOString().slice(0, 10) }
-function unicos(valores: string[]) { const vistos = new Set<string>(); return valores.filter((valor) => { const chave = valor.trim().toUpperCase(); if (!chave || vistos.has(chave)) return false; vistos.add(chave); return true }) }
-async function enriquecerComItens(item: Oportunidade): Promise<Oportunidade> {
-  try {
-    const resposta = await fetch(`/api/crm-proxy/crm-documentos/oportunidades/${encodeURIComponent(item.id)}/itens`, { cache: "no-store" })
-    const payload = await resposta.json().catch(() => [])
-    if (!resposta.ok || !Array.isArray(payload)) return item
-    const ativos = (payload as ItemOportunidade[]).filter((registro) => !registro.arquivado_em)
-    const equipamentos = unicos(ativos.map((registro) => String(registro.nome_comercial || registro.equipamento || registro.modelo_base || "").trim()).filter(Boolean))
-    const linhas = unicos(ativos.map((registro) => String(registro.linha_produto || "").trim()).filter(Boolean))
-    return { ...item, equipamento: equipamentos.join(", ") || item.equipamento, linha_equipamentos: linhas.join(", ") || item.linha_equipamentos }
-  } catch {
-    return item
-  }
-}
-
-export default function OportunidadesPage() {
-  const { locale, tOp, formatCurrency, formatDate, formatNumber } = useOperationalI18n()
-  const [dados, setDados] = useState<Oportunidade[]>([])
-  const [inicio, setInicio] = useState(inicioMesAtual)
-  const [fim, setFim] = useState(fimMesAtual)
-  const [busca, setBusca] = useState("")
-  const [visao, setVisao] = useState<VisaoOportunidade>("TODAS")
-  const [loading, setLoading] = useState(true)
-  const [erro, setErro] = useState("")
-
-  useEffect(() => {
-    let ativo = true
-    setLoading(true)
-    setErro("")
-    fetch(`${API_URL}/crm-visao/oportunidades?inicio=${inicio}&fim=${fim}`, { cache: "no-store" })
-      .then(async (response) => { if (!response.ok) throw new Error("Falha ao carregar oportunidades"); return response.json() as Promise<Oportunidade[]> })
-      .then(async (registros) => {
-        const base = Array.isArray(registros) ? registros : []
-        const enriquecidos = await Promise.all(base.map(enriquecerComItens))
-        if (ativo) setDados(enriquecidos)
-      })
-      .catch(() => { if (ativo) setErro(tOp("op.loadFailed")) })
-      .finally(() => { if (ativo) setLoading(false) })
-    return () => { ativo = false }
-  }, [inicio, fim, tOp])
-
-  const abertas = useMemo(() => dados.filter(oportunidadeAberta), [dados])
-  const filtrados = useMemo(() => {
-    const base = visao === "ABERTAS" ? abertas : dados
-    const termo = busca.trim().toLocaleLowerCase(locale === "pt-BR" ? "pt-BR" : locale === "es" ? "es" : "en")
-    if (!termo) return base
-    return base.filter((item) => `${item.cliente_nome} ${item.titulo} ${item.status} ${item.equipamento || ""} ${item.linha_equipamentos || ""}`.toLocaleLowerCase(locale === "pt-BR" ? "pt-BR" : locale === "es" ? "es" : "en").includes(termo))
-  }, [abertas, busca, dados, locale, visao])
-
-  const valorTotal = abertas.reduce((total, item) => total + Number(item.valor_estimado || 0), 0)
-  const valorPonderado = abertas.reduce((total, item) => total + Number(item.valor_estimado || 0) * (chanceDaOportunidade(item) / 100), 0)
-  const relatorioHref = `/oportunidades/relatorio?inicio=${encodeURIComponent(inicio)}&fim=${encodeURIComponent(fim)}&busca=${encodeURIComponent(busca)}`
-  const dataPrevista = (valor?: string | null) => dataIsoValida(valor) ? formatDate(`${String(valor).slice(0, 10)}T12:00:00`) : tOp("op.noForecast")
-
-  function abrirComposicao(novaVisao: VisaoOportunidade) {
-    setVisao(novaVisao)
-    setBusca("")
-    window.setTimeout(() => document.getElementById("lista-oportunidades")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0)
-  }
-
-  return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar /><section className="min-w-0 flex-1"><Topbar /><div className="space-y-6 p-4 sm:p-6 lg:p-8">
-    <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">{tOp("op.eyebrow")}</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">{tOp("op.title")}</h1><p className="mt-2 text-gray-400">{tOp("op.subtitle")}</p></div><div className="flex flex-col gap-3 sm:flex-row"><Link href={relatorioHref} className="rounded-xl border border-cyan-700 px-5 py-3 text-center font-semibold text-cyan-300">{tOp("op.report")}</Link><Link href="/crm-app/oportunidades/nova" className="rounded-xl bg-cyan-500 px-5 py-3 text-center font-semibold text-slate-950">{tOp("op.new")}</Link></div></header>
-    <JornadaComercialNav />
-    <section className="grid gap-4 rounded-2xl border border-[#13203f] bg-[#071226] p-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_2fr_auto]"><CampoData label={tOp("common.start")} value={inicio} onChange={setInicio} /><CampoData label={tOp("common.end")} value={fim} onChange={setFim} /><label className="text-sm text-slate-300">{tOp("common.search")}<input value={busca} onChange={(event) => setBusca(event.target.value)} placeholder={tOp("op.searchPlaceholder")} className="mt-2 w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3" /></label><button type="button" onClick={() => { setInicio(inicioMesAtual()); setFim(fimMesAtual()) }} className="self-end rounded-xl border border-cyan-700 px-4 py-3 text-cyan-300">{tOp("common.currentMonth")}</button></section>
-    {erro && <div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}
-    <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi titulo={tOp("op.periodRecords")} valor={formatNumber(dados.length)} onOpen={() => abrirComposicao("TODAS")} detalhe={tOp("common.clickDetail")} /><Kpi titulo={tOp("op.openCount")} valor={formatNumber(abertas.length)} onOpen={() => abrirComposicao("ABERTAS")} detalhe={tOp("common.clickDetail")} /><Kpi titulo={tOp("op.openValue")} valor={formatCurrency(valorTotal)} onOpen={() => abrirComposicao("ABERTAS")} detalhe={tOp("common.clickDetail")} /><Kpi titulo={tOp("op.weightedValue")} valor={formatCurrency(valorPonderado)} onOpen={() => abrirComposicao("ABERTAS")} detalhe={tOp("common.clickDetail")} /></section>
-    <section className="flex flex-wrap gap-2"><button type="button" onClick={() => setVisao("TODAS")} className={`rounded-full border px-4 py-2 text-sm ${visao === "TODAS" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-[#24466f] bg-[#020817] text-slate-400"}`}>{tOp("common.all")} <strong className="ml-1">{formatNumber(dados.length)}</strong></button><button type="button" onClick={() => setVisao("ABERTAS")} className={`rounded-full border px-4 py-2 text-sm ${visao === "ABERTAS" ? "border-cyan-500 bg-cyan-950/50 text-cyan-200" : "border-[#24466f] bg-[#020817] text-slate-400"}`}>{tOp("common.openFem")} <strong className="ml-1">{formatNumber(abertas.length)}</strong></button></section>
-    <div id="lista-oportunidades" className="scroll-mt-24 overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]">{loading ? <Aviso>{tOp("op.loading")}</Aviso> : filtrados.length === 0 ? <Aviso>{tOp("op.empty")}</Aviso> : <><div className="border-b border-[#13203f] px-5 py-3 text-xs text-cyan-300">{tOp("op.composition", { count: formatNumber(filtrados.length), view: visao === "ABERTAS" ? tOp("common.openFem") : tOp("common.all") })}</div><table className="min-w-[1050px] w-full text-left text-sm"><thead className="bg-[#061326] text-xs uppercase text-slate-500"><tr><th className="px-5 py-4">{tOp("common.company")}</th><th className="px-5 py-4">{tOp("op.opportunity")}</th><th className="px-5 py-4">{tOp("op.products")}</th><th className="px-5 py-4">{tOp("common.value")}</th><th className="px-5 py-4">{tOp("op.chance")}</th><th className="px-5 py-4">{tOp("common.stage")}</th><th className="px-5 py-4">{tOp("common.forecast")}</th><th className="px-5 py-4">{tOp("common.action")}</th></tr></thead><tbody className="divide-y divide-[#13203f]">{filtrados.map((item) => { const contexto = lerContextoOportunidade(item); return <tr key={item.id} className="align-middle text-slate-200"><td className="px-5 py-4 font-semibold text-cyan-300">{item.cliente_nome}</td><td className="px-5 py-4 font-medium">{item.titulo}</td><td className="px-5 py-4">{item.equipamento || contexto.equipamentos.join(", ") || item.linha_equipamentos || tOp("op.undefined")}</td><td className="px-5 py-4 text-emerald-300">{formatCurrency(Number(item.valor_estimado || 0))}</td><td className="px-5 py-4">{chanceDaOportunidade(item)}%</td><td className="px-5 py-4">{item.status}</td><td className="px-5 py-4">{dataPrevista(item.data_fechamento_prevista)}</td><td className="px-5 py-4"><Link href={`/oportunidades/${item.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">{tOp("op.openDeal")}</Link></td></tr> })}</tbody></table></>}</div>
-  </div></section></main>
-}
-
-function CampoData({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) { return <label className="text-sm text-slate-300">{label}<input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="mt-2 w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3" /></label> }
-function Kpi({ titulo, valor, onOpen, detalhe }: { titulo: string; valor: string; onOpen?: () => void; detalhe: string }) { const body = <><p className="text-sm text-gray-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-400">{valor}</p>{onOpen && <p className="mt-2 text-[11px] text-cyan-400">{detalhe}</p>}</>; return onOpen ? <button type="button" onClick={onOpen} className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5 text-left transition hover:border-cyan-500/70 hover:bg-[#0b1d38]">{body}</button> : <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5">{body}</div> }
-function Aviso({ children }: { children: React.ReactNode }) { return <div className="p-10 text-gray-300">{children}</div> }
+type Registro=Record<string,unknown>
+type UsuarioOpcao={id:string;nome:string}
+type Visao="TODAS"|"ABERTAS"
+type Linha={raw:Registro;id:string;cliente:string;titulo:string;responsavelId:string;responsavelNome:string;linha:string;equipamento:string;status:string;valor:number;probabilidade:number;dataInclusao:string;dataPrevista:string}
+const finais=new Set(["GANHO","PERDIDO","CANCELADO","FATURADO","ENCERRADO"])
+function texto(v:unknown,p=""){const s=String(v??"").trim();return s||p}
+function percentual(v:unknown){const n=Number(v||0);return Math.round(n<=1?n*100:n)}
+function listaUsuarios(p:unknown):UsuarioOpcao[]{if(!Array.isArray(p))return[];return p.map(x=>{const r=x as Registro;return{id:texto(r.id),nome:texto(r.nome||r.email)}}).filter(x=>x.id&&x.nome)}
+function dias(v:number|null){return v===null?"—":`${v}d`}
+const copy={"pt-BR":{title:"Oportunidades",subtitle:"Negócios comerciais na mesma fonte de verdade do CRM App, com análise de carteira, prazo e linha de equipamento.",all:"Todas",open:"Abertas",total:"Valor total",weighted:"Valor ponderado",search:"Buscar cliente, responsável, linha, equipamento, oportunidade ou estágio",empty:"Nenhuma oportunidade encontrada.",client:"Cliente",deal:"Oportunidade",responsible:"Responsável",line:"Linha",equipment:"Equipamento",value:"Valor",chance:"Chance",stage:"Estágio",included:"Inclusão",forecast:"Previsão",deadline:"Prazo",action:"Ação",openDeal:"Abrir negócio",newDeal:"Nova oportunidade"},en:{title:"Opportunities",subtitle:"Sales deals from the same CRM App source of truth, with portfolio, timing and equipment-line analysis.",all:"All",open:"Open",total:"Total value",weighted:"Weighted value",search:"Search account, owner, line, equipment, opportunity or stage",empty:"No opportunities found.",client:"Account",deal:"Opportunity",responsible:"Owner",line:"Line",equipment:"Equipment",value:"Value",chance:"Chance",stage:"Stage",included:"Created",forecast:"Forecast",deadline:"Timing",action:"Action",openDeal:"Open deal",newDeal:"New opportunity"},es:{title:"Oportunidades",subtitle:"Negocios comerciales de la misma fuente de verdad del CRM App, con análisis de cartera, plazos y línea de equipos.",all:"Todas",open:"Abiertas",total:"Valor total",weighted:"Valor ponderado",search:"Buscar cliente, responsable, línea, equipo, oportunidad o etapa",empty:"No se encontraron oportunidades.",client:"Cliente",deal:"Oportunidad",responsible:"Responsable",line:"Línea",equipment:"Equipo",value:"Valor",chance:"Probabilidad",stage:"Etapa",included:"Inclusión",forecast:"Previsión",deadline:"Plazo",action:"Acción",openDeal:"Abrir negocio",newDeal:"Nueva oportunidad"}} as const
+export default function OportunidadesPage(){
+ const{usuario}=useAuth();const{locale,formatCurrency,formatDate,formatNumber}=useOperationalI18n();const t=copy[locale];const master=String(usuario?.tipo_usuario||"").toUpperCase()==="ADMIN_MASTER"
+ const[registros,setRegistros]=useState<Registro[]>([]),[loading,setLoading]=useState(true),[erro,setErro]=useState(""),[busca,setBusca]=useState(""),[visao,setVisao]=useState<Visao>("ABERTAS"),[filtros,setFiltros]=useState<FiltrosComerciais>(FILTROS_CRM_VAZIOS),[usuariosMaster,setUsuariosMaster]=useState<UsuarioOpcao[]>([])
+ useEffect(()=>{fetch("/api/crm-proxy/crm/nucleo-comercial",{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>[]);if(!r.ok)throw new Error(texto((p as Registro).detail,`HTTP ${r.status}`));const lista=Array.isArray(p)?p:Array.isArray((p as Registro).itens)?(p as Registro).itens as Registro[]:[];setRegistros(lista)}).catch(e=>setErro(e instanceof Error?e.message:"Falha ao carregar oportunidades")).finally(()=>setLoading(false))},[])
+ useEffect(()=>{if(!master)return;fetch("/api/crm-proxy/governanca/usuarios",{cache:"no-store"}).then(async r=>r.ok?listaUsuarios(await r.json().catch(()=>[])):[]).then(setUsuariosMaster).catch(()=>setUsuariosMaster([]))},[master])
+ const usuarioAtual=useMemo(()=>usuario?.id?{id:String(usuario.id),nome:String(usuario.nome||usuario.email||usuario.id)}:null,[usuario?.id,usuario?.nome,usuario?.email]);const usuarios=useMemo(()=>master?usuariosMaster:(usuarioAtual?[usuarioAtual]:[]),[master,usuariosMaster,usuarioAtual]);const nomesPorId=useMemo(()=>Object.fromEntries(usuarios.map(u=>[u.id,u.nome])),[usuarios])
+ const escopo=useMemo(()=>registros.filter(r=>pertenceAoEscopoDoUsuario(texto(r.responsavel_id),usuario)),[registros,usuario]);const analiticos=useMemo<Linha[]>(()=>escopo.map(raw=>{const a=montarRegistroAnalitico(raw,nomesPorId);return{raw,id:texto(raw.oportunidade_id||raw.id),cliente:texto(raw.cliente_nome||raw.razao_social||raw.cliente,"Cliente não identificado"),titulo:texto(raw.titulo||raw.oportunidade_titulo||raw.equipamento,"Oportunidade comercial"),responsavelId:a.responsavelId,responsavelNome:a.responsavelNome,linha:a.linha,equipamento:texto(raw.equipamento||raw.modelo||raw.produto,"—"),status:texto(raw.etapa||raw.status_oportunidade||raw.status,"OPORTUNIDADE").toUpperCase(),valor:Number(raw.valor||raw.valor_estimado||0),probabilidade:Number(raw.probabilidade||raw.probabilidade_fechamento||0),dataInclusao:a.dataInclusao,dataPrevista:a.dataPrevista}}).filter(i=>i.id),[escopo,nomesPorId]);const linhas=useMemo(()=>opcoesUnicas(analiticos.map(i=>i.linha),"Não informada"),[analiticos]);const responsaveis=useMemo(()=>{const b=[...usuarios];for(const i of analiticos)if(i.responsavelId&&!b.some(u=>u.id===i.responsavelId))b.push({id:i.responsavelId,nome:i.responsavelNome});return b.sort((a,b)=>a.nome.localeCompare(b.nome,locale))},[usuarios,analiticos,locale]);const comercial=useMemo(()=>aplicarFiltrosComerciais(analiticos,filtros,master,String(usuario?.id||"")),[analiticos,filtros,master,usuario?.id]);const abertas=useMemo(()=>comercial.filter(i=>!finais.has(i.status)),[comercial]);const filtrados=useMemo(()=>{const base=visao==="ABERTAS"?abertas:comercial,termo=busca.trim().toLocaleLowerCase(locale);return termo?base.filter(i=>`${i.cliente} ${i.responsavelNome} ${i.linha} ${i.equipamento} ${i.titulo} ${i.status}`.toLocaleLowerCase(locale).includes(termo)):base},[abertas,comercial,busca,visao,locale]);const total=abertas.reduce((s,i)=>s+i.valor,0);const weighted=abertas.reduce((s,i)=>s+i.valor*(percentual(i.probabilidade)/100),0)
+ function exportarPdf(){exportarRelatorioCrmPdf({titulo:t.title,subtitulo:t.subtitle,colunas:[{chave:"cliente",titulo:t.client},{chave:"negocio",titulo:t.deal},{chave:"responsavel",titulo:t.responsible},{chave:"linha",titulo:t.line},{chave:"equipamento",titulo:t.equipment},{chave:"valor",titulo:t.value},{chave:"chance",titulo:t.chance},{chave:"estagio",titulo:t.stage},{chave:"inclusao",titulo:t.included},{chave:"previsao",titulo:t.forecast},{chave:"atraso",titulo:"Atraso"}],registros:filtrados.map(i=>{const m=calcularMetricasPrazo(i.dataInclusao,i.dataPrevista,finais.has(i.status));return{cliente:i.cliente,negocio:i.titulo,responsavel:i.responsavelNome,linha:i.linha,equipamento:i.equipamento,valor:formatCurrency(i.valor),chance:`${percentual(i.probabilidade)}%`,estagio:i.status.replaceAll("_"," "),inclusao:i.dataInclusao?formatDate(i.dataInclusao):"—",previsao:i.dataPrevista?formatDate(i.dataPrevista):"—",atraso:m.atrasado?`${m.diasAtraso}d`:"—"}})})}
+ return <main className="flex min-h-screen bg-[#020817] text-white"><Sidebar/><section className="min-w-0 flex-1"><Topbar/><div className="space-y-6 p-4 sm:p-6 lg:p-8"><header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[.22em] text-cyan-400">CRM WEB</p><h1 className="mt-2 text-3xl font-bold sm:text-4xl">{t.title}</h1><p className="mt-2 text-gray-400">{t.subtitle}</p></div><Link href="/crm-app/oportunidades/nova" className="rounded-xl bg-cyan-500 px-5 py-3 text-center font-semibold text-slate-950">{t.newDeal}</Link></header><JornadaComercialNav/><CrmFiltrosComerciais filtros={filtros} onChange={setFiltros} master={master} responsaveis={responsaveis} linhas={linhas} totalFiltrado={filtrados.length} onPdf={exportarPdf}/>{erro&&<div className="rounded-xl border border-red-500 p-4 text-red-300">{erro}</div>}<section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Kpi titulo="Registros" valor={formatNumber(comercial.length)}/><Kpi titulo={t.open} valor={formatNumber(abertas.length)}/><Kpi titulo={t.total} valor={formatCurrency(total)}/><Kpi titulo={t.weighted} valor={formatCurrency(weighted)}/></section><section className="flex flex-col gap-3 rounded-2xl border border-[#13203f] bg-[#071226] p-5 lg:flex-row lg:items-center lg:justify-between"><div className="flex gap-2"><button type="button" onClick={()=>setVisao("TODAS")} className={`rounded-full border px-4 py-2 text-sm ${visao==="TODAS"?"border-cyan-500 bg-cyan-950/50 text-cyan-200":"border-[#24466f] text-slate-400"}`}>{t.all}</button><button type="button" onClick={()=>setVisao("ABERTAS")} className={`rounded-full border px-4 py-2 text-sm ${visao==="ABERTAS"?"border-cyan-500 bg-cyan-950/50 text-cyan-200":"border-[#24466f] text-slate-400"}`}>{t.open}</button></div><input value={busca} onChange={e=>setBusca(e.target.value)} placeholder={t.search} className="w-full rounded-xl border border-[#24466f] bg-[#020817] px-4 py-3 text-sm lg:max-w-xl"/></section>{loading?<Aviso>Carregando...</Aviso>:filtrados.length===0?<Aviso>{t.empty}</Aviso>:<div className="overflow-x-auto rounded-2xl border border-[#13203f] bg-[#091a33]"><table className="min-w-[1600px] w-full text-sm"><thead><tr className="border-b border-[#13203f] text-left text-slate-400"><Th>{t.client}</Th><Th>{t.deal}</Th><Th>{t.responsible}</Th><Th>{t.line}</Th><Th>{t.equipment}</Th><Th>{t.value}</Th><Th>{t.chance}</Th><Th>{t.stage}</Th><Th>{t.included}</Th><Th>{t.forecast}</Th><Th>{t.deadline}</Th><Th>{t.action}</Th></tr></thead><tbody>{filtrados.map(i=>{const m=calcularMetricasPrazo(i.dataInclusao,i.dataPrevista,finais.has(i.status));return<tr key={i.id} className="border-b border-[#13203f]"><Td forte>{i.cliente}</Td><Td>{i.titulo}</Td><Td>{i.responsavelNome}</Td><Td>{i.linha}</Td><Td>{i.equipamento}</Td><td className="p-4 text-emerald-300">{formatCurrency(i.valor)}</td><Td>{percentual(i.probabilidade)}%</Td><Td>{i.status.replaceAll("_"," ")}</Td><Td>{i.dataInclusao?formatDate(i.dataInclusao):"—"}</Td><Td>{i.dataPrevista?formatDate(i.dataPrevista):"—"}</Td><Td>{dias(m.diasPlanejados)} · {dias(m.diasDecorridos)}{m.atrasado?` · atraso ${m.diasAtraso}d`:""}</Td><td className="p-4"><Link href={`/oportunidades/${i.id}`} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs font-semibold text-cyan-300">{t.openDeal}</Link></td></tr>})}</tbody></table></div>}</div></section></main>}
+function Kpi({titulo,valor}:{titulo:string;valor:string}){return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-5"><p className="text-sm text-gray-400">{titulo}</p><p className="mt-2 text-2xl font-bold text-cyan-400">{valor}</p></div>}
+function Aviso({children}:{children:React.ReactNode}){return <div className="rounded-2xl border border-[#13203f] bg-[#091a33] p-10 text-gray-300">{children}</div>}
+function Th({children}:{children:React.ReactNode}){return <th className="p-4 font-medium">{children}</th>}
+function Td({children,forte=false}:{children:React.ReactNode;forte?:boolean}){return <td className={`p-4 ${forte?"font-semibold text-cyan-300":""}`}>{children}</td>}
