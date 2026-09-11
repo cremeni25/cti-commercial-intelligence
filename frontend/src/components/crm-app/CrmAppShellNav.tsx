@@ -9,21 +9,21 @@ import { useI18n } from "@/core/i18n"
 
 const textos = {
   "pt-BR": {
-    home: "Início", agenda: "Agenda", deals: "Negócios", register: "Registrar",
+    home: "Início", agenda: "Agenda", deals: "Negócios", register: "Nova ação",
     archivedTests: "Testes arquivados", manageItems: "Gerenciar itens", archiving: "Arquivando...", archiveTest: "Arquivar teste",
     navLabel: "Navegação principal do CRM",
     archiveConfirm: "Arquivar esta oportunidade como registro de teste? Ela deixará de participar de Pipeline, Forecast, Relatórios e IA, mas continuará preservada para auditoria.",
     archiveError: "Não foi possível arquivar o registro de teste.", failure: "Falha",
   },
   en: {
-    home: "Home", agenda: "Agenda", deals: "Deals", register: "Log activity",
+    home: "Home", agenda: "Agenda", deals: "Deals", register: "New action",
     archivedTests: "Archived tests", manageItems: "Manage items", archiving: "Archiving...", archiveTest: "Archive test",
     navLabel: "CRM primary navigation",
     archiveConfirm: "Archive this opportunity as a test record? It will no longer participate in Pipeline, Forecast, Reports or AI, but will remain preserved for audit.",
     archiveError: "The test record could not be archived.", failure: "Failure",
   },
   es: {
-    home: "Inicio", agenda: "Agenda", deals: "Negocios", register: "Registrar",
+    home: "Inicio", agenda: "Agenda", deals: "Negocios", register: "Nueva acción",
     archivedTests: "Pruebas archivadas", manageItems: "Gestionar ítems", archiving: "Archivando...", archiveTest: "Archivar prueba",
     navLabel: "Navegación principal del CRM",
     archiveConfirm: "¿Archivar esta oportunidad como registro de prueba? Dejará de participar en Pipeline, Forecast, Informes e IA, pero seguirá preservada para auditoría.",
@@ -35,6 +35,9 @@ function ativo(pathname: string, href: string) {
   if (href === "/crm-app") return pathname === href
   if (href === "/crm-app/oportunidades") {
     return pathname.startsWith("/crm-app/oportunidades") || pathname.startsWith("/crm-app/pipeline") || pathname.startsWith("/crm-app/forecast") || pathname.startsWith("/crm-app/historico")
+  }
+  if (href === "/crm-app/acao") {
+    return pathname.startsWith("/crm-app/acao") || pathname.startsWith("/crm-app/atividades/nova") || pathname.startsWith("/crm-app/visitas/nova")
   }
   return pathname.startsWith(href)
 }
@@ -53,7 +56,7 @@ export function CrmAppShellNav() {
     { href: "/crm-app", label: tx.home, icon: Building2 },
     { href: "/crm-app/agenda", label: tx.agenda, icon: CalendarDays },
     { href: "/crm-app/oportunidades", label: tx.deals, icon: Target },
-    { href: "/crm-app/atividades/nova", label: tx.register, icon: Plus, destaque: true },
+    { href: "/crm-app/acao", label: tx.register, icon: Plus, destaque: true },
   ]
 
   const matchEditar = pathname.match(/^\/crm-app\/oportunidades\/([^/]+)\/editar$/)
