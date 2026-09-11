@@ -68,8 +68,8 @@ export default function AcaoRapidaPage() {
   const t = textos[(locale as Locale) || "pt-BR"] || textos["pt-BR"]
 
   const principais = [
-    { href: "/crm-app/atividades/nova?tipo=VISITA_PRESENCIAL", titulo: t.visit, descricao: t.visitHelp, icon: MapPinned },
-    { href: "/crm-app/atividades/nova?tipo=FOLLOW_UP", titulo: t.contact, descricao: t.contactHelp, icon: ClipboardCheck },
+    { href: "/crm-app/acao/registrar?tipo=VISITA_PRESENCIAL", titulo: t.visit, descricao: t.visitHelp, icon: MapPinned },
+    { href: "/crm-app/acao/registrar?tipo=FOLLOW_UP", titulo: t.contact, descricao: t.contactHelp, icon: ClipboardCheck },
     { href: "/crm-app/acao/negociacao", titulo: t.continueDeal, descricao: t.continueDealHelp, icon: BriefcaseBusiness },
     { href: "/crm-app/acao/negociacao", titulo: t.proposal, descricao: t.proposalHelp, icon: FileText },
   ]
