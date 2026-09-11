@@ -5,28 +5,29 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import {
   Bot,
   BriefcaseBusiness,
-  Building2,
   CalendarDays,
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
   FileText,
+  MapPinned,
   PackageCheck,
   PiggyBank,
+  Plus,
   RefreshCw,
-  Route,
+  Search,
   Target,
   TrendingUp,
-  UserPlus,
   Users,
 } from "lucide-react"
 import { useAuth } from "@/core/auth"
-import { useI18n } from "@/core/i18n"
+import { useOperationalI18n } from "@/core/i18n/operational"
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
 
 type Registro = Record<string, unknown>
+type Locale = "pt-BR" | "en" | "es"
 type Resumo = {
   visitas: number
   pendencias: number
@@ -41,6 +42,105 @@ type Resumo = {
 }
 
 const FINAIS = new Set(["GANHO", "PERDIDO", "CANCELADO", "FATURADO", "ENCERRADO"])
+
+const textos = {
+  "pt-BR": {
+    brand: "CTI CRM · campo",
+    hello: "Olá, {name}",
+    subtitle: "Seu dia comercial em uma tela. Escolha a próxima ação e deixe o CTI cuidar do restante.",
+    today: "Meu dia",
+    visits: "Visitas hoje",
+    pending: "Pendências",
+    openDeals: "Negócios abertos",
+    mainAction: "Nova ação",
+    mainActionHelp: "Visita, contato, proposta ou continuidade da negociação.",
+    next: "Continuar negociação",
+    nextHelp: "Abra sua carteira e avance exatamente de onde parou.",
+    agenda: "Ver pendências",
+    agendaHelp: "Retornos, compromissos e atividades que precisam de atenção.",
+    clients: "Buscar cliente",
+    clientsHelp: "Encontre o cliente e parta dele para a próxima ação.",
+    current: "Negociação em destaque",
+    noCurrent: "Nenhuma negociação aberta no momento.",
+    details: "Abrir negócios",
+    more: "Mais recursos",
+    moreHelp: "Recursos completos continuam disponíveis quando você precisar.",
+    syncError: "Não foi possível sincronizar o CRM agora.",
+    online: "Online",
+    reconnecting: "Reconectando",
+    activities: "Atividades",
+    pipeline: "Pipeline",
+    proposals: "Propostas",
+    orders: "Pedidos",
+    sales: "Vendas",
+    ai: "IA Comercial",
+    financial: "Controle financeiro",
+  },
+  en: {
+    brand: "CTI CRM · field",
+    hello: "Hello, {name}",
+    subtitle: "Your sales day on one screen. Choose the next action and let CTI handle the rest.",
+    today: "My day",
+    visits: "Visits today",
+    pending: "Pending",
+    openDeals: "Open deals",
+    mainAction: "New action",
+    mainActionHelp: "Visit, contact, proposal or continue a deal.",
+    next: "Continue deal",
+    nextHelp: "Open your portfolio and continue exactly where you left off.",
+    agenda: "View pending",
+    agendaHelp: "Follow-ups, appointments and activities requiring attention.",
+    clients: "Find account",
+    clientsHelp: "Find the account and start the next action from there.",
+    current: "Highlighted deal",
+    noCurrent: "No open deal right now.",
+    details: "Open deals",
+    more: "More resources",
+    moreHelp: "Full CRM resources remain available whenever needed.",
+    syncError: "CRM could not synchronize right now.",
+    online: "Online",
+    reconnecting: "Reconnecting",
+    activities: "Activities",
+    pipeline: "Pipeline",
+    proposals: "Proposals",
+    orders: "Orders",
+    sales: "Sales",
+    ai: "Sales AI",
+    financial: "Financial control",
+  },
+  es: {
+    brand: "CTI CRM · campo",
+    hello: "Hola, {name}",
+    subtitle: "Tu día comercial en una sola pantalla. Elige la próxima acción y deja que CTI gestione el resto.",
+    today: "Mi día",
+    visits: "Visitas hoy",
+    pending: "Pendientes",
+    openDeals: "Negocios abiertos",
+    mainAction: "Nueva acción",
+    mainActionHelp: "Visita, contacto, propuesta o continuidad del negocio.",
+    next: "Continuar negocio",
+    nextHelp: "Abre tu cartera y continúa exactamente donde la dejaste.",
+    agenda: "Ver pendientes",
+    agendaHelp: "Retornos, compromisos y actividades que requieren atención.",
+    clients: "Buscar cliente",
+    clientsHelp: "Encuentra al cliente y parte desde él hacia la próxima acción.",
+    current: "Negocio destacado",
+    noCurrent: "No hay negocios abiertos en este momento.",
+    details: "Abrir negocios",
+    more: "Más recursos",
+    moreHelp: "Los recursos completos siguen disponibles cuando los necesites.",
+    syncError: "No fue posible sincronizar el CRM ahora.",
+    online: "Online",
+    reconnecting: "Reconectando",
+    activities: "Actividades",
+    pipeline: "Pipeline",
+    proposals: "Propuestas",
+    orders: "Pedidos",
+    sales: "Ventas",
+    ai: "IA Comercial",
+    financial: "Control financiero",
+  },
+} satisfies Record<Locale, Record<string, string>>
 
 function lista(payload: unknown): Registro[] {
   if (Array.isArray(payload)) return payload as Registro[]
@@ -64,20 +164,11 @@ function etapa(item: Registro) {
 
 export default function CrmAppPage() {
   const { usuario } = useAuth()
-  const { t } = useI18n()
+  const { locale } = useOperationalI18n()
+  const idioma = (locale as Locale) || "pt-BR"
+  const t = textos[idioma] || textos["pt-BR"]
   const adminMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-  const [resumo, setResumo] = useState<Resumo>({
-    visitas: 0,
-    pendencias: 0,
-    atividades: 0,
-    oportunidades: 0,
-    pipeline: 0,
-    clientes: 0,
-    propostas: 0,
-    pedidos: 0,
-    vendas: 0,
-    destaque: t("crm.home.noOpenOpportunity"),
-  })
+  const [resumo, setResumo] = useState<Resumo>({ visitas: 0, pendencias: 0, atividades: 0, oportunidades: 0, pipeline: 0, clientes: 0, propostas: 0, pedidos: 0, vendas: 0, destaque: t.noCurrent })
   const [sincronizando, setSincronizando] = useState(false)
   const [online, setOnline] = useState(true)
   const [aviso, setAviso] = useState("")
@@ -85,7 +176,6 @@ export default function CrmAppPage() {
   const sincronizar = useCallback(async () => {
     setSincronizando(true)
     setAviso("")
-
     const resultados = await Promise.allSettled([
       fetch("/api/crm-proxy/crm/nucleo-comercial", { cache: "no-store" }).then(json),
       fetch("/api/crm-proxy/crm/agenda", { cache: "no-store" }).then(json),
@@ -95,11 +185,10 @@ export default function CrmAppPage() {
       fetch("/api/crm-proxy/crm-documentos/pedidos", { cache: "no-store" }).then(json),
       fetch("/api/crm-proxy/vendas", { cache: "no-store" }).then(json),
     ])
-
     const [nucleoR, agendaR, atividadesR, clientesR, propostasR, pedidosR, vendasR] = resultados
     if (nucleoR.status === "rejected") {
       setOnline(false)
-      setAviso(t("crm.home.syncFailed"))
+      setAviso(t.syncError)
       setSincronizando(false)
       return
     }
@@ -109,7 +198,6 @@ export default function CrmAppPage() {
     const abertas = oportunidades.filter((item) => !FINAIS.has(etapa(item)))
     const idsPermitidos = new Set(oportunidades.map((item) => String(item.oportunidade_id || item.id || "")).filter(Boolean))
     const escopoProprio = possuiEscopoProprio(usuario)
-
     const agendaItens = agendaR.status === "fulfilled" ? lista(agendaR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
     const atividades = atividadesR.status === "fulfilled" ? lista(atividadesR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
     const clientes = clientesR.status === "fulfilled" ? lista(clientesR.value) : []
@@ -119,17 +207,13 @@ export default function CrmAppPage() {
     const propostas = escopoProprio ? propostasTodas.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : propostasTodas
     const pedidos = escopoProprio ? pedidosTodos.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : pedidosTodos
     const vendas = escopoProprio ? vendasTodas.filter((item) => pertenceAoEscopoDoUsuario(String(item.responsavel_id || ""), usuario) || idsPermitidos.has(String(item.oportunidade_id || ""))) : vendasTodas
-
     const hoje = new Date().toISOString().slice(0, 10)
-    const visitas = atividades.filter((item) =>
-      String(item.tipo || "").toUpperCase().includes("VISITA") &&
-      String(item.data || item.data_atividade || "").slice(0, 10) === hoje
-    ).length
+    const visitas = atividades.filter((item) => String(item.tipo || "").toUpperCase().includes("VISITA") && String(item.data || item.data_atividade || "").slice(0, 10) === hoje).length
     const pendencias = agendaItens.filter((item) => !["CONCLUIDA", "CONCLUÍDA", "CANCELADA"].includes(String(item.status || "").toUpperCase())).length
     const destaque = abertas[0]
     const contexto = destaque ? lerContextoOportunidade(destaque) : null
-    const titulo = destaque ? textoSeguro(destaque.titulo) || textoSeguro(destaque.equipamento) || t("crm.opportunity.generic") : ""
-    const cliente = destaque ? textoSeguro(destaque.cliente_nome) || t("crm.account.identifying") : ""
+    const titulo = destaque ? textoSeguro(destaque.titulo) || textoSeguro(destaque.equipamento) || "Negociação" : ""
+    const cliente = destaque ? textoSeguro(destaque.cliente_nome) || "Cliente" : ""
 
     setResumo({
       visitas,
@@ -141,11 +225,11 @@ export default function CrmAppPage() {
       propostas: propostas.length,
       pedidos: pedidos.length,
       vendas: vendas.length,
-      destaque: destaque ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.` : t("crm.home.noOpenOpportunity"),
+      destaque: destaque ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.` : t.noCurrent,
     })
     setOnline(true)
     setSincronizando(false)
-  }, [t, usuario])
+  }, [t.noCurrent, t.syncError, usuario])
 
   useEffect(() => {
     queueMicrotask(() => void sincronizar())
@@ -153,132 +237,96 @@ export default function CrmAppPage() {
     return () => window.clearInterval(id)
   }, [sincronizar])
 
-  const modulos = useMemo(() => {
+  const recursos = useMemo(() => {
     const base = [
-      { href: "/crm-app/agenda", label: t("crm.module.agenda"), valor: resumo.pendencias, descricao: t("crm.module.agendaDescription"), icon: CalendarDays, financeiro: false },
-      { href: "/crm-app/atividades", label: t("crm.module.activities"), valor: resumo.atividades, descricao: t("crm.module.activitiesDescription"), icon: ClipboardCheck, financeiro: false },
-      { href: "/crm-app/clientes", label: t("crm.module.accounts"), valor: resumo.clientes, descricao: t("crm.module.accountsDescription"), icon: Users, financeiro: false },
-      { href: "/crm-app/visitas", label: t("crm.module.visits"), valor: resumo.visitas, descricao: t("crm.module.visitsDescription"), icon: Route, financeiro: false },
-      { href: "/crm-app/oportunidades", label: t("crm.module.opportunities"), valor: resumo.oportunidades, descricao: resumo.destaque, icon: BriefcaseBusiness, financeiro: false },
-      { href: "/crm-app/pipeline", label: t("crm.module.pipeline"), valor: resumo.pipeline, descricao: t("crm.module.pipelineDescription"), icon: TrendingUp, financeiro: false },
-      { href: "/crm-app/propostas", label: t("crm.module.proposals"), valor: resumo.propostas, descricao: t("crm.module.proposalsDescription"), icon: FileText, financeiro: false },
-      { href: "/crm-app/pedidos", label: t("crm.module.orders"), valor: resumo.pedidos, descricao: t("crm.module.ordersDescription"), icon: PackageCheck, financeiro: false },
-      { href: "/crm-app/vendas", label: t("crm.module.sales"), valor: resumo.vendas, descricao: t("crm.module.salesDescription"), icon: CircleDollarSign, financeiro: false },
-      { href: "/ia-comercial", label: t("crm.module.salesAi"), valor: "IA", descricao: t("crm.module.salesAiDescription"), icon: Bot, financeiro: false },
+      { href: "/crm-app/atividades", label: t.activities, valor: resumo.atividades, icon: ClipboardCheck },
+      { href: "/crm-app/pipeline", label: t.pipeline, valor: resumo.pipeline, icon: TrendingUp },
+      { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
+      { href: "/crm-app/pedidos", label: t.orders, valor: resumo.pedidos, icon: PackageCheck },
+      { href: "/crm-app/vendas", label: t.sales, valor: resumo.vendas, icon: CircleDollarSign },
+      { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
     ]
-
-    if (adminMaster) {
-      base.push({
-        href: "/crm-app/controle-financeiro",
-        label: t("crm.module.financialControl"),
-        valor: "MASTER",
-        descricao: t("crm.module.financialControlDescription"),
-        icon: PiggyBank,
-        financeiro: true,
-      })
-    }
-
+    if (adminMaster) base.push({ href: "/crm-app/controle-financeiro", label: t.financial, valor: "MASTER", icon: PiggyBank })
     return base
   }, [adminMaster, resumo, t])
 
-  const atalhos = useMemo(() => [
-    { href: "/crm-app/clientes/nova", titulo: t("crm.action.newAccount"), descricao: t("crm.action.newAccountDescription"), icon: UserPlus },
-    { href: "/crm-app/atividades/nova", titulo: t("crm.action.logActivity"), descricao: t("crm.action.logActivityDescription"), icon: ClipboardCheck },
-    { href: "/crm-app/oportunidades/nova", titulo: t("crm.action.newOpportunity"), descricao: t("crm.action.newOpportunityDescription"), icon: Target },
-    { href: "/crm-app/clientes", titulo: t("crm.action.findAccount"), descricao: t("crm.action.findAccountDescription"), icon: Building2 },
-  ], [t])
-
-  const primeiroNome = usuario?.nome?.split(" ")[0] || t("crm.home.defaultUser")
+  const primeiroNome = usuario?.nome?.split(" ")[0] || ""
+  const hello = t.hello.replace("{name}", primeiroNome)
 
   return (
-    <main className="min-h-[100dvh] bg-[#020817] pb-24 text-white">
-      <header className="sticky top-0 z-20 border-b border-cyan-950/80 bg-[#061126]/95 px-4 py-3 backdrop-blur sm:px-6 sm:py-4">
-        <div className="mx-auto flex w-full max-w-[94vw] items-center justify-between gap-4">
+    <main className="min-h-[100dvh] bg-[#020817] pb-28 text-white">
+      <header className="sticky top-0 z-20 border-b border-cyan-950/80 bg-[#061126]/95 px-4 py-3 backdrop-blur">
+        <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400 sm:text-xs">{t("crm.home.brand")}</p>
-            <h1 className="mt-1 text-lg font-bold sm:text-2xl">{t("crm.home.title")}</h1>
+            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400">{t.brand}</p>
+            <h1 className="mt-1 text-lg font-bold">{t.today}</h1>
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher compact />
-            <div className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-300" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>
-              {online ? t("common.online") : t("common.reconnecting")}
-            </div>
+            <span className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-300" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>{online ? t.online : t.reconnecting}</span>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto w-full max-w-[94vw] px-4 py-4 sm:px-6 sm:py-6">
+      <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
         {aviso && <div className="mb-4 rounded-2xl border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-100">{aviso}</div>}
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(360px,.65fr)]">
-          <div className="space-y-5">
-            <section className="rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl sm:p-7">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-sm text-slate-400 sm:text-base">{t("crm.home.dailyOperation")}</p>
-                  <h2 className="mt-1 text-2xl font-bold sm:text-3xl">{t("crm.home.hello", { name: primeiroNome })}</h2>
-                  <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-300 sm:text-base">{t("crm.home.truthFlow")}</p>
-                </div>
-                <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="rounded-2xl border border-cyan-800 bg-cyan-950/30 p-3 text-cyan-300">
-                  <RefreshCw size={20} className={sincronizando ? "animate-spin" : ""} />
-                </button>
-              </div>
-              <div className="mt-6 grid grid-cols-3 gap-3">
-                <Indicador valor={resumo.visitas} label={t("crm.home.visitsToday")} />
-                <Indicador valor={resumo.pendencias} label={t("crm.home.pending")} />
-                <Indicador valor={resumo.oportunidades} label={t("crm.module.opportunities")} />
-              </div>
-            </section>
 
-            <section>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-xl font-semibold">{t("crm.home.quickActions")}</h2>
-                <span className="text-sm text-slate-500">{t("crm.home.fieldUse")}</span>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {atalhos.map(({ href, titulo, descricao, icon: Icon }) => (
-                  <Link key={href} href={href} className="flex min-h-24 items-center gap-4 rounded-2xl border border-[#16325c] bg-[#091a33] p-5">
-                    <span className="rounded-2xl bg-cyan-950/50 p-4 text-cyan-300"><Icon size={22} /></span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-lg font-semibold">{titulo}</span>
-                      <span className="mt-1 block text-sm text-slate-400">{descricao}</span>
-                    </span>
-                    <ChevronRight size={18} className="text-slate-600" />
-                  </Link>
-                ))}
-              </div>
-            </section>
+        <section className="rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h2 className="text-3xl font-bold">{hello}</h2>
+              <p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p>
+            </div>
+            <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-cyan-300">
+              <RefreshCw size={20} className={sincronizando ? "animate-spin" : ""} />
+            </button>
           </div>
+          <div className="mt-5 grid grid-cols-3 gap-2">
+            <Indicador valor={resumo.visitas} label={t.visits} />
+            <Indicador valor={resumo.pendencias} label={t.pending} />
+            <Indicador valor={resumo.oportunidades} label={t.openDeals} />
+          </div>
+        </section>
 
-          <section>
-            <h2 className="mb-4 text-xl font-semibold">{t("crm.home.modules")}</h2>
-            <div className="grid grid-cols-2 gap-4 xl:grid-cols-3">
-              {modulos.map(({ href, label, valor, descricao, icon: Icon, financeiro }) => (
-                <Link href={href} key={href} className={`flex min-h-36 flex-col justify-between rounded-2xl border p-5 transition ${financeiro ? "border-emerald-800 bg-emerald-950/15 hover:border-emerald-500" : "border-[#16325c] bg-[#07162b] hover:border-cyan-700"}`}>
-                  <Icon className={financeiro ? "text-emerald-300" : "text-cyan-300"} size={24} />
-                  <div>
-                    <strong className={`mt-3 block text-2xl ${financeiro ? "text-emerald-300" : "text-cyan-300"}`}>{valor}</strong>
-                    <span className="block font-semibold">{label}</span>
-                    <span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-            <div className="mt-4 rounded-2xl border border-emerald-900/70 bg-emerald-950/20 p-4">
-              <p className="text-sm font-semibold text-emerald-200">Núcleo único sincronizado</p>
-              <p className="mt-1 text-xs leading-5 text-emerald-100/70">Proposta negocia, pedido executa e venda registra o realizado. Nenhuma dessas telas cria um segundo negócio.</p>
-            </div>
-          </section>
-        </div>
+        <section className="mt-5 grid gap-3">
+          <Link href="/crm-app/acao" className="flex min-h-28 items-center gap-4 rounded-3xl bg-cyan-500 p-5 text-slate-950 shadow-xl active:scale-[.99]">
+            <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950/10"><Plus size={30} /></span>
+            <span className="min-w-0 flex-1"><span className="block text-2xl font-black">{t.mainAction}</span><span className="mt-1 block text-sm font-medium text-slate-900/75">{t.mainActionHelp}</span></span>
+            <ChevronRight size={25} />
+          </Link>
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Acao href="/crm-app/oportunidades" titulo={t.next} descricao={t.nextHelp} icon={Target} />
+            <Acao href="/crm-app/agenda" titulo={t.agenda} descricao={t.agendaHelp} icon={CalendarDays} />
+            <Acao href="/crm-app/clientes" titulo={t.clients} descricao={t.clientsHelp} icon={Search} />
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-3xl border border-[#16325c] bg-[#081a32] p-5">
+          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-300"><BriefcaseBusiness size={22} /></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumo.destaque}</p></div></div>
+          <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#24466f] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></Link>
+        </section>
+
+        <details className="mt-5 rounded-3xl border border-[#16325c] bg-[#061126] p-4">
+          <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-400">{t.moreHelp}</span></summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {recursos.map(({ href, label, valor, icon: Icon }) => (
+              <Link key={href} href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4">
+                <div className="flex items-center justify-between gap-2"><Icon size={20} className="text-cyan-300"/><strong className="text-sm text-cyan-200">{valor}</strong></div>
+                <span className="mt-3 block text-sm font-semibold">{label}</span>
+              </Link>
+            ))}
+          </div>
+        </details>
       </div>
     </main>
   )
 }
 
 function Indicador({ valor, label }: { valor: number; label: string }) {
-  return (
-    <div className="rounded-2xl border border-[#17365f] bg-[#061126]/70 px-4 py-4 text-center">
-      <strong className="block text-2xl text-cyan-300">{valor}</strong>
-      <span className="mt-1 block text-xs text-slate-400">{label}</span>
-    </div>
-  )
+  return <div className="rounded-2xl border border-[#17365f] bg-[#061126]/70 px-2 py-4 text-center"><strong className="block text-2xl text-cyan-300">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></div>
+}
+
+function Acao({ href, titulo, descricao, icon: Icon }: { href: string; titulo: string; descricao: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
+  return <Link href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-950/70 text-cyan-300"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-600 sm:hidden"/></Link>
 }
