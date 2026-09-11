@@ -88,14 +88,16 @@ def _buscar_perfil(auth_id: str, email: str) -> dict | None:
 
 
 def _buscar_permissoes(user_id: str, tipo_usuario: str) -> dict[str, bool]:
-    if tipo_usuario == "ADMIN_MASTER":
-        return {"acesso_total": True, "usuarios_administrar": True}
     try:
         resposta = supabase.table("cti_user_permissions").select("*").eq("user_id", user_id).single().execute()
         dados = getattr(resposta, "data", None) or {}
-        return {chave: bool(valor) for chave, valor in dados.items() if isinstance(valor, bool)}
+        permissoes = {chave: bool(valor) for chave, valor in dados.items() if isinstance(valor, bool)}
     except Exception:
-        return {}
+        permissoes = {}
+    if tipo_usuario == "ADMIN_MASTER":
+        permissoes["acesso_total"] = True
+        permissoes["usuarios_administrar"] = True
+    return permissoes
 
 
 def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(security)) -> UsuarioAutenticado:
