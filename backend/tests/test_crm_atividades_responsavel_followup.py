@@ -14,7 +14,8 @@ def test_backend_enriquece_atividade_com_responsavel_sem_alterar_fato_original()
 
 
 def test_central_exibe_responsavel_e_followup_acionavel_em_concluidas():
-    assert 'responsavelNome:texto(i.responsavel_nome||i.usuario_nome||i.vendedor_nome)' in FRONTEND
+    assert 'responsavelNome:texto(i.responsavel_nome||i.usuario_nome||i.vendedor_nome||ctx.responsavelNome)' in FRONTEND
+    assert 'nomes[responsavelId]||t.responsibleUnknown' in FRONTEND
     assert '{t.responsible}: {a.responsavelNome||t.responsibleUnknown}' in FRONTEND
     assert 'function followUpHref(a:Atividade)' in FRONTEND
     assert 'new URLSearchParams({tipo:"FOLLOW_UP"})' in FRONTEND
