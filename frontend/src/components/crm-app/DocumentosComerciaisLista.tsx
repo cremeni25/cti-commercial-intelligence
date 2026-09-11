@@ -41,12 +41,14 @@ export default function DocumentosComerciaisLista({ tipo }: { tipo: "propostas" 
   const master=String(usuario?.tipo_usuario||"").toUpperCase()==="ADMIN_MASTER"
   const [registros,setRegistros]=useState<Registro[]>([]),[busca,setBusca]=useState(""),[filtroPedido,setFiltroPedido]=useState<FiltroPedido>("TODOS"),[carregando,setCarregando]=useState(true),[erro,setErro]=useState("")
   const [filtrosComerciais,setFiltrosComerciais]=useState<FiltrosComerciais>(FILTROS_CRM_VAZIOS)
-  const [usuarios,setUsuarios]=useState<UsuarioOpcao[]>([])
+  const [usuariosMaster,setUsuariosMaster]=useState<UsuarioOpcao[]>([])
   const propostas=tipo==="propostas", titulo=propostas?c.proposalsTitle:c.ordersTitle, subtitulo=propostas?c.proposalsSub:c.ordersSub, Icone=propostas?FileText:PackageCheck
 
   useEffect(()=>{fetchCrmSeguroProxy(`crm-seguro/${tipo}`,{cache:"no-store"}).then(async r=>{const p=await r.json().catch(()=>[]);if(!r.ok)throw new Error(String((p as Registro).detail||`${c.loadError} (${r.status})`));const lista=Array.isArray(p)?p:[];setRegistros(tipo==="propostas"?lista.filter(item=>!propostaJaVirouPedido(item)):lista)}).catch(f=>setErro(f instanceof Error?f.message:c.loadError)).finally(()=>setCarregando(false))},[tipo,c.loadError])
-  useEffect(()=>{if(!master){const id=texto(usuario?.id,"");const nome=texto(usuario?.nome||usuario?.email,"");setUsuarios(id&&nome?[{id,nome}]:[]);return}fetch("/api/crm-proxy/governanca/usuarios",{cache:"no-store"}).then(async r=>r.ok?listaUsuarios(await r.json().catch(()=>[])):[]).then(setUsuarios).catch(()=>setUsuarios([]))},[master,usuario?.id,usuario?.nome,usuario?.email])
+  useEffect(()=>{if(!master)return;fetch("/api/crm-proxy/governanca/usuarios",{cache:"no-store"}).then(async r=>r.ok?listaUsuarios(await r.json().catch(()=>[])):[]).then(setUsuariosMaster).catch(()=>setUsuariosMaster([]))},[master])
 
+  const usuarioAtual=useMemo(()=>{const id=texto(usuario?.id,"");const nome=texto(usuario?.nome||usuario?.email,"");return id&&nome?{id,nome}:null},[usuario?.id,usuario?.nome,usuario?.email])
+  const usuarios=useMemo(()=>master?usuariosMaster:(usuarioAtual?[usuarioAtual]:[]),[master,usuariosMaster,usuarioAtual])
   const nomesPorId=useMemo(()=>Object.fromEntries(usuarios.map(i=>[i.id,i.nome])),[usuarios])
   const analiticos=useMemo(()=>registros.map(raw=>({raw,...montarRegistroAnalitico(raw,nomesPorId)})),[registros,nomesPorId])
   const linhas=useMemo(()=>opcoesUnicas(analiticos.map(i=>i.linha),"Não informada"),[analiticos])
