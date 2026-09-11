@@ -12,6 +12,14 @@ router = APIRouter(prefix="/crm", tags=["CRM - Governança de atividades"])
 
 TABELA_ATIVIDADES = "cti_atividades_registros"
 VIEW_ATIVIDADES_ATIVAS = "cti_atividades"
+STATUS_ENCERRADOS = {"GANHO", "PERDIDO", "CANCELADO", "CANCELADA", "ENCERRADO", "ENCERRADA"}
+MOTIVOS_ENCERRAMENTO = {
+    "VENDA_CONCLUIDA",
+    "PERDA_CONCORRENCIA",
+    "DESISTENCIA_CLIENTE",
+    "SEM_CONTINUIDADE",
+    "OUTRO",
+}
 
 
 class AtividadeCreate(BaseModel):
@@ -48,6 +56,12 @@ class AtividadeArquivar(BaseModel):
     motivo: str
 
 
+class EncerramentoNegociacao(BaseModel):
+    usuario_id: str
+    motivo_tipo: str
+    motivo_descricao: Optional[str] = None
+
+
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -57,6 +71,10 @@ def _texto(valor: Optional[str]) -> Optional[str]:
         return None
     normalizado = " ".join(valor.strip().split())
     return normalizado or None
+
+
+def _normalizar_status(valor: Any) -> str:
+    return str(valor or "").strip().upper()
 
 
 def _master(usuario_id: str) -> dict[str, Any]:
@@ -87,6 +105,75 @@ def _atividade(atividade_id: str, incluir_arquivadas: bool = False) -> dict[str,
     if not resultado.data:
         raise HTTPException(status_code=404, detail="Atividade não encontrada.")
     return resultado.data[0]
+
+
+def _oportunidade(oportunidade_id: str) -> dict[str, Any]:
+    resultado = (
+        supabase.table("cti_oportunidades")
+        .select("*")
+        .eq("id", oportunidade_id)
+        .limit(1)
+        .execute()
+    )
+    if not resultado.data:
+        raise HTTPException(status_code=404, detail="Negociação não encontrada.")
+    return resultado.data[0]
+
+
+def _oportunidades_abertas_cliente(cliente_id: str) -> list[dict[str, Any]]:
+    registros = (
+        supabase.table("cti_oportunidades")
+        .select("id,cliente_id,status,titulo,responsavel_id")
+        .eq("cliente_id", cliente_id)
+        .order("created_at", desc=True)
+        .execute()
+        .data
+        or []
+    )
+    return [item for item in registros if _normalizar_status(item.get("status")) not in STATUS_ENCERRADOS]
+
+
+def _resolver_oportunidade_atividade(cliente_id: Optional[str], oportunidade_id: Optional[str]) -> Optional[str]:
+    if not cliente_id:
+        return None
+    if oportunidade_id:
+        oportunidade = _oportunidade(oportunidade_id)
+        if str(oportunidade.get("cliente_id") or "") != cliente_id:
+            raise HTTPException(status_code=422, detail="A negociação selecionada não pertence ao cliente informado.")
+        if _normalizar_status(oportunidade.get("status")) in STATUS_ENCERRADOS:
+            raise HTTPException(status_code=409, detail="A negociação já está encerrada. Abra uma nova negociação para um novo ciclo comercial.")
+        return oportunidade_id
+
+    abertas = _oportunidades_abertas_cliente(cliente_id)
+    if len(abertas) == 1:
+        return str(abertas[0].get("id") or "") or None
+    if len(abertas) > 1:
+        raise HTTPException(
+            status_code=422,
+            detail="Este cliente possui mais de uma negociação aberta. Selecione a negociação correta para preservar o histórico do processo.",
+        )
+    return None
+
+
+def _registrar_evento_negociacao(
+    oportunidade_id: Optional[str],
+    tipo: str,
+    descricao: str,
+    usuario_id: Optional[str],
+    payload: dict[str, Any],
+) -> None:
+    if not oportunidade_id:
+        return
+    supabase.table("cti_oportunidade_historico").insert(
+        {
+            "oportunidade_id": oportunidade_id,
+            "tipo": tipo,
+            "descricao": descricao,
+            "usuario_id": usuario_id,
+            "payload": payload,
+            "created_at": _now(),
+        }
+    ).execute()
 
 
 def _nomes_clientes(registros: list[dict[str, Any]]) -> dict[str, str]:
@@ -147,6 +234,7 @@ def _enriquecer(registros: list[dict[str, Any]]) -> list[dict[str, Any]]:
         registro["responsavel_id"] = usuario_id
         registro["responsavel_nome"] = responsaveis.get(usuario_id, "")
         registro["contexto_atividade"] = "CLIENTE" if cliente_id else ("PARCEIRO" if parceiro else "GERAL")
+        registro["processo_id"] = registro.get("oportunidade_id")
         saida.append(registro)
     return saida
 
@@ -187,12 +275,13 @@ def criar_atividade_operacional(atividade: AtividadeCreate):
     if not cliente_id and atividade.oportunidade_id:
         raise HTTPException(status_code=422, detail="Negociação relacionada só pode ser vinculada quando houver cliente selecionado.")
 
+    oportunidade_id = _resolver_oportunidade_atividade(cliente_id, atividade.oportunidade_id)
     payload = {
         "cliente_id": cliente_id,
         "parceiro_nome": parceiro_nome,
         "parceiro_tipo": _texto(atividade.parceiro_tipo),
         "parceiro_organizacao": _texto(atividade.parceiro_organizacao),
-        "oportunidade_id": atividade.oportunidade_id,
+        "oportunidade_id": oportunidade_id,
         "proposta_id": atividade.proposta_id,
         "pedido_id": atividade.pedido_id,
         "usuario_id": atividade.usuario_id,
@@ -213,6 +302,14 @@ def criar_atividade_operacional(atividade: AtividadeCreate):
     resultado = supabase.table(TABELA_ATIVIDADES).insert(payload).execute().data or []
     if not resultado:
         raise HTTPException(status_code=409, detail="O banco não confirmou o registro da atividade.")
+    criado = resultado[0]
+    _registrar_evento_negociacao(
+        oportunidade_id,
+        "ATIVIDADE",
+        "Nova atualização registrada no processo comercial.",
+        atividade.usuario_id,
+        criado,
+    )
     return _enriquecer(resultado)
 
 
@@ -234,7 +331,7 @@ def listar_atividades_arquivadas(usuario_id: str):
 @router.put("/atividades/{atividade_id}/concluir")
 def concluir_atividade_operacional(atividade_id: str):
     anterior = _atividade(atividade_id)
-    if str(anterior.get("status") or "").upper() in {"CONCLUIDA", "CONCLUÍDA", "REALIZADA", "FINALIZADA"}:
+    if _normalizar_status(anterior.get("status")) in {"CONCLUIDA", "CONCLUÍDA", "REALIZADA", "FINALIZADA"}:
         return _enriquecer([anterior])[0]
 
     agora = _now()
@@ -252,7 +349,15 @@ def concluir_atividade_operacional(atividade_id: str):
     )
     if not resultado.data:
         raise HTTPException(status_code=409, detail="Atividade não encontrada ou já arquivada.")
-    return _enriquecer([resultado.data[0]])[0]
+    atualizado = resultado.data[0]
+    _registrar_evento_negociacao(
+        str(atualizado.get("oportunidade_id") or "") or None,
+        "ATIVIDADE",
+        "Atualização do processo comercial concluída.",
+        str(atualizado.get("usuario_id") or "") or None,
+        atualizado,
+    )
+    return _enriquecer([atualizado])[0]
 
 
 @router.put("/atividades/{atividade_id}/administrar")
@@ -269,12 +374,26 @@ def administrar_atividade(atividade_id: str, alteracao: AtividadeAdminUpdate):
     if not payload:
         return _enriquecer([anterior])[0]
 
+    cliente_id = str(payload.get("cliente_id") or anterior.get("cliente_id") or "") or None
+    if "oportunidade_id" in payload or "cliente_id" in payload:
+        payload["oportunidade_id"] = _resolver_oportunidade_atividade(
+            cliente_id,
+            str(payload.get("oportunidade_id") or anterior.get("oportunidade_id") or "") or None,
+        )
+
     payload["updated_at"] = _now()
     resultado = supabase.table(TABELA_ATIVIDADES).update(payload).eq("id", atividade_id).is_("arquivado_em", "null").execute()
     if not resultado.data:
         raise HTTPException(status_code=409, detail="Atividade não encontrada ou já arquivada.")
     atualizado = resultado.data[0]
     _auditar(atividade_id, "EDICAO_ADMIN_MASTER", alteracao.administrador_id, anterior, atualizado)
+    _registrar_evento_negociacao(
+        str(atualizado.get("oportunidade_id") or "") or None,
+        "ATIVIDADE",
+        "Atualização corrigida no mesmo processo comercial.",
+        alteracao.administrador_id,
+        atualizado,
+    )
     return _enriquecer([atualizado])[0]
 
 
@@ -308,6 +427,81 @@ def arquivar_atividade(atividade_id: str, comando: AtividadeArquivar):
     atualizado = resultado.data[0]
     _auditar(atividade_id, "ARQUIVAMENTO_ADMIN_MASTER", comando.administrador_id, anterior, atualizado, motivo)
     return _enriquecer([atualizado])[0]
+
+
+@router.put("/oportunidades/{oportunidade_id}/encerrar")
+def encerrar_negociacao(oportunidade_id: str, comando: EncerramentoNegociacao):
+    oportunidade = _oportunidade(oportunidade_id)
+    status_atual = _normalizar_status(oportunidade.get("status"))
+    if status_atual in STATUS_ENCERRADOS:
+        return oportunidade
+
+    motivo_tipo = _normalizar_status(comando.motivo_tipo)
+    if motivo_tipo not in MOTIVOS_ENCERRAMENTO:
+        raise HTTPException(status_code=422, detail="Motivo de encerramento inválido.")
+    motivo_descricao = _texto(comando.motivo_descricao)
+    if motivo_tipo == "OUTRO" and not motivo_descricao:
+        raise HTTPException(status_code=422, detail="Descreva o motivo do encerramento.")
+
+    novo_status = "GANHO" if motivo_tipo == "VENDA_CONCLUIDA" else "PERDIDO"
+    agora = _now()
+    atualizado = (
+        supabase.table("cti_oportunidades")
+        .update({"status": novo_status, "updated_at": agora})
+        .eq("id", oportunidade_id)
+        .execute()
+        .data
+        or []
+    )
+    if not atualizado:
+        raise HTTPException(status_code=409, detail="Não foi possível encerrar a negociação.")
+
+    atividades_pendentes = (
+        supabase.table(TABELA_ATIVIDADES)
+        .select("id")
+        .eq("oportunidade_id", oportunidade_id)
+        .eq("status", "PENDENTE")
+        .is_("arquivado_em", "null")
+        .execute()
+        .data
+        or []
+    )
+    if atividades_pendentes:
+        ids = [str(item.get("id")) for item in atividades_pendentes if item.get("id")]
+        if ids:
+            (
+                supabase.table(TABELA_ATIVIDADES)
+                .update({"status": "CANCELADA", "updated_at": agora})
+                .in_("id", ids)
+                .execute()
+            )
+
+    supabase.table("cti_pipeline").insert(
+        {
+            "oportunidade_id": oportunidade_id,
+            "etapa_anterior": status_atual or oportunidade.get("status"),
+            "nova_etapa": novo_status,
+            "etapa": novo_status,
+            "usuario_id": comando.usuario_id,
+            "observacao": motivo_descricao or motivo_tipo.replace("_", " ").title(),
+            "data": agora[:10],
+            "hora": agora[11:19],
+        }
+    ).execute()
+    _registrar_evento_negociacao(
+        oportunidade_id,
+        "ENCERRAMENTO",
+        "Processo comercial encerrado e preservado no histórico do cliente.",
+        comando.usuario_id,
+        {
+            "motivo_tipo": motivo_tipo,
+            "motivo_descricao": motivo_descricao,
+            "status_anterior": status_atual,
+            "status_final": novo_status,
+            "encerrado_em": agora,
+        },
+    )
+    return atualizado[0]
 
 
 @router.get("/dashboard")
