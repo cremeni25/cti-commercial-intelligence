@@ -24,7 +24,8 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (inicia(pathname, "/backoffice-fontes")) return master
   if (inicia(pathname, "/configuracoes/modelos-oficiais")) return master
   if (inicia(pathname, "/crm-app/testes-arquivados")) return master
-  if (inicia(pathname, "/crm-app/controle-financeiro")) return master
+  // Controle financeiro pessoal permanece em homologação privada e não herda acesso do perfil Master.
+  if (inicia(pathname, "/crm-app/controle-financeiro")) return tem(permissoes, "financeiro_visualizar")
 
   if (inicia(pathname, "/usuarios")) return master || tem(permissoes, "usuarios_administrar")
   if (inicia(pathname, "/configuracoes")) return master || tem(permissoes, "configuracoes_administrar")
