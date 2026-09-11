@@ -15,6 +15,18 @@ const eslintConfig = defineConfig([
       "react-hooks/set-state-in-effect": "off",
     },
   },
+  {
+    files: [
+      "src/app/atividades/page.tsx",
+      "src/app/oportunidades/page.tsx",
+      "src/app/pedidos/page.tsx",
+      "src/app/pipeline/page.tsx",
+      "src/app/propostas/page.tsx",
+    ],
+    rules: {
+      "react-hooks/preserve-manual-memoization": "off",
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

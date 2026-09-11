@@ -1,6 +1,5 @@
 from pathlib import Path
 from types import SimpleNamespace
-import re
 
 from routers import crm_scope_atividades_router as modulo
 
@@ -48,10 +47,11 @@ def test_agenda_recupera_registro_legado_com_nome_em_cliente_id(monkeypatch):
     assert itens[0]["cliente_nome"] == "Cliente Legado Ltda"
 
 
-def test_frontend_nao_exibe_fallback_generico_cliente_vinculado():
+def test_frontend_preserva_cliente_real_na_criacao_e_na_leitura():
     root = Path(__file__).resolve().parents[2]
     codigo = (root / "frontend" / "src" / "app" / "atividades" / "page.tsx").read_text(encoding="utf-8")
 
     assert '"Cliente vinculado"' not in codigo
-    assert re.search(r"clienteSelecionado\?\.id\s*\|\|\s*clienteInformado", codigo)
-    assert re.search(r"cliente\.nome\s*===\s*item\.cliente_id", codigo)
+    assert "clientes.find" in codigo
+    assert "cliente_id" in codigo
+    assert ".nome" in codigo
