@@ -40,6 +40,8 @@ export default function RegistroRapidoPage() {
   useEffect(() => {
     const agora = new URLSearchParams(window.location.search)
     const inicial = chave(agora.get("tipo"))
+    const clienteContexto = texto(agora.get("cliente"))
+    const oportunidadeContexto = texto(agora.get("oportunidade"))
     if (TIPOS.some(([valor]) => valor === inicial)) setTipo(inicial)
     let ativo = true
     void (async () => {
@@ -52,20 +54,38 @@ export default function RegistroRapidoPage() {
         const nd = await nr.json().catch(() => [])
         if (!cr.ok || !nr.ok) throw new Error("Não foi possível carregar os dados do CRM.")
         if (!ativo) return
-        setClientes((Array.isArray(cd) ? cd : []).map((i: Registro) => ({
+
+        const listaClientes = (Array.isArray(cd) ? cd : []).map((i: Registro) => ({
           id: texto(i.id),
           nome: texto(i.nome || i.razao_social || i.nome_fantasia),
           cidade: texto(i.cidade || i.municipio),
           estado: texto(i.estado || i.uf),
-        })).filter((i: Cliente) => i.id && i.nome))
-        setNegociacoes((Array.isArray(nd) ? nd : []).map((i: Registro) => ({
+        })).filter((i: Cliente) => i.id && i.nome)
+
+        const listaNegociacoes = (Array.isArray(nd) ? nd : []).map((i: Registro) => ({
           oportunidade_id: texto(i.oportunidade_id || i.id),
           cliente_id: texto(i.cliente_id),
           cliente_nome: texto(i.cliente_nome),
           titulo: texto(i.titulo || i.equipamento) || "Negociação comercial",
           etapa: texto(i.etapa || i.status_oportunidade),
           encerrada: Boolean(i.encerrada),
-        })).filter((i: Negociacao) => i.oportunidade_id))
+        })).filter((i: Negociacao) => i.oportunidade_id)
+
+        setClientes(listaClientes)
+        setNegociacoes(listaNegociacoes)
+
+        const negociacaoInicial = oportunidadeContexto
+          ? listaNegociacoes.find((i: Negociacao) => i.oportunidade_id === oportunidadeContexto)
+          : undefined
+        const clienteInicial = listaClientes.find((i: Cliente) => i.id === clienteContexto)
+          || listaClientes.find((i: Cliente) => negociacaoInicial?.cliente_id && i.id === negociacaoInicial.cliente_id)
+          || listaClientes.find((i: Cliente) => negociacaoInicial?.cliente_nome && chave(i.nome) === chave(negociacaoInicial.cliente_nome))
+
+        if (clienteInicial) {
+          setCliente(clienteInicial)
+          setBusca(clienteInicial.nome)
+        }
+        if (negociacaoInicial) setOportunidadeId(negociacaoInicial.oportunidade_id)
       } catch (falha) {
         if (ativo) setErro(falha instanceof Error ? falha.message : "Não foi possível carregar o CRM.")
       } finally {
@@ -88,10 +108,11 @@ export default function RegistroRapidoPage() {
 
   useEffect(() => {
     queueMicrotask(() => {
+      if (oportunidadeId && negociacoesCliente.some((i) => i.oportunidade_id === oportunidadeId)) return
       if (negociacoesCliente.length === 1) setOportunidadeId(negociacoesCliente[0].oportunidade_id)
       else setOportunidadeId("")
     })
-  }, [negociacoesCliente])
+  }, [negociacoesCliente, oportunidadeId])
 
   async function salvar(e: FormEvent) {
     e.preventDefault()
@@ -143,7 +164,7 @@ export default function RegistroRapidoPage() {
         <header className="mb-5 flex items-start gap-3">
           <Link href="/crm-app/acao" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={21} /></Link>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Registro rápido</p>
+            <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Registro</p>
             <h1 className="mt-1 text-3xl font-bold">O que aconteceu?</h1>
             <p className="mt-1 text-sm leading-6 text-slate-400">Três passos. O restante o CTI completa automaticamente.</p>
           </div>
@@ -185,7 +206,6 @@ export default function RegistroRapidoPage() {
         <button type="submit" disabled={!cliente || salvando} className="mt-5 flex min-h-16 w-full items-center justify-center rounded-2xl bg-cyan-500 px-5 text-lg font-bold text-slate-950 disabled:opacity-50">
           {salvando ? <><Loader2 className="mr-2 animate-spin" size={20}/>Salvando...</> : "Registrar e continuar"}
         </button>
-        <Link href="/crm-app/atividades/nova" className="mt-3 flex min-h-12 items-center justify-center text-sm font-semibold text-slate-500">Preciso de opções avançadas</Link>
       </form>
     </main>
   )
