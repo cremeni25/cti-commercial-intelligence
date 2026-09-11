@@ -16,14 +16,14 @@ const textos = {
     contact: "Registrar contato",
     contactHelp: "Ligação, WhatsApp, e-mail, reunião ou follow-up.",
     continueDeal: "Continuar negociação",
-    continueDealHelp: "Abra a carteira e avance a negociação que já está em andamento.",
-    proposal: "Criar ou continuar proposta",
-    proposalHelp: "Acesse as propostas sem procurar por módulos intermediários.",
+    continueDealHelp: "Escolha o cliente e continue exatamente do ponto em que parou.",
+    proposal: "Proposta",
+    proposalHelp: "Escolha a negociação em andamento; o CTI leva você ao processo correto.",
     findAccount: "Encontrar cliente",
     findAccountHelp: "Consulte a carteira e parta do cliente para a próxima ação.",
     activities: "Ver meu dia",
     activitiesHelp: "Pendências, retornos e atividades que precisam de atenção.",
-    hint: "Uma ação por vez. Atividade, oportunidade, proposta e pedido continuam sincronizados por trás do aplicativo.",
+    hint: "Uma ação por vez. O vendedor informa o que aconteceu; o CTI mantém atividade, negociação, proposta e pedido sincronizados por trás do aplicativo.",
   },
   en: {
     eyebrow: "CTI CRM · field use",
@@ -34,14 +34,14 @@ const textos = {
     contact: "Log a contact",
     contactHelp: "Call, WhatsApp, email, meeting or follow-up.",
     continueDeal: "Continue a deal",
-    continueDealHelp: "Open your portfolio and advance an existing deal.",
-    proposal: "Create or continue proposal",
-    proposalHelp: "Go straight to proposals without intermediate modules.",
+    continueDealHelp: "Choose the account and continue exactly where you stopped.",
+    proposal: "Proposal",
+    proposalHelp: "Choose the active deal and CTI opens the right process.",
     findAccount: "Find account",
     findAccountHelp: "Open your portfolio and start the next action from the account.",
     activities: "View my day",
     activitiesHelp: "Pending items, follow-ups and activities that need attention.",
-    hint: "One action at a time. Activities, opportunities, proposals and orders remain synchronized behind the app.",
+    hint: "One action at a time. The seller records what happened; CTI keeps activities, deals, proposals and orders synchronized behind the app.",
   },
   es: {
     eyebrow: "CTI CRM · uso en campo",
@@ -52,14 +52,14 @@ const textos = {
     contact: "Registrar contacto",
     contactHelp: "Llamada, WhatsApp, correo, reunión o seguimiento.",
     continueDeal: "Continuar negocio",
-    continueDealHelp: "Abre tu cartera y avanza el negocio que ya está en curso.",
-    proposal: "Crear o continuar propuesta",
-    proposalHelp: "Accede directamente a propuestas sin módulos intermedios.",
+    continueDealHelp: "Elige el cliente y continúa exactamente desde donde paraste.",
+    proposal: "Propuesta",
+    proposalHelp: "Elige el negocio activo y CTI abre el proceso correcto.",
     findAccount: "Buscar cliente",
     findAccountHelp: "Consulta tu cartera y parte del cliente hacia la próxima acción.",
     activities: "Ver mi día",
     activitiesHelp: "Pendientes, retornos y actividades que requieren atención.",
-    hint: "Una acción a la vez. Actividades, oportunidades, propuestas y pedidos siguen sincronizados detrás de la aplicación.",
+    hint: "Una acción a la vez. El vendedor registra lo ocurrido; CTI mantiene actividades, negocios, propuestas y pedidos sincronizados detrás de la aplicación.",
   },
 } satisfies Record<Locale, Record<string, string>>
 
@@ -70,8 +70,8 @@ export default function AcaoRapidaPage() {
   const principais = [
     { href: "/crm-app/atividades/nova?tipo=VISITA_PRESENCIAL", titulo: t.visit, descricao: t.visitHelp, icon: MapPinned },
     { href: "/crm-app/atividades/nova?tipo=FOLLOW_UP", titulo: t.contact, descricao: t.contactHelp, icon: ClipboardCheck },
-    { href: "/crm-app/oportunidades", titulo: t.continueDeal, descricao: t.continueDealHelp, icon: BriefcaseBusiness },
-    { href: "/crm-app/propostas", titulo: t.proposal, descricao: t.proposalHelp, icon: FileText },
+    { href: "/crm-app/acao/negociacao", titulo: t.continueDeal, descricao: t.continueDealHelp, icon: BriefcaseBusiness },
+    { href: "/crm-app/acao/negociacao", titulo: t.proposal, descricao: t.proposalHelp, icon: FileText },
   ]
 
   const apoio = [
@@ -94,8 +94,8 @@ export default function AcaoRapidaPage() {
         </header>
 
         <section className="grid gap-3">
-          {principais.map(({ href, titulo, descricao, icon: Icon }) => (
-            <Link key={href} href={href} className="flex min-h-28 items-center gap-4 rounded-3xl border border-[#1c3f68] bg-gradient-to-br from-[#0b2342] to-[#07172c] p-5 shadow-lg active:scale-[.99]">
+          {principais.map(({ href, titulo, descricao, icon: Icon }, indice) => (
+            <Link key={`${href}-${indice}`} href={href} className="flex min-h-28 items-center gap-4 rounded-3xl border border-[#1c3f68] bg-gradient-to-br from-[#0b2342] to-[#07172c] p-5 shadow-lg active:scale-[.99]">
               <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-cyan-500 text-slate-950"><Icon size={27} /></span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xl font-bold">{titulo}</span>
