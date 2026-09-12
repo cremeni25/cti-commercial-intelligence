@@ -24,6 +24,7 @@ const ROTAS_LEGADAS_SEGURAS: Record<string, string> = {
   "/carrier-operacional/ciclos": "crm-seguro/ciclos",
   "/crm-app/clientes": "crm-seguro/clientes",
   "/modulos/clientes": "crm-seguro/clientes",
+  "/api/cti/modulos/clientes": "crm-seguro/clientes",
 }
 
 function destinoSeguroLeitura(url: string, metodo: string): string | null {
