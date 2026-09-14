@@ -51,15 +51,13 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     const resposta = await fetchCrmSeguroProxy("crm-seguro/clientes", { cache: "no-store" })
     const dados = await resposta.json().catch(() => [])
     if (!resposta.ok) throw new Error(texto((dados as Registro).detail) || "Não foi possível carregar os clientes.")
-    const lista = (Array.isArray(dados) ? dados : []).map((i: Registro) => ({
+    return (Array.isArray(dados) ? dados : []).map((i: Registro) => ({
       id: texto(i.id),
       nome: texto(i.nome || i.razao_social || i.nome_fantasia),
       cidade: texto(i.cidade || i.municipio),
       estado: texto(i.estado || i.uf).toUpperCase(),
       cnpj: texto(i.cnpj || i.cnpj_cpf || i.documento),
     })).filter((i: Cliente) => i.id && i.nome)
-    setClientes(lista)
-    return lista
   }
 
   useEffect(() => {
@@ -69,7 +67,9 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     const clienteUrl = texto(params.get("cliente"))
     queueMicrotask(() => { if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl) })
     void carregarClientes().then((lista) => {
-      if (!ativo || !clienteUrl) return
+      if (!ativo) return
+      setClientes(lista)
+      if (!clienteUrl) return
       const encontrado = lista.find((i) => i.id === clienteUrl || chave(i.nome) === chave(clienteUrl))
       if (encontrado) { setCliente(encontrado); setBusca(encontrado.nome) }
     }).catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar os clientes.") }).finally(() => { if (ativo) setCarregando(false) })
