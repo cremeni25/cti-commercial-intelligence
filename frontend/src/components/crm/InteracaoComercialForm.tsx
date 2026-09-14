@@ -66,8 +66,8 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     let ativo = true
     const params = new URLSearchParams(window.location.search)
     const tipoUrl = chave(params.get("tipo"))
-    if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl)
     const clienteUrl = texto(params.get("cliente"))
+    queueMicrotask(() => { if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl) })
     void carregarClientes().then((lista) => {
       if (!ativo || !clienteUrl) return
       const encontrado = lista.find((i) => i.id === clienteUrl || chave(i.nome) === chave(clienteUrl))
