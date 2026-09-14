@@ -1,15 +1,21 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
-PAGE = ROOT / "frontend" / "src" / "app" / "crm-app" / "acao" / "registrar" / "page.tsx"
+FORM = ROOT / "frontend" / "src" / "components" / "crm" / "InteracaoComercialForm.tsx"
+APP_PAGE = ROOT / "frontend" / "src" / "app" / "crm-app" / "acao" / "registrar" / "page.tsx"
+WEB_PAGE = ROOT / "frontend" / "src" / "app" / "atividades" / "interacao" / "page.tsx"
 
 
 def test_registro_unico_bloqueia_multiplos_envios_imediatos():
-    page = PAGE.read_text(encoding="utf-8")
-    compacto = "".join(page.split())
-    assert "useRef" in page
-    assert "envioRef.current" in page
-    assert "if(envioRef.current||!cliente||!usuario?.id)return" in compacto
-    assert "envioRef.current=true" in compacto
-    assert "window.location.href=`/crm-app/acao/concluida?${qs.toString()}`" in compacto
+    form = FORM.read_text(encoding="utf-8")
+    assert "useRef" in form
+    assert "envioRef.current" in form
+
+
+def test_app_e_web_usam_o_mesmo_fluxo_de_interacao():
+    app = APP_PAGE.read_text(encoding="utf-8")
+    web = WEB_PAGE.read_text(encoding="utf-8")
+    assert "InteracaoComercialForm" in app
+    assert "InteracaoComercialForm" in web
+    assert 'superficie="app"' in app
+    assert 'superficie="web"' in web

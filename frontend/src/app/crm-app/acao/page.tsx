@@ -1,127 +1,28 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowLeft, BriefcaseBusiness, ChevronRight, ClipboardCheck, FileText, MapPinned, Search, Users } from "lucide-react"
+import { ArrowLeft, BriefcaseBusiness, ChevronRight, FileText, MessageSquareText, Search, Users } from "lucide-react"
 import { useOperationalI18n } from "@/core/i18n/operational"
 
 type Locale = "pt-BR" | "en" | "es"
-
 const textos = {
-  "pt-BR": {
-    eyebrow: "CTI CRM · uso em campo",
-    title: "O que você quer fazer agora?",
-    subtitle: "Escolha uma ação. O CTI reaproveita os dados da negociação e evita caminhos desnecessários.",
-    visit: "Registrar visita",
-    visitHelp: "Presencial ou remota, com cliente cadastrado ou parceiro/pessoa quando não houver cliente.",
-    contact: "Registrar contato",
-    contactHelp: "Ligação, WhatsApp, e-mail, reunião ou follow-up.",
-    continueDeal: "Continuar negociação",
-    continueDealHelp: "Escolha o cliente e continue exatamente do ponto em que parou.",
-    proposal: "Proposta",
-    proposalHelp: "Escolha a negociação em andamento; o CTI leva você ao processo correto.",
-    findAccount: "Encontrar / cadastrar cliente",
-    findAccountHelp: "Consulte a carteira ou cadastre pelo CNPJ com preenchimento automático.",
-    activities: "Ver meu dia",
-    activitiesHelp: "Pendências, retornos e atividades que precisam de atenção.",
-    hint: "Uma ação por vez. O vendedor informa o que aconteceu; o CTI mantém atividade, negociação, proposta e pedido sincronizados por trás do aplicativo.",
-  },
-  en: {
-    eyebrow: "CTI CRM · field use",
-    title: "What do you want to do now?",
-    subtitle: "Choose one action. CTI reuses deal data and avoids unnecessary navigation.",
-    visit: "Log a visit",
-    visitHelp: "On-site or remote, with a registered account or an external partner/person.",
-    contact: "Log a contact",
-    contactHelp: "Call, WhatsApp, email, meeting or follow-up.",
-    continueDeal: "Continue a deal",
-    continueDealHelp: "Choose the account and continue exactly where you stopped.",
-    proposal: "Proposal",
-    proposalHelp: "Choose the active deal and CTI opens the right process.",
-    findAccount: "Find / register account",
-    findAccountHelp: "Search the portfolio or register by tax ID with automatic data fill.",
-    activities: "View my day",
-    activitiesHelp: "Pending items, follow-ups and activities that need attention.",
-    hint: "One action at a time. The seller records what happened; CTI keeps activities, deals, proposals and orders synchronized behind the app.",
-  },
-  es: {
-    eyebrow: "CTI CRM · uso en campo",
-    title: "¿Qué quieres hacer ahora?",
-    subtitle: "Elige una acción. CTI reutiliza los datos del negocio y evita recorridos innecesarios.",
-    visit: "Registrar visita",
-    visitHelp: "Presencial o remota, con cliente registrado o socio/persona externa.",
-    contact: "Registrar contacto",
-    contactHelp: "Llamada, WhatsApp, correo, reunión o seguimiento.",
-    continueDeal: "Continuar negocio",
-    continueDealHelp: "Elige el cliente y continúa exactamente desde donde paraste.",
-    proposal: "Propuesta",
-    proposalHelp: "Elige el negocio activo y CTI abre el proceso correcto.",
-    findAccount: "Buscar / registrar cliente",
-    findAccountHelp: "Consulta la cartera o registra por identificación fiscal con llenado automático.",
-    activities: "Ver mi día",
-    activitiesHelp: "Pendientes, retornos y actividades que requieren atención.",
-    hint: "Una acción a la vez. El vendedor registra lo ocurrido; CTI mantiene actividades, negocios, propuestas y pedidos sincronizados detrás de la aplicación.",
-  },
-} satisfies Record<Locale, Record<string, string>>
+  "pt-BR": { eyebrow:"CTI CRM · uso em campo", title:"O que você quer fazer agora?", subtitle:"Uma ação por vez. O CTI conduz a evolução comercial sem repetir cadastros.", interaction:"Registrar interação", interactionHelp:"Visita, ligação, WhatsApp, e-mail, reunião ou follow-up. No fim, defina se virou lead, oportunidade ou ficou sem continuidade.", continueDeal:"Continuar negociação", continueDealHelp:"Continue um processo comercial já aberto exatamente do ponto em que parou.", proposal:"Proposta", proposalHelp:"Entre em uma negociação em andamento e avance para a proposta quando houver oportunidade real.", findAccount:"Encontrar / cadastrar cliente", findAccountHelp:"Consulte a carteira ou cadastre pelo CNPJ com preenchimento automático.", day:"Ver meu dia", dayHelp:"Pendências, retornos e compromissos que precisam de atenção.", hint:"Interação → Lead ou Oportunidade → Proposta → Pedido → Venda. O vendedor informa o que ocorreu; o CTI mantém o processo sincronizado." },
+  en: { eyebrow:"CTI CRM · field use", title:"What do you want to do now?", subtitle:"One action at a time. CTI advances the sales cycle without duplicate entry.", interaction:"Log interaction", interactionHelp:"Visit, call, WhatsApp, email, meeting or follow-up. Then define whether it became a lead, opportunity or ended.", continueDeal:"Continue a deal", continueDealHelp:"Continue an existing sales process exactly where it stopped.", proposal:"Proposal", proposalHelp:"Open an active deal and advance to a proposal when there is a real opportunity.", findAccount:"Find / create account", findAccountHelp:"Search the portfolio or create an account from its tax ID.", day:"View my day", dayHelp:"Pending items, returns and commitments requiring attention.", hint:"Interaction → Lead or Opportunity → Proposal → Order → Sale. The seller records what happened; CTI keeps the process synchronized." },
+  es: { eyebrow:"CTI CRM · uso en campo", title:"¿Qué quieres hacer ahora?", subtitle:"Una acción a la vez. CTI hace avanzar el ciclo comercial sin registros duplicados.", interaction:"Registrar interacción", interactionHelp:"Visita, llamada, WhatsApp, correo, reunión o seguimiento. Luego define si se convirtió en lead, oportunidad o terminó.", continueDeal:"Continuar negocio", continueDealHelp:"Continúe un proceso comercial existente exactamente desde donde se detuvo.", proposal:"Propuesta", proposalHelp:"Abra un negocio activo y avance a propuesta cuando exista una oportunidad real.", findAccount:"Buscar / registrar cliente", findAccountHelp:"Consulte la cartera o registre por CNPJ con autocompletado.", day:"Ver mi día", dayHelp:"Pendientes, retornos y compromisos que requieren atención.", hint:"Interacción → Lead u Oportunidad → Propuesta → Pedido → Venta. El vendedor registra lo ocurrido; CTI mantiene el proceso sincronizado." }
+} satisfies Record<Locale,Record<string,string>>
 
-export default function AcaoRapidaPage() {
-  const { locale } = useOperationalI18n()
-  const t = textos[(locale as Locale) || "pt-BR"] || textos["pt-BR"]
-
-  const principais = [
-    { href: "/crm-app/acao/registrar?tipo=VISITA_PRESENCIAL", titulo: t.visit, descricao: t.visitHelp, icon: MapPinned },
-    { href: "/crm-app/acao/registrar?tipo=FOLLOW_UP", titulo: t.contact, descricao: t.contactHelp, icon: ClipboardCheck },
-    { href: "/crm-app/acao/negociacao", titulo: t.continueDeal, descricao: t.continueDealHelp, icon: BriefcaseBusiness },
-    { href: "/crm-app/acao/negociacao", titulo: t.proposal, descricao: t.proposalHelp, icon: FileText },
+export default function AcaoRapidaPage(){
+  const {locale}=useOperationalI18n(); const t=textos[(locale as Locale)||"pt-BR"]||textos["pt-BR"]
+  const principais=[
+    {href:"/crm-app/acao/registrar",titulo:t.interaction,descricao:t.interactionHelp,icon:MessageSquareText},
+    {href:"/crm-app/acao/negociacao",titulo:t.continueDeal,descricao:t.continueDealHelp,icon:BriefcaseBusiness},
+    {href:"/crm-app/acao/negociacao",titulo:t.proposal,descricao:t.proposalHelp,icon:FileText},
   ]
-
-  const apoio = [
-    { href: "/crm-app/clientes", titulo: t.findAccount, descricao: t.findAccountHelp, icon: Search },
-    { href: "/crm-app/agenda", titulo: t.activities, descricao: t.activitiesHelp, icon: Users },
-  ]
-
-  return (
-    <main className="min-h-[100dvh] bg-[#020817] px-4 pb-28 pt-5 text-white sm:px-6">
-      <div className="mx-auto max-w-3xl">
-        <header className="mb-6 flex items-start gap-3">
-          <Link href="/crm-app" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300">
-            <ArrowLeft size={21} />
-          </Link>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">{t.eyebrow}</p>
-            <h1 className="mt-1 text-3xl font-bold leading-tight">{t.title}</h1>
-            <p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p>
-          </div>
-        </header>
-
-        <section className="grid gap-3">
-          {principais.map(({ href, titulo, descricao, icon: Icon }, indice) => (
-            <Link key={`${href}-${indice}`} href={href} className="flex min-h-28 items-center gap-4 rounded-3xl border border-[#1c3f68] bg-gradient-to-br from-[#0b2342] to-[#07172c] p-5 shadow-lg active:scale-[.99]">
-              <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-cyan-500 text-slate-950"><Icon size={27} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-xl font-bold">{titulo}</span>
-                <span className="mt-1 block text-sm leading-5 text-slate-300">{descricao}</span>
-              </span>
-              <ChevronRight size={22} className="shrink-0 text-cyan-300" />
-            </Link>
-          ))}
-        </section>
-
-        <section className="mt-5 grid gap-3 sm:grid-cols-2">
-          {apoio.map(({ href, titulo, descricao, icon: Icon }) => (
-            <Link key={href} href={href} className="flex min-h-24 items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4 active:scale-[.99]">
-              <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-950/70 text-cyan-300"><Icon size={21} /></span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-base font-semibold">{titulo}</span>
-                <span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span>
-              </span>
-            </Link>
-          ))}
-        </section>
-
-        <div className="mt-5 rounded-2xl border border-emerald-900/70 bg-emerald-950/20 p-4 text-sm leading-6 text-emerald-100/80">
-          {t.hint}
-        </div>
-      </div>
-    </main>
-  )
+  const apoio=[{href:"/crm-app/clientes",titulo:t.findAccount,descricao:t.findAccountHelp,icon:Search},{href:"/crm-app/agenda",titulo:t.day,descricao:t.dayHelp,icon:Users}]
+  return <main className="min-h-[100dvh] bg-[#020817] px-4 pb-28 pt-5 text-white sm:px-6"><div className="mx-auto max-w-3xl">
+    <header className="mb-6 flex items-start gap-3"><Link href="/crm-app" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={21}/></Link><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-400">{t.eyebrow}</p><h1 className="mt-1 text-3xl font-bold leading-tight">{t.title}</h1><p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p></div></header>
+    <section className="grid gap-3">{principais.map(({href,titulo,descricao,icon:Icon},i)=><Link key={`${href}-${i}`} href={href} className="flex min-h-28 items-center gap-4 rounded-3xl border border-[#1c3f68] bg-gradient-to-br from-[#0b2342] to-[#07172c] p-5 shadow-lg active:scale-[.99]"><span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-cyan-500 text-slate-950"><Icon size={27}/></span><span className="min-w-0 flex-1"><span className="block text-xl font-bold">{titulo}</span><span className="mt-1 block text-sm leading-5 text-slate-300">{descricao}</span></span><ChevronRight size={22} className="shrink-0 text-cyan-300"/></Link>)}</section>
+    <section className="mt-5 grid gap-3 sm:grid-cols-2">{apoio.map(({href,titulo,descricao,icon:Icon})=><Link key={href} href={href} className="flex min-h-24 items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4 active:scale-[.99]"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-950/70 text-cyan-300"><Icon size={21}/></span><span className="min-w-0 flex-1"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span></Link>)}</section>
+    <div className="mt-5 rounded-2xl border border-emerald-900/70 bg-emerald-950/20 p-4 text-sm leading-6 text-emerald-100/80">{t.hint}</div>
+  </div></main>
 }

@@ -34,6 +34,7 @@ const menuGroups: MenuGroup[] = [
   {
     tituloKey: "nav.crm",
     itens: [
+      { label: { "pt-BR": "Nova interação", en: "New interaction", es: "Nueva interacción" }, href: "/atividades/interacao", icon: "✚", type: "emoji" },
       { labelKey: "nav.opportunities", href: "/oportunidades", icon: "📈", type: "emoji" },
       { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
       { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
@@ -87,6 +88,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/upload") return gestao
   if (href === "/dashboard" || href === "/inteligencia" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
+  if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
   if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")
   if (href === "/pedidos") return gestao || tem(permissoes, "pedidos_visualizar")
@@ -122,18 +124,8 @@ export default function Sidebar() {
                 const active = pathname === item.href || Boolean(item.aliases?.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`)))
                 const label = item.labelKey ? t(item.labelKey) : item.label?.[locale] || item.href
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${active ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400" : "text-gray-300 hover:bg-[#101b36]"}`}
-                  >
-                    <div className="w-[28px] flex items-center justify-center">
-                      {item.type === "image" ? (
-                        <Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain" />
-                      ) : (
-                        <span className="text-lg">{item.icon as string}</span>
-                      )}
-                    </div>
+                  <Link key={item.href} href={item.href} className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${active ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400" : "text-gray-300 hover:bg-[#101b36]"}`}>
+                    <div className="w-[28px] flex items-center justify-center">{item.type === "image" ? <Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain" /> : <span className="text-lg">{item.icon as string}</span>}</div>
                     <span>{label}</span>
                   </Link>
                 )
@@ -143,15 +135,7 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-4 border-t border-[#13203f]">
-        <div className="bg-[#101b36] rounded-xl p-4">
-          <p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p>
-          <div className="flex items-center gap-2 mt-3">
-            <div className="w-3 h-3 rounded-full bg-green-400 animate-pulse" />
-            <span className="text-green-400 text-sm font-medium">{t("common.online")}</span>
-          </div>
-        </div>
-      </div>
+      <div className="p-4 border-t border-[#13203f]"><div className="bg-[#101b36] rounded-xl p-4"><p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p><div className="flex items-center gap-2 mt-3"><div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"/><span className="text-green-400 text-sm font-medium">{t("common.online")}</span></div></div></div>
     </aside>
   )
 }
