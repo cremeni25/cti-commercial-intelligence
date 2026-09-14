@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
-import { ArrowLeft, Check, ChevronRight, Loader2, Search } from "lucide-react"
+import { ArrowLeft, Building2, Check, ChevronRight, Loader2, Plus, Search, UserRound } from "lucide-react"
 import { useAuth } from "@/core/auth"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Cliente = { id: string; nome: string; cidade?: string; estado?: string }
 type Negociacao = { oportunidade_id: string; cliente_id: string; cliente_nome?: string; titulo: string; etapa: string; encerrada?: boolean }
+type Contexto = "CLIENTE" | "PARCEIRO"
 
 const TIPOS = [
   ["VISITA_PRESENCIAL", "Visita"],
@@ -27,8 +28,12 @@ export default function RegistroRapidoPage() {
   const { usuario } = useAuth()
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [negociacoes, setNegociacoes] = useState<Negociacao[]>([])
+  const [contexto, setContexto] = useState<Contexto>("CLIENTE")
   const [busca, setBusca] = useState("")
   const [cliente, setCliente] = useState<Cliente | null>(null)
+  const [parceiroNome, setParceiroNome] = useState("")
+  const [parceiroTipo, setParceiroTipo] = useState("PARCEIRO_COMERCIAL")
+  const [parceiroOrganizacao, setParceiroOrganizacao] = useState("")
   const [tipo, setTipo] = useState("FOLLOW_UP")
   const [oportunidadeId, setOportunidadeId] = useState("")
   const [descricao, setDescricao] = useState("")
@@ -102,9 +107,9 @@ export default function RegistroRapidoPage() {
   }, [busca, cliente, clientes])
 
   const negociacoesCliente = useMemo(() => {
-    if (!cliente) return []
+    if (!cliente || contexto !== "CLIENTE") return []
     return abertas(negociacoes.filter((i) => i.cliente_id === cliente.id || (i.cliente_nome && chave(i.cliente_nome) === chave(cliente.nome))))
-  }, [cliente, negociacoes])
+  }, [cliente, contexto, negociacoes])
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -114,10 +119,12 @@ export default function RegistroRapidoPage() {
     })
   }, [negociacoesCliente, oportunidadeId])
 
+  const pronto = contexto === "CLIENTE" ? Boolean(cliente) : Boolean(parceiroNome.trim())
+
   async function salvar(e: FormEvent) {
     e.preventDefault()
-    if (envioRef.current || !cliente || !usuario?.id) return
-    if (negociacoesCliente.length > 1 && !oportunidadeId) {
+    if (envioRef.current || !pronto || !usuario?.id) return
+    if (contexto === "CLIENTE" && negociacoesCliente.length > 1 && !oportunidadeId) {
       setErro("Este cliente possui mais de uma negociação aberta. Escolha qual processo deve receber esta interação.")
       return
     }
@@ -128,17 +135,21 @@ export default function RegistroRapidoPage() {
       const agora = new Date()
       const data = agora.toISOString().slice(0, 10)
       const horario = agora.toTimeString().slice(0, 5)
-      const negocio = negociacoesCliente.find((i) => i.oportunidade_id === oportunidadeId)
+      const negocio = contexto === "CLIENTE" ? negociacoesCliente.find((i) => i.oportunidade_id === oportunidadeId) : undefined
       const rotulo = TIPOS.find(([valor]) => valor === tipo)?.[1] || "Interação"
+      const alvo = contexto === "CLIENTE" ? cliente?.nome : parceiroNome.trim()
       const resposta = await fetchCrmSeguroProxy("crm-seguro/atividades", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          cliente_id: cliente.id,
+          cliente_id: contexto === "CLIENTE" ? cliente?.id : null,
+          parceiro_nome: contexto === "PARCEIRO" ? parceiroNome.trim() : null,
+          parceiro_tipo: contexto === "PARCEIRO" ? parceiroTipo : null,
+          parceiro_organizacao: contexto === "PARCEIRO" ? parceiroOrganizacao.trim() || null : null,
           oportunidade_id: negocio?.oportunidade_id || null,
           usuario_id: usuario.id,
           tipo,
-          titulo: `${rotulo} · ${cliente.nome}`,
+          titulo: `${rotulo} · ${alvo}`,
           descricao: descricao.trim() || null,
           data,
           horario,
@@ -147,7 +158,7 @@ export default function RegistroRapidoPage() {
       })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(texto(payload?.detail) || `HTTP ${resposta.status}`)
-      const qs = new URLSearchParams({ cliente: cliente.nome })
+      const qs = new URLSearchParams({ cliente: alvo || "Registro concluído" })
       if (negocio?.oportunidade_id) qs.set("oportunidade", negocio.oportunidade_id)
       window.location.href = `/crm-app/acao/concluida?${qs.toString()}`
     } catch (falha) {
@@ -173,21 +184,35 @@ export default function RegistroRapidoPage() {
         {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
 
         <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-          <span className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">1 · Cliente</span>
-          {carregando ? <div className="mt-4 flex min-h-16 items-center text-slate-400"><Loader2 className="mr-2 animate-spin" size={19}/>Carregando...</div> : cliente ? (
+          <span className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">1 · Com quem?</span>
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => { setContexto("CLIENTE"); setParceiroNome(""); setParceiroOrganizacao("") }} className={`flex min-h-14 items-center justify-center gap-2 rounded-2xl border px-3 font-semibold ${contexto === "CLIENTE" ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-[#24466f] bg-[#020817] text-slate-300"}`}><Building2 size={18}/>Cliente</button>
+            <button type="button" onClick={() => { setContexto("PARCEIRO"); setCliente(null); setBusca(""); setOportunidadeId("") }} className={`flex min-h-14 items-center justify-center gap-2 rounded-2xl border px-3 font-semibold ${contexto === "PARCEIRO" ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-[#24466f] bg-[#020817] text-slate-300"}`}><UserRound size={18}/>Parceiro / pessoa</button>
+          </div>
+
+          {contexto === "CLIENTE" && (carregando ? <div className="mt-4 flex min-h-16 items-center text-slate-400"><Loader2 className="mr-2 animate-spin" size={19}/>Carregando...</div> : cliente ? (
             <div className="mt-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4">
               <div><strong className="block text-lg">{cliente.nome}</strong><span className="text-sm text-slate-400">{[cliente.cidade, cliente.estado].filter(Boolean).join(" · ")}</span></div>
               <button type="button" onClick={() => { setCliente(null); setBusca(""); setOportunidadeId("") }} className="min-h-10 rounded-xl border border-[#24466f] px-3 text-sm text-slate-300">Trocar</button>
             </div>
           ) : (
-            <div className="relative mt-4">
-              <Search className="absolute left-4 top-4 text-slate-500" size={20}/>
-              <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite o nome do cliente" className="min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] pl-12 pr-4 text-base outline-none focus:border-cyan-500" />
-              {sugestoes.length > 0 && <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[#24466f] bg-[#07162b] shadow-2xl">{sugestoes.map((item) => <button key={item.id} type="button" onClick={() => { setCliente(item); setBusca(item.nome) }} className="flex min-h-14 w-full items-center justify-between border-b border-[#16325c] px-4 text-left last:border-0"><span><strong className="block">{item.nome}</strong><span className="text-xs text-slate-500">{[item.cidade, item.estado].filter(Boolean).join(" · ")}</span></span><ChevronRight size={18} className="text-cyan-400"/></button>)}</div>}
+            <div className="mt-4">
+              <div className="relative">
+                <Search className="absolute left-4 top-4 text-slate-500" size={20}/>
+                <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite o nome do cliente" className="min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] pl-12 pr-4 text-base outline-none focus:border-cyan-500" />
+                {sugestoes.length > 0 && <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[#24466f] bg-[#07162b] shadow-2xl">{sugestoes.map((item) => <button key={item.id} type="button" onClick={() => { setCliente(item); setBusca(item.nome) }} className="flex min-h-14 w-full items-center justify-between border-b border-[#16325c] px-4 text-left last:border-0"><span><strong className="block">{item.nome}</strong><span className="text-xs text-slate-500">{[item.cidade, item.estado].filter(Boolean).join(" · ")}</span></span><ChevronRight size={18} className="text-cyan-400"/></button>)}</div>}
+              </div>
+              <Link href={`/crm-app/clientes/nova?retorno=${encodeURIComponent(`/crm-app/acao/registrar?tipo=${tipo}`)}`} className="mt-3 flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-cyan-700 bg-cyan-950/30 px-4 text-sm font-semibold text-cyan-200"><Plus size={17}/>Cliente não cadastrado? Cadastrar agora</Link>
             </div>
-          )}
+          ))}
 
-          {cliente && negociacoesCliente.length > 0 && <div className="mt-4 rounded-2xl border border-[#24466f] bg-[#020817] p-4">
+          {contexto === "PARCEIRO" && <div className="mt-4 grid gap-3">
+            <label className="text-sm text-slate-300">Nome da pessoa<input value={parceiroNome} onChange={(e) => setParceiroNome(e.target.value)} placeholder="Nome completo" className="mt-2 min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 text-base outline-none focus:border-cyan-500" /></label>
+            <label className="text-sm text-slate-300">Quem é?<select value={parceiroTipo} onChange={(e) => setParceiroTipo(e.target.value)} className="mt-2 min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 text-base outline-none"><option value="PARCEIRO_COMERCIAL">Parceiro comercial</option><option value="PESSOA_FISICA">Pessoa física</option><option value="CONTATO_EXTERNO">Contato externo</option></select></label>
+            <label className="text-sm text-slate-300">Empresa / organização <span className="text-slate-500">(opcional)</span><input value={parceiroOrganizacao} onChange={(e) => setParceiroOrganizacao(e.target.value)} placeholder="Ex.: implementadora, fornecedor, consultoria" className="mt-2 min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] px-4 text-base outline-none focus:border-cyan-500" /></label>
+          </div>}
+
+          {contexto === "CLIENTE" && cliente && negociacoesCliente.length > 0 && <div className="mt-4 rounded-2xl border border-[#24466f] bg-[#020817] p-4">
             <span className="text-xs font-semibold uppercase tracking-[.16em] text-slate-500">Negociação</span>
             {negociacoesCliente.length === 1 ? <div className="mt-2 flex items-center gap-2 text-sm text-emerald-300"><Check size={17}/>{negociacoesCliente[0].titulo} vinculada automaticamente</div> : <div className="mt-3 grid gap-2">{negociacoesCliente.map((item) => <button key={item.oportunidade_id} type="button" onClick={() => setOportunidadeId(item.oportunidade_id)} className={`min-h-12 rounded-xl border px-4 text-left text-sm ${oportunidadeId === item.oportunidade_id ? "border-cyan-500 bg-cyan-950/40 text-cyan-200" : "border-[#24466f] text-slate-300"}`}>{item.titulo}</button>)}</div>}
           </div>}
@@ -203,7 +228,7 @@ export default function RegistroRapidoPage() {
           <textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={5} placeholder="Descreva em poucas palavras o que aconteceu e qual é o próximo passo." className="mt-4 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-4 text-base leading-6 outline-none placeholder:text-slate-600 focus:border-cyan-500" />
         </section>
 
-        <button type="submit" disabled={!cliente || salvando} className="mt-5 flex min-h-16 w-full items-center justify-center rounded-2xl bg-cyan-500 px-5 text-lg font-bold text-slate-950 disabled:opacity-50">
+        <button type="submit" disabled={!pronto || salvando} className="mt-5 flex min-h-16 w-full items-center justify-center rounded-2xl bg-cyan-500 px-5 text-lg font-bold text-slate-950 disabled:opacity-50">
           {salvando ? <><Loader2 className="mr-2 animate-spin" size={20}/>Salvando...</> : "Registrar e continuar"}
         </button>
       </form>
