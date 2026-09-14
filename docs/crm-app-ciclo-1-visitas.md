@@ -1,33 +1,49 @@
-# CRM App CTI — Ciclo 1: Visitas comerciais
+# CRM App CTI — Visitas comerciais
 
-## Responsabilidade do módulo
+## Princípio
 
-A tela `/crm-app/visitas` é responsável pela jornada operacional de visita em campo. Não é uma listagem genérica de atividades.
+A visita é um fato comercial. O CRM App não transforma o vendedor em operador de workflow.
 
-## Estados operacionais
+O módulo deve registrar somente o necessário para a execução em campo e, quando houver possibilidade real de negócio, encaminhar o acompanhamento para a oportunidade comercial até seu encerramento em ganho ou perda.
 
-- **Agendada:** visita futura ou prevista para hoje.
-- **Atrasada:** data prevista vencida e visita ainda não concluída.
-- **Em andamento:** profissional iniciou a execução.
-- **Concluída:** resultado registrado e histórico sincronizado.
+## Estados da visita
 
-## Jornada
+- **Agendada:** visita futura.
+- **A confirmar:** a data da visita chegou ou passou e o sistema precisa apenas saber se ela ocorreu.
+- **Realizada:** visita efetivamente ocorrida e preservada no histórico do cliente.
+- **Não realizada:** visita que não aconteceu e foi encerrada como fato operacional.
 
-1. Agendar visita com cliente, oportunidade, data, horário e objetivo.
-2. Preparar a visita consultando cliente ou histórico da oportunidade.
-3. Iniciar visita.
-4. Registrar resultado e desfecho.
-5. Definir próxima ação e data.
-6. Concluir e sincronizar o histórico comercial.
+Não existem mais estados obrigatórios de **Preparar visita**, **Iniciar visita** ou **Registrar resultado**.
+
+## Jornada mínima
+
+1. Agendar visita com cliente, data, objetivo e, quando já existir, oportunidade relacionada.
+2. Na data da visita, confirmar apenas **Visita realizada** ou **Não realizada**.
+3. Se a visita realizada já pertence a uma oportunidade, continuar diretamente no negócio.
+4. Se ainda não existe oportunidade, responder apenas se surgiu possibilidade comercial.
+5. Sem possibilidade comercial, a visita termina e permanece no dossiê.
+6. Com possibilidade comercial, abrir oportunidade e acompanhar o mesmo ciclo até **ganho** ou **perda**.
+
+## Regra comercial
+
+O ciclo não precisa obedecer a uma sequência artificial de telas. Ele pode evoluir conforme a realidade do negócio, por exemplo:
+
+- visita → oportunidade → proposta → pedido → venda;
+- visita → oportunidade → venda;
+- outra interação comercial → oportunidade → proposta → venda.
+
+Proposta e pedido são marcos do mesmo ciclo comercial, não novos processos independentes.
+
+As datas de abertura, fechamento previsto e fechamento real pertencem ao acompanhamento da oportunidade e servem para medir duração, atraso, conversão e resultado comercial.
 
 ## Integração
 
-- Fonte principal: `cti_atividades`, com `tipo = VISITA`.
-- Cliente: Cadastro Mestre de Clientes.
-- Oportunidade: núcleo comercial consolidado.
-- Histórico: registrado automaticamente pelo backend quando existe `oportunidade_id`.
-- Próxima ação: criada como atividade `FOLLOW_UP`, permanecendo na Agenda.
+- Visitas continuam na fonte operacional `cti_atividades`.
+- Cliente continua no Cadastro Mestre de Clientes.
+- Oportunidade continua no núcleo comercial consolidado.
+- O dossiê do cliente preserva as visitas e demais interações como histórico.
+- Quando existe `oportunidade_id`, a continuidade é feita no próprio negócio.
 
 ## Critério de validação
 
-A tela não pode apresentar apenas um estado vazio. Mesmo sem visitas, deve oferecer a ação explícita **Agendar visita** e explicar o próximo passo operacional.
+A tela de visitas deve permitir agendar, confirmar ocorrência e abrir/continuar o ciclo comercial. Depois que uma visita é finalizada, não deve oferecer comandos administrativos sem sentido comercial.
