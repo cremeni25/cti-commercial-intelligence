@@ -56,12 +56,25 @@ export default function NovoClientePage() {
       const resposta=await fetchCrmSeguroProxy("crm-seguro/clientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
       const retorno=await resposta.json().catch(()=>({})) as Registro
       if(!resposta.ok)throw new Error(texto(retorno.detail)||`${tOp("clients.saveFailed")} (${resposta.status})`)
+      const cliente=(retorno.cliente||{}) as Registro
+      const clienteId=texto(cliente.id)
+      const retornoFluxo=new URLSearchParams(window.location.search).get("retorno")
+      if(retornoFluxo&&clienteId){
+        const destino=new URL(retornoFluxo,window.location.origin)
+        if(destino.origin===window.location.origin&&destino.pathname.startsWith("/crm-app/")){
+          destino.searchParams.set("cliente",clienteId)
+          window.location.href=`${destino.pathname}${destino.search}`
+          return
+        }
+      }
       formulario.reset();setCategoria("TRANSPORTADORA");setAviso("");setSucesso(tOp("clients.saved"))
     }catch(falha){setErro(falha instanceof Error?falha.message:tOp("clients.saveFailed"))}finally{setSalvando(false)}
   }
 
+  const voltar = typeof window === "undefined" ? "/crm-app/clientes" : (new URLSearchParams(window.location.search).get("retorno") || "/crm-app/clientes")
+
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-4xl">
-    <header className="mb-5 flex items-center gap-3"><Link href="/crm-app/clientes" className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{tOp("clients.newTitle")}</h1><p className="text-sm text-slate-400">{tOp("clients.newSubtitle")}</p></div></header>
+    <header className="mb-5 flex items-center gap-3"><Link href={voltar} className="grid size-11 place-items-center rounded-2xl border border-[#16325c] bg-[#091a33] text-cyan-300"><ArrowLeft size={20}/></Link><div><p className="text-xs uppercase tracking-[.24em] text-cyan-400">CTI CRM</p><h1 className="text-2xl font-bold">{tOp("clients.newTitle")}</h1><p className="text-sm text-slate-400">{tOp("clients.newSubtitle")}</p></div></header>
     {erro&&<div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-red-200">{erro}</div>}{aviso&&<div className="mb-4 rounded-2xl border border-amber-800 bg-amber-950/30 p-4 text-amber-200">{aviso}</div>}{sucesso&&<div className="mb-4 rounded-2xl border border-emerald-900 bg-emerald-950/30 p-4 text-emerald-200">{sucesso}</div>}
     <form ref={formRef} onSubmit={salvar} className="space-y-5 rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6">
       <div className="flex items-center gap-3"><span className="rounded-2xl bg-cyan-950/50 p-3 text-cyan-300"><Building2 size={22}/></span><div><h2 className="font-bold">{tOp("clients.registrationData")}</h2><p className="text-sm text-slate-400">{tOp("clients.reviewSource")}</p></div></div>
