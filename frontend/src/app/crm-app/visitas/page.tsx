@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ArrowLeft, BriefcaseBusiness, CalendarDays, CheckCircle2, Clock3, Loader2, MapPinned, Plus, Search, XCircle } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -48,6 +49,7 @@ function descricaoObjetivo(objetivo: string) {
 
 export default function VisitasPage() {
   const { usuario } = useAuth()
+  const router = useRouter()
   const contextoAplicado = useRef(false)
   const [visitas, setVisitas] = useState<Visita[]>([])
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -247,7 +249,7 @@ export default function VisitasPage() {
     try {
       await atualizarStatus(visita, "CONCLUIDA")
       if (visita.oportunidadeId) {
-        window.location.href = `/crm-app/historico/${encodeURIComponent(visita.oportunidadeId)}?origem=visitas`
+        router.push(`/crm-app/historico/${encodeURIComponent(visita.oportunidadeId)}?origem=visitas`)
         return
       }
       setDecisao(visita)
@@ -267,7 +269,7 @@ export default function VisitasPage() {
 
   function abrirOportunidade(visita: Visita) {
     const params = new URLSearchParams({ cliente: visita.clienteId, nome: visita.cliente, origem: "visita", visita: visita.id })
-    window.location.href = `/crm-app/oportunidades/nova?${params.toString()}`
+    router.push(`/crm-app/oportunidades/nova?${params.toString()}`)
   }
 
   return <main className="min-h-[100dvh] bg-[#020817] px-4 py-5 pb-24 text-white sm:px-6"><div className="mx-auto max-w-6xl">
