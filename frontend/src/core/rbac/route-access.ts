@@ -16,15 +16,11 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   const gestao = master || diretorIntegral
 
   if (["/", "/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"].includes(pathname)) return true
-
-  // Onboarding é uma rota autenticada de qualquer perfil. Não concede acesso a módulos.
   if (pathname === "/primeiro-acesso") return true
 
-  // Ferramentas técnicas e de homologação não pertencem à operação diretiva.
   if (inicia(pathname, "/backoffice-fontes")) return master
   if (inicia(pathname, "/configuracoes/modelos-oficiais")) return master
   if (inicia(pathname, "/crm-app/testes-arquivados")) return master
-  // Controle financeiro pessoal permanece em homologação privada e não herda acesso do perfil Master.
   if (inicia(pathname, "/crm-app/controle-financeiro")) return tem(permissoes, "financeiro_visualizar")
 
   if (inicia(pathname, "/usuarios")) return master || tem(permissoes, "usuarios_administrar")
@@ -38,6 +34,7 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (inicia(pathname, "/pedidos")) return gestao || tem(permissoes, "pedidos_visualizar")
   if (inicia(pathname, "/vendas") || inicia(pathname, "/relatorios") || inicia(pathname, "/funil-carrier")) return gestao || tem(permissoes, "dashboard_executivo")
 
+  if (inicia(pathname, "/crm-app/acao")) return usuario.acesso_crm !== false && (gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar"))
   if (inicia(pathname, "/crm-app/clientes")) return gestao || tem(permissoes, "clientes_visualizar") || tem(permissoes, "clientes_editar")
   if (inicia(pathname, "/crm-app/oportunidades") || inicia(pathname, "/crm-app/pipeline") || inicia(pathname, "/crm-app/forecast") || inicia(pathname, "/crm-app/agenda") || inicia(pathname, "/crm-app/atividades") || inicia(pathname, "/crm-app/visitas") || inicia(pathname, "/crm-app/historico")) return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (inicia(pathname, "/crm-app/propostas")) return gestao || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")
@@ -45,6 +42,5 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (inicia(pathname, "/crm-app/vendas")) return gestao || tem(permissoes, "dashboard_executivo")
   if (pathname === "/crm-app") return usuario.acesso_crm !== false
 
-  // Rotas novas não são abertas implicitamente para perfis operacionais.
   return master
 }
