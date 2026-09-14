@@ -282,9 +282,9 @@ export default function CrmAppPage() {
             </button>
           </div>
           <div className="mt-5 grid grid-cols-3 gap-2">
-            <Indicador valor={resumo.visitas} label={t.visits} />
-            <Indicador valor={resumo.pendencias} label={t.pending} />
-            <Indicador valor={resumo.oportunidades} label={t.openDeals} />
+            <Indicador href="/crm-app/visitas" valor={resumo.visitas} label={t.visits} />
+            <Indicador href="/crm-app/agenda" valor={resumo.pendencias} label={t.pending} />
+            <Indicador href="/crm-app/oportunidades" valor={resumo.oportunidades} label={t.openDeals} />
           </div>
         </section>
 
@@ -323,8 +323,8 @@ export default function CrmAppPage() {
   )
 }
 
-function Indicador({ valor, label }: { valor: number; label: string }) {
-  return <div className="rounded-2xl border border-[#17365f] bg-[#061126]/70 px-2 py-4 text-center"><strong className="block text-2xl text-cyan-300">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></div>
+function Indicador({ href, valor, label }: { href: string; valor: number; label: string }) {
+  return <Link href={href} className="rounded-2xl border border-[#17365f] bg-[#061126]/70 px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-cyan-300">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></Link>
 }
 
 function Acao({ href, titulo, descricao, icon: Icon }: { href: string; titulo: string; descricao: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
