@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { obterTokenCTI, registrarSessaoCTI } from "@/core/auth/session"
 import { getSupabaseClient } from "@/core/database/supabase"
 
 const ANFIR_WORKBOOK_PATH = "/api/cti/analytics/anfir-workbook-2026"
@@ -58,8 +59,6 @@ export default function AuthenticatedAnfirFetchBridge() {
       const metodo = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
       const legadoSeguro = destinoSeguroLeitura(url, metodo)
 
-      // Mantém o contrato homologado do bridge ANFIR e acrescenta apenas as
-      // leituras CRM seguras. Escritas continuam usando exatamente a rota original.
       if (!url.includes(ANFIR_WORKBOOK_PATH)) {
         if (!url.includes(CTI_ANALYTICS_PATH) && !url.includes(CRM_PROXY_PATH) && !legadoSeguro) {
           return originalFetch(input, init)
@@ -68,16 +67,11 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       const destino = legadoSeguro || input
       const leituraSegura = metodo === "GET" || metodo === "HEAD"
-      const supabase = getSupabaseClient()
-      const { data, error } = await supabase.auth.getSession()
-      let token = data.session?.access_token
 
-      if (error || !token) {
-        const renovada = await supabase.auth.refreshSession()
-        token = renovada.data.session?.access_token
-      }
-
-      if (!token) {
+      let token: string
+      try {
+        token = await obterTokenCTI()
+      } catch {
         return new Response(JSON.stringify({ detail: "Sessão CTI não autenticada." }), {
           status: 401,
           headers: { "content-type": "application/json" },
@@ -90,10 +84,14 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       if (resposta.status !== 401 || !leituraSegura) return resposta
 
+      // Renovação só acontece após 401 real. O caminho normal deixa de depender
+      // de getSession(), removendo o lock que vinha travando CTI Web e CRM App.
+      const supabase = getSupabaseClient()
       const renovada = await supabase.auth.refreshSession()
       const tokenRenovado = renovada.data.session?.access_token
       if (!tokenRenovado || tokenRenovado === token) return resposta
 
+      registrarSessaoCTI(renovada.data.session)
       const headersRenovados = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headersRenovados.set("Authorization", `Bearer ${tokenRenovado}`)
       if (!legadoSeguro) {
