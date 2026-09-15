@@ -10,6 +10,7 @@ export const maxDuration = 300
 const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || "https://cti-backend-5ugf.onrender.com").replace(/\/$/, "")
 const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
 const ATRASOS_RETRY_LEITURA_MS = [0, 500, 1500, 3000, 5000, 8000]
+const ROTAS_ESCRITA_IDEMPOTENTES = new Set(["crm-seguro/clientes"])
 
 type Registro = Record<string, unknown>
 
@@ -145,11 +146,13 @@ async function encaminhar(
 
   try {
     const leitura = ["GET", "HEAD"].includes(request.method)
+    const escritaIdempotente = request.method === "POST" && ROTAS_ESCRITA_IDEMPOTENTES.has(caminho)
+    const corpo = leitura ? undefined : await request.arrayBuffer()
     const resposta = await fetchBackend(destino, {
       method: request.method,
       headers,
-      body: leitura ? undefined : await request.arrayBuffer(),
-    }, leitura)
+      body: corpo,
+    }, leitura || escritaIdempotente)
 
     if (!resposta.ok && request.method === "GET") {
       const alternativa = await fallbackSeguro(caminhoSolicitado)
