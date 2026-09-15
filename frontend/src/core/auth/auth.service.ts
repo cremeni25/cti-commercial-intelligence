@@ -1,5 +1,5 @@
 import { API_URL } from "@/lib/api"
-import { getSupabaseClient } from "../database/supabase"
+import { obterSessaoCTI } from "./session"
 import { UsuarioCTI } from "./types"
 
 const AUTH_TIMEOUT_MS = 8000
@@ -39,11 +39,8 @@ async function buscarPerfil(token: string) {
 }
 
 export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
-  const supabase = getSupabaseClient()
-  const { data, error } = await supabase.auth.getSession()
-  const session = data.session
-
-  if (error || !session?.access_token) return null
+  const session = await obterSessaoCTI()
+  if (!session?.access_token) return null
 
   const response = await buscarPerfil(session.access_token)
 
