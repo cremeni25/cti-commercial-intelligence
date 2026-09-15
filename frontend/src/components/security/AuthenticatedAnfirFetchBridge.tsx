@@ -23,7 +23,6 @@ const ROTAS_LEGADAS_SEGURAS: Record<string, string> = {
   "/crm-documentos/pedidos": "crm-seguro/pedidos",
   "/carrier-operacional/pedidos": "crm-seguro/pedidos",
   "/carrier-operacional/ciclos": "crm-seguro/ciclos",
-  "/crm-app/clientes": "crm-seguro/clientes",
   "/modulos/clientes": "crm-seguro/clientes",
   "/api/cti/modulos/clientes": "crm-seguro/clientes",
 }
@@ -84,8 +83,6 @@ export default function AuthenticatedAnfirFetchBridge() {
 
       if (resposta.status !== 401 || !leituraSegura) return resposta
 
-      // Renovação só acontece após 401 real. O caminho normal deixa de depender
-      // de getSession(), removendo o lock que vinha travando CTI Web e CRM App.
       const supabase = getSupabaseClient()
       const renovada = await supabase.auth.refreshSession()
       const tokenRenovado = renovada.data.session?.access_token
