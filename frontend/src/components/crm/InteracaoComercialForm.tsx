@@ -47,31 +47,29 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
   const [novoEstado, setNovoEstado] = useState("")
   const envioRef = useRef(false)
 
-  async function carregarClientes() {
-    const resposta = await fetchCrmSeguroProxy("crm-seguro/clientes", { cache: "no-store" })
-    const dados = await resposta.json().catch(() => [])
-    if (!resposta.ok) throw new Error(texto((dados as Registro).detail) || "Não foi possível carregar os clientes.")
-    return (Array.isArray(dados) ? dados : []).map((i: Registro) => ({
-      id: texto(i.id),
-      nome: texto(i.nome || i.razao_social || i.nome_fantasia),
-      cidade: texto(i.cidade || i.municipio),
-      estado: texto(i.estado || i.uf).toUpperCase(),
-      cnpj: texto(i.cnpj || i.cnpj_cpf || i.documento),
-    })).filter((i: Cliente) => i.id && i.nome)
-  }
-
   useEffect(() => {
     let ativo = true
     const params = new URLSearchParams(window.location.search)
     const tipoUrl = chave(params.get("tipo"))
     const clienteUrl = texto(params.get("cliente"))
-    queueMicrotask(() => { if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl) })
-    void carregarClientes().then((lista) => {
+    if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl)
+
+    void fetchCrmSeguroProxy("crm-seguro/clientes", { cache: "no-store" }).then(async (resposta) => {
+      const dados = await resposta.json().catch(() => [])
+      if (!resposta.ok) throw new Error(texto((dados as Registro).detail) || "Não foi possível carregar os clientes.")
+      const lista = (Array.isArray(dados) ? dados : []).map((i: Registro) => ({
+        id: texto(i.id),
+        nome: texto(i.nome || i.razao_social || i.nome_fantasia),
+        cidade: texto(i.cidade || i.municipio),
+        estado: texto(i.estado || i.uf).toUpperCase(),
+        cnpj: texto(i.cnpj || i.cnpj_cpf || i.documento),
+      })).filter((i: Cliente) => i.id && i.nome)
       if (!ativo) return
       setClientes(lista)
-      if (!clienteUrl) return
-      const encontrado = lista.find((i) => i.id === clienteUrl || chave(i.nome) === chave(clienteUrl))
-      if (encontrado) { setCliente(encontrado); setBusca(encontrado.nome) }
+      if (clienteUrl) {
+        const encontrado = lista.find((i) => i.id === clienteUrl || chave(i.nome) === chave(clienteUrl) || digitos(i.cnpj) === digitos(clienteUrl))
+        if (encontrado) { setCliente(encontrado); setBusca(encontrado.nome) }
+      }
     }).catch((e) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar os clientes.") }).finally(() => { if (ativo) setCarregando(false) })
     return () => { ativo = false }
   }, [])
@@ -83,8 +81,16 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     return clientes.filter((i) => chave(i.nome).includes(t) || (cnpj && digitos(i.cnpj).includes(cnpj))).slice(0, 10)
   }, [busca, cliente, clientes])
 
+  useEffect(() => {
+    if (cliente || !busca.trim()) return
+    const nomeExato = chave(busca)
+    const cnpjExato = digitos(busca)
+    const exato = clientes.find((i) => chave(i.nome) === nomeExato || (cnpjExato.length === 14 && digitos(i.cnpj) === cnpjExato))
+    if (exato) { setCliente(exato); setBusca(exato.nome); setErro("") }
+  }, [busca, cliente, clientes])
+
   async function consultarCnpj() {
-    const cnpj = digitos(novoCnpj)
+    const cnpj = digitos(novoCnpj || busca)
     if (cnpj.length !== 14) return setErro("Informe um CNPJ com 14 dígitos.")
     setConsultandoCnpj(true); setErro("")
     try {
@@ -99,6 +105,7 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
       }
       const d = (retorno.dados || {}) as Registro
       setNovoNome(texto(d.nome || d.razao_social)); setNovaCidade(texto(d.cidade || d.municipio)); setNovoEstado(texto(d.estado || d.uf).toUpperCase()); setNovoCnpj(texto(d.cnpj) || cnpj)
+      setCadastroAberto(true)
     } catch (e) { setErro(e instanceof Error ? e.message : "Não foi possível consultar o CNPJ.") } finally { setConsultandoCnpj(false) }
   }
 
@@ -119,9 +126,9 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
   async function salvar(evento: FormEvent) {
     evento.preventDefault()
     if (envioRef.current || !usuario?.id) return
-    if (contexto === "CLIENTE" && !cliente) return setErro("Selecione ou cadastre o cliente.")
+    if (contexto === "CLIENTE" && !cliente) return setErro("Selecione o cliente exibido na busca.")
     if (contexto === "PARCEIRO" && !parceiroNome.trim()) return setErro("Informe com quem foi a interação.")
-    if (resultado === "OPORTUNIDADE" && contexto !== "CLIENTE") return setErro("Para abrir uma oportunidade é necessário identificar o cliente. O contato com parceiro/pessoa pode permanecer como lead em acompanhamento.")
+    if (resultado === "OPORTUNIDADE" && contexto !== "CLIENTE") return setErro("Para abrir um negócio é necessário identificar o cliente.")
 
     envioRef.current = true; setSalvando(true); setErro("")
     try {
@@ -132,13 +139,12 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
       if (resultado === "OPORTUNIDADE" && cliente) {
         const oportunidadeResp = await fetchCrmSeguroProxy("crm-seguro/cliente-oportunidade", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
           cliente: { id: cliente.id, nome: cliente.nome, cidade: cliente.cidade || null, estado: cliente.estado || null },
-          oportunidade: { responsavel_id: String(usuario.id), titulo: `Oportunidade · ${cliente.nome}`, descricao: descricao.trim() || `${rotulo} com evolução comercial.`, valor_estimado: 0, probabilidade: 20, municipio: cliente.cidade || null, estado: cliente.estado || null },
+          oportunidade: { responsavel_id: String(usuario.id), titulo: `Negócio · ${cliente.nome}`, descricao: descricao.trim() || `${rotulo} com evolução comercial.`, valor_estimado: 0, probabilidade: 20, municipio: cliente.cidade || null, estado: cliente.estado || null },
         }) })
         const op = await oportunidadeResp.json().catch(() => ({})) as Registro
         if (!oportunidadeResp.ok) throw new Error(texto(op.detail) || `Oportunidade: HTTP ${oportunidadeResp.status}`)
-        const oportunidade = (op.oportunidade || {}) as Registro
-        oportunidadeId = texto(oportunidade.id) || null
-        if (!oportunidadeId) throw new Error("A oportunidade foi criada sem identificação.")
+        oportunidadeId = texto(((op.oportunidade || {}) as Registro).id) || null
+        if (!oportunidadeId) throw new Error("O negócio foi criado sem identificação.")
       }
 
       const agora = new Date()
@@ -164,6 +170,8 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     } catch (e) { envioRef.current = false; setErro(e instanceof Error ? e.message : "Não foi possível registrar a interação.") } finally { setSalvando(false) }
   }
 
+  const podeOferecerCadastro = !cliente && !carregando && busca.trim().length >= 3 && sugestoes.length === 0
+
   return <form onSubmit={salvar} className="mx-auto w-full max-w-4xl space-y-4">
     {erro && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
 
@@ -175,18 +183,18 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
       </div>
 
       {contexto === "CLIENTE" ? <div className="mt-4">
-        {carregando ? <div className="flex min-h-14 items-center text-slate-400"><Loader2 className="mr-2 animate-spin" size={18}/>Carregando clientes...</div> : cliente ? <div className="flex items-center justify-between rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4"><div><strong className="block">{cliente.nome}</strong><span className="text-sm text-slate-400">{[cliente.cidade, cliente.estado].filter(Boolean).join(" · ")}</span></div><button type="button" onClick={() => { setCliente(null); setBusca("") }} className="rounded-xl border border-[#24466f] px-3 py-2 text-sm">Trocar</button></div> : <div className="relative"><Search className="absolute left-4 top-4 text-slate-500" size={19}/><input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Nome ou CNPJ do cliente" className="min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] pl-12 pr-4 text-base"/>{sugestoes.length > 0 && <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[#24466f] bg-[#07162b] shadow-2xl">{sugestoes.map((i) => <button key={i.id} type="button" onClick={() => { setCliente(i); setBusca(i.nome) }} className="flex min-h-14 w-full items-center justify-between border-b border-[#16325c] px-4 text-left last:border-0"><span>{i.nome}</span><Check size={17} className="text-cyan-400"/></button>)}</div>}</div>}
-        {!cliente && !cadastroAberto && <button type="button" onClick={() => setCadastroAberto(true)} className="mt-3 text-sm font-semibold text-cyan-300">Cliente não cadastrado? Cadastrar pelo CNPJ</button>}
-        {cadastroAberto && <div className="mt-4 rounded-2xl border border-cyan-900 bg-[#020817] p-4"><p className="font-semibold">Cadastro rápido de cliente</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={novoCnpj} onChange={(e) => setNovoCnpj(e.target.value)} placeholder="CNPJ" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/><button type="button" onClick={consultarCnpj} disabled={consultandoCnpj} className="h-12 rounded-xl border border-cyan-700 text-cyan-200">{consultandoCnpj ? "Consultando..." : "Consultar e preencher"}</button><input value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Razão social / nome" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3 sm:col-span-2"/><input value={novaCidade} onChange={(e) => setNovaCidade(e.target.value)} placeholder="Cidade" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/><input value={novoEstado} onChange={(e) => setNovoEstado(e.target.value.toUpperCase().slice(0,2))} placeholder="UF" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/></div><div className="mt-3 flex gap-2"><button type="button" onClick={cadastrarCliente} disabled={salvando} className="rounded-xl bg-cyan-500 px-4 py-2 font-bold text-slate-950">Cadastrar e selecionar</button><button type="button" onClick={() => setCadastroAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-2">Cancelar</button></div></div>}
+        {carregando ? <div className="flex min-h-14 items-center text-slate-400"><Loader2 className="mr-2 animate-spin" size={18}/>Carregando clientes...</div> : cliente ? <div className="flex items-center justify-between rounded-2xl border border-emerald-900 bg-emerald-950/20 p-4"><div><strong className="block">{cliente.nome}</strong><span className="text-sm text-slate-400">{[cliente.cidade, cliente.estado].filter(Boolean).join(" · ")}</span></div><button type="button" onClick={() => { setCliente(null); setBusca("") }} className="rounded-xl border border-[#24466f] px-3 py-2 text-sm">Trocar</button></div> : <div className="relative"><Search className="absolute left-4 top-4 text-slate-500" size={19}/><input value={busca} onChange={(e) => { setBusca(e.target.value); setErro("") }} placeholder="Nome ou CNPJ do cliente" className="min-h-14 w-full rounded-2xl border border-[#24466f] bg-[#020817] pl-12 pr-4 text-base"/>{sugestoes.length > 0 && <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-2xl border border-[#24466f] bg-[#07162b] shadow-2xl">{sugestoes.map((i) => <button key={i.id} type="button" onClick={() => { setCliente(i); setBusca(i.nome); setErro("") }} className="flex min-h-14 w-full items-center justify-between border-b border-[#16325c] px-4 text-left last:border-0"><span>{i.nome}</span><span className="flex items-center gap-2 text-xs font-semibold text-cyan-300">Selecionar <Check size={17}/></span></button>)}</div>}</div>}
+        {podeOferecerCadastro && !cadastroAberto && <button type="button" onClick={() => { setNovoCnpj(digitos(busca)); void consultarCnpj() }} className="mt-3 text-sm font-semibold text-cyan-300">Cliente não encontrado · consultar CNPJ</button>}
+        {cadastroAberto && <div className="mt-4 rounded-2xl border border-cyan-900 bg-[#020817] p-4"><p className="font-semibold">Novo cliente</p><div className="mt-3 grid gap-3 sm:grid-cols-2"><input value={novoCnpj} onChange={(e) => setNovoCnpj(e.target.value)} placeholder="CNPJ" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/><button type="button" onClick={consultarCnpj} disabled={consultandoCnpj} className="h-12 rounded-xl border border-cyan-700 text-cyan-200">{consultandoCnpj ? "Consultando..." : "Consultar"}</button><input value={novoNome} onChange={(e) => setNovoNome(e.target.value)} placeholder="Razão social / nome" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3 sm:col-span-2"/><input value={novaCidade} onChange={(e) => setNovaCidade(e.target.value)} placeholder="Cidade" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/><input value={novoEstado} onChange={(e) => setNovoEstado(e.target.value.toUpperCase().slice(0,2))} placeholder="UF" className="h-12 rounded-xl border border-[#24466f] bg-[#07162b] px-3"/></div><div className="mt-3 flex gap-2"><button type="button" onClick={cadastrarCliente} disabled={salvando} className="rounded-xl bg-cyan-500 px-4 py-2 font-bold text-slate-950">Cadastrar</button><button type="button" onClick={() => setCadastroAberto(false)} className="rounded-xl border border-[#24466f] px-4 py-2">Cancelar</button></div></div>}
       </div> : <div className="mt-4 grid gap-3 sm:grid-cols-2"><input value={parceiroNome} onChange={(e) => setParceiroNome(e.target.value)} placeholder="Nome da pessoa / parceiro" className="h-12 rounded-xl border border-[#24466f] bg-[#020817] px-4 sm:col-span-2"/><select value={parceiroTipo} onChange={(e) => setParceiroTipo(e.target.value)} className="h-12 rounded-xl border border-[#24466f] bg-[#020817] px-4"><option value="PARCEIRO_COMERCIAL">Parceiro comercial</option><option value="PESSOA_FISICA">Pessoa física</option><option value="CONTATO_EXTERNO">Contato externo</option></select><input value={parceiroOrganizacao} onChange={(e) => setParceiroOrganizacao(e.target.value)} placeholder="Empresa / organização (opcional)" className="h-12 rounded-xl border border-[#24466f] bg-[#020817] px-4"/></div>}
     </section>
 
-    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">2 · Como foi a interação?</p><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{TIPOS.map(([codigo, label]) => <button key={codigo} type="button" onClick={() => setTipo(codigo)} className={`min-h-14 rounded-2xl border px-3 text-sm font-semibold ${tipo === codigo ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-[#24466f] bg-[#020817] text-slate-300"}`}>{label}</button>)}</div></section>
+    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">2 · Como foi?</p><div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">{TIPOS.map(([codigo, label]) => <button key={codigo} type="button" onClick={() => setTipo(codigo)} className={`min-h-14 rounded-2xl border px-3 text-sm font-semibold ${tipo === codigo ? "border-cyan-400 bg-cyan-500 text-slate-950" : "border-[#24466f] bg-[#020817] text-slate-300"}`}>{label}</button>)}</div></section>
 
-    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">3 · O que aconteceu?</p><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={5} placeholder="Resumo objetivo e próximo passo." className="mt-4 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-4 text-base leading-6"/></section>
+    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">3 · O que aconteceu?</p><textarea value={descricao} onChange={(e) => setDescricao(e.target.value)} rows={4} placeholder="Resumo objetivo e próximo passo." className="mt-4 w-full rounded-2xl border border-[#24466f] bg-[#020817] p-4 text-base leading-6"/></section>
 
-    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">4 · Qual foi o resultado?</p><div className="mt-4 grid gap-2 md:grid-cols-3"><button type="button" onClick={() => setResultado("LEAD")} className={`rounded-2xl border p-4 text-left ${resultado === "LEAD" ? "border-cyan-400 bg-cyan-950/40" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Acompanhar</strong><span className="mt-1 block text-sm text-slate-400">Ainda não há proposta. Mantém como lead e próxima ação.</span></button><button type="button" disabled={contexto !== "CLIENTE"} onClick={() => setResultado("OPORTUNIDADE")} className={`rounded-2xl border p-4 text-left disabled:opacity-40 ${resultado === "OPORTUNIDADE" ? "border-emerald-400 bg-emerald-950/30" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Virou oportunidade</strong><span className="mt-1 block text-sm text-slate-400">Existe potencial comercial. O CTI abre a oportunidade automaticamente.</span></button><button type="button" onClick={() => setResultado("SEM_CONTINUIDADE")} className={`rounded-2xl border p-4 text-left ${resultado === "SEM_CONTINUIDADE" ? "border-slate-400 bg-slate-900" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Sem continuidade</strong><span className="mt-1 block text-sm text-slate-400">Registra no histórico sem criar pendência comercial.</span></button></div></section>
+    <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5 sm:p-6"><p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">4 · Próximo estado</p><div className="mt-4 grid gap-2 md:grid-cols-3"><button type="button" onClick={() => setResultado("LEAD")} className={`rounded-2xl border p-4 text-left ${resultado === "LEAD" ? "border-cyan-400 bg-cyan-950/40" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Acompanhar</strong><span className="mt-1 block text-sm text-slate-400">Mantém próxima ação.</span></button><button type="button" disabled={contexto !== "CLIENTE"} onClick={() => setResultado("OPORTUNIDADE")} className={`rounded-2xl border p-4 text-left disabled:opacity-40 ${resultado === "OPORTUNIDADE" ? "border-emerald-400 bg-emerald-950/30" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Abrir negócio</strong><span className="mt-1 block text-sm text-slate-400">Avança para oportunidade e proposta.</span></button><button type="button" onClick={() => setResultado("SEM_CONTINUIDADE")} className={`rounded-2xl border p-4 text-left ${resultado === "SEM_CONTINUIDADE" ? "border-slate-400 bg-slate-900" : "border-[#24466f] bg-[#020817]"}`}><strong className="block">Encerrar</strong><span className="mt-1 block text-sm text-slate-400">Fica somente no histórico.</span></button></div></section>
 
-    <button disabled={salvando} className="min-h-16 w-full rounded-2xl bg-cyan-500 px-5 text-lg font-bold text-slate-950 disabled:opacity-50">{salvando ? "Registrando..." : resultado === "OPORTUNIDADE" ? "Registrar e abrir oportunidade" : "Registrar interação"}</button>
+    <button disabled={salvando} className="min-h-16 w-full rounded-2xl bg-cyan-500 px-5 text-lg font-bold text-slate-950 disabled:opacity-50">{salvando ? "Registrando..." : resultado === "OPORTUNIDADE" ? "Abrir negócio" : resultado === "SEM_CONTINUIDADE" ? "Registrar e encerrar" : "Registrar e acompanhar"}</button>
   </form>
 }
