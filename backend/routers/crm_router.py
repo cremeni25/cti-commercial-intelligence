@@ -54,6 +54,33 @@ STATUS_PROPOSTA = [
     "CANCELADA",
 ]
 
+# As views publicas são somente a projeção operacional (não arquivados).
+# Toda escrita do núcleo CRM deve atingir a tabela-base correspondente para não
+# depender da capacidade de atualização da view nem de colunas que a view não expõe.
+TABELAS_ESCRITA = {
+    "cti_oportunidades": "cti_oportunidades_registros",
+    "cti_pipeline": "cti_pipeline_registros",
+    "cti_propostas": "cti_propostas_registros",
+    "cti_pedidos": "cti_pedidos_registros",
+    "cti_atividades": "cti_atividades_registros",
+    "vendas": "vendas_registros",
+}
+
+TABELAS_COM_UPDATED_AT = {
+    "cti_oportunidades_registros",
+    "cti_pedidos_registros",
+    "cti_atividades_registros",
+}
+
+CAMPOS_TEMPORAIS = {
+    "data",
+    "horario",
+    "data_fechamento_prevista",
+    "data_pedido",
+    "validade",
+    "data_validade",
+}
+
 
 class OportunidadeCreate(BaseModel):
     cliente_id: str
@@ -217,65 +244,86 @@ def _date_hour() -> tuple[str, str]:
     return agora.date().isoformat(), agora.time().replace(microsecond=0).isoformat()
 
 
-def _leitura_resiliente(query_factory, tentativas: int = 3):
+def _tabela_escrita(table: str) -> str:
+    return TABELAS_ESCRITA.get(table, table)
+
+
+def _leitura_resiliente(query_factory, tentativas: int = 4):
     excecoes_transitorias = (
         httpx.ReadError,
         httpx.ConnectError,
         httpx.RemoteProtocolError,
         httpx.TimeoutException,
+        OSError,
     )
     for tentativa in range(tentativas):
         try:
-            return query_factory().execute().data
+            return query_factory().execute().data or []
         except excecoes_transitorias as erro:
             if tentativa + 1 >= tentativas:
                 raise HTTPException(
                     status_code=503,
                     detail="Fonte de dados temporariamente indisponível. Tente novamente em instantes.",
                 ) from erro
-            time.sleep(0.12 * (tentativa + 1))
+            time.sleep(0.15 * (tentativa + 1))
     return []
 
 
 def _first(table: str, record_id: str, detail: str) -> dict[str, Any]:
-    result = supabase.table(table).select("*").eq("id", record_id).execute()
-    if not result.data:
+    result = _leitura_resiliente(
+        lambda: supabase.table(table).select("*").eq("id", record_id).limit(1)
+    )
+    if not result:
         raise HTTPException(status_code=404, detail=detail)
-    return result.data[0]
+    return result[0]
 
 
 def _insert(table: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
-    return supabase.table(table).insert(payload).execute().data
+    tabela = _tabela_escrita(table)
+    return supabase.table(tabela).insert(payload).execute().data or []
 
 
 def _update(table: str, record_id: str, payload: dict[str, Any], detail: str) -> list[dict[str, Any]]:
     if not payload:
         return [_first(table, record_id, detail)]
-    payload["updated_at"] = _now()
-    result = supabase.table(table).update(payload).eq("id", record_id).execute()
+    tabela = _tabela_escrita(table)
+    payload = dict(payload)
+    if tabela in TABELAS_COM_UPDATED_AT:
+        payload["updated_at"] = _now()
+    result = supabase.table(tabela).update(payload).eq("id", record_id).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail=detail)
     return result.data
 
 
 def _payload(model: BaseModel, fields: list[str]) -> dict[str, Any]:
-    return {field: getattr(model, field) for field in fields if hasattr(model, field) and getattr(model, field) is not None}
+    payload: dict[str, Any] = {}
+    for field in fields:
+        if not hasattr(model, field):
+            continue
+        value = getattr(model, field)
+        if value is None:
+            continue
+        if field in CAMPOS_TEMPORAIS and isinstance(value, str) and not value.strip():
+            continue
+        payload[field] = value
+    return payload
 
 
-def _normalizar_probabilidade(probability: Any) -> float:
+def _normalizar_probabilidade(probability: Any) -> int:
     try:
         value = float(probability or 0)
     except (TypeError, ValueError):
         return 0
-    if value < 0:
+    if value <= 0:
         return 0
     if value <= 1:
-        return value
-    return value / 100
+        value *= 100
+    return max(0, min(100, int(round(value))))
 
 
 def _probability_factor(probability: Any) -> float:
-    return _normalizar_probabilidade(probability)
+    return _normalizar_probabilidade(probability) / 100
 
 
 def _registrar_historico(oportunidade_id: str, tipo: str, descricao: str, usuario_id: Optional[str] = None, payload: Optional[dict[str, Any]] = None) -> list[dict[str, Any]]:
@@ -302,34 +350,34 @@ def _registrar_auditoria(entidade: str, entidade_id: str, acao: str, usuario_id:
 
 
 def _registrar_pipeline(oportunidade_id: str, etapa_anterior: Optional[str], nova_etapa: str, usuario_id: Optional[str], observacao: Optional[str] = None) -> list[dict[str, Any]]:
-    data, hora = _date_hour()
+    descricao = observacao or "Movimentação comercial registrada."
+    if etapa_anterior and etapa_anterior != nova_etapa:
+        descricao = f"{etapa_anterior} → {nova_etapa}. {descricao}"
     payload = {
         "oportunidade_id": oportunidade_id,
-        "etapa_anterior": etapa_anterior,
-        "nova_etapa": nova_etapa,
         "etapa": nova_etapa,
         "usuario_id": usuario_id,
-        "observacao": observacao,
-        "data": data,
-        "hora": hora,
+        "observacao": descricao,
     }
     return _insert("cti_pipeline", payload)
 
 
 def _campos_oportunidade() -> list[str]:
     return [
-        "cliente_id", "responsavel_id", "titulo", "descricao", "origem", "status",
-        "valor_estimado", "probabilidade", "data_fechamento_prevista", "contato_id",
-        "linha_equipamentos", "equipamento", "implementadora", "locadora", "estado",
-        "ddd", "sub_regiao", "municipio", "bairro", "observacoes",
+        "cliente_id",
+        "responsavel_id",
+        "titulo",
+        "descricao",
+        "origem",
+        "status",
+        "valor_estimado",
+        "probabilidade",
+        "data_fechamento_prevista",
     ]
 
 
 def _campos_proposta() -> list[str]:
-    return [
-        "numero", "cliente_id", "oportunidade_id", "valor", "status", "responsavel_id",
-        "validade", "observacoes", "produtos", "equipamentos", "condicoes",
-    ]
+    return ["numero", "cliente_id", "oportunidade_id", "valor", "status"]
 
 
 @router.get("/etapas")
@@ -339,10 +387,13 @@ def listar_etapas():
 
 @router.get("/oportunidades")
 def listar_oportunidades(origem: Optional[str] = None):
-    consulta = supabase.table("cti_oportunidades").select("*")
-    if origem:
-        consulta = consulta.eq("origem", origem.strip().upper())
-    return consulta.order("created_at", desc=True).execute().data
+    def consulta():
+        query = supabase.table("cti_oportunidades").select("*")
+        if origem:
+            query = query.eq("origem", origem.strip().upper())
+        return query.order("created_at", desc=True)
+
+    return _leitura_resiliente(consulta)
 
 
 @router.get("/oportunidades/{oportunidade_id}")
@@ -371,15 +422,16 @@ def atualizar_oportunidade(oportunidade_id: str, oportunidade: OportunidadeUpdat
         payload["probabilidade"] = _normalizar_probabilidade(payload.get("probabilidade"))
     updated = _update("cti_oportunidades", oportunidade_id, payload, "Oportunidade não encontrada")
     if payload.get("status") and payload.get("status") != anterior.get("status"):
-        _registrar_pipeline(oportunidade_id, anterior.get("status"), payload["status"], payload.get("responsavel_id") or anterior.get("responsavel_id"), payload.get("observacoes"))
-    _registrar_historico(oportunidade_id, "OPORTUNIDADE", "Oportunidade atualizada.", payload.get("responsavel_id") or anterior.get("responsavel_id"), payload)
-    _registrar_auditoria("cti_oportunidades", oportunidade_id, "ATUALIZACAO", payload.get("responsavel_id") or anterior.get("responsavel_id"), payload)
+        _registrar_pipeline(oportunidade_id, anterior.get("status"), payload["status"], anterior.get("responsavel_id"), oportunidade.observacoes)
+    _registrar_historico(oportunidade_id, "OPORTUNIDADE", "Oportunidade atualizada.", anterior.get("responsavel_id"), payload)
+    _registrar_auditoria("cti_oportunidades", oportunidade_id, "ATUALIZACAO", anterior.get("responsavel_id"), payload)
     return updated
 
 
 @router.delete("/oportunidades/{oportunidade_id}")
 def excluir_oportunidade(oportunidade_id: str):
-    supabase.table("cti_oportunidades").delete().eq("id", oportunidade_id).execute()
+    tabela = _tabela_escrita("cti_oportunidades")
+    supabase.table(tabela).delete().eq("id", oportunidade_id).execute()
     return {"success": True}
 
 
@@ -399,7 +451,9 @@ def registrar_perda(oportunidade_id: str, perda: PerdaCreate):
 
 @router.get("/pipeline")
 def listar_pipeline():
-    movimentacoes = supabase.table("cti_pipeline").select("*").order("created_at", desc=True).execute().data or []
+    movimentacoes = _leitura_resiliente(
+        lambda: supabase.table("cti_pipeline").select("*").order("created_at", desc=True)
+    )
     movimentacoes_ordenadas = sorted(
         movimentacoes,
         key=lambda item: item.get("updated_at") or item.get("created_at") or "",
@@ -437,8 +491,6 @@ def criar_pipeline(pipeline: PipelineCreate):
 def atualizar_pipeline(pipeline_id: str, pipeline: PipelineUpdate):
     atual = _first("cti_pipeline", pipeline_id, "Pipeline não encontrado")
     payload = _payload(pipeline, ["etapa", "observacao"])
-    if pipeline.etapa is not None:
-        payload["nova_etapa"] = pipeline.etapa
     updated = _update("cti_pipeline", pipeline_id, payload, "Pipeline não encontrado")
     if pipeline.etapa is not None and updated:
         oportunidade_id = updated[0].get("oportunidade_id")
@@ -451,7 +503,9 @@ def atualizar_pipeline(pipeline_id: str, pipeline: PipelineUpdate):
 
 @router.get("/propostas")
 def listar_propostas():
-    return supabase.table("cti_propostas").select("*").order("created_at", desc=True).execute().data
+    return _leitura_resiliente(
+        lambda: supabase.table("cti_propostas").select("*").order("created_at", desc=True)
+    )
 
 
 @router.get("/propostas/{proposta_id}")
@@ -463,19 +517,27 @@ def obter_proposta(proposta_id: str):
 def criar_proposta(proposta: PropostaCreate):
     oportunidade = _first("cti_oportunidades", proposta.oportunidade_id, "Oportunidade não encontrada")
     payload = _payload(proposta, _campos_proposta())
+    if proposta.validade and proposta.validade.strip():
+        payload["data_validade"] = proposta.validade
     created = _insert("cti_propostas", payload)
     etapa_anterior = oportunidade.get("status") or oportunidade.get("etapa") or "OPORTUNIDADE"
     _update("cti_oportunidades", proposta.oportunidade_id, {"status": "PROPOSTA"}, "Oportunidade não encontrada")
-    _registrar_pipeline(proposta.oportunidade_id, etapa_anterior, "PROPOSTA", proposta.responsavel_id, "Proposta criada a partir da oportunidade.")
-    _registrar_historico(proposta.oportunidade_id, "PROPOSTA", "Proposta criada exclusivamente a partir da oportunidade.", proposta.responsavel_id, created[0])
+    _registrar_pipeline(proposta.oportunidade_id, etapa_anterior, "PROPOSTA", proposta.responsavel_id or oportunidade.get("responsavel_id"), "Proposta criada a partir da oportunidade.")
+    _registrar_historico(proposta.oportunidade_id, "PROPOSTA", "Proposta criada exclusivamente a partir da oportunidade.", proposta.responsavel_id or oportunidade.get("responsavel_id"), created[0])
     return created
 
 
 @router.put("/propostas/{proposta_id}")
 def atualizar_proposta(proposta_id: str, proposta: PropostaUpdate):
-    updated = _update("cti_propostas", proposta_id, _payload(proposta, _campos_proposta()), "Proposta não encontrada")
-    if updated and updated[0].get("oportunidade_id"):
-        _registrar_historico(updated[0]["oportunidade_id"], "PROPOSTA", "Proposta atualizada.", updated[0].get("responsavel_id"), updated[0])
+    atual = _first("cti_propostas", proposta_id, "Proposta não encontrada")
+    payload = _payload(proposta, _campos_proposta())
+    if proposta.validade and proposta.validade.strip():
+        payload["data_validade"] = proposta.validade
+    updated = _update("cti_propostas", proposta_id, payload, "Proposta não encontrada")
+    oportunidade_id = atual.get("oportunidade_id")
+    if oportunidade_id:
+        oportunidade = _first("cti_oportunidades", oportunidade_id, "Oportunidade não encontrada")
+        _registrar_historico(oportunidade_id, "PROPOSTA", "Proposta atualizada.", oportunidade.get("responsavel_id"), payload)
     return updated
 
 
@@ -486,29 +548,29 @@ def converter_proposta_em_pedido(proposta_id: str, conversao: ConverterPedidoCre
     if not oportunidade_id:
         raise HTTPException(status_code=400, detail="Proposta sem oportunidade vinculada")
     oportunidade = _first("cti_oportunidades", oportunidade_id, "Oportunidade não encontrada")
+    responsavel_id = conversao.responsavel_id or oportunidade.get("responsavel_id")
     pedido_payload = {
         "numero": conversao.numero,
         "cliente_id": proposta.get("cliente_id"),
         "proposta_id": proposta_id,
-        "oportunidade_id": oportunidade_id,
-        "responsavel_id": conversao.responsavel_id or proposta.get("responsavel_id") or oportunidade.get("responsavel_id"),
         "valor": proposta.get("valor") or oportunidade.get("valor_estimado") or 0,
         "status": conversao.status,
         "data_pedido": conversao.data_pedido or datetime.now(timezone.utc).date().isoformat(),
-        "origem_comercial": conversao.origem_comercial,
     }
     pedido = _insert("cti_pedidos", pedido_payload)
     _update("cti_propostas", proposta_id, {"status": "APROVADA"}, "Proposta não encontrada")
     _update("cti_oportunidades", oportunidade_id, {"status": "GANHO"}, "Oportunidade não encontrada")
-    _registrar_pipeline(oportunidade_id, oportunidade.get("status"), "GANHO", pedido_payload.get("responsavel_id"), "Proposta convertida em pedido.")
-    _registrar_historico(oportunidade_id, "PEDIDO", "Proposta aprovada e convertida em pedido.", pedido_payload.get("responsavel_id"), pedido[0])
-    _registrar_auditoria("cti_pedidos", pedido[0]["id"], "CONVERSAO_PROPOSTA_PEDIDO", pedido_payload.get("responsavel_id"), pedido[0])
+    _registrar_pipeline(oportunidade_id, oportunidade.get("status"), "GANHO", responsavel_id, "Proposta convertida em pedido.")
+    _registrar_historico(oportunidade_id, "PEDIDO", "Proposta aprovada e convertida em pedido.", responsavel_id, pedido[0])
+    _registrar_auditoria("cti_pedidos", pedido[0]["id"], "CONVERSAO_PROPOSTA_PEDIDO", responsavel_id, pedido[0])
     return pedido
 
 
 @router.get("/pedidos")
 def listar_pedidos():
-    return supabase.table("cti_pedidos").select("*").order("created_at", desc=True).execute().data
+    return _leitura_resiliente(
+        lambda: supabase.table("cti_pedidos").select("*").order("created_at", desc=True)
+    )
 
 
 @router.get("/pedidos/{pedido_id}")
@@ -518,15 +580,27 @@ def obter_pedido(pedido_id: str):
 
 @router.post("/pedidos")
 def criar_pedido(pedido: PedidoCreate):
-    created = _insert("cti_pedidos", _payload(pedido, ["numero", "cliente_id", "proposta_id", "oportunidade_id", "responsavel_id", "valor", "status", "data_pedido", "origem_comercial"]))
-    if pedido.oportunidade_id:
-        _registrar_historico(pedido.oportunidade_id, "PEDIDO", "Pedido criado e vinculado à oportunidade.", pedido.responsavel_id, created[0])
+    created = _insert(
+        "cti_pedidos",
+        _payload(pedido, ["numero", "cliente_id", "proposta_id", "valor", "status", "data_pedido"]),
+    )
+    oportunidade_id = pedido.oportunidade_id
+    if not oportunidade_id and pedido.proposta_id:
+        proposta = _first("cti_propostas", pedido.proposta_id, "Proposta não encontrada")
+        oportunidade_id = proposta.get("oportunidade_id")
+    if oportunidade_id:
+        _registrar_historico(oportunidade_id, "PEDIDO", "Pedido criado e vinculado à oportunidade.", pedido.responsavel_id, created[0])
     return created
 
 
 @router.put("/pedidos/{pedido_id}")
 def atualizar_pedido(pedido_id: str, pedido: PedidoUpdate):
-    return _update("cti_pedidos", pedido_id, _payload(pedido, ["numero", "cliente_id", "proposta_id", "oportunidade_id", "responsavel_id", "valor", "status", "data_pedido", "origem_comercial"]), "Pedido não encontrado")
+    return _update(
+        "cti_pedidos",
+        pedido_id,
+        _payload(pedido, ["numero", "cliente_id", "proposta_id", "valor", "status", "data_pedido"]),
+        "Pedido não encontrado",
+    )
 
 
 @router.get("/atividades")
@@ -552,9 +626,10 @@ def criar_atividade(atividade: AtividadeCreate):
 
 @router.put("/atividades/{atividade_id}")
 def atualizar_atividade(atividade_id: str, atividade: AtividadeUpdate):
-    updated = _update("cti_atividades", atividade_id, _payload(atividade, ["cliente_id", "oportunidade_id", "proposta_id", "pedido_id", "usuario_id", "tipo", "titulo", "descricao", "data", "horario", "status"]), "Atividade não encontrada")
+    payload = _payload(atividade, ["cliente_id", "oportunidade_id", "proposta_id", "pedido_id", "usuario_id", "tipo", "titulo", "descricao", "data", "horario", "status"])
+    updated = _update("cti_atividades", atividade_id, payload, "Atividade não encontrada")
     if updated and updated[0].get("oportunidade_id"):
-        _registrar_historico(updated[0]["oportunidade_id"], "ATIVIDADE", "Atividade atualizada na oportunidade.", updated[0].get("usuario_id"), updated[0])
+        _registrar_historico(updated[0]["oportunidade_id"], "ATIVIDADE", "Atividade atualizada na oportunidade.", updated[0].get("usuario_id"), payload)
     return updated
 
 
