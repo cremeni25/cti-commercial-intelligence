@@ -2,6 +2,42 @@ import { API_URL } from "@/lib/api"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 
+const AUTH_TIMEOUT_MS = 8000
+const AUTH_TENTATIVAS = 3
+const TRANSIENTES = new Set([502, 503, 504])
+
+function aguardar(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function buscarPerfil(token: string) {
+  let ultimoErro: unknown = null
+  for (let tentativa = 0; tentativa < AUTH_TENTATIVAS; tentativa += 1) {
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => controller.abort(), AUTH_TIMEOUT_MS)
+    try {
+      const response = await fetch(`${API_URL}/auth/me`, {
+        method: "GET",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      })
+      if (!TRANSIENTES.has(response.status) || tentativa === AUTH_TENTATIVAS - 1) return response
+    } catch (error) {
+      ultimoErro = error
+      const transitório = (error instanceof DOMException && error.name === "AbortError") || error instanceof TypeError
+      if (!transitório || tentativa === AUTH_TENTATIVAS - 1) throw error
+    } finally {
+      window.clearTimeout(timer)
+    }
+    await aguardar(300 * (tentativa + 1))
+  }
+  throw ultimoErro instanceof Error ? ultimoErro : new Error("Não foi possível validar o perfil CTI.")
+}
+
 export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
   const supabase = getSupabaseClient()
   const { data, error } = await supabase.auth.getSession()
@@ -9,14 +45,7 @@ export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
 
   if (error || !session?.access_token) return null
 
-  const response = await fetch(`${API_URL}/auth/me`, {
-    method: "GET",
-    cache: "no-store",
-    headers: {
-      Authorization: `Bearer ${session.access_token}`,
-      "Content-Type": "application/json",
-    },
-  })
+  const response = await buscarPerfil(session.access_token)
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null)
