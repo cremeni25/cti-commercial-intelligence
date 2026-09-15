@@ -2,20 +2,45 @@ import { getSupabaseClient } from "@/core/database/supabase"
 import { API_URL } from "@/lib/api"
 
 const TRANSIENTES = new Set([502, 503, 504])
+const TEMPO_LIMITE_GET_MS = 8000
+const TEMPO_LIMITE_ESCRITA_MS = 12000
 
 function aguardar(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-async function fetchComRetry(url: string, init: RequestInit, tentativas = 3) {
-  let resposta = await fetch(url, init)
-  const metodo = String(init.method || "GET").toUpperCase()
-  if (metodo !== "GET") return resposta
-  for (let tentativa = 1; tentativa < tentativas && TRANSIENTES.has(resposta.status); tentativa += 1) {
-    await aguardar(350 * tentativa)
-    resposta = await fetch(url, init)
+async function fetchComTimeout(url: string, init: RequestInit, timeoutMs: number) {
+  if (init.signal) return fetch(url, init)
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } finally {
+    window.clearTimeout(timer)
   }
-  return resposta
+}
+
+function erroTransitorio(error: unknown) {
+  return (error instanceof DOMException && error.name === "AbortError") || error instanceof TypeError
+}
+
+async function fetchComRetry(url: string, init: RequestInit, tentativas = 4) {
+  const metodo = String(init.method || "GET").toUpperCase()
+  const limite = metodo === "GET" ? TEMPO_LIMITE_GET_MS : TEMPO_LIMITE_ESCRITA_MS
+  let ultimoErro: unknown = null
+
+  for (let tentativa = 0; tentativa < tentativas; tentativa += 1) {
+    try {
+      const resposta = await fetchComTimeout(url, init, limite)
+      if (metodo !== "GET" || !TRANSIENTES.has(resposta.status) || tentativa === tentativas - 1) return resposta
+    } catch (error) {
+      ultimoErro = error
+      if (metodo !== "GET" || !erroTransitorio(error) || tentativa === tentativas - 1) throw error
+    }
+    await aguardar(300 * (tentativa + 1))
+  }
+
+  throw ultimoErro instanceof Error ? ultimoErro : new Error("O CTI não respondeu dentro do tempo operacional.")
 }
 
 export async function buscarNucleoComercialSeguro<T = unknown[]>(): Promise<T> {
