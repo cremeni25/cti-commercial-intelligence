@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import CicloComercial from "@/components/crm/CicloComercial"
+import OportunidadeItensComerciais from "@/components/crm/OportunidadeItensComerciais"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
@@ -63,7 +64,7 @@ export default function OportunidadeCrmAppPage() {
   return <main className="min-h-screen bg-[#020817] px-4 pb-28 pt-5 text-white sm:px-6">
     <div className="mx-auto w-full max-w-4xl space-y-4">
       <header className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-        <Link href="/crm-app/negocios" className="text-sm font-semibold text-cyan-300">← Voltar</Link>
+        <Link href="/crm-app/oportunidades" className="text-sm font-semibold text-cyan-300">← Voltar aos negócios</Link>
         <p className="mt-4 text-xs font-bold uppercase tracking-[.18em] text-cyan-400">CTI CRM · negócio</p>
         <h1 className="mt-2 text-2xl font-bold">{texto(registro?.titulo) || "Oportunidade comercial"}</h1>
         <p className="mt-1 text-slate-400">{clienteNome}</p>
@@ -84,9 +85,21 @@ export default function OportunidadeCrmAppPage() {
 
         <section className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
           <p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">Próximo passo</p>
-          <h2 className="mt-2 text-xl font-bold">Continuar a negociação</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-400">Registre apenas o próximo fato comercial. O CTI mantém o histórico e atualiza o ciclo.</p>
-          <Link href={`/crm-app/acao/registrar?cliente=${encodeURIComponent(clienteId || clienteNome)}&tipo=FOLLOW_UP`} className="mt-4 flex min-h-14 items-center justify-center rounded-2xl bg-cyan-400 px-4 font-bold text-slate-950">Registrar continuidade</Link>
+          <h2 className="mt-2 text-xl font-bold">Evoluir o negócio</h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">Se houve avanço comercial, gere a proposta a partir dos itens da oportunidade. Se ainda estiver em acompanhamento, registre apenas a próxima interação.</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <a href="#proposta" className="flex min-h-14 items-center justify-center rounded-2xl bg-cyan-400 px-4 font-bold text-slate-950">Elaborar proposta</a>
+            <Link href={`/crm-app/acao/registrar?cliente=${encodeURIComponent(clienteId || clienteNome)}&tipo=FOLLOW_UP`} className="flex min-h-14 items-center justify-center rounded-2xl border border-[#24466f] px-4 font-semibold text-cyan-200">Registrar continuidade</Link>
+          </div>
+        </section>
+
+        <section id="proposta" className="scroll-mt-24 rounded-3xl border border-[#16325c] bg-[#07162b] p-4 sm:p-5">
+          <div className="mb-4">
+            <p className="text-xs font-bold uppercase tracking-[.18em] text-cyan-400">Proposta comercial</p>
+            <h2 className="mt-2 text-xl font-bold">Itens, condições e proposta</h2>
+            <p className="mt-1 text-sm text-slate-400">A mesma negociação é usada no CTI Web e no CRM App.</p>
+          </div>
+          <OportunidadeItensComerciais oportunidadeId={id} />
         </section>
       </>}
     </div>
