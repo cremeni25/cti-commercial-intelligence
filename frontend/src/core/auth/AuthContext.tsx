@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 import { buscarUsuarioAtual } from "./auth.service"
+import { obterSessaoCTI, registrarSessaoCTI } from "./session"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 
 interface AuthContextType {
@@ -62,12 +63,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       try {
         const supabase = getSupabaseClient()
-        const { data } = await supabase.auth.getSession()
+        const session = await obterSessaoCTI()
         const rotaPublica = ROTAS_PUBLICAS.has(pathname)
         const rotaCrm = pathname.startsWith("/crm-app")
         const rotaPrimeiroAcesso = pathname === "/primeiro-acesso"
 
-        if (!data.session) {
+        if (!session) {
           if (ativo) setUsuario(null)
           if (!rotaPublica) router.replace(rotaCrm ? "/crm-app/login" : "/login")
           return
@@ -81,6 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const perfilBase = await buscarUsuarioAtual()
         if (!perfilBase) {
           await supabase.auth.signOut()
+          registrarSessaoCTI(null)
           if (ativo) setUsuario(null)
           router.replace(rotaCrm ? "/crm-app/login?acesso=negado" : "/login?acesso=negado")
           return
@@ -90,7 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const ativoNoSistema = perfil.ativo !== false && !["INATIVO", "BLOQUEADO", "REJEITADO"].includes(String(perfil.status_acesso || ""))
         const primeiroAcessoPendente = perfil.primeiro_acesso_pendente === true || perfil.cadastro_completo === false
 
-        // Onboarding é obrigatório antes da navegação normal, mas não altera o escopo do usuário.
         if (ativoNoSistema && primeiroAcessoPendente && !rotaPrimeiroAcesso) {
           if (ativo) setUsuario(perfil)
           router.replace("/primeiro-acesso")
@@ -103,7 +104,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
-        // A rota de primeiro acesso é neutra de canal: um usuário CRM-only também precisa concluir o onboarding.
         const acessoPermitido = ativoNoSistema && (rotaPrimeiroAcesso || (rotaCrm ? perfil.acesso_crm !== false : perfil.acesso_portal !== false))
 
         if (!acessoPermitido && !rotaPublica) {
@@ -137,6 +137,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = getSupabaseClient()
     const rotaCrm = pathname.startsWith("/crm-app")
     await supabase.auth.signOut()
+    registrarSessaoCTI(null)
     setUsuario(null)
     router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
