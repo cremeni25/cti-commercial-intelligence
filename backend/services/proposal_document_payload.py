@@ -104,9 +104,10 @@ def build_proposal_document_payload(
     final = _snapshot_final(proposal)
 
     quantity = int(_first(item, "quantidade", default=1) or 1)
-    unit_price = float(_first(item, "preco_unitario", default=0) or 0)
+    table_unit_price = float(_first(item, "preco_unitario", default=0) or 0)
     discount = float(_first(item, "desconto_percentual", default=0) or 0)
-    total = round(quantity * unit_price * (1 - discount / 100), 2)
+    negotiated_unit_price = round(table_unit_price * (1 - discount / 100), 2)
+    total = round(quantity * negotiated_unit_price, 2)
 
     client_name = _first(client, "razao_social", "nome_fantasia", "nome", "empresa") or _first(opportunity, "cliente_nome", "empresa_nome")
     client_tax_id = _first(client, "cpf_cnpj", "cnpj", "cpf", "documento", "documento_fiscal") or _first(opportunity, "cpf_cnpj", "cnpj", "cpf")
@@ -137,7 +138,7 @@ def build_proposal_document_payload(
         "voltage": _prefer(final, "voltagem", proposal, "voltagem"),
         "quantity_intro": quantity,
         "quantity": quantity,
-        "unit_price": _money_br(unit_price),
+        "unit_price": _money_br(negotiated_unit_price),
         "discount_percent": discount,
         "total_price": _money_br(total),
         "taxes": _prefer(final, "impostos", item, "impostos", default="04% ICMS/PIS/COFINS"),
