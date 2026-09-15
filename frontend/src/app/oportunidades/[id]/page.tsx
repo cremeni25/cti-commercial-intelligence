@@ -7,6 +7,7 @@ import { useParams } from "next/navigation"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import OportunidadeItensComerciais from "@/components/crm/OportunidadeItensComerciais"
+import CicloComercial from "@/components/crm/CicloComercial"
 import { API_URL } from "@/lib/api"
 import { lerContextoOportunidade } from "@/lib/crm-opportunity"
 
@@ -60,6 +61,8 @@ export default function OportunidadeDetalhesPage() {
         {erro && <div className="rounded-2xl border border-red-900 bg-red-950/30 p-5 text-red-200">{erro}</div>}
 
         {dados && <>
+          <CicloComercial registro={dados.oportunidade} propostas={dados.resumo.propostas} pedidos={dados.resumo.pedidos} />
+
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kpi titulo="Valor estimado" valor={moeda(dados.oportunidade.valor_estimado)} />
             <Kpi titulo="Probabilidade" valor={percentual(dados.oportunidade.probabilidade)} />
