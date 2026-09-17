@@ -15,13 +15,20 @@ async function fetchComTimeout(url: string, init: RequestInit, timeoutMs: number
   const timer = window.setTimeout(() => controller.abort(), timeoutMs)
   try {
     return await fetch(url, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error("O CTI demorou mais que o esperado para responder. Atualize a tela e tente novamente.")
+    }
+    throw error
   } finally {
     window.clearTimeout(timer)
   }
 }
 
 function erroTransitorio(error: unknown) {
-  return (error instanceof DOMException && error.name === "AbortError") || error instanceof TypeError
+  if (error instanceof TypeError) return true
+  if (error instanceof Error && error.message.startsWith("O CTI demorou mais que o esperado")) return true
+  return error instanceof DOMException && error.name === "AbortError"
 }
 
 async function fetchComRetry(url: string, init: RequestInit, tentativas = 4) {
