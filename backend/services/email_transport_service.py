@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from email.utils import formataddr, parseaddr
 from typing import Any, Mapping, Sequence
 
 import httpx
@@ -103,8 +104,16 @@ def enviar_email(
     idempotency_key: str | None = None,
     cc: Sequence[str] | None = None,
     cco: Sequence[str] | None = None,
+    remetente_nome: str | None = None,
+    reply_to_override: str | None = None,
 ) -> EmailEnviado:
     api_key, remetente, reply_to = _configuracao_resend()
+    if remetente_nome:
+        _, endereco = parseaddr(remetente)
+        if endereco:
+            remetente = formataddr((str(remetente_nome).strip(), endereco))
+    if reply_to_override:
+        reply_to = str(reply_to_override).strip()
     cc_lista = [str(item).strip() for item in cc or [] if str(item).strip()]
     cco_lista = [str(item).strip() for item in cco or [] if str(item).strip()]
 
