@@ -310,7 +310,12 @@ def solicitar_aceite_seguro(proposta_id: str, dados: SolicitarAceiteRequest, usu
 @router.post("/propostas/{proposta_id}/enviar-email")
 def enviar_proposta_email_seguro(proposta_id: str, dados: EnviarPropostaRequest, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _proposta_autorizada(proposta_id, usuario)
-    return enviar_proposta_por_email(proposta_id, dados)
+    return enviar_proposta_por_email(
+        proposta_id,
+        dados,
+        responsavel_nome=usuario.nome,
+        responsavel_email=usuario.email,
+    )
 
 
 @router.post("/propostas/{proposta_id}/converter-pedido")
