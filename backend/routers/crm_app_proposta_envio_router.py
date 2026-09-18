@@ -164,7 +164,12 @@ def _snapshot_com_envio(
 def status_envio_provedor(proposta_id: str):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
     numero = str(proposta.get("numero") or proposta_id)
-    assunto = f"Proposta comercial {numero} - CTI"
+    snapshot = proposta.get("snapshot_dados") or {}
+    envio_snapshot = snapshot.get("envio_email") if isinstance(snapshot, dict) else None
+    assunto_snapshot = str((envio_snapshot or {}).get("assunto") or "").strip() if isinstance(envio_snapshot, dict) else ""
+    cliente = _cliente(str(proposta.get("cliente_id") or ""))
+    cliente_nome = str(cliente.get("nome") or cliente.get("razao_social") or cliente.get("nome_fantasia") or "Cliente").strip()
+    assunto = assunto_snapshot or f"VIENA SP | Carrier Transicold | Proposta Comercial | {cliente_nome}"
     try:
         envio = buscar_email_enviado(assunto=assunto)
     except TransporteEmailNaoConfigurado as exc:
