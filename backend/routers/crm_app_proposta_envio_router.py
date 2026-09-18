@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import re
+import unicodedata
 from datetime import datetime, timezone
 from html import escape
 from typing import Any
@@ -37,6 +39,32 @@ class EnviarPropostaRequest(BaseModel):
 
 def _agora() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _arquivo_token(valor: Any, fallback: str) -> str:
+    texto = str(valor or "").strip()
+    texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+    texto = re.sub(r"[^A-Za-z0-9]+", "_", texto).strip("_").upper()
+    return texto or fallback
+
+
+def _data_comercial(proposta: dict[str, Any]) -> str:
+    bruto = str(proposta.get("emitida_em") or proposta.get("created_at") or "").strip()
+    if bruto:
+        try:
+            return datetime.fromisoformat(bruto.replace("Z", "+00:00")).strftime("%d-%m-%Y")
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc).strftime("%d-%m-%Y")
+
+
+def _nome_anexo_cliente(proposta: dict[str, Any], cliente_nome: str, equipamento: str) -> str:
+    cliente = _arquivo_token(cliente_nome, "CLIENTE")
+    produto = _arquivo_token(equipamento, "EQUIPAMENTO")
+    data = _data_comercial(proposta)
+    versao = int(proposta.get("versao") or 1)
+    sufixo = f"-V{versao}" if versao > 1 else ""
+    return f"{cliente}-{produto}-{data}{sufixo}.pdf"
 
 
 def _primeiro(tabela: str, registro_id: str, detalhe: str) -> dict[str, Any]:
@@ -153,7 +181,13 @@ def status_envio_provedor(proposta_id: str):
 
 
 @router.post("/{proposta_id}/enviar-email")
-def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
+def enviar_proposta_por_email(
+    proposta_id: str,
+    dados: EnviarPropostaRequest,
+    *,
+    responsavel_nome: str = "Equipe Comercial",
+    responsavel_email: str = "",
+):
     proposta = _primeiro("cti_propostas", proposta_id, "Proposta não encontrada.")
     item_id = str(proposta.get("item_oportunidade_id") or "")
     oportunidade_id = str(proposta.get("oportunidade_id") or "")
@@ -201,7 +235,7 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             detail=f"Não foi possível converter a proposta oficial para PDF. O envio por e-mail exige PDF validado: {exc}",
         ) from exc
 
-    arquivo_nome = pdf.filename
+    equipamento = str(item.get("equipamento") or item.get("modelo") or item.get("codigo_produto") or "Equipamento").strip()
     arquivo_conteudo = pdf.content
     arquivo_sha256 = pdf.sha256
     paginas = pdf.page_count
@@ -212,20 +246,26 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
     cco = _emails_validos(dados.cco, obrigatorio=False, campo="CCO")
     numero = str(proposta.get("numero") or proposta_id)
     cliente_nome = str(cliente.get("nome") or cliente.get("razao_social") or cliente.get("nome_fantasia") or "Cliente").strip()
-    valor = float(proposta.get("valor") or 0)
-    valor_br = f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    arquivo_nome = _nome_anexo_cliente(proposta, cliente_nome, equipamento)
     mensagem = str(dados.mensagem or "Segue a proposta comercial para sua análise.").strip()
-    assunto = str(dados.assunto or f"Proposta comercial {numero} - CTI").strip()
+    assunto = str(dados.assunto or f"VIENA SP | Carrier Transicold | Proposta Comercial | {cliente_nome}").strip()
+    assinatura_nome = str(responsavel_nome or "Equipe Comercial").strip()
     html = (
         f"<p>Olá, {escape(cliente_nome)}.</p>"
         f"<p>{escape(mensagem)}</p>"
-        f"<p><strong>Proposta:</strong> {escape(numero)}<br>"
-        f"<strong>Valor:</strong> {escape(valor_br)}</p>"
+        f"<p>Esta proposta comercial da <strong>VIENA SP – Carrier Transicold</strong> refere-se ao equipamento "
+        f"<strong>{escape(equipamento)}</strong>.</p>"
         "<p>O documento oficial segue anexado em PDF.</p>"
+        "<p style=\"margin-top:28px\">Atenciosamente,<br>"
+        f"<strong>{escape(assinatura_nome)}</strong><br>"
+        "VIENA SP – Carrier Transicold<br>"
+        "Departamento Comercial</p>"
     )
     texto = (
-        f"Olá, {cliente_nome}.\n\n{mensagem}\n\nProposta: {numero}\nValor: {valor_br}"
-        "\n\nO documento oficial segue anexado em PDF."
+        f"Olá, {cliente_nome}.\n\n{mensagem}\n\n"
+        f"Esta proposta comercial da VIENA SP – Carrier Transicold refere-se ao equipamento {equipamento}.\n\n"
+        "O documento oficial segue anexado em PDF.\n\n"
+        f"Atenciosamente,\n{assinatura_nome}\nVIENA SP – Carrier Transicold\nDepartamento Comercial"
     )
 
     try:
@@ -237,6 +277,8 @@ def enviar_proposta_por_email(proposta_id: str, dados: EnviarPropostaRequest):
             html=html,
             texto=texto,
             attachments=[{"filename": arquivo_nome, "content": base64.b64encode(arquivo_conteudo).decode("ascii")}],
+            remetente_nome="VIENA SP - Carrier Transicold",
+            reply_to_override=responsavel_email or None,
             idempotency_key=_chave_idempotencia(
                 proposta_id,
                 destinatarios,
