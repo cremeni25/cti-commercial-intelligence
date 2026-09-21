@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from core.supabase_client import supabase
 from routers.propostas_pedidos_router import emitir_proposta
+from routers.crm_app_proposta_envio_router import _nome_anexo_cliente
 from routers.propostas_primeira_pagina_router import validar_documento_para_emissao
 from services.docx_pdf_conversion_service import DocxPdfConversionError, convert_docx_to_pdf
 from services.email_transport_service import TransporteEmailNaoConfigurado, enviar_email
@@ -77,7 +78,13 @@ def _snapshot_com_envio(proposta: dict[str, Any], envio: dict[str, Any]) -> dict
 
 
 @router.post("/{oportunidade_id}/enviar-propostas-email")
-def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarPropostasOportunidadeRequest):
+def enviar_propostas_oportunidade_por_email(
+    oportunidade_id: str,
+    dados: EnviarPropostasOportunidadeRequest,
+    *,
+    responsavel_nome: str = "Equipe Comercial",
+    responsavel_email: str = "",
+):
     oportunidade = _primeiro("cti_oportunidades", oportunidade_id, "Oportunidade não encontrada.")
     cliente_id = str(oportunidade.get("cliente_id") or "")
     if not cliente_id:
@@ -138,15 +145,24 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
         if status in STATUS_PRE_EMISSAO:
             propostas_a_emitir.append(proposta_id)
 
-        anexos.append({"filename": pdf.filename, "content": base64.b64encode(pdf.content).decode("ascii")})
+        equipamento = str(item.get("nome_comercial") or item.get("equipamento") or "Equipamento").strip()
+        cliente_nome_anexo = str(
+            cliente.get("nome")
+            or cliente.get("razao_social")
+            or cliente.get("nome_fantasia")
+            or cliente.get("cliente")
+            or "Cliente"
+        ).strip()
+        arquivo_nome = _nome_anexo_cliente(proposta, cliente_nome_anexo, equipamento)
+        anexos.append({"filename": arquivo_nome, "content": base64.b64encode(pdf.content).decode("ascii")})
         propostas_preparadas.append({
             "id": proposta_id,
             "numero": str(proposta.get("numero") or proposta_id),
             "item_id": item_id,
-            "equipamento": str(item.get("nome_comercial") or item.get("equipamento") or "Equipamento"),
+            "equipamento": equipamento,
             "quantidade": int(item.get("quantidade") or 1),
             "valor": float(proposta.get("valor") or 0),
-            "arquivo": pdf.filename,
+            "arquivo": arquivo_nome,
             "sha256": pdf.sha256,
             "paginas": pdf.page_count,
             "snapshot_dados": proposta.get("snapshot_dados"),
@@ -160,28 +176,37 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
     destinatarios = _emails_validos(dados.destinatarios, campo="Para")
     cc = _emails_validos(dados.cc, obrigatorio=False, campo="CC")
     cco = _emails_validos(dados.cco, obrigatorio=False, campo="CCO")
-    cliente_nome = str(cliente.get("nome") or cliente.get("razao_social") or cliente.get("nome_fantasia") or "Cliente").strip()
-    titulo_oportunidade = str(oportunidade.get("titulo") or "Negociação comercial").strip()
-    mensagem = str(dados.mensagem or "Seguem as propostas comerciais dos equipamentos negociados para sua análise.").strip()
-    assunto = str(dados.assunto or f"Propostas comerciais - {titulo_oportunidade} - CTI").strip()
-    valor_br = f"R$ {valor_total:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    cliente_nome = str(
+        cliente.get("nome")
+        or cliente.get("razao_social")
+        or cliente.get("nome_fantasia")
+        or cliente.get("cliente")
+        or "Cliente"
+    ).strip()
+    mensagem = str(dados.mensagem or "Seguem as propostas comerciais para sua análise.").strip()
+    assunto = str(dados.assunto or f"VIENA SP | Carrier Transicold | Proposta Comercial | {cliente_nome}").strip()
+    assinatura_nome = str(responsavel_nome or "Equipe Comercial").strip()
     lista_html = "".join(
-        f"<li><strong>{escape(item['numero'])}</strong> — {escape(item['equipamento'])} — {item['quantidade']} un.</li>"
+        f"<li><strong>{escape(item['equipamento'])}</strong> — {item['quantidade']} un.</li>"
         for item in propostas_preparadas
     )
     html = (
         f"<p>Olá, {escape(cliente_nome)}.</p>"
         f"<p>{escape(mensagem)}</p>"
-        f"<p><strong>Negociação:</strong> {escape(titulo_oportunidade)}<br>"
-        f"<strong>Valor total negociado:</strong> {escape(valor_br)}</p>"
+        "<p>Os documentos oficiais da <strong>VIENA SP – Carrier Transicold</strong> seguem anexados em PDF:</p>"
         f"<ul>{lista_html}</ul>"
-        "<p>Cada proposta oficial segue anexada separadamente em PDF, preservando o modelo e as condições de cada equipamento.</p>"
+        "<p>Cada equipamento permanece em sua própria proposta comercial.</p>"
+        "<p style=\"margin-top:28px\">Atenciosamente,<br>"
+        f"<strong>{escape(assinatura_nome)}</strong><br>"
+        "VIENA SP – Carrier Transicold<br>"
+        "Departamento Comercial</p>"
     )
     texto = (
-        f"Olá, {cliente_nome}.\n\n{mensagem}\n\nNegociação: {titulo_oportunidade}\n"
-        f"Valor total negociado: {valor_br}\n\n"
-        + "\n".join(f"- {item['numero']} | {item['equipamento']} | {item['quantidade']} un." for item in propostas_preparadas)
-        + "\n\nCada proposta oficial segue anexada separadamente em PDF."
+        f"Olá, {cliente_nome}.\n\n{mensagem}\n\n"
+        "Os documentos oficiais da VIENA SP – Carrier Transicold seguem anexados em PDF:\n"
+        + "\n".join(f"- {item['equipamento']} | {item['quantidade']} un." for item in propostas_preparadas)
+        + "\n\nCada equipamento permanece em sua própria proposta comercial.\n\n"
+        f"Atenciosamente,\n{assinatura_nome}\nVIENA SP – Carrier Transicold\nDepartamento Comercial"
     )
     chave_material = "|".join([
         oportunidade_id,
@@ -202,6 +227,8 @@ def enviar_propostas_oportunidade_por_email(oportunidade_id: str, dados: EnviarP
             html=html,
             texto=texto,
             attachments=anexos,
+            remetente_nome="VIENA SP - Carrier Transicold",
+            reply_to_override=responsavel_email or None,
             idempotency_key=idempotency_key,
         )
     except TransporteEmailNaoConfigurado as exc:

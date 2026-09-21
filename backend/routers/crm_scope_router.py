@@ -4,6 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from routers.crm_app_proposta_envio_router import EnviarPropostaRequest, enviar_proposta_por_email
+from routers.crm_app_oportunidade_propostas_envio_router import (
+    EnviarPropostasOportunidadeRequest,
+    enviar_propostas_oportunidade_por_email,
+)
 from routers.crm_atividades_governanca_router import _enriquecer as _enriquecer_atividades
 from routers.crm_core_extension import nucleo_comercial
 from routers.crm_router import (
@@ -312,6 +316,25 @@ def enviar_proposta_email_seguro(proposta_id: str, dados: EnviarPropostaRequest,
     _proposta_autorizada(proposta_id, usuario)
     return enviar_proposta_por_email(
         proposta_id,
+        dados,
+        responsavel_nome=usuario.nome,
+        responsavel_email=usuario.email,
+    )
+
+
+@router.post("/oportunidades/{oportunidade_id}/enviar-propostas-email")
+def enviar_propostas_oportunidade_email_seguro(
+    oportunidade_id: str,
+    dados: EnviarPropostasOportunidadeRequest,
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    _exigir_acesso(obter_oportunidade(oportunidade_id), usuario)
+    for proposta_id in dados.proposta_ids:
+        proposta = _proposta_autorizada(str(proposta_id), usuario)
+        if str(proposta.get("oportunidade_id") or "") != oportunidade_id:
+            raise HTTPException(status_code=409, detail="Todas as propostas devem pertencer à mesma oportunidade.")
+    return enviar_propostas_oportunidade_por_email(
+        oportunidade_id,
         dados,
         responsavel_nome=usuario.nome,
         responsavel_email=usuario.email,
