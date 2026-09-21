@@ -65,6 +65,7 @@ const menuGroups: MenuGroup[] = [
   {
     tituloKey: "nav.administration",
     itens: [
+      { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📊", type: "emoji" },
       { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
       { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
       { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
@@ -82,11 +83,11 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   const diretor = perfil === "DIRETOR_VIENA_SP"
   const gestao = master || (diretor && acessoTotal)
 
-  if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais") return master
+  if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais" || href === "/inteligencia") return master
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
   if (href === "/upload") return gestao
-  if (href === "/dashboard" || href === "/inteligencia" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
+  if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
