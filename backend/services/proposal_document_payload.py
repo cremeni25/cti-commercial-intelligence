@@ -106,7 +106,12 @@ def build_proposal_document_payload(
     quantity = int(_first(item, "quantidade", default=1) or 1)
     table_unit_price = float(_first(item, "preco_unitario", default=0) or 0)
     discount = float(_first(item, "desconto_percentual", default=0) or 0)
-    negotiated_unit_price = round(table_unit_price * (1 - discount / 100), 2)
+    exact_negotiated = _first(item, "preco_negociado_unitario")
+    negotiated_unit_price = (
+        round(float(exact_negotiated), 2)
+        if exact_negotiated is not None and str(exact_negotiated).strip() != ""
+        else round(table_unit_price * (1 - discount / 100), 2)
+    )
     total = round(quantity * negotiated_unit_price, 2)
 
     client_name = _first(client, "razao_social", "nome_fantasia", "nome", "empresa") or _first(opportunity, "cliente_nome", "empresa_nome")
