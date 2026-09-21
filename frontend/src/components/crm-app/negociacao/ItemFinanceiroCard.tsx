@@ -4,7 +4,7 @@ import { Pencil } from "lucide-react"
 import { FINAL, type Item, dinheiro } from "./financeiro"
 
 export default function ItemFinanceiroCard({item,indice,onEdit}:{item:Item;indice:number;onEdit:(item:Item)=>void}){
- const unit=item.preco_tabela*(1-item.desconto_percentual/100)
+ const unit=item.preco_negociado_unitario??item.preco_tabela*(1-item.desconto_percentual/100)
  const desconto=item.preco_tabela-unit
  const subtotal=unit*item.quantidade
  const final=FINAL.has(item.status.toUpperCase())

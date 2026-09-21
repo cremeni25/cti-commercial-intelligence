@@ -116,6 +116,9 @@ def _prioridade_pedido(pedido: dict[str, Any]) -> tuple[int, str]:
 
 def _valor_item(item: dict[str, Any]) -> float:
     quantidade = _numero(item.get("quantidade"))
+    preco_negociado = item.get("preco_negociado_unitario")
+    if preco_negociado not in (None, ""):
+        return round(quantidade * _numero(preco_negociado), 2)
     preco = _numero(item.get("preco_unitario"))
     desconto = _numero(item.get("desconto_percentual"))
     return round(quantidade * preco * (1 - desconto / 100), 2)

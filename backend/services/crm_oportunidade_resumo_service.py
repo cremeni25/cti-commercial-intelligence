@@ -12,6 +12,9 @@ def _agora() -> str:
 
 def valor_item(item: dict[str, Any]) -> float:
     quantidade = float(item.get("quantidade") or 0)
+    preco_negociado = item.get("preco_negociado_unitario")
+    if preco_negociado is not None:
+        return round(quantidade * float(preco_negociado), 2)
     preco = float(item.get("preco_unitario") or item.get("preco_tabela") or 0)
     desconto = float(item.get("desconto_percentual") or 0)
     return round(quantidade * preco * (1 - desconto / 100), 2)
@@ -20,7 +23,7 @@ def valor_item(item: dict[str, Any]) -> float:
 def sincronizar_resumo_oportunidade(oportunidade_id: str) -> dict[str, Any]:
     itens = (
         supabase.table("cti_oportunidade_itens")
-        .select("nome_comercial,equipamento,quantidade,preco_unitario,preco_tabela,desconto_percentual,status,ordem,created_at")
+        .select("nome_comercial,equipamento,quantidade,preco_unitario,preco_tabela,preco_negociado_unitario,desconto_percentual,status,ordem,created_at")
         .eq("oportunidade_id", oportunidade_id)
         .order("ordem")
         .order("created_at")
