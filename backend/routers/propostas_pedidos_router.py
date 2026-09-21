@@ -23,6 +23,7 @@ class ItemOportunidadeCreate(BaseModel):
     configuracao: str | None = None
     quantidade: int = Field(default=1, gt=0)
     preco_unitario: float = Field(default=0, ge=0)
+    preco_negociado_unitario: float | None = Field(default=None, ge=0)
     desconto_percentual: float = Field(default=0, ge=0, le=100)
     condicao_pagamento: str | None = None
     prazo_entrega: str | None = None
@@ -42,6 +43,7 @@ class ItemOportunidadeUpdate(BaseModel):
     configuracao: str | None = None
     quantidade: int | None = Field(default=None, gt=0)
     preco_unitario: float | None = Field(default=None, ge=0)
+    preco_negociado_unitario: float | None = Field(default=None, ge=0)
     desconto_percentual: float | None = Field(default=None, ge=0, le=100)
     condicao_pagamento: str | None = None
     prazo_entrega: str | None = None
@@ -112,6 +114,9 @@ def _numero_pedido() -> str:
 
 def _valor_item(item: dict[str, Any]) -> float:
     quantidade = float(item.get("quantidade") or 0)
+    preco_negociado = item.get("preco_negociado_unitario")
+    if preco_negociado is not None:
+        return round(quantidade * float(preco_negociado), 2)
     preco = float(item.get("preco_unitario") or 0)
     desconto = float(item.get("desconto_percentual") or 0)
     return round(quantidade * preco * (1 - desconto / 100), 2)
@@ -120,7 +125,7 @@ def _valor_item(item: dict[str, Any]) -> float:
 def _sincronizar_valor_oportunidade(oportunidade_id: str) -> float:
     itens = (
         supabase.table("cti_oportunidade_itens")
-        .select("quantidade,preco_unitario,desconto_percentual,status")
+        .select("quantidade,preco_unitario,preco_negociado_unitario,desconto_percentual,status")
         .eq("oportunidade_id", oportunidade_id)
         .execute()
         .data
@@ -217,7 +222,7 @@ def criar_item(oportunidade_id: str, dados: ItemOportunidadeCreate):
 def atualizar_item(item_id: str, dados: ItemOportunidadeUpdate):
     item = _primeiro("cti_oportunidade_itens", item_id, "Item da oportunidade não encontrado")
     if str(item.get("status") or "") in STATUS_ITEM_FINAL:
-        campos_comerciais = {"linha_produto", "equipamento", "configuracao", "quantidade", "preco_unitario", "desconto_percentual"}
+        campos_comerciais = {"linha_produto", "equipamento", "configuracao", "quantidade", "preco_unitario", "preco_negociado_unitario", "desconto_percentual"}
         if campos_comerciais.intersection(dados.model_fields_set):
             raise HTTPException(status_code=409, detail="Item aceito ou convertido não pode ter configuração ou valor alterados.")
     payload = dados.model_dump(exclude_none=True)
