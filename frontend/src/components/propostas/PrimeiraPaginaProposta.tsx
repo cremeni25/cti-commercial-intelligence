@@ -29,6 +29,8 @@ type Resposta = {
   modalidade_comercial?: "VENDA_DIRETA" | "VENDA_INDIRETA"
   campos: Campos
   valores_negociados?: { quantidade?: number; preco_unitario?: number | string; desconto_percentual?: number | string; valor_proposta?: number | string }
+  campos_pendentes?: string[]
+  pronto_para_emitir?: boolean
 }
 
 const camposVazios: Campos = { voltagem:null, tipo_equipamento:null, impostos:"04% ICMS/PIS/COFINS", acessorios:null, condicao_pagamento:null, possui_entrada:null, valor_entrada:null, local_entrega:null, autorizada_nome_endereco:null, frete:null, prazo_entrega:null, validade:null, lynx_meses:null }
@@ -52,6 +54,13 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
   }
 
   useEffect(() => { void carregar().catch((falha) => setErro(falha instanceof Error ? falha.message : "Falha ao carregar os campos.")) }, [propostaId])
+  useEffect(() => {
+    function focarCampos() {
+      document.getElementById("dados-complementares-proposta")?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+    window.addEventListener("cti-foco-dados-documentais", focarCampos)
+    return () => window.removeEventListener("cti-foco-dados-documentais", focarCampos)
+  }, [])
 
   async function abrirRevisao() {
     if (!window.confirm("O documento já emitido continuará preservado. Deseja abrir uma nova revisão documental para corrigir os campos?")) return
@@ -72,7 +81,10 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
       const resposta = await fetch(`/api/crm-proxy/crm-documentos/propostas/${encodeURIComponent(propostaId)}/primeira-pagina`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(campos) })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível salvar os dados complementares."))
-      setMensagem("Dados complementares salvos. A proposta e o pedido usarão este mesmo conteúdo.")
+      const pendentes = Array.isArray(payload.campos_pendentes) ? payload.campos_pendentes : []
+      setMensagem(pendentes.length
+        ? `Dados salvos. Ainda falta preencher: ${pendentes.join(", ")}.`
+        : "Dados complementares salvos. Documento pronto para emissão.")
       await carregar()
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao salvar os campos.") }
     finally { setSalvando(false) }
@@ -81,32 +93,37 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
   if (!dados && !erro) return <div className="rounded-2xl border border-[#16325c] bg-[#07162b] p-4 text-sm text-slate-400">Carregando dados complementares da proposta...</div>
 
   const vendaIndireta = dados?.modalidade_comercial === "VENDA_INDIRETA"
-  return <section className={`rounded-3xl border border-[#16325c] bg-[#07162b] ${compacto ? "p-4" : "p-6"}`}>
+  const pendentes = dados?.campos_pendentes || []
+  const falta = (rotulo: string) => pendentes.includes(rotulo)
+  const classeCampo = (rotulo?: string) => rotulo && falta(rotulo) ? "entrada entrada-pendente" : "entrada"
+  return <section id="dados-complementares-proposta" className={`scroll-mt-4 rounded-3xl border border-[#16325c] bg-[#07162b] ${compacto ? "p-4" : "p-6"}`}>
     <div><p className="text-xs uppercase tracking-[0.2em] text-cyan-400">Documento oficial Carrier</p><h2 className="mt-1 text-lg font-bold">Dados complementares da proposta</h2>{dados && <p className="mt-1 text-sm text-slate-400">{dados.equipamento} • revisão R{dados.revisao_documental || 1} • {vendaIndireta ? "venda indireta / acompanhamento pós-venda" : "mesmo conteúdo documental para proposta e pedido"}</p>}</div>
     {erro && <div className="mt-4 rounded-xl border border-red-900 bg-red-950/30 p-3 text-sm text-red-200">{erro}</div>}
     {mensagem && <div className="mt-4 rounded-xl border border-emerald-900 bg-emerald-950/30 p-3 text-sm text-emerald-200">{mensagem}</div>}
+    {dados?.editavel && pendentes.length>0 && <div className="mt-4 rounded-xl border border-amber-700 bg-amber-950/25 p-4 text-sm text-amber-100"><strong>Antes de emitir, complete {pendentes.length === 1 ? "este campo obrigatório" : "estes campos obrigatórios"}:</strong><p className="mt-1">{pendentes.join(" · ")}</p></div>}
+    {dados?.editavel && dados.pronto_para_emitir && <div className="mt-4 rounded-xl border border-emerald-800 bg-emerald-950/20 p-3 text-sm text-emerald-200"><strong>Documento pronto para emissão.</strong> Os campos obrigatórios estão completos.</div>}
     {dados?.valores_negociados && <div className="mt-4 grid gap-2 rounded-2xl border border-[#16325c] bg-[#020817] p-4 text-sm sm:grid-cols-4"><Resumo label="Quantidade" valor={String(dados.valores_negociados.quantidade ?? 1)}/><Resumo label="Valor unitário" valor={moeda(dados.valores_negociados.preco_unitario)}/><Resumo label="Desconto" valor={vendaIndireta ? "Não aplicável" : `${Number(dados.valores_negociados.desconto_percentual || 0).toLocaleString("pt-BR")}%`}/><Resumo label="Valor proposta" valor={moeda(dados.valores_negociados.valor_proposta)}/></div>}
     {dados && <div className="mt-5 space-y-6">
       <div><h3 className="mb-3 font-semibold text-cyan-200">Tabela técnica e complementos</h3><div className="grid gap-4 sm:grid-cols-2">
-        <Campo label="Voltagem"><input disabled={!dados.editavel} value={campos.voltagem ?? ""} onChange={(e) => setCampos({ ...campos, voltagem: e.target.value || null })} className="entrada" placeholder="Ex.: 12V / 24V" /></Campo>
-        <Campo label="Tipo de equipamento / configuração"><input disabled={!dados.editavel} value={campos.tipo_equipamento ?? ""} onChange={(e) => setCampos({ ...campos, tipo_equipamento: e.target.value || null })} className="entrada" placeholder="Ex.: Acoplado e elétrico" /></Campo>
-        <Campo label="Impostos inclusos"><input disabled={!dados.editavel} value={campos.impostos ?? ""} onChange={(e) => setCampos({ ...campos, impostos: e.target.value || null })} className="entrada" /></Campo>
+        <Campo label="Voltagem"><input disabled={!dados.editavel} value={campos.voltagem ?? ""} onChange={(e) => setCampos({ ...campos, voltagem: e.target.value || null })} className={classeCampo("voltagem")} placeholder="Ex.: 12V / 24V" /></Campo>
+        <Campo label="Tipo de equipamento / configuração"><input disabled={!dados.editavel} value={campos.tipo_equipamento ?? ""} onChange={(e) => setCampos({ ...campos, tipo_equipamento: e.target.value || null })} className={classeCampo("tipo/configuração do equipamento")} placeholder="Ex.: Acoplado e elétrico" /></Campo>
+        <Campo label="Impostos inclusos"><input disabled={!dados.editavel} value={campos.impostos ?? ""} onChange={(e) => setCampos({ ...campos, impostos: e.target.value || null })} className={classeCampo("impostos")} /></Campo>
         <Campo label="Acessórios / Itens Complementares"><textarea disabled={!dados.editavel} rows={3} value={campos.acessorios ?? ""} onChange={(e) => setCampos({ ...campos, acessorios: e.target.value || null })} className="entrada" /></Campo>
       </div></div>
       <div><h3 className="mb-3 font-semibold text-cyan-200">Condições de pagamento, entrega e validade</h3><div className="grid gap-4 sm:grid-cols-2">
-        <Campo label="Condições de pagamentos"><textarea disabled={!dados.editavel} rows={2} value={campos.condicao_pagamento ?? ""} onChange={(e) => setCampos({ ...campos, condicao_pagamento: e.target.value || null })} className="entrada" placeholder="Ex.: 30/60/90 dias" /></Campo>
-        <Campo label="Possui entrada?"><select disabled={!dados.editavel} value={campos.possui_entrada === null ? "" : campos.possui_entrada ? "SIM" : "NAO"} onChange={(e) => setCampos({ ...campos, possui_entrada: e.target.value === "" ? null : e.target.value === "SIM", valor_entrada: e.target.value === "NAO" ? 0 : campos.valor_entrada })} className="entrada"><option value="">Selecione</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></Campo>
-        <Campo label="Valor da entrada"><input disabled={!dados.editavel || campos.possui_entrada === false} type="number" min="0" step="0.01" value={campos.valor_entrada ?? ""} onChange={(e) => setCampos({ ...campos, valor_entrada: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" placeholder="0,00" /></Campo>
-        <Campo label="Entrega"><select disabled={!dados.editavel} value={campos.local_entrega ?? ""} onChange={(e) => setCampos({ ...campos, local_entrega: e.target.value || null })} className="entrada"><option value="">Selecione</option><option value="AUTORIZADA CARRIER">Autorizada Carrier</option><option value="ENDEREÇO CLIENTE">Endereço do cliente</option></select></Campo>
+        <Campo label="Condições de pagamentos"><textarea disabled={!dados.editavel} rows={2} value={campos.condicao_pagamento ?? ""} onChange={(e) => setCampos({ ...campos, condicao_pagamento: e.target.value || null })} className={classeCampo("condição de pagamento")} placeholder="Ex.: 30/60/90 dias" /></Campo>
+        <Campo label="Possui entrada?"><select disabled={!dados.editavel} value={campos.possui_entrada === null ? "" : campos.possui_entrada ? "SIM" : "NAO"} onChange={(e) => setCampos({ ...campos, possui_entrada: e.target.value === "" ? null : e.target.value === "SIM", valor_entrada: e.target.value === "NAO" ? 0 : campos.valor_entrada })} className={classeCampo("definição de entrada")}><option value="">Selecione</option><option value="SIM">Sim</option><option value="NAO">Não</option></select></Campo>
+        <Campo label="Valor da entrada"><input disabled={!dados.editavel || campos.possui_entrada === false} type="number" min="0" step="0.01" value={campos.valor_entrada ?? ""} onChange={(e) => setCampos({ ...campos, valor_entrada: e.target.value === "" ? null : Number(e.target.value) })} className={classeCampo("valor da entrada")} placeholder="0,00" /></Campo>
+        <Campo label="Entrega"><select disabled={!dados.editavel} value={campos.local_entrega ?? ""} onChange={(e) => setCampos({ ...campos, local_entrega: e.target.value || null })} className={classeCampo("local de entrega")}><option value="">Selecione</option><option value="AUTORIZADA CARRIER">Autorizada Carrier</option><option value="ENDEREÇO CLIENTE">Endereço do cliente</option></select></Campo>
         <Campo label="Nome e endereço da Autorizada"><textarea disabled={!dados.editavel} rows={3} value={campos.autorizada_nome_endereco ?? ""} onChange={(e) => setCampos({ ...campos, autorizada_nome_endereco: e.target.value || null })} className="entrada" /></Campo>
-        <Campo label="Frete"><select disabled={!dados.editavel} value={campos.frete ?? ""} onChange={(e) => setCampos({ ...campos, frete: e.target.value || null })} className="entrada"><option value="">Selecione</option><option value="CIF">CIF</option><option value="FOB">FOB</option></select></Campo>
-        <Campo label="Prazo de entrega"><input disabled={!dados.editavel} value={campos.prazo_entrega ?? ""} onChange={(e) => setCampos({ ...campos, prazo_entrega: e.target.value || null })} className="entrada" placeholder="Ex.: 30 dias" /></Campo>
+        <Campo label="Frete"><select disabled={!dados.editavel} value={campos.frete ?? ""} onChange={(e) => setCampos({ ...campos, frete: e.target.value || null })} className={classeCampo("frete")}><option value="">Selecione</option><option value="CIF">CIF</option><option value="FOB">FOB</option></select></Campo>
+        <Campo label="Prazo de entrega"><input disabled={!dados.editavel} value={campos.prazo_entrega ?? ""} onChange={(e) => setCampos({ ...campos, prazo_entrega: e.target.value || null })} className={classeCampo("prazo de entrega")} placeholder="Ex.: 30 dias" /></Campo>
         <Campo label="Validade da proposta"><input disabled={!dados.editavel} type="date" value={(campos.validade ?? "").slice(0, 10)} onChange={(e) => setCampos({ ...campos, validade: e.target.value || null })} className="entrada" /></Campo>
         <Campo label="Período Lynx Fleet (meses)"><input disabled={!dados.editavel} type="number" min="0" step="1" value={campos.lynx_meses ?? ""} onChange={(e) => setCampos({ ...campos, lynx_meses: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" /></Campo>
       </div></div>
     </div>}
     {dados?.editavel ? <button disabled={salvando} onClick={() => void salvar()} className="mt-5 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-50">{salvando ? "Salvando..." : "Salvar dados complementares"}</button> : <div className="mt-5 rounded-xl border border-amber-800 bg-amber-950/20 p-4"><p className="text-sm text-amber-200">O documento atual é imutável e permanece preservado no histórico.</p>{dados?.pode_abrir_revisao && <button disabled={revisando} onClick={() => void abrirRevisao()} className="mt-3 w-full rounded-xl border border-amber-600 px-4 py-3 font-semibold text-amber-100 disabled:opacity-50">{revisando ? "Abrindo revisão..." : "Abrir revisão corretiva"}</button>}</div>}
-    <style jsx>{`.entrada{width:100%;border:1px solid #24466f;border-radius:12px;background:#020817;padding:12px;color:white}.entrada:disabled{opacity:.6}`}</style>
+    <style jsx>{`.entrada{width:100%;border:1px solid #24466f;border-radius:12px;background:#020817;padding:12px;color:white}.entrada:disabled{opacity:.6}.entrada-pendente{border-color:#d97706;box-shadow:0 0 0 1px rgba(217,119,6,.35)}`}</style>
   </section>
 }
 

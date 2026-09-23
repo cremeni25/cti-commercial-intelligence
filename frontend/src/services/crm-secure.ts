@@ -31,9 +31,9 @@ function erroTransitorio(error: unknown) {
   return error instanceof DOMException && error.name === "AbortError"
 }
 
-async function fetchComRetry(url: string, init: RequestInit, tentativas = 4) {
+async function fetchComRetry(url: string, init: RequestInit, tentativas = 4, timeoutMs?: number) {
   const metodo = String(init.method || "GET").toUpperCase()
-  const limite = metodo === "GET" ? TEMPO_LIMITE_GET_MS : TEMPO_LIMITE_ESCRITA_MS
+  const limite = timeoutMs ?? (metodo === "GET" ? TEMPO_LIMITE_GET_MS : TEMPO_LIMITE_ESCRITA_MS)
   let ultimoErro: unknown = null
 
   for (let tentativa = 0; tentativa < tentativas; tentativa += 1) {
@@ -70,9 +70,18 @@ export async function buscarNucleoComercialSeguro<T = unknown[]>(): Promise<T> {
   return payload as T
 }
 
-export async function fetchCrmSeguroProxy(path: string, init: RequestInit = {}) {
+export async function fetchCrmSeguroProxy(
+  path: string,
+  init: RequestInit = {},
+  options: { timeoutMs?: number; tentativas?: number } = {},
+) {
   const token = await obterTokenCTI()
   const headers = new Headers(init.headers)
   headers.set("Authorization", `Bearer ${token}`)
-  return fetchComRetry(`/api/crm-proxy/${path.replace(/^\/+/, "")}`, { ...init, headers })
+  return fetchComRetry(
+    `/api/crm-proxy/${path.replace(/^\/+/, "")}`,
+    { ...init, headers },
+    options.tentativas ?? 4,
+    options.timeoutMs,
+  )
 }
