@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping
 
 from services.legacy_doc_normalization_service import LegacyDocNormalizationError, normalize_legacy_doc_to_docx
+from services.docx_pdf_conversion_service import DocxPdfConversionError, source_document_page_count
 from services.official_proposal_document import render_official_docx, verify_media_preserved
 from services.proposal_document_payload import build_proposal_document_payload
 from services.proposal_template_catalog import template_for_equipment
@@ -57,8 +58,8 @@ def build_preview_official_proposal(
         raise ProposalDocumentRepositoryError("SHA-256 do arquivo mestre diverge do registro técnico.")
 
     source = source_original
-    expected_pages = 4
     source_name = str(model.get("arquivo_template_nome_original") or Path(source_path).name)
+    expected_pages = 0
     if source_name.lower().endswith(".doc") and not source_name.lower().endswith(".docx"):
         try:
             normalized = normalize_legacy_doc_to_docx(source_original, source_name)
@@ -67,6 +68,11 @@ def build_preview_official_proposal(
         source = normalized.content
         if normalized.source_pages:
             expected_pages = normalized.source_pages
+    else:
+        try:
+            expected_pages = source_document_page_count(source_original, source_name)
+        except DocxPdfConversionError as exc:
+            raise ProposalDocumentRepositoryError(f"Falha ao validar a paginação do modelo DOCX: {exc}") from exc
 
     payload = build_proposal_document_payload(
         proposal=dict(proposta),
