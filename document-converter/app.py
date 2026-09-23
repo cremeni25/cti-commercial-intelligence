@@ -204,6 +204,20 @@ async def normalize_docx(
     )
 
 
+@app.post("/page-count")
+async def page_count(
+    file: UploadFile = File(...),
+    x_cti_converter_key: str | None = Header(default=None),
+) -> dict[str, int]:
+    _authorize(x_cti_converter_key)
+    filename = Path(file.filename or "documento.docx").name
+    if not filename.lower().endswith((".docx", ".doc")):
+        raise HTTPException(status_code=422, detail="Formato de documento não suportado.")
+    content = await file.read()
+    pdf = _run_libreoffice(content, filename, target="pdf:writer_pdf_Export")
+    return {"pages": _pdf_pages(pdf)}
+
+
 @app.post("/convert")
 async def convert(
     file: UploadFile = File(...),

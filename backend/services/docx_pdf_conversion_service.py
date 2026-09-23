@@ -32,6 +32,55 @@ def _converter_config() -> tuple[str, str]:
     return url, key
 
 
+_SOURCE_PAGE_CACHE: dict[str, int] = {}
+
+
+def source_document_page_count(docx: bytes, filename: str) -> int:
+    if not docx:
+        raise DocxPdfConversionError("Documento mestre vazio.")
+    digest = hashlib.sha256(docx).hexdigest()
+    cached = _SOURCE_PAGE_CACHE.get(digest)
+    if cached:
+        return cached
+
+    url, key = _converter_config()
+    safe_filename = Path(filename or "modelo.docx").name
+    try:
+        response = requests.post(
+            f"{url}/page-count",
+            files={
+                "file": (
+                    safe_filename,
+                    docx,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            },
+            headers={"X-CTI-Converter-Key": key},
+            timeout=210,
+        )
+    except requests.RequestException as exc:
+        raise DocxPdfConversionError(f"Serviço documental indisponível ao validar o mestre: {exc}") from exc
+
+    if response.status_code != 200:
+        try:
+            detail = response.json().get("detail")
+        except Exception:
+            detail = response.text
+        raise DocxPdfConversionError(
+            f"Não foi possível determinar a paginação do mestre ({response.status_code}): {str(detail or 'sem detalhe')[:800]}"
+        )
+
+    try:
+        pages = int(response.json().get("pages") or 0)
+    except Exception as exc:
+        raise DocxPdfConversionError("O conversor não retornou uma paginação válida para o mestre.") from exc
+    if pages <= 0:
+        raise DocxPdfConversionError("O documento mestre não possui paginação válida.")
+
+    _SOURCE_PAGE_CACHE[digest] = pages
+    return pages
+
+
 def convert_docx_to_pdf(docx: bytes, filename: str, *, expected_pages: int = 4) -> ConvertedPdf:
     if not docx:
         raise DocxPdfConversionError("Documento DOCX vazio.")
