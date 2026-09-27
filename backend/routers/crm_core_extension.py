@@ -324,8 +324,9 @@ def nucleo_comercial():
         )
         cliente = cliente_por_id.get(str(cliente_id or ""), {})
         cliente_nome = _nome_cliente(cliente, oportunidade, proposta_vigente, item_vigente, pedido_vigente)
+        data_inclusao = _data_iso(oportunidade.get("created_at"))
         data_prevista = _data_iso(oportunidade.get("data_fechamento_prevista"))
-        competencia = (data_prevista or _data_iso(oportunidade.get("created_at")) or "")[:7]
+        competencia = (data_prevista or data_inclusao or "")[:7]
         titulo = _titulo_comercial(oportunidade, cliente_nome, item_vigente, proposta_vigente)
 
         resultado.append({
@@ -334,6 +335,11 @@ def nucleo_comercial():
             "cliente_id": cliente_id,
             "cliente_nome": cliente_nome,
             "responsavel_id": oportunidade.get("responsavel_id"),
+            "created_at": oportunidade.get("created_at"),
+            "updated_at": oportunidade.get("updated_at"),
+            "data_inclusao": data_inclusao,
+            "linha_equipamento": (item_vigente or {}).get("linha_produto"),
+            "equipamento": (item_vigente or {}).get("equipamento"),
             "etapa": etapa,
             "status_oportunidade": oportunidade.get("status"),
             "probabilidade": probabilidade,
