@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import CicloComercial from "@/components/crm/CicloComercial"
 import OportunidadeItensComerciais from "@/components/crm/OportunidadeItensComerciais"
+import EncerramentoNegociacao from "@/components/crm/EncerramentoNegociacao"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
@@ -64,7 +65,7 @@ export default function OportunidadeCrmAppPage() {
   return <main className="min-h-screen bg-[#020817] px-4 pb-28 pt-5 text-white sm:px-6">
     <div className="mx-auto w-full max-w-4xl space-y-4">
       <header className="rounded-3xl border border-[#16325c] bg-[#07162b] p-5">
-        <Link href="/crm-app/oportunidades" className="text-sm font-semibold text-cyan-300">← Voltar aos negócios</Link>
+        <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/crm-app/oportunidades" className="text-sm font-semibold text-cyan-300">← Voltar aos negócios</Link><Link href="/crm-app/historico" className="text-sm font-semibold text-amber-200">Histórico de encerrados</Link></div>
         <p className="mt-4 text-xs font-bold uppercase tracking-[.18em] text-cyan-400">CTI CRM · negócio</p>
         <h1 className="mt-2 text-2xl font-bold">{texto(registro?.titulo) || "Oportunidade comercial"}</h1>
         <p className="mt-1 text-slate-400">{clienteNome}</p>
@@ -75,6 +76,7 @@ export default function OportunidadeCrmAppPage() {
 
       {registro && <>
         <CicloComercial registro={registro} propostas={propostas.length} pedidos={pedidos.length} vendas={vendas.length} />
+        <EncerramentoNegociacao oportunidadeId={id} status={texto(registro.status||registro.status_oportunidade)} motivoAtual={texto(registro.motivo_encerramento)} historicoHref="/crm-app/historico" />
 
         <section className="grid grid-cols-2 gap-3">
           <Kpi titulo="Valor" valor={moeda(registro.valor || registro.valor_estimado)} />
