@@ -11,11 +11,44 @@ const BACKEND_CTI = (process.env.CTI_BACKEND_URL || process.env.NEXT_PUBLIC_API_
 const STATUS_TRANSITORIOS = new Set([500, 502, 503, 504])
 const ATRASOS_RETRY_LEITURA_MS = [0, 500, 1500, 3000, 5000, 8000]
 const ROTAS_ESCRITA_IDEMPOTENTES = new Set(["crm-seguro/clientes"])
+const STATUS_ENCERRAMENTO_COMERCIAL = new Set([
+  "GANHO",
+  "PERDIDO",
+  "CANCELADO",
+  "CANCELADA",
+  "FATURADO",
+  "ENCERRADO",
+  "ENCERRADA",
+  "CONCLUIDO",
+  "CONCLUÍDO",
+])
 
 type Registro = Record<string, unknown>
 
 function texto(valor: unknown): string {
   return String(valor ?? "").trim()
+}
+
+function statusNormalizado(valor: unknown) {
+  return texto(valor).toUpperCase().replaceAll(" ", "_")
+}
+
+function nucleoOperacional(payload: unknown) {
+  const filtrar = (linhas: Registro[]) => linhas.filter((item) => {
+    const statusOportunidade = statusNormalizado(item.status_oportunidade || item.status)
+    return !STATUS_ENCERRAMENTO_COMERCIAL.has(statusOportunidade)
+  })
+
+  if (Array.isArray(payload)) return filtrar(payload as Registro[])
+  if (payload && typeof payload === "object") {
+    const objeto = payload as Registro
+    for (const chave of ["oportunidades", "dados", "itens", "resultado"]) {
+      if (Array.isArray(objeto[chave])) {
+        return { ...objeto, [chave]: filtrar(objeto[chave] as Registro[]) }
+      }
+    }
+  }
+  return payload
 }
 
 function aguardar(ms: number) {
@@ -175,7 +208,22 @@ async function encaminhar(
       })
     }
 
-    return new NextResponse(await resposta.text(), {
+    const textoResposta = await resposta.text()
+    if (
+      resposta.ok &&
+      request.method === "GET" &&
+      caminho === "crm/nucleo-comercial" &&
+      !request.nextUrl.searchParams.has("incluir_encerradas")
+    ) {
+      try {
+        const payload = JSON.parse(textoResposta) as unknown
+        return NextResponse.json(nucleoOperacional(payload), { status: resposta.status })
+      } catch {
+        // Se o backend não devolver JSON válido, preserva o retorno original para diagnóstico.
+      }
+    }
+
+    return new NextResponse(textoResposta, {
       status: resposta.status,
       headers: headersResposta,
     })
