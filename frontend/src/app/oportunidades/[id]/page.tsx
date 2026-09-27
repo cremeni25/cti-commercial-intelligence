@@ -8,13 +8,14 @@ import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import OportunidadeItensComerciais from "@/components/crm/OportunidadeItensComerciais"
 import CicloComercial from "@/components/crm/CicloComercial"
+import EncerramentoNegociacao from "@/components/crm/EncerramentoNegociacao"
 import { API_URL } from "@/lib/api"
 import { lerContextoOportunidade } from "@/lib/crm-opportunity"
 
 type Registro = Record<string, unknown>
 type Evento = { tipo: string; data_hora?: string; titulo?: string; status?: string; responsavel_id?: string; registro: Registro }
 type Detalhes = {
-  oportunidade: Registro & { id: string; cliente_nome?: string; titulo?: string; descricao?: string; status?: string; valor_estimado?: number; probabilidade?: number; data_fechamento_prevista?: string }
+  oportunidade: Registro & { id: string; cliente_nome?: string; titulo?: string; descricao?: string; status?: string; valor_estimado?: number; probabilidade?: number; data_fechamento_prevista?: string; motivo_encerramento?: string }
   resumo: { atividades: number; movimentacoes_pipeline: number; propostas: number; pedidos: number }
   eventos: Evento[]
 }
@@ -50,7 +51,7 @@ export default function OportunidadeDetalhesPage() {
       <Topbar />
       <div className="space-y-6 p-4 sm:p-6 lg:p-8">
         <header className="rounded-3xl border border-[#13203f] bg-[#091a33] p-6">
-          <Link href="/oportunidades" className="text-sm font-semibold text-cyan-300">← Voltar para oportunidades</Link>
+          <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/oportunidades" className="text-sm font-semibold text-cyan-300">← Voltar para oportunidades</Link><Link href="/oportunidades/encerradas" className="text-sm font-semibold text-amber-200">Histórico de encerrados</Link></div>
           <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div><p className="text-xs font-semibold uppercase tracking-[0.24em] text-cyan-400">Detalhes da oportunidade</p><h1 className="mt-2 text-3xl font-bold">{dados?.oportunidade.titulo || "Oportunidade comercial"}</h1><p className="mt-2 text-slate-400">{dados?.oportunidade.cliente_nome || "Cliente não identificado"}</p></div>
             {dados && <span className="w-fit rounded-full border border-cyan-800 bg-cyan-950/30 px-4 py-2 text-sm text-cyan-200">{String(dados.oportunidade.status || "OPORTUNIDADE")}</span>}
@@ -62,6 +63,7 @@ export default function OportunidadeDetalhesPage() {
 
         {dados && <>
           <CicloComercial registro={dados.oportunidade} propostas={dados.resumo.propostas} pedidos={dados.resumo.pedidos} />
+          <EncerramentoNegociacao oportunidadeId={id} status={String(dados.oportunidade.status||"")} motivoAtual={String(dados.oportunidade.motivo_encerramento||"")} historicoHref="/oportunidades/encerradas" />
 
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Kpi titulo="Valor estimado" valor={moeda(dados.oportunidade.valor_estimado)} />
