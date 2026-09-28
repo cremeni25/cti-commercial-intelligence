@@ -61,6 +61,52 @@ def test_nucleo_comercial_ignora_item_arquivado_no_total(monkeypatch):
     assert resultado[0]["valor"] == 100000.00
 
 
+def test_nucleo_encerrado_ganho_prevalece_sobre_dossie(monkeypatch):
+    oportunidade_id = "opp-magario"
+    tabelas = {
+        "cti_oportunidades": [{
+            "id": oportunidade_id,
+            "cliente_id": "cli-magario",
+            "titulo": "Proposta",
+            "status": "GANHO",
+            "probabilidade": 100,
+            "valor_estimado": 145000,
+            "created_at": "2026-08-30T12:00:00+00:00",
+            "data_fechamento_real": "2026-09-27T12:00:00+00:00",
+        }],
+        "cti_oportunidade_itens": [{"id": "i-magario", "oportunidade_id": oportunidade_id, "equipamento": "X4 7500", "quantidade": 1, "preco_negociado_unitario": 145000, "status": "PEDIDO", "arquivado_em": None}],
+        "cti_atividades": [],
+        "cti_propostas": [],
+        "cti_pedidos": [{"id": "ped-magario", "oportunidade_id": oportunidade_id, "status": "DOSSIÊ", "valor": 145000, "dossie_documentos": {"pedido": True}}],
+        "cti_clientes": [],
+        "clientes": [{"id": "cli-magario", "nome": "MAGARIO FRUTAS DO BRASIL COMERCIAL, EXPORTACAO LTDA"}],
+    }
+    monkeypatch.setattr(core, "_ler_tabela", lambda nome, obrigatoria=False: tabelas.get(nome, []))
+
+    resultado = core.nucleo_comercial()
+
+    assert resultado[0]["etapa"] == "GANHO"
+    assert resultado[0]["status_oportunidade"] == "GANHO"
+    assert resultado[0]["data_fechamento_real"] == "2026-09-27"
+    assert resultado[0]["encerrada"] is True
+
+
+def test_data_fechamento_real_fecha_operacional_mesmo_com_status_legado(monkeypatch):
+    oportunidade_id = "opp-fechada-legado"
+    tabelas = {
+        "cti_oportunidades": [{"id": oportunidade_id, "cliente_id": "cli-1", "titulo": "Legado", "status": "PROPOSTA", "probabilidade": 50, "created_at": "2026-08-26T17:18:25+00:00", "data_fechamento_real": "2026-09-27T12:00:00+00:00"}],
+        "cti_oportunidade_itens": [], "cti_atividades": [], "cti_propostas": [], "cti_pedidos": [], "cti_clientes": [],
+        "clientes": [{"id": "cli-1", "nome": "CLIENTE TESTE"}],
+    }
+    monkeypatch.setattr(core, "_ler_tabela", lambda nome, obrigatoria=False: tabelas.get(nome, []))
+
+    resultado = core.nucleo_comercial()
+
+    assert resultado[0]["etapa"] == "ENCERRADO"
+    assert resultado[0]["status_oportunidade"] == "ENCERRADO"
+    assert resultado[0]["encerrada"] is True
+
+
 def test_titulo_generico_usa_tipo_comercial_da_descricao_sem_cliente_ou_equipamento():
     oportunidade = {
         "titulo": "Proposta Comercial",
