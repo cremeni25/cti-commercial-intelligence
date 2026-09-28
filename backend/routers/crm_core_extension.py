@@ -149,10 +149,11 @@ def _etapa_comercial(
     pedidos: list[dict[str, Any]],
 ) -> str:
     status_oportunidade = _status(oportunidade.get("status")) or "OPORTUNIDADE"
-    if status_oportunidade in ETAPAS_PROBABILIDADE_ZERO:
-        return status_oportunidade
-    if status_oportunidade in {"FATURADO", "ENCERRADO", "CONCLUIDO"}:
-        return "ENCERRADO" if status_oportunidade == "CONCLUIDO" else status_oportunidade
+    encerrada_por_data = bool(_texto(oportunidade.get("data_fechamento_real")))
+    if encerrada_por_data or status_oportunidade in STATUS_OPORTUNIDADE_ENCERRADA or status_oportunidade == "FATURADO":
+        if status_oportunidade in {"GANHO", "PERDIDO", "CANCELADO", "FATURADO"}:
+            return status_oportunidade
+        return "ENCERRADO"
     if pedidos:
         status_pedidos = {_status(item.get("status")) for item in pedidos}
         if "FATURADO" in status_pedidos:
@@ -326,8 +327,10 @@ def nucleo_comercial():
         cliente_nome = _nome_cliente(cliente, oportunidade, proposta_vigente, item_vigente, pedido_vigente)
         data_inclusao = _data_iso(oportunidade.get("created_at"))
         data_prevista = _data_iso(oportunidade.get("data_fechamento_prevista"))
+        data_fechamento_real = _data_iso(oportunidade.get("data_fechamento_real"))
         competencia = (data_prevista or data_inclusao or "")[:7]
         titulo = _titulo_comercial(oportunidade, cliente_nome, item_vigente, proposta_vigente)
+        status_canonico = etapa if data_fechamento_real else oportunidade.get("status")
 
         resultado.append({
             "oportunidade_id": oportunidade_id,
@@ -341,12 +344,13 @@ def nucleo_comercial():
             "linha_equipamento": (item_vigente or {}).get("linha_produto"),
             "equipamento": (item_vigente or {}).get("equipamento"),
             "etapa": etapa,
-            "status_oportunidade": oportunidade.get("status"),
+            "status_oportunidade": status_canonico,
             "probabilidade": probabilidade,
             "valor": round(valor, 2),
             "valor_ponderado": round(valor * probabilidade, 2),
             "competencia": competencia,
             "data_fechamento_prevista": data_prevista,
+            "data_fechamento_real": data_fechamento_real,
             "proposta_id": proposta_vigente.get("id") if proposta_vigente else None,
             "proposta_numero": proposta_vigente.get("numero") if proposta_vigente else None,
             "status_proposta": (
@@ -359,7 +363,7 @@ def nucleo_comercial():
             "quantidade_itens": len([item for item in itens_oportunidade if not item.get("arquivado_em")]),
             "quantidade_atividades": len(atividades_oportunidade),
             "quantidade_propostas_ativas": len(propostas_ativas),
-            "encerrada": etapa in STATUS_OPORTUNIDADE_ENCERRADA or etapa in {"FATURADO", "ENCERRADO"},
+            "encerrada": bool(data_fechamento_real) or etapa in STATUS_OPORTUNIDADE_ENCERRADA or etapa in {"FATURADO", "ENCERRADO"},
         })
 
     return sorted(
