@@ -7,68 +7,12 @@ import { getSupabaseClient } from "@/core/database/supabase"
 import { useI18n } from "@/core/i18n"
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 
-export default function CrmLoginPage() {
-  return (
-    <Suspense fallback={<CrmLoginFallback />}>
-      <CrmLoginContent />
-    </Suspense>
-  )
+function EyeIcon({open}:{open:boolean}){return open?<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true"><path d="M3 3l18 18"/><path d="M10.6 10.6a2 2 0 002.8 2.8"/><path d="M9.9 4.2A10.8 10.8 0 0112 4c5 0 9 4 10 8a12.6 12.6 0 01-2.1 4.1M6.2 6.2A12.1 12.1 0 002 12c1 4 5 8 10 8a10.8 10.8 0 005.1-1.3"/></svg>:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>}
+
+export default function CrmLoginPage(){return <Suspense fallback={<CrmLoginFallback/>}><CrmLoginContent/></Suspense>}
+function CrmLoginContent(){
+ const router=useRouter(),params=useSearchParams(),{t}=useI18n();const[email,setEmail]=useState(""),[senha,setSenha]=useState(""),[mostrarSenha,setMostrarSenha]=useState(false),[erro,setErro]=useState(params.get("acesso")==="negado"?t("crmLogin.denied"):""),[enviando,setEnviando]=useState(false)
+ async function entrar(event:FormEvent<HTMLFormElement>){event.preventDefault();setErro("");setEnviando(true);try{const supabase=getSupabaseClient();const{error}=await supabase.auth.signInWithPassword({email:email.trim(),password:senha});if(error)throw error;router.replace("/crm-app");router.refresh()}catch(error){setErro(error instanceof Error?error.message:t("crmLogin.failed"))}finally{setEnviando(false)}}
+ return <main className="flex min-h-screen items-center justify-center bg-[#020817] p-5 text-white"><section className="w-full max-w-md rounded-3xl border border-[#16325c] bg-[#091a33] p-6 shadow-2xl sm:p-8"><div className="mb-4 flex justify-end"><LanguageSwitcher/></div><div className="mb-7 text-center"><p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-400">CTI / Viena São Paulo</p><h1 className="mt-3 text-3xl font-bold">{t("crmLogin.title")}</h1><p className="mt-2 text-sm leading-6 text-slate-400">{t("crmLogin.subtitle")}</p></div>{erro&&<div className="mb-5 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-300">{erro}</div>}<form onSubmit={entrar} className="space-y-5"><label className="block text-sm text-slate-300">{t("common.email")}<input type="email" required autoComplete="email" value={email} onChange={e=>setEmail(e.target.value)} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400"/></label><label className="block text-sm text-slate-300">{t("common.password")}<div className="relative mt-2"><input type={mostrarSenha?"text":"password"} required autoComplete="current-password" value={senha} onChange={e=>setSenha(e.target.value)} className="w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 pr-12 text-white outline-none focus:border-cyan-400"/><button type="button" onClick={()=>setMostrarSenha(v=>!v)} aria-label={mostrarSenha?"Ocultar senha":"Mostrar senha"} aria-pressed={mostrarSenha} className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-slate-400 hover:text-cyan-300 focus:outline-none"><EyeIcon open={mostrarSenha}/></button></div></label><button disabled={enviando} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">{enviando?t("crmLogin.entering"):t("crmLogin.enter")}</button></form><div className="mt-6 border-t border-[#16325c] pt-5 text-center"><p className="text-xs text-slate-500">{t("crmLogin.noAccess")}</p><Link href="/solicitar-acesso?canal=CRM" className="mt-3 inline-flex rounded-xl border border-cyan-800 px-4 py-2 text-sm font-semibold text-cyan-300">{t("crmLogin.request")}</Link></div></section></main>
 }
-
-function CrmLoginContent() {
-  const router = useRouter()
-  const params = useSearchParams()
-  const { t } = useI18n()
-  const [email, setEmail] = useState("")
-  const [senha, setSenha] = useState("")
-  const [erro, setErro] = useState(params.get("acesso") === "negado" ? t("crmLogin.denied") : "")
-  const [enviando, setEnviando] = useState(false)
-
-  async function entrar(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    setErro("")
-    setEnviando(true)
-    try {
-      const supabase = getSupabaseClient()
-      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: senha })
-      if (error) throw error
-      router.replace("/crm-app")
-      router.refresh()
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : t("crmLogin.failed"))
-    } finally {
-      setEnviando(false)
-    }
-  }
-
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#020817] p-5 text-white">
-      <section className="w-full max-w-md rounded-3xl border border-[#16325c] bg-[#091a33] p-6 shadow-2xl sm:p-8">
-        <div className="mb-4 flex justify-end"><LanguageSwitcher /></div>
-        <div className="mb-7 text-center">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-cyan-400">CTI / Viena São Paulo</p>
-          <h1 className="mt-3 text-3xl font-bold">{t("crmLogin.title")}</h1>
-          <p className="mt-2 text-sm leading-6 text-slate-400">{t("crmLogin.subtitle")}</p>
-        </div>
-        {erro && <div className="mb-5 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-300">{erro}</div>}
-        <form onSubmit={entrar} className="space-y-5">
-          <label className="block text-sm text-slate-300">{t("common.email")}<input type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" /></label>
-          <label className="block text-sm text-slate-300">{t("common.password")}<input type="password" required autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3 text-white outline-none focus:border-cyan-400" /></label>
-          <button disabled={enviando} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">{enviando ? t("crmLogin.entering") : t("crmLogin.enter")}</button>
-        </form>
-        <div className="mt-6 border-t border-[#16325c] pt-5 text-center">
-          <p className="text-xs text-slate-500">{t("crmLogin.noAccess")}</p>
-          <Link href="/solicitar-acesso?canal=CRM" className="mt-3 inline-flex rounded-xl border border-cyan-800 px-4 py-2 text-sm font-semibold text-cyan-300">{t("crmLogin.request")}</Link>
-        </div>
-      </section>
-    </main>
-  )
-}
-
-function CrmLoginFallback() {
-  return (
-    <main className="flex min-h-screen items-center justify-center bg-[#020817] p-5 text-white">
-      <div className="rounded-2xl border border-[#16325c] bg-[#091a33] px-6 py-5 text-sm text-slate-300">CTI CRM...</div>
-    </main>
-  )
-}
+function CrmLoginFallback(){return <main className="flex min-h-screen items-center justify-center bg-[#020817] p-5 text-white"><div className="rounded-2xl border border-[#16325c] bg-[#091a33] px-6 py-5 text-sm text-slate-300">CTI CRM...</div></main>}
