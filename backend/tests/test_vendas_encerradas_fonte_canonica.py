@@ -9,7 +9,7 @@ def test_tela_vendas_usa_fonte_segura_sem_nucleo_operacional():
 
 
 def test_backend_vendas_seguras_governa_escopo():
-    fonte = (Path(__file__).parent / "../routers/crm_scope_vendas_router.py").resolve().read_text(encoding="utf-8")
+    fonte = (Path(__file__).parents[1] / "routers/crm_scope_vendas_router.py").read_text(encoding="utf-8")
     assert '@router.get("/vendas")' in fonte
     assert '_venda_autorizada' in fonte
     assert 'listar_vendas()' in fonte
