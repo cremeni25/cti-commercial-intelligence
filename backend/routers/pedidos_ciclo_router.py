@@ -67,6 +67,63 @@ def _sincronizar_carrier(pedido: dict[str, Any]) -> dict[str, Any]:
     return pedido
 
 
+def _venda_existente(pedido_id: str) -> dict[str, Any] | None:
+    try:
+        vendas = supabase.table("vendas").select("id,data_venda,tipo_venda,observacao").eq("pedido_id", pedido_id).limit(1).execute().data or []
+    except Exception:
+        vendas = []
+    return vendas[0] if vendas else None
+
+
+def _modalidade_venda(pedido: dict[str, Any]) -> str:
+    from routers.vendas_router import pedido_venda_indireta
+
+    return "INDIRETA" if pedido_venda_indireta(pedido) else "DIRETA"
+
+
+def _sincronizar_venda_direta_por_nf(pedido: dict[str, Any], etapa: str) -> dict[str, Any] | None:
+    if _modalidade_venda(pedido) != "DIRETA" or etapa != "FATURADO":
+        return _venda_existente(str(pedido["id"]))
+
+    from routers.vendas_router import ConcluirVendaPedidoRequest, concluir_pedido_em_venda
+
+    resultado = concluir_pedido_em_venda(
+        str(pedido["id"]),
+        ConcluirVendaPedidoRequest(
+            confirmar=True,
+            tipo_venda="EQUIPAMENTO",
+            observacao="Venda direta reconhecida automaticamente pela confirmação da NF.",
+        ),
+    )
+    venda = resultado.get("venda") if isinstance(resultado, dict) else None
+    return venda if isinstance(venda, dict) else _venda_existente(str(pedido["id"]))
+
+
+def _sincronizar_venda_indireta_por_anfir(pedido: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    existente = _venda_existente(str(pedido["id"]))
+    if existente or _modalidade_venda(pedido) != "INDIRETA":
+        return existente, None
+
+    from routers.vendas_router import ConcluirVendaPedidoRequest, concluir_pedido_em_venda, evidencia_anfir_pedido_indireto
+
+    evidencia = evidencia_anfir_pedido_indireto(str(pedido["id"]))
+    if not evidencia:
+        return None, None
+
+    resultado = concluir_pedido_em_venda(
+        str(pedido["id"]),
+        ConcluirVendaPedidoRequest(
+            confirmar=True,
+            tipo_venda="EQUIPAMENTO",
+            origem_confirmacao="ANFIR",
+            anfir_registro_id=str(evidencia.get("id") or ""),
+            observacao="Venda indireta reconhecida automaticamente por evidência ANFIR vinculada ao pedido originado da proposta aceita.",
+        ),
+    )
+    venda = resultado.get("venda") if isinstance(resultado, dict) else None
+    return (venda if isinstance(venda, dict) else _venda_existente(str(pedido["id"]))), evidencia
+
+
 @router.get("/ciclos")
 def listar_ciclos():
     pedidos = supabase.table("cti_pedidos").select("*").order("created_at", desc=True).execute().data or []
@@ -83,13 +140,17 @@ def listar_ciclos():
 
 @router.get("/pedidos/{pedido_id}/ciclo")
 def obter_ciclo(pedido_id: str):
-    pedido = _sincronizar_carrier(buscar_pedido(pedido_id))
+    pedido = buscar_pedido(pedido_id)
+    modalidade = _modalidade_venda(pedido)
+    if modalidade == "DIRETA":
+        pedido = _sincronizar_carrier(pedido)
+    venda, evidencia_anfir = (_sincronizar_venda_indireta_por_anfir(pedido) if modalidade == "INDIRETA" else (_venda_existente(pedido_id), None))
     atual = str(pedido.get("status_ciclo") or "PEDIDO").upper()
     envio_confirmado, _ = _envio_real_confirmado(pedido)
     return {
         "pedido_id": pedido_id,
         "status_ciclo": atual,
-        "etapas": ETAPAS,
+        "etapas": ETAPAS if modalidade == "DIRETA" else ["PEDIDO", "ACOMPANHAMENTO", "VENDA"],
         "envio_carrier_confirmado": envio_confirmado,
         "carrier_confirmado_em": pedido.get("carrier_confirmado_em"),
         "faturado_em": pedido.get("faturado_em"),
@@ -100,7 +161,12 @@ def obter_ciclo(pedido_id: str):
         "numero_serie_instalado": pedido.get("numero_serie_instalado"),
         "encerrado_em": pedido.get("encerrado_em"),
         "observacao_acompanhamento": pedido.get("observacao_acompanhamento"),
-        "pode_encerrar": bool(pedido.get("instalado_em")),
+        "modalidade_venda": modalidade,
+        "marco_venda": "NF_CONFIRMADA" if modalidade == "DIRETA" else "ANFIR_OU_VENDEDOR",
+        "venda_registrada": bool(venda),
+        "data_venda": venda.get("data_venda") if venda else None,
+        "evidencia_anfir": evidencia_anfir,
+        "pode_encerrar": bool(pedido.get("instalado_em")) if modalidade == "DIRETA" else False,
         "serie_divergente": bool(
             pedido.get("numero_serie_nf")
             and pedido.get("numero_serie_instalado")
@@ -112,7 +178,14 @@ def obter_ciclo(pedido_id: str):
 
 @router.post("/pedidos/{pedido_id}/ciclo")
 def atualizar_ciclo(pedido_id: str, dados: AtualizarCicloRequest):
-    pedido = _sincronizar_carrier(buscar_pedido(pedido_id))
+    pedido = buscar_pedido(pedido_id)
+    if _modalidade_venda(pedido) == "INDIRETA":
+        raise HTTPException(
+            status_code=409,
+            detail="Pedido de venda indireta não percorre faturamento/instalação como condição de venda. Ele permanece em acompanhamento até reconhecimento pela ANFIR ou confirmação do vendedor.",
+        )
+
+    pedido = _sincronizar_carrier(pedido)
     etapa = dados.etapa.strip().upper()
     if etapa not in ETAPAS[1:]:
         raise HTTPException(status_code=422, detail="Etapa operacional inválida.")
@@ -156,28 +229,40 @@ def atualizar_ciclo(pedido_id: str, dados: AtualizarCicloRequest):
         payload["status"] = "CONCLUIDO"
 
     atualizado = supabase.table("cti_pedidos").update(payload).eq("id", pedido_id).execute().data or []
-    return atualizado[0] if atualizado else {**pedido, **payload}
+    registro = atualizado[0] if atualizado else {**pedido, **payload}
+    venda = _sincronizar_venda_direta_por_nf(registro, etapa)
+    return {
+        **registro,
+        "modalidade_venda": "DIRETA",
+        "venda_registrada": bool(venda),
+        "data_venda": venda.get("data_venda") if venda else None,
+    }
 
 
 @router.get("/ciclo-resumo")
 def resumo_ciclo():
-    pedidos = [_sincronizar_carrier(p) for p in (supabase.table("cti_pedidos").select("*").execute().data or [])]
+    pedidos = supabase.table("cti_pedidos").select("*").execute().data or []
+    diretos = [p for p in pedidos if _modalidade_venda(p) == "DIRETA"]
+    indiretos = [p for p in pedidos if _modalidade_venda(p) == "INDIRETA"]
     contagem = {etapa: 0 for etapa in ETAPAS}
-    for pedido in pedidos:
+    for pedido in (_sincronizar_carrier(p) for p in diretos):
         etapa = str(pedido.get("status_ciclo") or "PEDIDO").upper()
         contagem[etapa if etapa in contagem else "PEDIDO"] += 1
     divergencias = sum(
-        1 for p in pedidos
+        1 for p in diretos
         if p.get("numero_serie_nf") and p.get("numero_serie_instalado")
         and str(p.get("numero_serie_nf")).strip().upper() != str(p.get("numero_serie_instalado")).strip().upper()
     )
+    indiretas_vendidas = sum(1 for p in indiretos if _venda_existente(str(p.get("id") or "")))
     return {
         "total_pedidos": len(pedidos),
         "por_etapa": contagem,
-        "enviados_carrier": sum(1 for p in pedidos if p.get("carrier_confirmado_em")),
-        "faturados": sum(1 for p in pedidos if p.get("faturado_em")),
-        "entregues": sum(1 for p in pedidos if p.get("entregue_em")),
-        "instalados": sum(1 for p in pedidos if p.get("instalado_em")),
-        "encerrados": sum(1 for p in pedidos if p.get("encerrado_em")),
+        "enviados_carrier": sum(1 for p in diretos if p.get("carrier_confirmado_em")),
+        "faturados": sum(1 for p in diretos if p.get("faturado_em")),
+        "entregues": sum(1 for p in diretos if p.get("entregue_em")),
+        "instalados": sum(1 for p in diretos if p.get("instalado_em")),
+        "encerrados": sum(1 for p in diretos if p.get("encerrado_em")),
+        "indiretos_em_acompanhamento": max(0, len(indiretos) - indiretas_vendidas),
+        "indiretos_reconhecidos_venda": indiretas_vendidas,
         "divergencias_numero_serie": divergencias,
     }
