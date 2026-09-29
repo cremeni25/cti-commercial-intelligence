@@ -4,6 +4,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/core/auth"
 import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type PrecoVigente = { tabela_codigo?: string; preco_cheio?: number; vigencia_inicio?: string }
 type EquipamentoCatalogo = {
@@ -34,7 +35,8 @@ type Item = {
   garantia?: string
   status: string
 }
-type Proposta = { id: string; numero?: string; versao?: number; valor?: number; status_documento?: string }
+type Proposta = { id: string; numero?: string; versao?: number; valor?: number; status_documento?: string; cliente_id?: string; snapshot_dados?: { estabelecimento?: { nome?: string; cnpj?: string } } }
+type Estabelecimento = { id: string; nome?: string; razao_social?: string; nome_fantasia?: string; cnpj?: string; cidade?: string }
 type AceiteCriado = { aceite?: { id?: string } | null; link_token?: string | null }
 
 const STATUS_ITEM_FECHADO = new Set(["ACEITO", "CONVERTIDO_PEDIDO", "CANCELADO", "PERDIDO"])
@@ -74,6 +76,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
   const [catalogo, setCatalogo] = useState<EquipamentoCatalogo[]>([])
   const [itens, setItens] = useState<Item[]>([])
   const [propostas, setPropostas] = useState<Record<string, Proposta[]>>({})
+  const [estabelecimentos, setEstabelecimentos] = useState<Estabelecimento[]>([])
   const [linha, setLinha] = useState("")
   const [equipamentoCodigo, setEquipamentoCodigo] = useState("")
   const [formularioAberto, setFormularioAberto] = useState(false)
@@ -91,18 +94,21 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
     setCarregando(true)
     setErro("")
     try {
-      const [respostaCatalogo, respostaItens] = await Promise.all([
+      const [respostaCatalogo, respostaItens, respostaEstabelecimentos] = await Promise.all([
         fetch(`${API_URL}/catalogo-comercial/equipamentos`, { cache: "no-store" }),
         fetch(`${API_URL}/crm-documentos/oportunidades/${oportunidadeId}/itens`, { cache: "no-store" }),
+        fetchCrmSeguroProxy(`crm-seguro/oportunidades/${oportunidadeId}/estabelecimentos`, { cache: "no-store" }),
       ])
       const dadosCatalogo = await respostaCatalogo.json().catch(() => [])
       const dadosItens = await respostaItens.json().catch(() => [])
+      const dadosEstabelecimentos = await respostaEstabelecimentos.json().catch(() => ({}))
       if (!respostaCatalogo.ok) throw new Error(dadosCatalogo?.detail || "Não foi possível carregar o catálogo comercial.")
       if (!respostaItens.ok) throw new Error(dadosItens?.detail || "Não foi possível carregar os itens comerciais.")
       const listaCatalogo = Array.isArray(dadosCatalogo) ? dadosCatalogo : []
       const listaItens = Array.isArray(dadosItens) ? dadosItens : []
       setCatalogo(listaCatalogo)
       setItens(listaItens)
+      if (respostaEstabelecimentos.ok) setEstabelecimentos(Array.isArray(dadosEstabelecimentos?.estabelecimentos) ? dadosEstabelecimentos.estabelecimentos : [])
       if (!linha && listaCatalogo.length) {
         setLinha(listaCatalogo[0].linha_produto)
         setEquipamentoCodigo(listaCatalogo[0].codigo)
@@ -183,11 +189,17 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
   }
 
   async function gerarProposta(item: Item) {
+    const opcoes = estabelecimentos.map((est, indice) => `${indice + 1} - ${est.razao_social || est.nome || est.nome_fantasia || "Estabelecimento"} — ${est.cnpj || "CNPJ não informado"}`).join("\n")
+    const escolha = estabelecimentos.length > 1 ? window.prompt(`Escolha o CNPJ desta proposta:\n${opcoes}\n\nDigite o número da opção.`, "1") : "1"
+    if (!escolha) return
+    const estabelecimento = estabelecimentos[Math.max(0, Number(escolha) - 1)]
+    if (!estabelecimento?.id) { setErro("Selecione um CNPJ válido para esta proposta."); return }
     try {
       await acao(`/crm-documentos/itens/${item.id}/propostas`, {
         responsavel_id: String(usuario?.id || ""),
         validade: item.validade_condicao || null,
         condicoes_adicionais: item.condicao_pagamento || null,
+        cliente_id: estabelecimento.id,
       }, "Proposta criada.")
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao gerar proposta.") }
   }
@@ -259,7 +271,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
             <p>Garantia: {item.garantia || "A definir"}</p>
           </div>
           {lista.length > 0 && <div className="mt-5 space-y-2 border-t border-[#16325c] pt-4">{lista.map((proposta) => <div key={proposta.id} className="flex flex-col gap-3 rounded-xl bg-[#061326] p-4 lg:flex-row lg:items-center lg:justify-between">
-            <div><p className="font-semibold text-white">{proposta.numero || "Proposta"} • versão {proposta.versao || 1}</p><p className="text-xs text-slate-400">{statusLabel(proposta.status_documento)} • {moeda(proposta.valor)}</p></div>
+            <div><p className="font-semibold text-white">{proposta.numero || "Proposta"} • versão {proposta.versao || 1}</p><p className="text-xs text-slate-400">{statusLabel(proposta.status_documento)} • {moeda(proposta.valor)}</p>{proposta.snapshot_dados?.estabelecimento && <p className="mt-1 text-xs text-cyan-300">CNPJ da proposta: {proposta.snapshot_dados.estabelecimento.nome || "Estabelecimento"} — {proposta.snapshot_dados.estabelecimento.cnpj || "não informado"}</p>}</div>
             <div className="flex flex-wrap gap-2">
               {!possuiPropostaFinal && ["RASCUNHO", "EM_REVISAO", "APROVADA_INTERNA"].includes(String(proposta.status_documento)) && <button onClick={() => void emitir(proposta)} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Emitir</button>}
               {!possuiPropostaFinal && ["EMITIDA", "ENVIADA", "VISUALIZADA", "EM_NEGOCIACAO"].includes(String(proposta.status_documento)) && <><button onClick={() => void solicitarAceite(proposta, "PRESENCIAL_TELA")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite presencial</button><button onClick={() => void solicitarAceite(proposta, "REMOTO_LINK")} className="rounded-lg border border-cyan-700 px-3 py-2 text-xs text-cyan-300">Aceite por link</button></>}

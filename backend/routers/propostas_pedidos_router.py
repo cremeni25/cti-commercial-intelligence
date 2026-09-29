@@ -63,6 +63,7 @@ class GerarPropostaRequest(BaseModel):
     validade: str | None = None
     observacoes: str | None = None
     condicoes_adicionais: str | None = None
+    cliente_id: str | None = None
 
 
 class SolicitarAceiteRequest(BaseModel):
@@ -145,6 +146,35 @@ def _snapshot(oportunidade: dict[str, Any], item: dict[str, Any], modelo: dict[s
         "item": {**item, "valor_total_calculado": _valor_item(item)},
         "modelo": modelo,
         "gerado_em": _agora(),
+    }
+
+
+def _validar_estabelecimento_proposta(oportunidade: dict[str, Any], cliente_id: str | None) -> dict[str, Any]:
+    atual_id = str(oportunidade.get("cliente_id") or "").strip()
+    escolhido_id = str(cliente_id or atual_id).strip()
+    if not escolhido_id:
+        raise HTTPException(status_code=422, detail="A proposta precisa de um estabelecimento/CNPJ.")
+
+    vinculo = supabase.table("cti_grupo_estabelecimentos").select("grupo_cliente_id").eq("estabelecimento_cliente_id", atual_id).limit(1).execute().data or []
+    grupo_id = str(vinculo[0].get("grupo_cliente_id")) if vinculo else atual_id
+    permitido = supabase.table("cti_grupo_estabelecimentos").select("id").eq("grupo_cliente_id", grupo_id).eq("estabelecimento_cliente_id", escolhido_id).limit(1).execute().data or []
+    if escolhido_id != atual_id and not permitido:
+        raise HTTPException(status_code=422, detail="O CNPJ selecionado não pertence ao grupo econômico desta negociação.")
+
+    cliente = _primeiro("clientes", escolhido_id, "Estabelecimento/CNPJ não encontrado")
+    return {
+        "grupo_cliente_id": grupo_id,
+        "cliente_id": escolhido_id,
+        "nome": cliente.get("razao_social") or cliente.get("nome") or cliente.get("nome_fantasia"),
+        "cnpj": cliente.get("cnpj"),
+        "cidade": cliente.get("cidade"),
+        "estado": cliente.get("estado"),
+        "endereco": cliente.get("endereco"),
+        "numero": cliente.get("numero"),
+        "complemento": cliente.get("complemento"),
+        "bairro": cliente.get("bairro"),
+        "cep": cliente.get("cep"),
+        "inscricao_estadual": cliente.get("inscricao_estadual"),
     }
 
 
@@ -262,7 +292,9 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     oportunidade = _primeiro("cti_oportunidades", str(item["oportunidade_id"]), "Oportunidade não encontrada")
     modelo = _modelo_ativo(item)
     versao = int(propostas_anteriores[0].get("versao") or 0) + 1 if propostas_anteriores else 1
+    estabelecimento = _validar_estabelecimento_proposta(oportunidade, dados.cliente_id)
     snapshot = _snapshot(oportunidade, item, modelo)
+    snapshot["estabelecimento"] = estabelecimento
     snapshot["condicoes_adicionais"] = dados.condicoes_adicionais or item.get("condicao_pagamento")
     snapshot["produto"] = item.get("linha_produto")
     snapshot["equipamento"] = item.get("equipamento")
@@ -272,7 +304,7 @@ def gerar_proposta(item_id: str, dados: GerarPropostaRequest):
     hash_documento = sha256(repr(snapshot).encode("utf-8")).hexdigest()
     payload = {
         "numero": _numero_proposta(),
-        "cliente_id": oportunidade.get("cliente_id"),
+        "cliente_id": estabelecimento["cliente_id"],
         "oportunidade_id": oportunidade["id"],
         "item_oportunidade_id": item_id,
         "modelo_proposta_id": modelo.get("id") if modelo else None,
