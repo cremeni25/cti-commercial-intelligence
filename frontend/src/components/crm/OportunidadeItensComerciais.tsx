@@ -4,6 +4,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/core/auth"
 import { API_URL } from "@/lib/api"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type PrecoVigente = { tabela_codigo?: string; preco_cheio?: number; vigencia_inicio?: string }
 type EquipamentoCatalogo = {
@@ -96,7 +97,7 @@ export default function OportunidadeItensComerciais({ oportunidadeId }: { oportu
       const [respostaCatalogo, respostaItens, respostaEstabelecimentos] = await Promise.all([
         fetch(`${API_URL}/catalogo-comercial/equipamentos`, { cache: "no-store" }),
         fetch(`${API_URL}/crm-documentos/oportunidades/${oportunidadeId}/itens`, { cache: "no-store" }),
-        fetch(`/api/crm-secure/crm-seguro/oportunidades/${oportunidadeId}/estabelecimentos`, { cache: "no-store" }),
+        fetchCrmSeguroProxy(`crm-seguro/oportunidades/${oportunidadeId}/estabelecimentos`, { cache: "no-store" }),
       ])
       const dadosCatalogo = await respostaCatalogo.json().catch(() => [])
       const dadosItens = await respostaItens.json().catch(() => [])
