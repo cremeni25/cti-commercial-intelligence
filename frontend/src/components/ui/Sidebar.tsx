@@ -18,77 +18,54 @@ type MenuItem = { labelKey?: MessageKey; label?: LocalizedLabel; href: string; i
 type MenuGroup = { tituloKey?: MessageKey; titulo?: LocalizedLabel; itens: MenuItem[] }
 
 const menuGroups: MenuGroup[] = [
-  {
-    titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" },
-    itens: [
-      {
-        label: { "pt-BR": "Mapa Estratégico", en: "Strategic Map", es: "Mapa Estratégico" },
-        href: "/mapa-estrategico",
-        aliases: ["/inteligencia-comercial"],
-        icon: "◎",
-        type: "emoji",
-      },
-      { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
-    ],
-  },
-  {
-    tituloKey: "nav.crm",
-    itens: [
-      { label: { "pt-BR": "Nova interação", en: "New interaction", es: "Nueva interacción" }, href: "/atividades/interacao", icon: "✚", type: "emoji" },
-      { labelKey: "nav.opportunities", href: "/oportunidades", icon: "📈", type: "emoji" },
-      { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
-      { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
-      { labelKey: "nav.proposals", href: "/propostas", icon: "📄", type: "emoji" },
-      { labelKey: "nav.orders", href: "/pedidos", icon: "📦", type: "emoji" },
-      { labelKey: "nav.sales", href: "/vendas", icon: "💰", type: "emoji" },
-      { labelKey: "nav.reports", href: "/relatorios", icon: "📑", type: "emoji" },
-      { labelKey: "nav.generateReport", href: "/relatorios/modular", icon: "🖨️", type: "emoji" },
-      { labelKey: "nav.activities", href: "/atividades", icon: "📅", type: "emoji" },
-      { labelKey: "nav.forecast", href: "/forecast", icon: "📊", type: "emoji" },
-    ],
-  },
-  {
-    tituloKey: "nav.masterData",
-    itens: [
-      { labelKey: "nav.companies", href: "/empresas", icon: "🏢", type: "emoji" },
-      { labelKey: "nav.bodyBuilders", href: "/implementadoras", icon: "🏭", type: "emoji" },
-    ],
-  },
-  {
-    tituloKey: "nav.equipment",
-    itens: [
-      { labelKey: "nav.trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
-      { labelKey: "nav.dieselTruck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
-      { labelKey: "nav.directDrive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
-    ],
-  },
-  {
-    tituloKey: "nav.administration",
-    itens: [
-      { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📊", type: "emoji" },
-      { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
-      { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
-      { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
-      { labelKey: "nav.officialTemplates", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
-    ],
-  },
+  { titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" }, itens: [
+    { label: { "pt-BR": "Mapa Estratégico", en: "Strategic Map", es: "Mapa Estratégico" }, href: "/mapa-estrategico", aliases: ["/inteligencia-comercial"], icon: "◎", type: "emoji" },
+    { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
+  ]},
+  { tituloKey: "nav.crm", itens: [
+    { label: { "pt-BR": "Nova interação", en: "New interaction", es: "Nueva interacción" }, href: "/atividades/interacao", icon: "✚", type: "emoji" },
+    { labelKey: "nav.opportunities", href: "/oportunidades", icon: "📈", type: "emoji" },
+    { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
+    { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
+    { labelKey: "nav.proposals", href: "/propostas", icon: "📄", type: "emoji" },
+    { labelKey: "nav.orders", href: "/pedidos", icon: "📦", type: "emoji" },
+    { labelKey: "nav.sales", href: "/vendas", icon: "💰", type: "emoji" },
+    { labelKey: "nav.reports", href: "/relatorios", icon: "📑", type: "emoji" },
+    { labelKey: "nav.generateReport", href: "/relatorios/modular", icon: "🖨️", type: "emoji" },
+    { labelKey: "nav.activities", href: "/atividades", icon: "📅", type: "emoji" },
+    { labelKey: "nav.forecast", href: "/forecast", icon: "📊", type: "emoji" },
+  ]},
+  { tituloKey: "nav.masterData", itens: [
+    { labelKey: "nav.companies", href: "/empresas", icon: "🏢", type: "emoji" },
+    { label: { "pt-BR": "Carteiras Comerciais", en: "Customer Portfolios", es: "Carteras Comerciales" }, href: "/dashboard/carteiras-comerciais", icon: "🗂️", type: "emoji" },
+    { labelKey: "nav.bodyBuilders", href: "/implementadoras", icon: "🏭", type: "emoji" },
+  ]},
+  { tituloKey: "nav.equipment", itens: [
+    { labelKey: "nav.trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
+    { labelKey: "nav.dieselTruck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
+    { labelKey: "nav.directDrive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
+  ]},
+  { tituloKey: "nav.administration", itens: [
+    { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📊", type: "emoji" },
+    { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
+    { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
+    { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
+    { labelKey: "nav.officialTemplates", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
+  ]},
 ]
 
-function tem(permissoes: PermissoesSessaoCTI | undefined, chave: keyof PermissoesSessaoCTI) {
-  return permissoes?.[chave] === true
-}
+function tem(permissoes: PermissoesSessaoCTI | undefined, chave: keyof PermissoesSessaoCTI) { return permissoes?.[chave] === true }
 
 function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessaoCTI | undefined, acessoTotal: boolean) {
   const master = perfil === "ADMIN_MASTER"
   const diretor = perfil === "DIRETOR_VIENA_SP"
   const gestao = master || (diretor && acessoTotal)
-
   if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais" || href === "/inteligencia") return master
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
   if (href === "/upload") return gestao
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
-  if (href === "/empresas" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
+  if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
   if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")
@@ -99,44 +76,11 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
 }
 
 export default function Sidebar() {
-  const pathname = usePathname()
-  const { usuario } = useAuth()
-  const { t, locale } = useI18n()
-  const perfil = String(usuario?.tipo_usuario || "").toUpperCase()
-  const permissoes = usuario?.permissoes
-  const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
-
-  return (
-    <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
-      <div className="p-4 border-b border-[#13203f] flex flex-col items-center gap-3">
-        <Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain" />
-        <LanguageSwitcher compact />
-      </div>
-
-      <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {menuGroups.map((grupo, index) => {
-          const itensPermitidos = grupo.itens.filter((item) => rotaPermitida(item.href, perfil, permissoes, acessoTotal))
-          if (itensPermitidos.length === 0) return null
-          const tituloGrupo = grupo.tituloKey ? t(grupo.tituloKey) : grupo.titulo?.[locale] || ""
-          return (
-            <div key={`${grupo.tituloKey || tituloGrupo}-${index}`}>
-              <p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{tituloGrupo}</p>
-              {itensPermitidos.map((item) => {
-                const active = pathname === item.href || Boolean(item.aliases?.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`)))
-                const label = item.labelKey ? t(item.labelKey) : item.label?.[locale] || item.href
-                return (
-                  <Link key={item.href} href={item.href} className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${active ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-400" : "text-gray-300 hover:bg-[#101b36]"}`}>
-                    <div className="w-[28px] flex items-center justify-center">{item.type === "image" ? <Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain" /> : <span className="text-lg">{item.icon as string}</span>}</div>
-                    <span>{label}</span>
-                  </Link>
-                )
-              })}
-            </div>
-          )
-        })}
-      </nav>
-
-      <div className="p-4 border-t border-[#13203f]"><div className="bg-[#101b36] rounded-xl p-4"><p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p><div className="flex items-center gap-2 mt-3"><div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"/><span className="text-green-400 text-sm font-medium">{t("common.online")}</span></div></div></div>
-    </aside>
-  )
+  const pathname = usePathname(); const { usuario } = useAuth(); const { t, locale } = useI18n()
+  const perfil = String(usuario?.tipo_usuario || "").toUpperCase(); const permissoes = usuario?.permissoes; const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
+  return <aside className="w-[300px] min-h-screen bg-[#071028] border-r border-[#13203f] flex flex-col">
+    <div className="p-4 border-b border-[#13203f] flex flex-col items-center gap-3"><Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain"/><LanguageSwitcher compact/></div>
+    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">{menuGroups.map((grupo,index)=>{const itensPermitidos=grupo.itens.filter(item=>rotaPermitida(item.href,perfil,permissoes,acessoTotal));if(itensPermitidos.length===0)return null;const tituloGrupo=grupo.tituloKey?t(grupo.tituloKey):grupo.titulo?.[locale]||"";return <div key={`${grupo.tituloKey||tituloGrupo}-${index}`}><p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#6c8ecf]">{tituloGrupo}</p>{itensPermitidos.map(item=>{const active=pathname===item.href||Boolean(item.aliases?.some(alias=>pathname===alias||pathname.startsWith(`${alias}/`)));const label=item.labelKey?t(item.labelKey):item.label?.[locale]||item.href;return <Link key={item.href} href={item.href} className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${active?"bg-cyan-500/10 border border-cyan-500/20 text-cyan-400":"text-gray-300 hover:bg-[#101b36]"}`}><div className="w-[28px] flex items-center justify-center">{item.type==="image"?<Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain"/>:<span className="text-lg">{item.icon as string}</span>}</div><span>{label}</span></Link>})}</div>})}</nav>
+    <div className="p-4 border-t border-[#13203f]"><div className="bg-[#101b36] rounded-xl p-4"><p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p><div className="flex items-center gap-2 mt-3"><div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"/><span className="text-green-400 text-sm font-medium">{t("common.online")}</span></div></div></div>
+  </aside>
 }
