@@ -10,12 +10,29 @@ from routers.documentos_comerciais_listagem_router import listar_pedidos_operaci
 
 router = APIRouter(prefix="/crm-seguro/relatorios", tags=["crm-seguro-relatorios"])
 
+_STATUS_TERMINAIS = {"GANHO", "GANHA", "PERDIDO", "PERDIDA", "ENCERRADO", "ENCERRADA", "CONCLUIDO", "CONCLUIDA", "CONCLUÍDO", "CONCLUÍDA", "VENDIDO", "VENDIDA"}
+
+
+def _status_normalizado(item: dict) -> str:
+    return str(item.get("status") or item.get("status_oportunidade") or item.get("situacao") or "").strip().upper()
+
+
+def _oportunidade_ativa(item: dict) -> bool:
+    """Carteira operacional contém somente negócios ainda em andamento.
+
+    Estados terminais permanecem preservados na base e no histórico realizado,
+    mas não podem compor Oportunidades/Pipeline/Forecast ativos.
+    """
+    return _status_normalizado(item) not in _STATUS_TERMINAIS
+
 
 @router.get("")
 def relatorio_comercial_seguro(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    """Mantém o relatório operacional, alterando apenas o universo de responsabilidade."""
+    """Relatório comercial separado por etapa real da jornada."""
+    oportunidades_usuario = _filtrar_por_usuario(listar_oportunidades(), usuario)
+    oportunidades_ativas = [item for item in oportunidades_usuario if _oportunidade_ativa(item)]
     return {
-        "oportunidades": _filtrar_por_usuario(listar_oportunidades(), usuario),
+        "oportunidades": oportunidades_ativas,
         "propostas": _filtrar_por_usuario(listar_propostas_operacionais(), usuario),
         "pedidos": _filtrar_por_usuario(listar_pedidos_operacionais(), usuario),
         "vendas": listar_vendas_seguras(usuario),
