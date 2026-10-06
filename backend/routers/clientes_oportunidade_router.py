@@ -161,14 +161,21 @@ def _clientes_unificados() -> list[dict[str, Any]]:
             cnpj = _so_digitos(item.get("cnpj"))
             chave = f"cnpj:{cnpj}" if cnpj else f"nome:{_chave_nome(nome)}"
             atual = por_chave.get(chave, {})
+            # A tabela canônica `clientes` é a fonte de verdade para a gestão
+            # comercial. Ao unificar com `cti_clientes`, campos de responsabilidade
+            # já definidos não podem ser apagados por valores nulos da outra fonte.
             normalizado = {
                 **atual,
-                **item,
+                **{chave_item: valor for chave_item, valor in item.items() if valor is not None},
                 "nome": nome,
-                "cnpj": cnpj or item.get("cnpj"),
+                "cnpj": cnpj or item.get("cnpj") or atual.get("cnpj"),
                 "cidade": item.get("cidade") or item.get("municipio") or atual.get("cidade"),
                 "estado": item.get("estado") or item.get("uf") or atual.get("estado"),
                 "categoria": item.get("categoria") or item.get("segmento") or atual.get("categoria"),
+                "responsavel_comercial_id": item.get("responsavel_comercial_id") or atual.get("responsavel_comercial_id"),
+                "responsabilidade_tipo": item.get("responsabilidade_tipo") or atual.get("responsabilidade_tipo"),
+                "responsabilidade_atualizada_em": item.get("responsabilidade_atualizada_em") or atual.get("responsabilidade_atualizada_em"),
+                "responsabilidade_atualizada_por": item.get("responsabilidade_atualizada_por") or atual.get("responsabilidade_atualizada_por"),
                 "origem_cadastro": tabela,
             }
             por_chave[chave] = normalizado
