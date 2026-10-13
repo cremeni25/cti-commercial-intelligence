@@ -30,7 +30,7 @@ export default function VendasPage(){
  const usuarioAtual=useMemo(()=>usuario?.id?{id:String(usuario.id),nome:String(usuario.nome||usuario.email||usuario.id)}:null,[usuario?.id,usuario?.nome,usuario?.email])
  const nomesPorId=useMemo(()=>Object.fromEntries((master?usuariosMaster:(usuarioAtual?[usuarioAtual]:[])).map(u=>[u.id,u.nome])),[master,usuariosMaster,usuarioAtual])
  const nomeResponsavel=(item:Venda)=>item.responsavel_nome||nomesPorId[String(item.responsavel_id||"")]||(String(item.responsavel_id||"")===String(usuario?.id||"")?String(usuario?.nome||usuario?.email||""):"")||"—"
- const filtrados=useMemo(()=>{const loc=locale==="pt-BR"?"pt-BR":locale==="es"?"es":"en";const termo=busca.trim().toLocaleLowerCase(loc);if(!termo)return dados;return dados.filter(item=>(JSON.stringify(item)+" "+nomeResponsavel(item)).toLocaleLowerCase(loc).includes(termo))},[busca,dados,locale,nomesPorId])
+ const filtrados=(()=>{const loc=locale==="pt-BR"?"pt-BR":locale==="es"?"es":"en";const termo=busca.trim().toLocaleLowerCase(loc);if(!termo)return dados;return dados.filter(item=>(JSON.stringify(item)+" "+nomeResponsavel(item)).toLocaleLowerCase(loc).includes(termo))})()
  const valorTotal=dados.reduce((total,item)=>total+Number(item.valor||0),0),ticketMedio=dados.length?valorTotal/dados.length:0,tipos=new Set(dados.map(item=>String(item.tipo_venda||"").trim()).filter(Boolean)).size
  const dataLocal=(valor?:string)=>{if(!valor)return"-";return formatDate(`${valor}T12:00:00`)}
  function abrirRealizado(){setBusca("");window.setTimeout(()=>document.getElementById("historico-vendas")?.scrollIntoView({behavior:"smooth",block:"start"}),0)}
