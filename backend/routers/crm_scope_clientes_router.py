@@ -51,11 +51,11 @@ def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None 
     canonicos = supabase.table("clientes").select("id,cnpj,nome,responsavel_comercial_id,responsabilidade_tipo").execute().data or []
     por_id = {str(c["id"]): c for c in canonicos if c.get("id")}
     por_cnpj = {re.sub(r"\\D", "", str(c.get("cnpj") or "")): c for c in canonicos if re.sub(r"\\D", "", str(c.get("cnpj") or ""))}
-    por_nome = {_fold(c.get("nome")): c for c in canonicos if _fold(c.get("nome"))}
+    por_nome = {}  # Nome isolado não é identidade suficiente para atribuir uma carteira.
     resolvidos = []
     for item in base:
         cnpj = re.sub(r"\\D", "", str(item.get("cnpj") or ""))
-        canonico = por_id.get(str(item.get("id") or "")) or (por_cnpj.get(cnpj) if cnpj else None) or por_nome.get(_fold(item.get("nome")))
+        canonico = por_id.get(str(item.get("id") or "")) or (por_cnpj.get(cnpj) if cnpj else None)
         if canonico:
             item = {**item, "id": canonico["id"], "responsavel_comercial_id": canonico.get("responsavel_comercial_id"), "responsabilidade_tipo": canonico.get("responsabilidade_tipo")}
         else:
@@ -93,6 +93,8 @@ def listar_responsaveis_comerciais(usuario: UsuarioAutenticado = Depends(usuario
 @router.get("")
 def listar_clientes_seguro(responsavel_id: str | None = Query(default=None), nao_atribuidos: bool = Query(default=False), usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_visualizar")
+    responsavel_id = responsavel_id if isinstance(responsavel_id, str) else None
+    nao_atribuidos = nao_atribuidos if isinstance(nao_atribuidos, bool) else False
     if (responsavel_id or nao_atribuidos) and not _visao_total(usuario):
         raise HTTPException(status_code=403, detail="Filtro de carteira disponível somente para usuários Master.")
     return [_anotar_responsavel(item) for item in _clientes_filtrados(usuario, responsavel_id, nao_atribuidos)]
