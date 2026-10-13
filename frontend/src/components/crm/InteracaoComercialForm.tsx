@@ -54,7 +54,7 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     const params = new URLSearchParams(window.location.search)
     const tipoUrl = chave(params.get("tipo"))
     const clienteUrl = texto(params.get("cliente"))
-    if (TIPOS.some(([codigo]) => codigo === tipoUrl)) setTipo(tipoUrl)
+    if (TIPOS.some(([codigo]) => codigo === tipoUrl)) queueMicrotask(() => { if (ativo) setTipo(tipoUrl) })
 
     void fetchCrmSeguroProxy("crm-seguro/clientes", { cache: "no-store" }).then(async (resposta) => {
       const dados = await resposta.json().catch(() => [])
@@ -77,9 +77,9 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
   }, [])
 
   useEffect(() => {
-    if (!cliente?.id) { setNegocioAtivo(null); return }
+    if (!cliente?.id) { queueMicrotask(() => setNegocioAtivo(null)); return }
     let ativo = true
-    setCarregandoNegocio(true)
+    queueMicrotask(() => { if (ativo) setCarregandoNegocio(true) })
     void fetchCrmSeguroProxy(`crm-seguro/clientes/${encodeURIComponent(cliente.id)}/negocio-ativo`, { cache: "no-store" })
       .then(async (resposta) => {
         const dados = await resposta.json().catch(() => ({})) as Registro
@@ -106,7 +106,7 @@ export default function InteracaoComercialForm({ superficie, tipoInicial = "FOLL
     const nomeExato = chave(busca)
     const cnpjExato = digitos(busca)
     const exato = clientes.find((i) => chave(i.nome) === nomeExato || (cnpjExato.length === 14 && digitos(i.cnpj) === cnpjExato))
-    if (exato) { setCliente(exato); setBusca(exato.nome); setErro("") }
+    if (exato) queueMicrotask(() => { setCliente(exato); setBusca(exato.nome); setErro("") })
   }, [busca, cliente, clientes])
 
   async function consultarCnpj() {
