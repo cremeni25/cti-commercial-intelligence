@@ -44,14 +44,31 @@ def _cliente_no_escopo(cliente: dict[str, Any], usuario: UsuarioAutenticado) -> 
     responsavel = str(cliente.get("responsavel_comercial_id") or "").strip()
     return bool(responsavel) and responsavel == str(usuario.id)
 def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None = None, somente_nao_atribuidos: bool = False) -> list[dict[str, Any]]:
+    # A carteira é definida exclusivamente pelo vínculo persistido em public.clientes.
+    # A lista unificada pode incluir registros legados de cti_clientes, mas não pode
+    # sobrescrever a responsabilidade comercial da fonte canônica.
     base = listar_clientes_crm_app()
-    if _visao_total(usuario):
-        if somente_nao_atribuidos:
-            return [item for item in base if not str(item.get("responsavel_comercial_id") or "").strip()]
-        if responsavel_id:
-            return [item for item in base if str(item.get("responsavel_comercial_id") or "").strip() == str(responsavel_id).strip()]
-        return base
-    return [item for item in base if _cliente_no_escopo(item, usuario)]
+    canonicos = supabase.table("clientes").select("id,cnpj,nome,responsavel_comercial_id,responsabilidade_tipo").execute().data or []
+    por_id = {str(c["id"]): c for c in canonicos if c.get("id")}
+    por_cnpj = {re.sub(r"\\D", "", str(c.get("cnpj") or "")): c for c in canonicos if re.sub(r"\\D", "", str(c.get("cnpj") or ""))}
+    por_nome = {_fold(c.get("nome")): c for c in canonicos if _fold(c.get("nome"))}
+    resolvidos = []
+    for item in base:
+        cnpj = re.sub(r"\\D", "", str(item.get("cnpj") or ""))
+        canonico = por_id.get(str(item.get("id") or "")) or (por_cnpj.get(cnpj) if cnpj else None) or por_nome.get(_fold(item.get("nome")))
+        if canonico:
+            item = {**item, "id": canonico["id"], "responsavel_comercial_id": canonico.get("responsavel_comercial_id"), "responsabilidade_tipo": canonico.get("responsabilidade_tipo")}
+        else:
+            # Cadastro exclusivamente legado: não atribuir responsável por inferência.
+            item = {**item, "responsavel_comercial_id": None}
+        resolvidos.append(item)
+    if not _visao_total(usuario):
+        return [item for item in resolvidos if _cliente_no_escopo(item, usuario)]
+    if somente_nao_atribuidos:
+        return [item for item in resolvidos if not str(item.get("responsavel_comercial_id") or "").strip()]
+    if responsavel_id:
+        return [item for item in resolvidos if str(item.get("responsavel_comercial_id") or "").strip() == str(responsavel_id).strip()]
+    return resolvidos
 def _anotar_responsavel(item: dict[str, Any]) -> dict[str, Any]:
     responsavel_id = str(item.get("responsavel_comercial_id") or "")
     if not responsavel_id: return item
