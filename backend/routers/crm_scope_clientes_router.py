@@ -50,11 +50,11 @@ def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None 
     base = listar_clientes_crm_app()
     canonicos = supabase.table("clientes").select("id,cnpj,nome,responsavel_comercial_id,responsabilidade_tipo").execute().data or []
     por_id = {str(c["id"]): c for c in canonicos if c.get("id")}
-    por_cnpj = {re.sub(r"\\D", "", str(c.get("cnpj") or "")): c for c in canonicos if re.sub(r"\\D", "", str(c.get("cnpj") or ""))}
+    por_cnpj = {re.sub(r"\D", "", str(c.get("cnpj") or "")): c for c in canonicos if re.sub(r"\D", "", str(c.get("cnpj") or ""))}
     por_nome = {}  # Nome isolado não é identidade suficiente para atribuir uma carteira.
     resolvidos = []
     for item in base:
-        cnpj = re.sub(r"\\D", "", str(item.get("cnpj") or ""))
+        cnpj = re.sub(r"\D", "", str(item.get("cnpj") or ""))
         canonico = por_id.get(str(item.get("id") or "")) or (por_cnpj.get(cnpj) if cnpj else None)
         if canonico:
             item = {**item, "id": canonico["id"], "responsavel_comercial_id": canonico.get("responsavel_comercial_id"), "responsabilidade_tipo": canonico.get("responsabilidade_tipo")}
