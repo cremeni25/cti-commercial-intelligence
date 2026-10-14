@@ -56,6 +56,12 @@ def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None 
         return [item for item in resolvidos if str(item.get("responsavel_comercial_id") or "").strip() == str(responsavel_id).strip()]
     return resolvidos
 
+def _cliente_canonico(cliente_id: str) -> dict[str, Any]:
+    dados = supabase.table("clientes").select("*").eq("id", cliente_id).limit(1).execute().data or []
+    if not dados:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado no cadastro canônico.")
+    return dados[0]
+
 def _anotar_responsavel(item: dict[str, Any]) -> dict[str, Any]:
     responsavel_id = str(item.get("responsavel_comercial_id") or "")
     if not responsavel_id: return item
@@ -94,14 +100,14 @@ def criar_cliente_seguro(dados: ClienteCreate, usuario: UsuarioAutenticado = Dep
     return resposta
 @router.get("/{cliente_id}")
 def obter_cliente_seguro(cliente_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    _exigir_permissao(usuario, "clientes_visualizar"); cliente = obter_cliente_crm_app(cliente_id)
+    _exigir_permissao(usuario, "clientes_visualizar"); cliente = _cliente_canonico(cliente_id)
     if not _cliente_no_escopo(cliente, usuario): raise HTTPException(status_code=403, detail="Cliente fora do seu escopo comercial.")
     return _anotar_responsavel(cliente)
 @router.put("/{cliente_id}")
 def atualizar_cliente_seguro(cliente_id: str, dados: ClienteEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_editar")
     if _visao_total(usuario): return atualizar_cliente_crm_app(cliente_id, dados)
-    atual = obter_cliente_crm_app(cliente_id)
+    atual = _cliente_canonico(cliente_id)
     if not _cliente_no_escopo(atual, usuario): raise HTTPException(status_code=403, detail="Cliente fora do seu escopo comercial.")
     return atualizar_cliente_crm_app(cliente_id, dados)
 @router.put("/{cliente_id}/responsavel")
