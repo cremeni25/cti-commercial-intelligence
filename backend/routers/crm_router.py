@@ -358,8 +358,6 @@ def _registrar_pipeline(oportunidade_id: str, etapa_anterior: Optional[str], nov
         "etapa": nova_etapa,
         "usuario_id": usuario_id,
         "observacao": descricao,
-        "etapa_anterior": etapa_anterior,
-        "nova_etapa": nova_etapa,
     }
     return _insert("cti_pipeline", payload)
 
