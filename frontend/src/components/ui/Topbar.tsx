@@ -62,7 +62,7 @@ export default function Topbar() {
   const exibirFiltrosExecutivos = pathname === "/dashboard" || pathname === "/inteligencia";
 
   return (
-    <header className="w-full min-h-[90px] border-b border-[#D8E2EC] bg-white flex flex-wrap items-center justify-between gap-3 px-8 py-3">
+    <header className="w-full min-h-[90px] border-b border-[#D8E2EC] bg-white flex flex-wrap items-center justify-between gap-3 px-4 pb-3 pt-16 sm:px-6 lg:px-8 lg:py-3">
       <div><h2 className="text-2xl font-bold text-[#0F172A]">{titulo}</h2><p className="text-sm text-slate-600 mt-1">{paginaAtual.descricao[locale]}</p></div>
       <div className="flex flex-wrap items-center justify-end gap-3">
         {exibirFiltrosExecutivos && <>
