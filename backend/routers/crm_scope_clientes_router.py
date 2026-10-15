@@ -112,7 +112,7 @@ def atualizar_cliente_seguro(cliente_id: str, dados: ClienteEdicao, usuario: Usu
     return atualizar_cliente_crm_app(cliente_id, dados)
 @router.put("/{cliente_id}/responsavel")
 def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCliente, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    _exigir_master(usuario); cliente = obter_cliente_crm_app(cliente_id); anterior_id = str(cliente.get("responsavel_comercial_id") or "") or None; tipo_anterior = str(cliente.get("responsabilidade_tipo") or "TERRITORIO")
+    _exigir_master(usuario); cliente = _cliente_canonico(cliente_id); anterior_id = str(cliente.get("responsavel_comercial_id") or "") or None; tipo_anterior = str(cliente.get("responsabilidade_tipo") or "TERRITORIO")
     if dados.restaurar_territorio:
         territorial = _responsavel_territorial(cliente); novo_id = str(territorial.get("id")) if territorial else None; tipo_novo = "TERRITORIO"
     else:
@@ -121,4 +121,4 @@ def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCli
         if not perfil or perfil.get("ativo") is False: raise HTTPException(status_code=422, detail="Responsável comercial inválido ou inativo.")
         novo_id = str(perfil["id"]); tipo_novo = "CONTA_DIRETA_MASTER" if dados.conta_direta_master else "ATRIBUICAO_MASTER"
     supabase.table("clientes").update({"responsavel_comercial_id":novo_id,"responsabilidade_tipo":tipo_novo,"responsabilidade_atualizada_em":_agora(),"responsabilidade_atualizada_por":str(usuario.id)}).eq("id", cliente_id).execute()
-    _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id)); return _anotar_responsavel(obter_cliente_crm_app(cliente_id))
+    _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id)); return _anotar_responsavel(_cliente_canonico(cliente_id))
