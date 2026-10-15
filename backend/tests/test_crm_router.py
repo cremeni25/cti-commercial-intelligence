@@ -89,7 +89,9 @@ class FakeSupabase:
         }
 
     def table(self, name):
-        return Query(self.db, name)
+        # A base de testes reproduz a view de leitura sobre a tabela de escrita.
+        tabela = name.removesuffix("_registros") if name.endswith("_registros") else name
+        return Query(self.db, tabela)
 
 
 def client_with_fake(monkeypatch):
@@ -229,7 +231,7 @@ def test_oportunidade_cria_pipeline_historico_auditoria_e_campos_operacionais(mo
 
     assert created.status_code == 200
     oportunidade = created.json()[0]
-    assert oportunidade["probabilidade"] == 0.5
+    assert oportunidade["probabilidade"] == 50
     assert oportunidade["implementadora"] == "RANDON"
     assert fake.db["cti_pipeline"][0]["etapa_anterior"] is None
     assert fake.db["cti_pipeline"][0]["nova_etapa"] == "OPORTUNIDADE"
