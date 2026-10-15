@@ -192,17 +192,17 @@ export default function CrmAppPage() {
   const hello = t.hello.replace("{name}", primeiroNome)
 
   return (
-    <main className="min-h-[100dvh] bg-[#020817] pb-28 text-white">
+    <main className="min-h-[100dvh] bg-[#F1F5F9] pb-28 text-white">
       <header className="sticky top-0 z-20 border-b border-cyan-950/80 bg-[#061126]/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-cyan-400">{t.brand}</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[.28em] text-sky-700">{t.brand}</p>
             <h1 className="mt-1 text-lg font-bold">{t.today}</h1>
-            <p className="mt-1 text-xs text-slate-400">{nome}{usuario?.tipo_usuario ? ` · ${usuario.tipo_usuario.replaceAll("_", " ")}` : ""}</p>
+            <p className="mt-1 text-xs text-slate-600">{nome}{usuario?.tipo_usuario ? ` · ${usuario.tipo_usuario.replaceAll("_", " ")}` : ""}</p>
           </div>
           <div className="flex items-center gap-2">
             <LanguageSwitcher compact />
-            <span className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-300" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>{online ? t.online : t.reconnecting}</span>
+            <span className={`rounded-full border px-3 py-1 text-xs ${online ? "border-emerald-900 bg-emerald-950/30 text-emerald-700" : "border-amber-900 bg-amber-950/30 text-amber-300"}`}>{online ? t.online : t.reconnecting}</span>
             <button type="button" onClick={() => void sair()} title={t.logout} aria-label={t.logout} className="grid size-9 place-items-center rounded-full border border-slate-700 bg-slate-900 text-slate-300"><LogOut size={16}/></button>
           </div>
         </div>
@@ -210,10 +210,10 @@ export default function CrmAppPage() {
 
       <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
         {aviso && <div className="mb-4 rounded-2xl border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-100">{aviso}</div>}
-        <section className="rounded-3xl border border-[#16325c] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl">
+        <section className="rounded-3xl border border-[#D8E2EC] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div><h2 className="text-3xl font-bold">{hello}</h2><p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p></div>
-            <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-cyan-300"><RefreshCw size={20} className={sincronizando ? "animate-spin" : ""}/></button>
+            <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-sky-700"><RefreshCw size={20} className={sincronizando ? "animate-spin" : ""}/></button>
           </div>
           <div className="mt-5 grid grid-cols-3 gap-2">
             <Indicador href="/crm-app/visitas" valor={resumo.visitas} label={t.visits}/>
@@ -234,14 +234,14 @@ export default function CrmAppPage() {
           </div>
         </section>
 
-        <section className="mt-5 rounded-3xl border border-[#16325c] bg-[#081a32] p-5">
-          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-300"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumo.destaque}</p></div></div>
-          <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#24466f] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></Link>
+        <section className="mt-5 rounded-3xl border border-[#D8E2EC] bg-[#081a32] p-5">
+          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-sky-700"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumo.destaque}</p></div></div>
+          <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#0b2342] font-semibold text-sky-800">{t.details}<ChevronRight size={18}/></Link>
         </section>
 
-        <details className="mt-5 rounded-3xl border border-[#16325c] bg-[#061126] p-4">
-          <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-400">{t.moreHelp}</span></summary>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{recursos.map(({ href, label, valor, icon: Icon }) => <Link key={href} href={href} className="rounded-2xl border border-[#16325c] bg-[#091a33] p-4"><div className="flex items-center justify-between gap-2"><Icon size={20} className="text-cyan-300"/><strong className="text-sm text-cyan-200">{valor}</strong></div><span className="mt-3 block text-sm font-semibold">{label}</span></Link>)}</div>
+        <details className="mt-5 rounded-3xl border border-[#D8E2EC] bg-[#061126] p-4">
+          <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-600">{t.moreHelp}</span></summary>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{recursos.map(({ href, label, valor, icon: Icon }) => <Link key={href} href={href} className="rounded-2xl border border-[#D8E2EC] bg-white p-4"><div className="flex items-center justify-between gap-2"><Icon size={20} className="text-sky-700"/><strong className="text-sm text-sky-800">{valor}</strong></div><span className="mt-3 block text-sm font-semibold">{label}</span></Link>)}</div>
         </details>
       </div>
     </main>
@@ -249,9 +249,9 @@ export default function CrmAppPage() {
 }
 
 function Indicador({ href, valor, label }: { href: string; valor: number; label: string }) {
-  return <Link href={href} className="rounded-2xl border border-[#17365f] bg-[#061126]/70 px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-cyan-300">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></Link>
+  return <Link href={href} className="rounded-2xl border border-[#D8E2EC] bg-white px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-sky-700">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-600">{label}</span></Link>
 }
 
 function Acao({ href, titulo, descricao, icon: Icon }: { href: string; titulo: string; descricao: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
-  return <Link href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#16325c] bg-[#091a33] p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-cyan-950/70 text-cyan-300"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-600 sm:hidden"/></Link>
+  return <Link href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#D8E2EC] bg-white p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-sky-100 text-sky-700"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-600">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-600 sm:hidden"/></Link>
 }
