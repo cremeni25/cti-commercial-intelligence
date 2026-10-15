@@ -3,6 +3,7 @@
 import Image, { type StaticImageData } from "next/image"
 import logoCTI from "@/assets/logo/Logo CTI - fundo azul.png"
 import Link from "next/link"
+import { useEffect, useState } from "react"
 import { usePathname } from "next/navigation"
 
 import trailerIcon from "@/assets/equipamentos/trailer.png"
@@ -77,10 +78,15 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
 
 export default function Sidebar() {
   const pathname = usePathname(); const { usuario } = useAuth(); const { t, locale } = useI18n()
+  const [menuMobileAberto, setMenuMobileAberto] = useState(false)
+  useEffect(() => { setMenuMobileAberto(false) }, [pathname])
   const perfil = String(usuario?.tipo_usuario || "").toUpperCase(); const permissoes = usuario?.permissoes; const acessoTotal = Boolean(usuario?.acesso_total || permissoes?.acesso_total)
-  return <aside className="w-[300px] min-h-screen bg-[#14283F] border-r border-[#2B435C] flex flex-col">
+  return <><button type="button" onClick={() => setMenuMobileAberto(true)} aria-label="Abrir menu de navegação" aria-expanded={menuMobileAberto} className="fixed left-3 top-3 z-40 rounded-xl border border-[#CBD5E1] bg-white px-4 py-3 text-sm font-bold text-[#0F172A] shadow-lg lg:hidden">☰ Menu</button>
+    {menuMobileAberto && <button type="button" aria-label="Fechar menu de navegação" onClick={() => setMenuMobileAberto(false)} className="fixed inset-0 z-40 bg-black/60 lg:hidden" />}
+    <aside className={`fixed inset-y-0 left-0 z-50 flex w-[min(85vw,320px)] flex-col overflow-y-auto border-r border-[#2B435C] bg-[#14283F] transition-transform duration-200 lg:static lg:z-auto lg:min-h-screen lg:w-[300px] lg:shrink-0 lg:translate-x-0 ${menuMobileAberto ? "translate-x-0" : "-translate-x-full"}`}>
+    <button type="button" onClick={() => setMenuMobileAberto(false)} aria-label="Fechar menu" className="absolute right-3 top-3 rounded-lg border border-[#2B435C] px-3 py-2 text-white lg:hidden">✕</button>
     <div className="p-4 border-b border-[#2B435C] flex flex-col items-center gap-3"><Image src={logoCTI} alt="CTI" width={220} height={90} priority className="object-contain"/><LanguageSwitcher compact/></div>
     <nav className="flex-1 p-4 space-y-2 overflow-y-auto">{menuGroups.map((grupo,index)=>{const itensPermitidos=grupo.itens.filter(item=>rotaPermitida(item.href,perfil,permissoes,acessoTotal));if(itensPermitidos.length===0)return null;const tituloGrupo=grupo.tituloKey?t(grupo.tituloKey):grupo.titulo?.[locale]||"";return <div key={`${grupo.tituloKey||tituloGrupo}-${index}`}><p className="px-4 pt-4 pb-2 text-xs uppercase tracking-widest text-[#B6D2EB]">{tituloGrupo}</p>{itensPermitidos.map(item=>{const active=pathname===item.href||Boolean(item.aliases?.some(alias=>pathname===alias||pathname.startsWith(`${alias}/`)));const label=item.labelKey?t(item.labelKey):item.label?.[locale]||item.href;return <Link key={item.href} href={item.href} className={`w-full flex items-center gap-3 rounded-xl px-4 py-3 transition-all ${active?"bg-[#D6EEFA] border border-[#8CCDEB] text-[#0F3554]":"text-slate-200 hover:bg-[#243E58]"}`}><div className="w-[28px] flex items-center justify-center">{item.type==="image"?<Image src={item.icon as StaticImageData} alt={label} width={28} height={28} className="object-contain"/>:<span className="text-lg">{item.icon as string}</span>}</div><span>{label}</span></Link>})}</div>})}</nav>
     <div className="p-4 border-t border-[#2B435C]"><div className="bg-[#243E58] rounded-xl p-4"><p className="text-xs text-gray-400 uppercase tracking-widest">{t("common.systemStatus")}</p><div className="flex items-center gap-2 mt-3"><div className="w-3 h-3 rounded-full bg-green-400 animate-pulse"/><span className="text-green-400 text-sm font-medium">{t("common.online")}</span></div></div></div>
-  </aside>
+  </aside></>
 }
