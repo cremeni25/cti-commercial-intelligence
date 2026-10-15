@@ -373,6 +373,8 @@ def _campos_oportunidade() -> list[str]:
         "valor_estimado",
         "probabilidade",
         "data_fechamento_prevista",
+        "contato_id", "linha_equipamentos", "equipamento", "implementadora",
+        "locadora", "estado", "ddd", "sub_regiao", "municipio", "bairro", "observacoes",
     ]
 
 
