@@ -248,7 +248,7 @@ def _tabela_escrita(table: str) -> str:
     return TABELAS_ESCRITA.get(table, table)
 
 
-def _leitura_resiliente(query_factory, tentativas: int = 4):
+def _leitura_resiliente(query_factory, tentativas: int = 3):
     excecoes_transitorias = (
         httpx.ReadError,
         httpx.ConnectError,
