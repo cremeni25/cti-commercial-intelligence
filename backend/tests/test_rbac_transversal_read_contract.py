@@ -36,7 +36,8 @@ def test_bridge_intercepta_leituras_legadas_sem_capturar_rota_visual_de_vendas()
 def test_pagina_vendas_usa_proxy_autenticado_sem_depender_da_rota_visual():
     pagina = VENDAS_PAGE.read_text(encoding="utf-8")
     assert 'fetchCrmSeguroProxy("crm-seguro/vendas"' in pagina
-    assert 'fetchCrmSeguroProxy("crm-seguro/nucleo-comercial"' in pagina
+    assert 'fetchCrmSeguroProxy("crm-seguro/vendas"' in pagina
+    assert 'from "@/services/crm-secure"' in pagina
     assert '`${API_URL}/vendas`' not in pagina
 
 
