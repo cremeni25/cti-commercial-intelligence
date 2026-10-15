@@ -15,15 +15,15 @@ const atalhos = [
 
 export default function DashboardPage() {
   return (
-    <main className="flex min-h-screen bg-[#020817] text-white">
+    <main className="flex min-h-screen bg-[#F1F5F9] text-[#0F172A]">
       <Sidebar />
       <section className="min-w-0 flex-1">
         <Topbar />
         <div className="space-y-6 p-4 sm:p-6 lg:p-8">
           <header>
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Operação comercial</p>
+            <p className="text-xs font-semibold uppercase tracking-[.2em] text-sky-700">Operação comercial</p>
             <h1 className="mt-1 text-3xl font-bold">CTI Comercial</h1>
-            <p className="mt-2 max-w-3xl text-sm text-slate-400">
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">
               Acesso direto às funções operacionais. O Mapa Estratégico permanece disponível como leitura analítica, sem bloquear a operação do CTI.
             </p>
           </header>
@@ -33,21 +33,21 @@ export default function DashboardPage() {
               <Link
                 key={item.href}
                 href={item.href}
-                className="rounded-2xl border border-[#17304d] bg-[#071226] p-5 transition hover:border-cyan-500/60 hover:bg-cyan-500/5"
+                className="rounded-2xl border border-[#D8E2EC] bg-white shadow-sm p-5 transition hover:border-sky-400 hover:bg-sky-50"
               >
-                <strong className="text-base text-white">{item.titulo}</strong>
-                <span className="mt-2 block text-sm leading-6 text-slate-400">{item.apoio}</span>
+                <strong className="text-base text-[#0F172A]">{item.titulo}</strong>
+                <span className="mt-2 block text-sm leading-6 text-slate-600">{item.apoio}</span>
               </Link>
             ))}
           </section>
 
-          <section className="rounded-2xl border border-[#17304d] bg-[#071226] p-5">
+          <section className="rounded-2xl border border-[#D8E2EC] bg-white shadow-sm p-5">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="font-semibold">Mapa Comercial Estratégico</h2>
-                <p className="mt-1 text-sm text-slate-400">Leitura analítica de mercado, regiões, linhas e perdas.</p>
+                <p className="mt-1 text-sm text-slate-600">Leitura analítica de mercado, regiões, linhas e perdas.</p>
               </div>
-              <Link href="/mapa-estrategico" className="rounded-xl border border-cyan-700 px-4 py-3 text-center text-sm font-semibold text-cyan-300 hover:bg-cyan-950/30">
+              <Link href="/mapa-estrategico" className="rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-center text-sm font-semibold text-sky-800 hover:bg-sky-100">
                 Abrir mapa
               </Link>
             </div>
