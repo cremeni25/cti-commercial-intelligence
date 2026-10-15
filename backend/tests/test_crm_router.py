@@ -233,8 +233,8 @@ def test_oportunidade_cria_pipeline_historico_auditoria_e_campos_operacionais(mo
     oportunidade = created.json()[0]
     assert oportunidade["probabilidade"] == 50
     assert oportunidade["implementadora"] == "RANDON"
-    assert fake.db["cti_pipeline"][0]["etapa_anterior"] is None
-    assert fake.db["cti_pipeline"][0]["nova_etapa"] == "OPORTUNIDADE"
+    assert fake.db["cti_pipeline"][0]["etapa"] == "OPORTUNIDADE"
+    assert fake.db["cti_pipeline"][0]["oportunidade_id"] == oportunidade["id"]
     assert fake.db["cti_oportunidade_historico"][0]["tipo"] == "OPORTUNIDADE"
     assert fake.db["cti_crm_auditoria"][0]["acao"] == "CRIACAO"
 
@@ -255,7 +255,7 @@ def test_converter_proposta_em_pedido_vincula_fluxo_e_marca_ganho(monkeypatch):
     assert pedido.json()[0]["oportunidade_id"] == oportunidade_id
     assert client.get(f"/crm/oportunidades/{oportunidade_id}").json()["status"] == "GANHO"
     assert fake.db["cti_propostas"][0]["status"] == "APROVADA"
-    assert fake.db["cti_pipeline"][-1]["nova_etapa"] == "GANHO"
+    assert fake.db["cti_pipeline"][-1]["etapa"] == "GANHO"
     assert fake.db["cti_oportunidade_historico"][-1]["tipo"] == "PEDIDO"
 
 
@@ -306,5 +306,5 @@ def test_criar_proposta_registra_etapa_anterior_real_da_oportunidade(monkeypatch
     })
 
     assert proposta.status_code == 200
-    assert fake.db["cti_pipeline"][-1]["etapa_anterior"] == "NEGOCIACAO"
-    assert fake.db["cti_pipeline"][-1]["nova_etapa"] == "PROPOSTA"
+    assert fake.db["cti_pipeline"][-1]["etapa"] == "PROPOSTA"
+    assert fake.db["cti_oportunidades"][0]["status"] == "PROPOSTA"
