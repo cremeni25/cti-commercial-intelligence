@@ -167,7 +167,7 @@ def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
     atividade_id = atividade.json()[0]["id"]
     concluida = client.put(f"/crm/atividades/{atividade_id}/concluir")
     assert concluida.status_code == 200
-    assert concluida.json()[0]["status"] == "CONCLUIDA"
+    assert concluida.json()["status"] == "CONCLUIDA"
 
 
 def test_atividade_pode_ser_registrada_para_parceiro_sem_cliente(monkeypatch):
