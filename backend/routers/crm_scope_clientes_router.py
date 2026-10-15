@@ -44,14 +44,24 @@ def _cliente_no_escopo(cliente: dict[str, Any], usuario: UsuarioAutenticado) -> 
     responsavel = str(cliente.get("responsavel_comercial_id") or "").strip()
     return bool(responsavel) and responsavel == str(usuario.id)
 def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None = None, somente_nao_atribuidos: bool = False) -> list[dict[str, Any]]:
-    base = listar_clientes_crm_app()
-    if _visao_total(usuario):
-        if somente_nao_atribuidos:
-            return [item for item in base if not str(item.get("responsavel_comercial_id") or "").strip()]
-        if responsavel_id:
-            return [item for item in base if str(item.get("responsavel_comercial_id") or "").strip() == str(responsavel_id).strip()]
-        return base
-    return [item for item in base if _cliente_no_escopo(item, usuario)]
+    # Fonte de verdade para a propriedade comercial: public.clientes.
+    # Cadastros de cti_clientes nao sao identidades comerciais confirmadas.
+    # Mantemos a visao Master de todos os cadastros canonicos, inclusive sem dono.
+    resolvidos = supabase.table("clientes").select("*").execute().data or []
+    if not _visao_total(usuario):
+        return [item for item in resolvidos if _cliente_no_escopo(item, usuario)]
+    if somente_nao_atribuidos:
+        return [item for item in resolvidos if not str(item.get("responsavel_comercial_id") or "").strip()]
+    if responsavel_id:
+        return [item for item in resolvidos if str(item.get("responsavel_comercial_id") or "").strip() == str(responsavel_id).strip()]
+    return resolvidos
+
+def _cliente_canonico(cliente_id: str) -> dict[str, Any]:
+    dados = supabase.table("clientes").select("*").eq("id", cliente_id).limit(1).execute().data or []
+    if not dados:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado no cadastro canônico.")
+    return dados[0]
+
 def _anotar_responsavel(item: dict[str, Any]) -> dict[str, Any]:
     responsavel_id = str(item.get("responsavel_comercial_id") or "")
     if not responsavel_id: return item
@@ -76,6 +86,8 @@ def listar_responsaveis_comerciais(usuario: UsuarioAutenticado = Depends(usuario
 @router.get("")
 def listar_clientes_seguro(responsavel_id: str | None = Query(default=None), nao_atribuidos: bool = Query(default=False), usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_visualizar")
+    responsavel_id = responsavel_id if isinstance(responsavel_id, str) else None
+    nao_atribuidos = nao_atribuidos if isinstance(nao_atribuidos, bool) else False
     if (responsavel_id or nao_atribuidos) and not _visao_total(usuario):
         raise HTTPException(status_code=403, detail="Filtro de carteira disponível somente para usuários Master.")
     return [_anotar_responsavel(item) for item in _clientes_filtrados(usuario, responsavel_id, nao_atribuidos)]
@@ -88,19 +100,19 @@ def criar_cliente_seguro(dados: ClienteCreate, usuario: UsuarioAutenticado = Dep
     return resposta
 @router.get("/{cliente_id}")
 def obter_cliente_seguro(cliente_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    _exigir_permissao(usuario, "clientes_visualizar"); cliente = obter_cliente_crm_app(cliente_id)
+    _exigir_permissao(usuario, "clientes_visualizar"); cliente = _cliente_canonico(cliente_id)
     if not _cliente_no_escopo(cliente, usuario): raise HTTPException(status_code=403, detail="Cliente fora do seu escopo comercial.")
     return _anotar_responsavel(cliente)
 @router.put("/{cliente_id}")
 def atualizar_cliente_seguro(cliente_id: str, dados: ClienteEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_permissao(usuario, "clientes_editar")
     if _visao_total(usuario): return atualizar_cliente_crm_app(cliente_id, dados)
-    atual = obter_cliente_crm_app(cliente_id)
+    atual = _cliente_canonico(cliente_id)
     if not _cliente_no_escopo(atual, usuario): raise HTTPException(status_code=403, detail="Cliente fora do seu escopo comercial.")
     return atualizar_cliente_crm_app(cliente_id, dados)
 @router.put("/{cliente_id}/responsavel")
 def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCliente, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    _exigir_master(usuario); cliente = obter_cliente_crm_app(cliente_id); anterior_id = str(cliente.get("responsavel_comercial_id") or "") or None; tipo_anterior = str(cliente.get("responsabilidade_tipo") or "TERRITORIO")
+    _exigir_master(usuario); cliente = _cliente_canonico(cliente_id); anterior_id = str(cliente.get("responsavel_comercial_id") or "") or None; tipo_anterior = str(cliente.get("responsabilidade_tipo") or "TERRITORIO")
     if dados.restaurar_territorio:
         territorial = _responsavel_territorial(cliente); novo_id = str(territorial.get("id")) if territorial else None; tipo_novo = "TERRITORIO"
     else:
@@ -109,4 +121,4 @@ def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCli
         if not perfil or perfil.get("ativo") is False: raise HTTPException(status_code=422, detail="Responsável comercial inválido ou inativo.")
         novo_id = str(perfil["id"]); tipo_novo = "CONTA_DIRETA_MASTER" if dados.conta_direta_master else "ATRIBUICAO_MASTER"
     supabase.table("clientes").update({"responsavel_comercial_id":novo_id,"responsabilidade_tipo":tipo_novo,"responsabilidade_atualizada_em":_agora(),"responsabilidade_atualizada_por":str(usuario.id)}).eq("id", cliente_id).execute()
-    _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id)); return _anotar_responsavel(obter_cliente_crm_app(cliente_id))
+    _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id)); return _anotar_responsavel(_cliente_canonico(cliente_id))

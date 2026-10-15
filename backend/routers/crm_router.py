@@ -248,7 +248,7 @@ def _tabela_escrita(table: str) -> str:
     return TABELAS_ESCRITA.get(table, table)
 
 
-def _leitura_resiliente(query_factory, tentativas: int = 4):
+def _leitura_resiliente(query_factory, tentativas: int = 3):
     excecoes_transitorias = (
         httpx.ReadError,
         httpx.ConnectError,
@@ -373,6 +373,8 @@ def _campos_oportunidade() -> list[str]:
         "valor_estimado",
         "probabilidade",
         "data_fechamento_prevista",
+        "contato_id", "linha_equipamentos", "equipamento", "implementadora",
+        "locadora", "estado", "ddd", "sub_regiao", "municipio", "bairro", "observacoes",
     ]
 
 
@@ -493,7 +495,7 @@ def atualizar_pipeline(pipeline_id: str, pipeline: PipelineUpdate):
     payload = _payload(pipeline, ["etapa", "observacao"])
     updated = _update("cti_pipeline", pipeline_id, payload, "Pipeline não encontrado")
     if pipeline.etapa is not None and updated:
-        oportunidade_id = updated[0].get("oportunidade_id")
+        oportunidade_id = atual.get("oportunidade_id") or updated[0].get("oportunidade_id")
         if oportunidade_id:
             oportunidade = _first("cti_oportunidades", oportunidade_id, "Oportunidade não encontrada")
             _update("cti_oportunidades", oportunidade_id, {"status": pipeline.etapa}, "Oportunidade não encontrada")

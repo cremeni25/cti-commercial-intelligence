@@ -7,10 +7,12 @@ HISTORICO = ROOT / "frontend" / "src" / "app" / "historico-comercial" / "page.ts
 CATALOGO_ESTRATEGICO = ROOT / "frontend" / "src" / "core" / "i18n" / "strategic.ts"
 
 
-def test_dashboard_legado_redireciona_para_mapa_estrategico():
+def test_dashboard_operacional_preserva_acesso_ao_mapa_estrategico():
     fonte = DASHBOARD.read_text(encoding="utf-8")
 
-    assert 'redirect("/mapa-estrategico")' in fonte
+    assert 'href: "/pipeline"' in fonte
+    assert 'href: "/vendas"' in fonte
+    assert 'href="/mapa-estrategico"' in fonte
     assert "AnfirWorkbookPanel" not in fonte
     assert "AnfirWorkbookCharts" not in fonte
     assert "Dashboard Executivo" not in fonte

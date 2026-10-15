@@ -20,9 +20,16 @@ def test_catalogo_clientes_respeita_responsabilidade_comercial(monkeypatch):
     ]
     monkeypatch.setattr(clientes_scope, "listar_clientes_crm_app", lambda: base)
     monkeypatch.setattr(clientes_scope, "_anotar_responsavel", lambda item: item)
+    class Consulta:
+        data = base
+        def select(self, *_args): return self
+        def execute(self): return self
+    monkeypatch.setattr(clientes_scope.supabase, "table", lambda nome: Consulta() if nome == "clientes" else None)
 
-    resultado = clientes_scope.listar_clientes_seguro(None, usuario_regional())
+    resultado = clientes_scope.listar_clientes_seguro(None, False, usuario_regional())
     assert [item["id"] for item in resultado] == ["c1"]
+    assert resultado[0]["responsavel_comercial_id"] == "user-monica"
+    assert [item["id"] for item in clientes_scope._clientes_filtrados(SimpleNamespace(id="user-master", tipo_usuario="ADMIN_MASTER", permissoes={}), "user-master")] == ["c2"]
 
 
 def test_crm_resumo_aplica_filtro_de_responsabilidade(monkeypatch):

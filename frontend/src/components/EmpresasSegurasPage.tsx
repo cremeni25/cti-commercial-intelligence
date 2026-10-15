@@ -22,7 +22,7 @@ export default function EmpresasSegurasPage(){
  const {contextoAtual,queryString}=useOperationalContext();const {locale,tc,formatCurrency,formatNumber}=useClosureI18n()
  const abrirEmpresa=locale==="en"?"Open company":locale==="es"?"Abrir empresa":"Abrir empresa"
  const[historico,setHistorico]=useState<EmpresaResumoItem[]>([]),[clientes,setClientes]=useState<ClienteCanonicoSeguro[]>([]),[crm,setCrm]=useState<CrmResumoEmpresaSeguro>(CRM_VAZIO),[busca,setBusca]=useState(""),[selecionada,setSelecionada]=useState<string|null>(null),[loadingHistorico,setLoadingHistorico]=useState(true),[loadingClientes,setLoadingClientes]=useState(true),[loadingCrm,setLoadingCrm]=useState(true),[avisos,setAvisos]=useState<string[]>([])
- useEffect(()=>{let ativo=true;setAvisos([]);setLoadingHistorico(true);setLoadingClientes(true);setLoadingCrm(true)
+ useEffect(()=>{let ativo=true;
   void getClientes(queryString).then(h=>{if(ativo)setHistorico(Array.isArray(h)?h:[])}).catch(()=>{if(ativo)setAvisos(v=>[...v,"O histórico de mercado demorou mais que o esperado; os clientes cadastrados continuam disponíveis."])}).finally(()=>{if(ativo)setLoadingHistorico(false)})
   void getClientesCanonicosSeguros().then(c=>{if(ativo)setClientes(Array.isArray(c)?c:[])}).catch(()=>{if(ativo)setAvisos(v=>[...v,"A base cadastral de clientes não respondeu. Atualize a tela para tentar novamente."])}).finally(()=>{if(ativo)setLoadingClientes(false)})
   void getCrmResumoEmpresasSeguro().then(r=>{if(ativo)setCrm(r||CRM_VAZIO)}).catch(()=>{if(ativo)setAvisos(v=>[...v,"O resumo comercial está temporariamente indisponível; a relação cadastral permanece acessível."])}).finally(()=>{if(ativo)setLoadingCrm(false)})

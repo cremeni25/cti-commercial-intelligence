@@ -85,7 +85,7 @@ export default function DossieFinanceiroCarrier({ propostaId, compacto = false }
     }
   }
 
-  useEffect(() => { if (propostaId) void carregar() }, [propostaId])
+  useEffect(() => { if (propostaId) { const iniciar = () => carregar(); void iniciar() } }, [propostaId])
 
   async function anexar() {
     const arquivo = fileRef.current?.files?.[0]

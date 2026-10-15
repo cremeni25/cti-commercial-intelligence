@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import JornadaComercialNav from "@/components/crm/JornadaComercialNav"
@@ -27,10 +27,10 @@ export default function VendasPage(){
  const[dados,setDados]=useState<Venda[]>([]),[busca,setBusca]=useState(""),[loading,setLoading]=useState(true),[erro,setErro]=useState(""),[usuariosMaster,setUsuariosMaster]=useState<UsuarioOpcao[]>([])
  useEffect(()=>{let ativo=true;setLoading(true);setErro("");fetchCrmSeguroProxy("crm-seguro/vendas",{cache:"no-store"}).then(async rv=>{const vendas=await rv.json().catch(()=>null);if(!rv.ok)throw new Error(vendas?.detail||tx.load);if(!Array.isArray(vendas))throw new Error(tx.unexpected);if(ativo)setDados(vendas as Venda[])}).catch(falha=>{if(ativo)setErro(falha instanceof Error?falha.message:tx.loadFail)}).finally(()=>{if(ativo)setLoading(false)});return()=>{ativo=false}},[tx.load,tx.loadFail,tx.unexpected,usuario])
  useEffect(()=>{if(!master)return;fetch("/api/crm-proxy/governanca/usuarios",{cache:"no-store"}).then(async r=>r.ok?listaUsuarios(await r.json().catch(()=>[])):[]).then(setUsuariosMaster).catch(()=>setUsuariosMaster([]))},[master])
- const usuarioAtual=useMemo(()=>usuario?.id?{id:String(usuario.id),nome:String(usuario.nome||usuario.email||usuario.id)}:null,[usuario?.id,usuario?.nome,usuario?.email])
- const nomesPorId=useMemo(()=>Object.fromEntries((master?usuariosMaster:(usuarioAtual?[usuarioAtual]:[])).map(u=>[u.id,u.nome])),[master,usuariosMaster,usuarioAtual])
+ const usuarioAtual=usuario?.id?{id:String(usuario.id),nome:String(usuario.nome||usuario.email||usuario.id)}:null
+ const nomesPorId=Object.fromEntries((master?usuariosMaster:(usuarioAtual?[usuarioAtual]:[])).map(u=>[u.id,u.nome]))
+ const filtrados=(()=>{const nomeResponsavel=(item:Venda)=>item.responsavel_nome||nomesPorId[String(item.responsavel_id||"")]||(String(item.responsavel_id||"")===String(usuario?.id||"")?String(usuario?.nome||usuario?.email||""):"")||"—";const loc=locale==="pt-BR"?"pt-BR":locale==="es"?"es":"en";const termo=busca.trim().toLocaleLowerCase(loc);if(!termo)return dados;return dados.filter(item=>(JSON.stringify(item)+" "+nomeResponsavel(item)).toLocaleLowerCase(loc).includes(termo))})()
  const nomeResponsavel=(item:Venda)=>item.responsavel_nome||nomesPorId[String(item.responsavel_id||"")]||(String(item.responsavel_id||"")===String(usuario?.id||"")?String(usuario?.nome||usuario?.email||""):"")||"—"
- const filtrados=useMemo(()=>{const loc=locale==="pt-BR"?"pt-BR":locale==="es"?"es":"en";const termo=busca.trim().toLocaleLowerCase(loc);if(!termo)return dados;return dados.filter(item=>(JSON.stringify(item)+" "+nomeResponsavel(item)).toLocaleLowerCase(loc).includes(termo))},[busca,dados,locale,nomesPorId])
  const valorTotal=dados.reduce((total,item)=>total+Number(item.valor||0),0),ticketMedio=dados.length?valorTotal/dados.length:0,tipos=new Set(dados.map(item=>String(item.tipo_venda||"").trim()).filter(Boolean)).size
  const dataLocal=(valor?:string)=>{if(!valor)return"-";return formatDate(`${valor}T12:00:00`)}
  function abrirRealizado(){setBusca("");window.setTimeout(()=>document.getElementById("historico-vendas")?.scrollIntoView({behavior:"smooth",block:"start"}),0)}
