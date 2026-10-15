@@ -67,4 +67,4 @@ export default function ForecastPage(){
 }
 function Kpi({titulo,valor,destaque="ciano",href,click}:{titulo:string;valor:string|number;destaque?:"ciano"|"verde";href?:string;click:string}){const body=<><p className="text-sm text-slate-600">{titulo}</p><h2 className={`mt-2 text-2xl font-bold sm:text-3xl ${destaque==="verde"?"text-green-400":"text-sky-700"}`}>{valor}</h2>{href&&<p className="mt-2 text-[11px] text-sky-700">{click}</p>}</>;return href?<Link href={href} className="rounded-2xl border border-[#D8E2EC] bg-white p-5 transition hover:border-cyan-500/70 hover:bg-[#F8FAFC] sm:p-6">{body}</Link>:<div className="rounded-2xl border border-[#D8E2EC] bg-white p-5 sm:p-6">{body}</div>}
 function Th({children}:{children:React.ReactNode}){return <th className="p-4 text-left text-slate-600">{children}</th>}
-function Td({children}:{children:React.ReactNode}){return <td className="p-4 text-white">{children}</td>}
+function Td({children}:{children:React.ReactNode}){return <td className="p-4 text-[#0F172A]">{children}</td>}
