@@ -138,7 +138,7 @@ def test_pipeline_muda_fase_e_persiste_na_oportunidade(monkeypatch):
 
     pipeline = client.get("/crm/pipeline")
     assert pipeline.status_code == 200
-    assert pipeline.json()[0]["etapa"] == "GANHO"
+    assert any(item["id"] == pipeline_id and item["etapa"] == "GANHO" for item in pipeline.json())
 
 
 def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
