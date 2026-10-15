@@ -495,7 +495,7 @@ def atualizar_pipeline(pipeline_id: str, pipeline: PipelineUpdate):
     payload = _payload(pipeline, ["etapa", "observacao"])
     updated = _update("cti_pipeline", pipeline_id, payload, "Pipeline não encontrado")
     if pipeline.etapa is not None and updated:
-        oportunidade_id = updated[0].get("oportunidade_id")
+        oportunidade_id = atual.get("oportunidade_id") or updated[0].get("oportunidade_id")
         if oportunidade_id:
             oportunidade = _first("cti_oportunidades", oportunidade_id, "Oportunidade não encontrada")
             _update("cti_oportunidades", oportunidade_id, {"status": pipeline.etapa}, "Oportunidade não encontrada")
