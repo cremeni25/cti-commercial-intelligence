@@ -84,6 +84,8 @@ export default function AuthenticatedAnfirFetchBridge() {
       if (resposta.status !== 401 || !leituraSegura) return resposta
 
       const supabase = getSupabaseClient()
+      const sessaoAtual = await supabase.auth.getSession()
+      if (!sessaoAtual.data.session?.refresh_token) return resposta
       const renovada = await supabase.auth.refreshSession()
       const tokenRenovado = renovada.data.session?.access_token
       if (!tokenRenovado || tokenRenovado === token) return resposta
