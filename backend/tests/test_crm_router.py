@@ -163,6 +163,7 @@ def test_relacionamentos_proposta_pedido_e_atividade(monkeypatch):
         "cliente_id": "empresa-1", "oportunidade_id": oportunidade_id, "proposta_id": proposta_id, "usuario_id": "user-1", "tipo": "follow-up", "titulo": "Retornar"
     })
     assert atividade.status_code == 200
+    assert isinstance(atividade.json(), list), atividade.json()
     atividade_id = atividade.json()[0]["id"]
     concluida = client.put(f"/crm/atividades/{atividade_id}/concluir")
     assert concluida.status_code == 200
