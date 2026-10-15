@@ -15,7 +15,7 @@ def usuario(tipo="USUARIO_CTI", **permissoes):
 
 
 def test_visualizacao_exige_permissao(monkeypatch):
-    monkeypatch.setattr(modulo, "obter_cliente_crm_app", lambda cliente_id: {"id": cliente_id, "responsavel_comercial_id": "user-1"})
+    monkeypatch.setattr(modulo, "_cliente_canonico", lambda cliente_id: {"id": cliente_id, "responsavel_comercial_id": "user-1"})
     with pytest.raises(HTTPException) as erro:
         modulo.obter_cliente_seguro("cliente-1", usuario())
     assert erro.value.status_code == 403
