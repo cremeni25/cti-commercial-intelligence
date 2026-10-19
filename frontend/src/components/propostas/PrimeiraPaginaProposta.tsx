@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type Campos = {
   voltagem: string | null
@@ -37,6 +37,7 @@ const camposVazios: Campos = { voltagem:null, tipo_equipamento:null, impostos:"0
 function moeda(valor: unknown) { return Number(valor || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) }
 
 export default function PrimeiraPaginaProposta({ propostaId, compacto = false }: { propostaId: string; compacto?: boolean }) {
+  const calendarioRef = useRef<HTMLInputElement>(null)
   const [dados, setDados] = useState<Resposta | null>(null)
   const [campos, setCampos] = useState<Campos>(camposVazios)
   const [erro, setErro] = useState("")
@@ -118,7 +119,7 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
         <Campo label="Nome e endereço da Autorizada"><textarea disabled={!dados.editavel} rows={3} value={campos.autorizada_nome_endereco ?? ""} onChange={(e) => setCampos({ ...campos, autorizada_nome_endereco: e.target.value || null })} className="entrada" /></Campo>
         <Campo label="Frete"><select disabled={!dados.editavel} value={campos.frete ?? ""} onChange={(e) => setCampos({ ...campos, frete: e.target.value || null })} className={classeCampo("frete")}><option value="">Selecione</option><option value="CIF">CIF</option><option value="FOB">FOB</option></select></Campo>
         <Campo label="Prazo de entrega"><input disabled={!dados.editavel} value={campos.prazo_entrega ?? ""} onChange={(e) => setCampos({ ...campos, prazo_entrega: e.target.value || null })} className={classeCampo("prazo de entrega")} placeholder="Ex.: 30 dias" /></Campo>
-        <Campo label="Validade da proposta"><input disabled={!dados.editavel} type="date" value={(campos.validade ?? "").slice(0, 10)} onChange={(e) => setCampos({ ...campos, validade: e.target.value || null })} className="entrada" /></Campo>
+        <Campo label="Validade da proposta"><div className="flex items-stretch gap-2"><input ref={calendarioRef} disabled={!dados.editavel} type="date" value={(campos.validade ?? "").slice(0, 10)} onChange={(e) => setCampos({ ...campos, validade: e.target.value || null })} className="entrada min-w-0 flex-1 [color-scheme:dark]" /><button type="button" disabled={!dados.editavel} onClick={() => { const campo = calendarioRef.current; if (!campo) return; try { campo.showPicker() } catch { campo.focus(); campo.click() } }} className="shrink-0 rounded-xl border border-cyan-700 bg-[#102b49] px-3 py-2 text-sm font-semibold text-cyan-100 disabled:opacity-50" aria-label="Abrir calendário de validade da proposta" title="Escolher data no calendário">📅 Calendário</button></div></Campo>
         <Campo label="Período Lynx Fleet (meses)"><input disabled={!dados.editavel} type="number" min="0" step="1" value={campos.lynx_meses ?? ""} onChange={(e) => setCampos({ ...campos, lynx_meses: e.target.value === "" ? null : Number(e.target.value) })} className="entrada" /></Campo>
       </div></div>
     </div>}
