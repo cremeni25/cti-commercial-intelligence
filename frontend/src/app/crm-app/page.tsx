@@ -239,6 +239,7 @@ export default function CrmAppPage() {
           <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#CBD5E1] bg-[#0b2342] font-semibold text-sky-800">{t.details}<ChevronRight size={18}/></Link>
         </section>
 
+        <Link href="/crm-app/feiras" className="mt-5 flex items-center justify-between rounded-3xl border border-cyan-700 bg-[#08233b] p-5 text-white"><span><strong className="block text-lg">Feiras e Eventos</strong><span className="block text-sm text-slate-300">Atendimentos, intenções e lançamentos</span></span><ChevronRight size={22}/></Link>
         <details className="mt-5 rounded-3xl border border-[#D8E2EC] bg-[#061126] p-4">
           <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-600">{t.moreHelp}</span></summary>
           <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{recursos.map(({ href, label, valor, icon: Icon }) => <Link key={href} href={href} className="rounded-2xl border border-[#D8E2EC] bg-white p-4"><div className="flex items-center justify-between gap-2"><Icon size={20} className="text-sky-700"/><strong className="text-sm text-sky-800">{valor}</strong></div><span className="mt-3 block text-sm font-semibold">{label}</span></Link>)}</div>
