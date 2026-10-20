@@ -17,6 +17,8 @@ router = APIRouter(prefix="/crm-seguro/feiras", tags=["feiras-eventos"])
 
 class ItemIntencao(BaseModel):
     codigo_produto: str | None = None
+    lancamento_feira: bool = False
+    descricao_lancamento: str | None = None
     linha_produto: str = Field(min_length=2)
     nome_produto: str = Field(min_length=2)
     quantidade: int = Field(ge=1, le=100000)
@@ -70,10 +72,16 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(422,"Informe ao menos um equipamento.")
     if entrada.valor_referencia is not None and not entrada.moeda:
         raise HTTPException(422,"Informe a moeda do valor de referência.")
-    codigos = [str(i.codigo_produto or "").strip() for i in entrada.itens]
-    if any(not codigo for codigo in codigos):
-        raise HTTPException(422,"Selecione equipamentos do catálogo.")
-    catalogados = supabase.table("cti_catalogo_equipamentos").select("codigo,linha_produto,nome_comercial").eq("ativo",True).in_("codigo",list(set(codigos))).execute().data or []
+    codigos = [str(i.codigo_produto or "").strip() for i in entrada.itens if not i.lancamento_feira]
+    for i in entrada.itens:
+        if i.lancamento_feira:
+            if not str(i.codigo_produto or "").strip() or not str(i.descricao_lancamento or "").strip():
+                raise HTTPException(422,"Lançamento de feira exige código e descrição.")
+        elif not str(i.codigo_produto or "").strip():
+            raise HTTPException(422,"Selecione um equipamento do catálogo.")
+    catalogados = (supabase.table("cti_catalogo_equipamentos")
+        .select("codigo,linha_produto,nome_comercial").eq("ativo",True)
+        .in_("codigo",list(set(codigos))).execute().data or []) if codigos else []
     por_codigo = {str(p["codigo"]):p for p in catalogados}
     if any(codigo not in por_codigo for codigo in codigos):
         raise HTTPException(422,"Um ou mais equipamentos não estão ativos no catálogo.")
@@ -89,7 +97,15 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(503,"Atendimento não confirmado.")
     atendimento = registro[0]
     try:
-        itens = [dict(atendimento_id=atendimento["id"],codigo_produto=i.codigo_produto,linha_produto=por_codigo[i.codigo_produto]["linha_produto"],nome_produto=por_codigo[i.codigo_produto]["nome_comercial"],quantidade=i.quantidade) for i in entrada.itens]
+        itens = [dict(
+            atendimento_id=atendimento["id"],
+            codigo_produto=i.codigo_produto,
+            linha_produto=i.linha_produto if i.lancamento_feira else por_codigo[i.codigo_produto]["linha_produto"],
+            nome_produto=i.nome_produto if i.lancamento_feira else por_codigo[i.codigo_produto]["nome_comercial"],
+            quantidade=i.quantidade,
+            lancamento_feira=i.lancamento_feira,
+            descricao_lancamento=i.descricao_lancamento if i.lancamento_feira else None
+        ) for i in entrada.itens]
         supabase.table("cti_feira_itens").insert(itens).execute()
     except Exception:
         supabase.table("cti_feira_atendimentos").delete().eq("id",atendimento["id"]).execute()
@@ -109,7 +125,7 @@ def relatorio_pdf(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_a
     cabecalho = ["Empresa","Visitante","Cidade/UF","Região","Equipamentos","Data"]
     linhas = [cabecalho]
     for a in registros:
-        produtos = "; ".join(str(i.get("quantidade",0))+"x "+str(i.get("nome_produto","")) for i in a.get("itens",[]))
+        produtos = "; ".join(str(i.get("quantidade",0))+"x "+str(i.get("nome_produto",""))+(" [LANÇAMENTO DA FEIRA]" if i.get("lancamento_feira") else "") for i in a.get("itens",[]))
         campos = [a.get("empresa"),a.get("visitante"),str(a.get("cidade") or "")+"/"+str(a.get("uf") or ""),a.get("regiao"),produtos,str(a.get("criado_em") or "")[:16]]
         linhas.append([Paragraph(escape(str(x or "")),estilo["BodyText"]) for x in campos])
     tabela = Table(linhas,colWidths=[125,100,100,75,275,90],repeatRows=1,hAlign="LEFT")
