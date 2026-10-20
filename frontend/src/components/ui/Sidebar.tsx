@@ -29,6 +29,7 @@ const menuGroups: MenuGroup[] = [
     { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
     { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
     { labelKey: "nav.proposals", href: "/propostas", icon: "📄", type: "emoji" },
+    { label: { "pt-BR": "Feiras e Eventos", en: "Fairs and Events", es: "Ferias y Eventos" }, href: "/crm-app/feiras", icon: "🎪", type: "emoji" },
     { labelKey: "nav.orders", href: "/pedidos", icon: "📦", type: "emoji" },
     { labelKey: "nav.sales", href: "/vendas", icon: "💰", type: "emoji" },
     { labelKey: "nav.reports", href: "/relatorios", icon: "📑", type: "emoji" },

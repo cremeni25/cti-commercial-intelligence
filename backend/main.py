@@ -12,6 +12,7 @@ load_dotenv()
 
 from core.supabase_client import supabase
 from routers.analytics_router import router as analytics_router
+from routers.feiras_eventos_router import router as feiras_eventos_router
 from routers.anfir_workbook_router import router as anfir_workbook_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
@@ -97,6 +98,7 @@ app.include_router(crm_scope_vendas_router)
 app.include_router(crm_scope_negocio_historico_router)
 app.include_router(primeiro_acesso_scope_router)
 app.include_router(analytics_router)
+app.include_router(feiras_eventos_router)
 app.include_router(anfir_workbook_router)
 app.include_router(commercial_truth_router)
 app.include_router(engine_router)
