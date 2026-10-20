@@ -112,6 +112,53 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(503,"Itens não gravados; atendimento revertido.")
     return {"id":atendimento["id"],"status":"REGISTRADO"}
 
+@router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")
+def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio
+    from routers.clientes_oportunidade_router import ClienteOportunidadeCreate, ClienteContexto, OportunidadeContexto
+    registros = (supabase.table("cti_feira_atendimentos").select("*")
+        .eq("id",atendimento_id).eq("feira_id",feira_id).limit(1).execute().data or [])
+    if not registros:
+        raise HTTPException(404,"Atendimento não localizado.")
+    a = registros[0]
+    if a.get("regiao") != "VIENA":
+        raise HTTPException(403,"Somente intenções da região VIENA podem gerar oportunidade no CTI.")
+    if a.get("oportunidade_id"):
+        return {"oportunidade_id":a["oportunidade_id"],"reutilizada":True}
+    itens = (supabase.table("cti_feira_itens").select("*")
+        .eq("atendimento_id",atendimento_id).execute().data or [])
+    if not itens:
+        raise HTTPException(422,"Intenção sem equipamentos.")
+    linhas = []
+    for i in itens:
+        prefixo = "LANÇAMENTO DA FEIRA - PENDENTE DE HOMOLOGAÇÃO" if i.get("lancamento_feira") else "CATÁLOGO CTI"
+        linhas.append(f'{prefixo}: {i.get("quantidade")} x {i.get("nome_produto")} (código {i.get("codigo_produto")})')
+    descricao = "Origem: Feira / "+str(feira_id)+"; atendimento "+str(atendimento_id)+"\n"+"\n".join(linhas)
+    if any(i.get("lancamento_feira") for i in itens):
+        descricao += "\nATENÇÃO: lançamento não homologado; não emitir proposta formal para este item."
+    dados = ClienteOportunidadeCreate(
+        cliente=ClienteContexto(nome=a["empresa"],cidade=a.get("cidade"),estado=a.get("uf")),
+        oportunidade=OportunidadeContexto(
+            responsavel_id=str(usuario.id),
+            titulo="Feira - "+str(a["empresa"]),
+            descricao=descricao,
+            valor_estimado=0,
+            probabilidade=0,
+            linha_equipamentos="FEIRA",
+            equipamento=", ".join(str(i.get("nome_produto")) for i in itens)
+        )
+    )
+    if _usa_escopo_proprio(usuario):
+        dados = dados.model_copy(update={"oportunidade":dados.oportunidade.model_copy(update={"responsavel_id":str(usuario.id)})})
+    cliente, compat = _resolver_cliente(dados)
+    resultado = _criar_oportunidade(dados,cliente,compat)
+    oportunidade = resultado.get("oportunidade") or {}
+    oportunidade_id = oportunidade.get("id")
+    if not oportunidade_id:
+        raise HTTPException(503,"Oportunidade não confirmada; atendimento preservado.")
+    supabase.table("cti_feira_atendimentos").update({"oportunidade_id":oportunidade_id,"status":"CONVERTIDO"}).eq("id",atendimento_id).eq("feira_id",feira_id).is_("oportunidade_id","null").execute()
+    return {"oportunidade_id":oportunidade_id,"reutilizada":bool(resultado.get("reutilizada"))}
+
 @router.delete("/{feira_id}/atendimentos/{atendimento_id}")
 def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     if usuario.tipo_usuario not in {"ADMIN_MASTER","DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
