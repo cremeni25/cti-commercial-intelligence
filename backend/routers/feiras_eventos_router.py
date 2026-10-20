@@ -9,6 +9,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
 from xml.sax.saxutils import escape
 from pydantic import BaseModel, Field
+from decimal import Decimal
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 
@@ -34,7 +35,7 @@ class Atendimento(BaseModel):
     interesse: str | None = None
     observacoes: str | None = None
     moeda: str | None = None
-    valor_referencia: float | None = None
+    valor_referencia: Decimal | None = None
     itens: list[ItemIntencao] = Field(default_factory=list)
 
 @router.get("")
@@ -67,6 +68,16 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(422,"Valor inválido.")
     if not entrada.itens:
         raise HTTPException(422,"Informe ao menos um equipamento.")
+    if entrada.valor_referencia is not None and not entrada.moeda:
+        raise HTTPException(422,"Informe a moeda do valor de referência.")
+    codigos = [str(i.codigo_produto or "").strip() for i in entrada.itens]
+    if any(not codigo for codigo in codigos):
+        raise HTTPException(422,"Selecione equipamentos do catálogo.")
+    catalogados = supabase.table("cti_catalogo_equipamentos").select("codigo,linha_produto,nome_comercial").eq("ativo",True).in_("codigo",list(set(codigos))).execute().data or []
+    por_codigo = {str(p["codigo"]):p for p in catalogados}
+    if any(codigo not in por_codigo for codigo in codigos):
+        raise HTTPException(422,"Um ou mais equipamentos não estão ativos no catálogo.")
+
     feiras = supabase.table("cti_feiras").select("id").eq("id",feira_id).limit(1).execute().data or []
     if not feiras:
         raise HTTPException(404,"Feira não localizada.")
@@ -78,7 +89,7 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(503,"Atendimento não confirmado.")
     atendimento = registro[0]
     try:
-        itens = [dict(i.model_dump(),atendimento_id=atendimento["id"]) for i in entrada.itens]
+        itens = [dict(atendimento_id=atendimento["id"],codigo_produto=i.codigo_produto,linha_produto=por_codigo[i.codigo_produto]["linha_produto"],nome_produto=por_codigo[i.codigo_produto]["nome_comercial"],quantidade=i.quantidade) for i in entrada.itens]
         supabase.table("cti_feira_itens").insert(itens).execute()
     except Exception:
         supabase.table("cti_feira_atendimentos").delete().eq("id",atendimento["id"]).execute()
