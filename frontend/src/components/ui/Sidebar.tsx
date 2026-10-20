@@ -20,6 +20,7 @@ type MenuGroup = { tituloKey?: MessageKey; titulo?: LocalizedLabel; itens: MenuI
 
 const menuGroups: MenuGroup[] = [
   { titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" }, itens: [
+    { label: { "pt-BR": "Feiras e Eventos", en: "Fairs and Events", es: "Ferias y Eventos" }, href: "/crm-app/feiras", icon: "🎪", type: "emoji" },
     { label: { "pt-BR": "Mapa Estratégico", en: "Strategic Map", es: "Mapa Estratégico" }, href: "/mapa-estrategico", aliases: ["/inteligencia-comercial"], icon: "◎", type: "emoji" },
     { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
   ]},

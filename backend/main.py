@@ -36,6 +36,7 @@ from routers.crm_scope_relatorios_router import router as crm_scope_relatorios_r
 from routers.crm_scope_vendas_router import router as crm_scope_vendas_router
 from routers.cti_api_router import router as cti_api_router
 from routers.drilldown_router import router as drilldown_router
+from routers.feiras_eventos_router import router as feiras_eventos_router
 from routers.engine_router import router as engine_router
 from routers.modulos_router import router as modulos_router
 from routers.negociacoes_router import router as negociacoes_router
@@ -84,6 +85,7 @@ app.include_router(crm_scope_estabelecimento_router)
 app.include_router(crm_scope_atividades_router)
 app.include_router(crm_scope_carrier_router)
 app.include_router(crm_scope_cliente_referencia_router)
+app.include_router(feiras_eventos_router)
 app.include_router(crm_scope_clientes_router)
 app.include_router(crm_scope_documents_secure_router)
 app.include_router(crm_scope_documents_public_router)
