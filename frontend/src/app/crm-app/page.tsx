@@ -179,6 +179,7 @@ export default function CrmAppPage() {
       { href: "/crm-app/atividades", label: t.activities, valor: resumo.atividades, icon: ClipboardCheck },
       { href: "/crm-app/pipeline", label: t.pipeline, valor: resumo.pipeline, icon: TrendingUp },
       { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
+      { href: "/crm-app/feiras", label: "Feiras e Eventos", valor: "2026", icon: CalendarDays },
       { href: "/crm-app/pedidos", label: t.orders, valor: resumo.pedidos, icon: PackageCheck },
       { href: "/crm-app/vendas", label: t.sales, valor: resumo.vendas, icon: CircleDollarSign },
       { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
@@ -238,6 +239,8 @@ export default function CrmAppPage() {
           <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-300"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumo.destaque}</p></div></div>
           <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#24466f] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></Link>
         </section>
+
+        <Link href="/crm-app/feiras" className="mt-5 flex items-center justify-between gap-3 rounded-3xl border border-cyan-700/70 bg-[#08233b] p-5 text-white"><span className="flex items-center gap-3"><span className="grid size-12 place-items-center rounded-xl bg-cyan-950 text-cyan-300"><CalendarDays size={24}/></span><span><strong className="block text-lg">Feiras e Eventos</strong><span className="mt-1 block text-sm text-slate-300">Atendimentos, intenções de compra e lançamentos da feira</span></span></span><ChevronRight size={22} className="shrink-0 text-cyan-300"/></Link>
 
         <details className="mt-5 rounded-3xl border border-[#16325c] bg-[#061126] p-4">
           <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-400">{t.moreHelp}</span></summary>
