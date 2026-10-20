@@ -1,6 +1,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
+from xml.sax.saxutils import escape
 from pydantic import BaseModel, Field
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
@@ -77,3 +84,25 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         supabase.table("cti_feira_atendimentos").delete().eq("id",atendimento["id"]).execute()
         raise HTTPException(503,"Itens não gravados; atendimento revertido.")
     return {"id":atendimento["id"],"status":"REGISTRADO"}
+
+@router.get("/{feira_id}/relatorio.pdf")
+def relatorio_pdf(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    feira = supabase.table("cti_feiras").select("nome").eq("id",feira_id).limit(1).execute().data or []
+    if not feira:
+        raise HTTPException(404,"Feira não localizada.")
+    registros = listar_atendimentos(feira_id, usuario)
+    memoria = BytesIO()
+    doc = SimpleDocTemplate(memoria,pagesize=landscape(A4),leftMargin=25,rightMargin=25,topMargin=30,bottomMargin=30)
+    estilo = getSampleStyleSheet()
+    titulo = Paragraph("CTI / VIENA - "+escape(feira[0]["nome"]),estilo["Title"])
+    cabecalho = ["Empresa","Visitante","Cidade/UF","Região","Equipamentos","Data"]
+    linhas = [cabecalho]
+    for a in registros:
+        produtos = "; ".join(str(i.get("quantidade",0))+"x "+str(i.get("nome_produto","")) for i in a.get("itens",[]))
+        campos = [a.get("empresa"),a.get("visitante"),str(a.get("cidade") or "")+"/"+str(a.get("uf") or ""),a.get("regiao"),produtos,str(a.get("criado_em") or "")[:16]]
+        linhas.append([Paragraph(escape(str(x or "")),estilo["BodyText"]) for x in campos])
+    tabela = Table(linhas,colWidths=[125,100,100,75,275,90],repeatRows=1,hAlign="LEFT")
+    tabela.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,0),colors.HexColor("#E6EFF7")),("GRID",(0,0),(-1,-1),0.3,colors.grey),("VALIGN",(0,0),(-1,-1),"TOP"),("BOTTOMPADDING",(0,0),(-1,-1),6)]))
+    doc.build([titulo,Spacer(1,12),Paragraph(f"Total de atendimentos: {len(registros)}",estilo["Normal"]),Spacer(1,12),tabela])
+    memoria.seek(0)
+    return StreamingResponse(memoria,media_type="application/pdf",headers={"Content-Disposition":"attachment; filename=cti-feira-relatorio.pdf"})
