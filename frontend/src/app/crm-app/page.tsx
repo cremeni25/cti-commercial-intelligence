@@ -179,6 +179,7 @@ export default function CrmAppPage() {
       { href: "/crm-app/atividades", label: t.activities, valor: resumo.atividades, icon: ClipboardCheck },
       { href: "/crm-app/pipeline", label: t.pipeline, valor: resumo.pipeline, icon: TrendingUp },
       { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
+      { href: "/crm-app/feiras", label: "Feiras e Eventos", valor: "2026", icon: CalendarDays },
       { href: "/crm-app/pedidos", label: t.orders, valor: resumo.pedidos, icon: PackageCheck },
       { href: "/crm-app/vendas", label: t.sales, valor: resumo.vendas, icon: CircleDollarSign },
       { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
