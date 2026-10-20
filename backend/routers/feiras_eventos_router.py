@@ -112,6 +112,22 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(503,"Itens não gravados; atendimento revertido.")
     return {"id":atendimento["id"],"status":"REGISTRADO"}
 
+@router.delete("/{feira_id}/atendimentos/{atendimento_id}")
+def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    if usuario.tipo_usuario not in {"ADMIN_MASTER","DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
+        raise HTTPException(403,"Exclusão de teste restrita à gestão.")
+    registros = (supabase.table("cti_feira_atendimentos").select("id,criado_por,observacoes,oportunidade_id")
+        .eq("id",atendimento_id).eq("feira_id",feira_id).limit(1).execute().data or [])
+    if not registros:
+        raise HTTPException(404,"Atendimento não localizado.")
+    registro = registros[0]
+    if not str(registro.get("observacoes") or "").lstrip().upper().startswith("[TESTE]"):
+        raise HTTPException(409,"Somente atendimentos identificados com [TESTE] podem ser excluídos.")
+    if registro.get("oportunidade_id"):
+        raise HTTPException(409,"Registro vinculado a oportunidade não pode ser excluído.")
+    supabase.table("cti_feira_atendimentos").delete().eq("id",atendimento_id).eq("feira_id",feira_id).execute()
+    return {"excluido":True,"id":atendimento_id}
+
 @router.get("/{feira_id}/relatorio.pdf")
 def relatorio_pdf(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     feira = supabase.table("cti_feiras").select("nome").eq("id",feira_id).limit(1).execute().data or []
