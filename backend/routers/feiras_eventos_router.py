@@ -114,7 +114,7 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
 
 @router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")
 def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio
+    from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio, _negocios_ativos
     from routers.clientes_oportunidade_router import ClienteOportunidadeCreate, ClienteContexto, OportunidadeContexto
     registros = (supabase.table("cti_feira_atendimentos").select("*")
         .eq("id",atendimento_id).eq("feira_id",feira_id).limit(1).execute().data or [])
@@ -151,6 +151,8 @@ def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioA
     if _usa_escopo_proprio(usuario):
         dados = dados.model_copy(update={"oportunidade":dados.oportunidade.model_copy(update={"responsavel_id":str(usuario.id)})})
     cliente, compat = _resolver_cliente(dados)
+    if _negocios_ativos(str(cliente.get("id") or ""), str(usuario.id)):
+        raise HTTPException(409,"Cliente já possui negócio ativo neste responsável. Vincule manualmente após conferir, para evitar associar a intenção a uma oportunidade não relacionada.")
     resultado = _criar_oportunidade(dados,cliente,compat)
     oportunidade = resultado.get("oportunidade") or {}
     oportunidade_id = oportunidade.get("id")
