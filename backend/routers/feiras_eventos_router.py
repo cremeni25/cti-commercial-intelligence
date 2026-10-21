@@ -42,21 +42,29 @@ class Atendimento(BaseModel):
 
 
 
+def _vinculo_externo(usuario: UsuarioAutenticado) -> dict | None:
+    registros = (supabase.table("cti_feira_profissionais").select("autorizada_id,papel,ativo")
+        .eq("user_id",usuario.id).limit(1).execute().data or [])
+    if not registros or not registros[0].get("ativo"):
+        return None
+    empresa = (supabase.table("cti_feira_autorizadas").select("ativa")
+        .eq("id",registros[0]["autorizada_id"]).limit(1).execute().data or [])
+    return registros[0] if empresa and empresa[0].get("ativa") else None
+
+
 def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
-    """Restringe acessos externos mesmo quando a rota e chamada diretamente."""
-    if usuario.tipo_usuario == "AUTORIZADO_CARRIER":
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
         if not usuario.permissoes.get("feiras_eventos"):
-            raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
-        return "proprio", str(usuario.id)
-    if usuario.tipo_usuario == "GESTOR_AUTORIZADO_CARRIER":
-        if not usuario.permissoes.get("feiras_eventos"):
-            raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
-        return "empresa", str(usuario.id)
-    if usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP", "ADMIN_COMERCIAL_VIENA_SP"}:
-        return "global", None
+            raise HTTPException(403,"Feiras e Eventos não autorizado.")
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo:
+            raise HTTPException(403,"Vínculo institucional inexistente ou inativo.")
+        return ("empresa",str(vinculo["autorizada_id"])) if vinculo["papel"] == "GESTOR" else ("proprio",str(usuario.id))
+    if usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
+        return "global",None
     if usuario.permissoes.get("feiras_eventos"):
-        return "proprio", str(usuario.id)
-    raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
+        return "proprio",str(usuario.id)
+    raise HTTPException(403,"Feiras e Eventos não autorizado.")
 
 @router.get("")
 def listar_feiras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
@@ -71,11 +79,12 @@ def catalogo(usuario: UsuarioAutenticado = Depends(usuario_atual)):
 @router.get("/{feira_id}/atendimentos")
 def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     escopo, identificador = _escopo_feira(usuario)
-    if escopo == "empresa":
-        raise HTTPException(403, "Visão empresarial pendente de vínculo institucional validado.")
+
     consulta = supabase.table("cti_feira_atendimentos").select("*").eq("feira_id",feira_id)
     if escopo == "proprio":
         consulta = consulta.eq("criado_por", identificador)
+    elif escopo == "empresa":
+        consulta = consulta.eq("autorizada_id", identificador)
     rows = consulta.order("criado_em",desc=True).limit(1000).execute().data or []
     if rows:
         ids = [r["id"] for r in rows]
@@ -87,8 +96,7 @@ def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usu
 @router.post("/{feira_id}/atendimentos", status_code=201)
 def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     escopo, _ = _escopo_feira(usuario)
-    if escopo == "empresa":
-        raise HTTPException(403, "Registro empresarial pendente de vínculo institucional validado.")
+
     if entrada.feira_id != feira_id:
         raise HTTPException(422,"Feira inconsistente.")
     if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR"}:
@@ -121,6 +129,11 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
     payload = entrada.model_dump(exclude={"itens","feira_id"})
     payload["feira_id"] = feira_id
     payload["criado_por"] = str(usuario.id)
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER","GESTOR_AUTORIZADO_CARRIER"}:
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo:
+            raise HTTPException(403,"Vínculo institucional inválido.")
+        payload["autorizada_id"] = vinculo["autorizada_id"]
     registro = supabase.table("cti_feira_atendimentos").insert(payload).execute().data
     if not registro:
         raise HTTPException(503,"Atendimento não confirmado.")
