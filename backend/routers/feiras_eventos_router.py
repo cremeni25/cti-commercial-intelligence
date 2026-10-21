@@ -10,6 +10,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, 
 from xml.sax.saxutils import escape
 from pydantic import BaseModel, Field
 from decimal import Decimal
+from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+import json
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 
@@ -85,6 +88,23 @@ def listar_feiras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
 def catalogo(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _escopo_feira(usuario)
     return supabase.table("cti_catalogo_equipamentos").select("codigo,linha_produto,nome_comercial").eq("ativo",True).order("linha_produto").execute().data or []
+
+@router.get("/consulta-cnpj/{cnpj}")
+def consultar_cnpj(cnpj: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
+    numero = "".join(c for c in cnpj if c.isdigit())
+    if len(numero) != 14 or numero != cnpj:
+        raise HTTPException(422, "CNPJ inválido.")
+    try:
+        with urlopen("https://brasilapi.com.br/api/cnpj/v1/" + numero, timeout=6) as resposta:
+            dados = json.load(resposta)
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, "CNPJ não localizado.") from exc
+        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
+    except (URLError, TimeoutError, ValueError, OSError) as exc:
+        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
+    return {"razao_social": dados.get("razao_social") or "", "nome_fantasia": dados.get("nome_fantasia") or "", "municipio": dados.get("municipio") or "", "uf": dados.get("uf") or ""}
 
 @router.get("/{feira_id}/atendimentos")
 def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual), offset: int = 0, limit: int = 100):
