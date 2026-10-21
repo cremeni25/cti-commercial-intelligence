@@ -44,7 +44,7 @@ class UsuarioTemporario(BaseModel):
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
     autorizada_id: UUID | None = None
-    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR"] = "INTERNO"
+    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR", "CARRIER_MASTER"] = "INTERNO"
 
     @field_validator("email")
     @classmethod
@@ -64,7 +64,7 @@ class UsuarioAtualizacao(BaseModel):
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
     autorizada_id: UUID | None = None
-    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR"] = "INTERNO"
+    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR", "CARRIER_MASTER"] = "INTERNO"
 
 
 class EstadoUsuario(BaseModel):
@@ -174,6 +174,10 @@ def atualizar_autorizada(autorizada_id: UUID, payload: AutorizadaCarrier, usuari
 
 def _validar_vinculo(payload):
     externo = payload.papel_feira != "INTERNO"
+    if payload.papel_feira == "CARRIER_MASTER":
+        if payload.autorizada_id:
+            raise HTTPException(422, "CARRIER Master não pertence a uma autorizada.")
+        return True
     if externo != bool(payload.autorizada_id):
         raise HTTPException(422, "Selecione a empresa autorizada e o papel do profissional.")
     if externo:
@@ -184,6 +188,17 @@ def _validar_vinculo(payload):
 
 
 def _provisionar(usuario_id, perfil, payload):
+    if payload.papel_feira == "CARRIER_MASTER":
+        perfil = {**perfil, "tipo_usuario": "CARRIER_MASTER"}
+        if usuario_id is None:
+            resposta = supabase.table("cti_users").insert(perfil).execute()
+            registros = _dados(resposta)
+            if not registros:
+                raise HTTPException(500, "Cadastro CARRIER Master não confirmado.")
+            usuario_id = registros[0]["id"]
+        permissoes = {"user_id": usuario_id, **_permissoes_dict(PermissoesUsuario(acesso_crm=True, feiras_eventos=True))}
+        supabase.table("cti_user_permissions").upsert(permissoes, on_conflict="user_id").execute()
+        return {"id": usuario_id, **perfil, "permissoes": permissoes}
     return supabase.rpc("cti_feira_provisionar", {
         "p_user_id": usuario_id, "p_perfil": perfil,
         "p_permissoes": _permissoes_dict(payload.permissoes),
@@ -305,7 +320,7 @@ def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: Usu
     alvo = _buscar_usuario(usuario_id)
     _proteger_admin_master_edicao(alvo, usuario)
     externo = _validar_vinculo(payload)
-    if str(alvo.get("tipo_usuario")) in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"} and not externo:
+    if str(alvo.get("tipo_usuario")) in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER", "CARRIER_MASTER"} and not externo:
         raise HTTPException(409, "Selecione o vínculo institucional existente; promoção para interno exige governança específica.")
     dados_cadastrais = {
         "nome": payload.nome.strip(),
