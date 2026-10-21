@@ -164,6 +164,8 @@ def listar_usuarios(usuario: UsuarioAutenticado = Depends(usuario_atual)):
 @router.post("/usuarios", status_code=status.HTTP_201_CREATED)
 def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
+    if payload.papel_feira != "INTERNO" or payload.autorizada_id:
+        raise HTTPException(409, "Provisionamento externo bloqueado até validação transacional de vínculo e permissões.")
     existente = supabase.table("cti_users").select("id").ilike("email", payload.email).limit(1).execute()
     if _dados(existente):
         raise HTTPException(status_code=409, detail="Já existe usuário com este e-mail em cti_users.")
