@@ -119,6 +119,8 @@ def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usu
             consulta = consulta.eq("autorizada_id", _vinculo_externo(usuario)["autorizada_id"])
     elif escopo == "empresa":
         consulta = consulta.eq("autorizada_id", identificador)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        consulta = consulta.in_("regiao", ["NORTE", "CENTRO_OESTE", "SUDESTE", "SUL", "PARAGUAY"])
     rows = consulta.order("criado_em",desc=True).order("id").range(offset, offset + limit - 1).execute().data or []
     if rows:
         ids = [r["id"] for r in rows]
