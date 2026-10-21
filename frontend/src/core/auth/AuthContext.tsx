@@ -17,6 +17,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({ usuario: null, loading: true, sair: async () => undefined })
 const ROTAS_PUBLICAS = new Set(["/", "/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"])
 const ROTA_PORTAL_PRINCIPAL = "/mapa-estrategico"
+const rotaInicial = (perfil: UsuarioComCanais) => ["AUTORIZADO_CARRIER","GESTOR_AUTORIZADO_CARRIER"].includes(String(perfil.tipo_usuario).toUpperCase()) ? "/crm-app/feiras" : perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : ROTA_PORTAL_PRINCIPAL
 
 type UsuarioComCanais = UsuarioCTI & { acesso_portal?: boolean; acesso_crm?: boolean; status_acesso?: string }
 
@@ -100,7 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (ativoNoSistema && !primeiroAcessoPendente && rotaPrimeiroAcesso) {
           if (ativo) setUsuario(perfil)
-          router.replace(perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : ROTA_PORTAL_PRINCIPAL)
+          router.replace(rotaInicial(perfil))
           return
         }
 
@@ -114,12 +115,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (!rotaPublica && !rotaAutorizadaCTI(pathname, perfil)) {
           if (ativo) setUsuario(perfil)
-          router.replace(rotaCrm ? "/crm-app?acesso=restrito" : `${ROTA_PORTAL_PRINCIPAL}?acesso=restrito`)
+          router.replace(rotaCrm && ["AUTORIZADO_CARRIER","GESTOR_AUTORIZADO_CARRIER"].includes(String(perfil.tipo_usuario).toUpperCase()) ? "/crm-app/feiras?acesso=restrito" : rotaCrm ? "/crm-app?acesso=restrito" : `${ROTA_PORTAL_PRINCIPAL}?acesso=restrito`)
           return
         }
 
         if (ativo) setUsuario(perfil)
-        if (pathname === "/login") router.replace(perfil.acesso_portal === false && perfil.acesso_crm !== false ? "/crm-app" : ROTA_PORTAL_PRINCIPAL)
+        if (pathname === "/login") router.replace(rotaInicial(perfil))
         if (pathname === "/crm-app/login") router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
