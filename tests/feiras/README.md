@@ -38,20 +38,20 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
 - 9 verificacoes de sessao aprovadas no Chromium: saida offline, tokens do projeto
   correto, recarga e respostas atrasadas apos saida.
 - 9 verificacoes do fluxo da tela CRM App, viewport 390x844, aprovadas.
-- 13 verificacoes da partida a frio offline, reconexao e saida em varias abas
+- 14 verificacoes da partida a frio offline, reconexao e saida em varias abas
   aprovadas com service worker, CacheStorage, IndexedDB e Web Crypto reais,
-  incluindo abertura pela URL inicial do app instalado.
+  incluindo encerramento e reinicio do processo do navegador, sem espelho em
+  sessionStorage, e abertura pela URL inicial do app instalado.
   Conta sintetica e servidor de API local: nao e homologacao do backend remoto.
 - 34 verificacoes SQL em PostgreSQL WASM isolado aprovadas; exercicio de fila
   com 1, 10 e 50 requisicoes, sem erros. Isso NAO mede capacidade Render/Supabase
   nem concorrencia real de varias conexoes.
 - TypeScript, lint dos arquivos alterados e build Next.js aprovados.
-- A bateria Python integral passou no GitHub na base 98f48910: 793 aprovados,
-  1 ignorado e 23 avisos; lint/build completos tambem passaram na execucao
-  39608526359. A execucao 39618326294 tambem passou backend, lint, build e
-  repetiu SQL/cofre/sessao/UI/offline no GitHub, na base 93dd961f.
+- A bateria integral do codigo 464c1fbc passou no GitHub: 809 aprovados,
+  1 ignorado e 23 avisos; lint/build e testes SQL/cofre/sessao/UI/offline tambem
+  passaram na execucao 39620858272. Essa rodada inclui 13 verificacoes offline;
+  o teste adicional de reinicio de processo passou localmente apos essa rodada.
   Isso nao substitui verificacao funcional remota.
-  As execucoes locais integrais foram limitadas por timeout.
   Os testes legados que acessavam rotas sem sessao foram adaptados para executar
   explicitamente como equipe interna; testes negativos de autenticacao continuam
   sem esse fixture e verificam 401/403.
@@ -67,7 +67,9 @@ No frontend: npm ci; npm run build (variaveis Supabase de teste).
 Nesta pasta: npm ci; npx playwright install chromium.
 Executar npm run test:database, npm run test:vault, npm run test:session,
 npm run test:ui e npm run test:offline. As variaveis NEXT_PUBLIC_SUPABASE_URL
-e NEXT_PUBLIC_SUPABASE_ANON_KEY devem estar presentes no build (valores de teste).
+e NEXT_PUBLIC_SUPABASE_ANON_KEY devem estar presentes no build. Usar
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co e
+NEXT_PUBLIC_SUPABASE_ANON_KEY=isolated-test-key para estes testes sinteticos.
 CTI_CHROMIUM_EXECUTABLE permite usar um Chromium instalado no ambiente.
 Os testes UI iniciam o Next localmente e bloqueiam chamadas externas.
 

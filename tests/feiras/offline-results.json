@@ -3,6 +3,7 @@
   "checks": [
     "real service worker prepares Feiras shell and excludes all APIs",
     "offline profile and catalog persist only as ciphertext",
+    "browser process restarted with persistent vault and no sessionStorage mirror",
     "installed app start URL opens prepared Feiras offline without exposing profile",
     "cold offline reload requires vault password before showing protected UI",
     "cold offline reload rejects wrong vault password",

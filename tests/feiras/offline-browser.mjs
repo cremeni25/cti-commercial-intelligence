@@ -1,7 +1,9 @@
 import {chromium} from '@playwright/test'
 import {createServer,request} from 'node:http'
 import {spawn} from 'node:child_process'
-import {writeFileSync} from 'node:fs'
+import {writeFileSync,mkdtempSync,rmSync} from 'node:fs'
+import {tmpdir} from 'node:os'
+import {join} from 'node:path'
 import assert from 'node:assert/strict'
 const next=spawn(process.execPath,['node_modules/next/dist/bin/next','start','--port','3102','--hostname','127.0.0.1'],{cwd:new URL('../../frontend/',import.meta.url),env:process.env})
 await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Next did not start')),15000);next.stdout.on('data',b=>{if(String(b).includes('Ready')){clearTimeout(timer);resolve()}});next.on('exit',c=>reject(Error('Next exit '+c)))})
@@ -24,11 +26,12 @@ const server=createServer((req,res)=>{
 })
 await new Promise(r=>server.listen(0,'127.0.0.1',r))
 const origin='http://127.0.0.1:'+server.address().port
-const browser=await chromium.launch({headless:true,executablePath:process.env.CTI_CHROMIUM_EXECUTABLE,args:['--no-sandbox','--disable-dev-shm-usage']})
+const profileDir=mkdtempSync(join(tmpdir(),'cti-offline-restart-'))
+const launch=()=>chromium.launchPersistentContext(profileDir,{headless:true,executablePath:process.env.CTI_CHROMIUM_EXECUTABLE,args:['--no-sandbox','--disable-dev-shm-usage'],viewport:{width:390,height:844},serviceWorkers:'allow'})
+let context=await launch()
 const checks=[]
 try{
- const context=await browser.newContext({viewport:{width:390,height:844},serviceWorkers:'allow'})
- const page=await context.newPage()
+ let page=await context.newPage()
  await context.addInitScript(perfil=>{if(!localStorage.getItem('cti-offline-fixture-initialized')){sessionStorage.setItem('cti-auth-session-v1',JSON.stringify({access_token:'synthetic-offline-test-token',refresh_token:'synthetic',expires_at:Math.floor(Date.now()/1000)+3600,user:{id:perfil.auth_id,email:perfil.email}}));localStorage.setItem('cti-offline-fixture-initialized','true')}},perfil)
  page.on('console',m=>{if(m.type()==='error')console.error(m.text())})
  await page.goto(origin+'/crm-app/feiras')
@@ -43,7 +46,13 @@ try{
  assert(cachesBefore.some(x=>x.endsWith('/crm-app/feiras')));assert(!cachesBefore.some(x=>x.includes('/api/')));checks.push('real service worker prepares Feiras shell and excludes all APIs')
  const plaintext=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('cti-feiras-cofre-v1');q.onsuccess=()=>r(q.result)});try{return await new Promise(r=>{const q=db.transaction('contextos').objectStore('contextos').getAll();q.onsuccess=()=>r(JSON.stringify(q.result))})}finally{db.close()}})
  assert(!plaintext.includes(perfil.email)&&!plaintext.includes('Equipamento offline'));checks.push('offline profile and catalog persist only as ciphertext')
+ // Persist only the synthetic Supabase session, then destroy every browser process and memory key.
+ await page.evaluate(perfil=>{localStorage.setItem('sb-example-auth-token',JSON.stringify({access_token:'synthetic-offline-test-token',refresh_token:'synthetic',token_type:'bearer',expires_at:Math.floor(Date.now()/1000)+3600,user:{id:perfil.auth_id,email:perfil.email}}));sessionStorage.removeItem('cti-auth-session-v1')},perfil)
+ await context.close()
+ context=await launch()
  await context.setOffline(true)
+ page=await context.newPage()
+ checks.push('browser process restarted with persistent vault and no sessionStorage mirror')
  try{await page.goto(origin+'/crm-app/',{waitUntil:'domcontentloaded'})}catch(error){console.error('Offline startup failed',page.url(),await page.evaluate(async()=>({registrations:(await navigator.serviceWorker.getRegistrations()).map(r=>r.scope),controller:navigator.serviceWorker.controller?.scriptURL,caches:await caches.keys()})).catch(()=>null));throw error}
  await page.waitForURL('**/crm-app/feiras')
  checks.push('installed app start URL opens prepared Feiras offline without exposing profile')
@@ -98,4 +107,4 @@ try{
  checks.push('offline logout across tabs preserves remaining pending as ciphertext')
  const report={environment:'Chromium 141, local Next.js production build and real service worker/cache/IndexedDB/WebCrypto; synthetic account and local API server; browser offline transport enabled',checks}
  writeFileSync(new URL('./offline-results.json',import.meta.url),JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2))
-}finally{await browser.close();server.close();next.kill()}
+}finally{await context.close();server.close();next.kill();rmSync(profileDir,{recursive:true,force:true})}
