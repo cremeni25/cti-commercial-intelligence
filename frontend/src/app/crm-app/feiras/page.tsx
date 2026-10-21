@@ -25,6 +25,7 @@ function FeirasPageContent(){
  const [feiras,setFeiras]=useState<Feira[]>([]),[feira,setFeira]=useState(""),[catalogo,setCatalogo]=useState<Produto[]>([]),[atendimentos,setAtendimentos]=useState<Atendimento[]>([])
  const [empresa,setEmpresa]=useState(""),[cnpj,setCnpj]=useState(""),[visitante,setVisitante]=useState(""),[contato,setContato]=useState(""),[email,setEmail]=useState(""),[cidade,setCidade]=useState(""),[uf,setUf]=useState(""),[regiao,setRegiao]=useState("A_CONFIRMAR"),[destino,setDestino]=useState(""),[observacoes,setObservacoes]=useState(""),[moeda,setMoeda]=useState(""),[valor,setValor]=useState(""),[itens,setItens]=useState<Item[]>([{...vazio}]),[salvando,setSalvando]=useState(false),[erro,setErro]=useState(""),[sucesso,setSucesso]=useState("")
  const [editando,setEditando]=useState<Atendimento|null>(null)
+ const [buscandoCnpj,setBuscandoCnpj]=useState(false)
  const [pendentes,setPendentes]=useState(0),[maisRegistros,setMaisRegistros]=useState(false)
  const atualizarPendentes=useCallback(async()=>{if(userId){const n=await quantidadePendente(userId);if(identidade.current===userId)setPendentes(n)}},[userId])
  const enviarPendente=useCallback(async(item:AtendimentoLocal)=>{
