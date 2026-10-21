@@ -1,0 +1,8 @@
+begin;
+alter table public.cti_user_permissions add column if not exists feiras_eventos boolean not null default false;
+create table if not exists public.cti_feira_autorizadas (id uuid primary key default gen_random_uuid(), nome text not null, ativa boolean not null default true, criado_em timestamptz not null default now());
+create table if not exists public.cti_feira_profissionais (user_id uuid primary key references public.cti_users(id) on delete cascade, autorizada_id uuid not null references public.cti_feira_autorizadas(id), papel text not null default 'PROFISSIONAL' check (papel in ('PROFISSIONAL','GESTOR')), ativo boolean not null default true, criado_em timestamptz not null default now());
+alter table public.cti_feira_atendimentos add column if not exists autorizada_id uuid references public.cti_feira_autorizadas(id);
+create index if not exists idx_cti_feira_atendimentos_empresa_feira on public.cti_feira_atendimentos(autorizada_id, feira_id, criado_em desc);
+create index if not exists idx_cti_feira_atendimentos_autor_feira on public.cti_feira_atendimentos(criado_por, feira_id, criado_em desc);
+commit;
