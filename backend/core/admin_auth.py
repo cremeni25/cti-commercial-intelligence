@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.supabase_client import supabase
@@ -102,7 +102,7 @@ def _buscar_permissoes(user_id: str, tipo_usuario: str) -> dict[str, bool]:
     return permissoes
 
 
-def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(security)) -> UsuarioAutenticado:
+def usuario_atual(request: Request, credenciais: HTTPAuthorizationCredentials | None = Depends(security)) -> UsuarioAutenticado:
     if credenciais is None or credenciais.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Autenticação obrigatória.", headers={"WWW-Authenticate": "Bearer"})
     try:
@@ -117,6 +117,10 @@ def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(sec
     if not perfil or perfil.get("ativo") is False:
         raise HTTPException(status_code=403, detail="Perfil CTI inativo ou inexistente.")
     tipo_usuario = _normalizar_perfil(perfil)
+    if tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        caminho = request.url.path.rstrip("/")
+        if not (caminho == "/crm-seguro/feiras" or caminho.startswith("/crm-seguro/feiras/") or caminho.startswith("/governanca/primeiro-acesso")):
+            raise HTTPException(status_code=403, detail="Perfil externo restrito a Feiras e Eventos.")
     user_id = str(perfil.get("id") or auth_id)
     return UsuarioAutenticado(
         id=user_id,
