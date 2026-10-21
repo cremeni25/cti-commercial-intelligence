@@ -168,3 +168,8 @@ export async function recuperarContextoFeiras(authId: string, senha: string) {
     return await lerContextoFeiras(authId)
   } catch (error) { bloquearCofre(); throw error }
 }
+
+/** Indica somente se esta conta preparou Feiras; não libera nem revela seu perfil. */
+export async function possuiContextoFeiras(authId: string): Promise<boolean> {
+  return operar<boolean>("contextos", "readonly", (s, done) => { const r = s.getKey(authId); r.onsuccess = () => done(r.result !== undefined) })
+}

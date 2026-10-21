@@ -44,7 +44,9 @@ try{
  const plaintext=await page.evaluate(async()=>{const db=await new Promise(r=>{const q=indexedDB.open('cti-feiras-cofre-v1');q.onsuccess=()=>r(q.result)});try{return await new Promise(r=>{const q=db.transaction('contextos').objectStore('contextos').getAll();q.onsuccess=()=>r(JSON.stringify(q.result))})}finally{db.close()}})
  assert(!plaintext.includes(perfil.email)&&!plaintext.includes('Equipamento offline'));checks.push('offline profile and catalog persist only as ciphertext')
  await context.setOffline(true)
- await page.reload({waitUntil:'domcontentloaded'})
+ try{await page.goto(origin+'/crm-app/',{waitUntil:'domcontentloaded'})}catch(error){console.error('Offline startup failed',page.url(),await page.evaluate(async()=>({registrations:(await navigator.serviceWorker.getRegistrations()).map(r=>r.scope),controller:navigator.serviceWorker.controller?.scriptURL,caches:await caches.keys()})).catch(()=>null));throw error}
+ await page.waitForURL('**/crm-app/feiras')
+ checks.push('installed app start URL opens prepared Feiras offline without exposing profile')
  await page.getByRole('heading',{name:'Feiras e Eventos · sem conexão',exact:true}).waitFor()
  assert.equal(await page.getByLabel('Empresa *',{exact:true}).count(),0);checks.push('cold offline reload requires vault password before showing protected UI')
  await page.getByLabel('Senha exclusiva do cofre').fill('senha-incorreta-aaaa')

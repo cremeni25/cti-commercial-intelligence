@@ -33,8 +33,9 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
 - 9 verificacoes de sessao aprovadas no Chromium: saida offline, tokens do projeto
   correto, recarga e respostas atrasadas apos saida.
 - 6 verificacoes do fluxo da tela CRM App, viewport 390x844, aprovadas.
-- 12 verificacoes da partida a frio offline, reconexao e saida em varias abas
-  aprovadas com service worker, CacheStorage, IndexedDB e Web Crypto reais.
+- 13 verificacoes da partida a frio offline, reconexao e saida em varias abas
+  aprovadas com service worker, CacheStorage, IndexedDB e Web Crypto reais,
+  incluindo abertura pela URL inicial do app instalado.
   Conta sintetica e servidor de API local: nao e homologacao do backend remoto.
 - 15 verificacoes SQL em PostgreSQL WASM isolado aprovadas; exercicio de fila
   com 1, 10 e 50 requisicoes, sem erros. Isso NAO mede capacidade Render/Supabase
@@ -42,7 +43,9 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
 - TypeScript, lint dos arquivos alterados e build Next.js aprovados.
 - A bateria Python integral passou no GitHub na base 98f48910: 793 aprovados,
   1 ignorado e 23 avisos; lint/build completos tambem passaram na execucao
-  39608526359. Isso nao substitui verificacao funcional remota.
+  39608526359. A execucao 39618326294 tambem passou backend, lint, build e
+  repetiu SQL/cofre/sessao/UI/offline no GitHub, na base 93dd961f.
+  Isso nao substitui verificacao funcional remota.
   As execucoes locais integrais foram limitadas por timeout.
   Os testes legados que acessavam rotas sem sessao foram adaptados para executar
   explicitamente como equipe interna; testes negativos de autenticacao continuam

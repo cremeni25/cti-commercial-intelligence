@@ -8,7 +8,7 @@ import { buscarUsuarioAtual } from "./auth.service"
 import { CHAVE_SAIDA_CTI, obterSessaoCTI, registrarSessaoCTI, sessaoCTIBloqueada } from "./session"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 import type { Session } from "@supabase/supabase-js"
-import { recuperarContextoFeiras, bloquearCofre } from "@/lib/feiras-cofre"
+import { possuiContextoFeiras, recuperarContextoFeiras, bloquearCofre } from "@/lib/feiras-cofre"
 
 interface AuthContextType {
   usuario: UsuarioCTI | null
@@ -85,6 +85,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
+        if (!navigator.onLine && ["/crm-app", "/crm-app/"].includes(pathname) && session.user?.id && await possuiContextoFeiras(session.user.id)) {
+          if (ativo) router.replace("/crm-app/feiras")
+          return
+        }
         if (!navigator.onLine && pathname === "/crm-app/feiras" && session.expires_at && session.user?.id) {
           if (ativo) setSessaoOffline(session)
           return

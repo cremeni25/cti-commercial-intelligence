@@ -23,7 +23,10 @@
   "migration_sha256": "9235d76531567aa9725675ef92aff37e05a936f3130ba3de6b6d78148949781a",
   "vault_chromium_checks": 24,
   "session_chromium_checks": 9,
-  "offline_flow_checks": 12,
+  "offline_flow_checks": 13,
   "offline_flow_environment": "real Chromium offline transport, local production Next.js, real service worker and vault, synthetic identity and local API",
-  "remote_staging": "blocked: Supabase create_branch returned Invalid or expired requestState again"
+  "remote_staging": "blocked: Supabase create_branch returned Invalid or expired requestState again",
+  "ci_verified_commit": "93dd961fddf5ce8ea4bd81cc6f0d57542d706d61",
+  "ci_run": 39618326294,
+  "ci_checks": "backend 793 passed, 1 skipped; lint, build, SQL, vault, session, UI and offline flow passed"
 }
