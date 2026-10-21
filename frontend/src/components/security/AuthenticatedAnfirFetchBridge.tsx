@@ -92,6 +92,8 @@ export default function AuthenticatedAnfirFetchBridge() {
       if (!tokenRenovado || tokenRenovado === token) return resposta
 
       registrarSessaoCTI(renovada.data.session)
+      // Uma saída ocorrida durante a renovação invalida também esta repetição.
+      if (await obterTokenCTI().catch(() => null) !== tokenRenovado) return resposta
       const headersRenovados = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headersRenovados.set("Authorization", `Bearer ${tokenRenovado}`)
       if (!legadoSeguro) {

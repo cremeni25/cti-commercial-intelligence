@@ -1,0 +1,17 @@
+{
+  "environment": "Chromium 141, local Next.js production build and real service worker/cache/IndexedDB/WebCrypto; synthetic account and local API server; browser offline transport enabled",
+  "checks": [
+    "real service worker prepares Feiras shell and excludes all APIs",
+    "offline profile and catalog persist only as ciphertext",
+    "cold offline reload requires vault password before showing protected UI",
+    "cold offline reload rejects wrong vault password",
+    "cold offline unlock restores correct fair and product catalog",
+    "cold offline form saves encrypted pending without network",
+    "second cold offline reload recovers pending count without data loss",
+    "reconnection sends once with original company and stable idempotency key",
+    "offline logout reaches login without waiting for remote Auth network",
+    "logout in one tab removes protected UI and redirects other open tab",
+    "offline reopening after logout cannot restore previous user profile",
+    "offline logout across tabs preserves remaining pending as ciphertext"
+  ]
+}

@@ -4,6 +4,9 @@ import { getSupabaseClient } from "../database/supabase"
 const SESSION_TIMEOUT_MS = 4000
 const MARGEM_EXPIRACAO_MS = 5000
 const CHAVE_SESSAO_CTI = "cti-auth-session-v1"
+export const CHAVE_SAIDA_CTI = "cti-auth-logout-v1"
+let bloqueadaEmMemoria = false
+let geracao = 0
 
 let sessaoCache: Session | null = null
 let sessaoEmAndamento: Promise<Session | null> | null = null
@@ -72,27 +75,6 @@ function lerStorage(storage: Storage): Session | null {
       }
     }
 
-    for (let i = 0; i < storage.length; i += 1) {
-      const chave = storage.key(i)
-      if (!chave || !chave.includes("auth-token")) continue
-
-      const direta = lerJsonSessao(storage.getItem(chave))
-      if (direta) return direta
-
-      if (chave.endsWith(".0")) {
-        const base = chave.slice(0, -2)
-        const partes: string[] = []
-        for (let parte = 0; parte < 16; parte += 1) {
-          const valor = storage.getItem(`${base}.${parte}`)
-          if (!valor) break
-          partes.push(valor)
-        }
-        if (partes.length) {
-          const fragmentada = lerJsonSessao(partes.join(""))
-          if (fragmentada) return fragmentada
-        }
-      }
-    }
   } catch {
     return null
   }
@@ -105,21 +87,53 @@ function lerSessaoCTIPersistida(): Session | null {
   return lerStorage(window.sessionStorage) || lerStorage(window.localStorage)
 }
 
+export function sessaoCTIBloqueada() {
+  if (bloqueadaEmMemoria) return true
+  if (typeof window === "undefined") return false
+  try { return window.localStorage.getItem(CHAVE_SAIDA_CTI) !== null } catch { return false }
+}
+
+/** Somente um login explícito pode reabrir uma sessão encerrada neste aparelho. */
+export function iniciarSessaoCTI(session: Session) {
+  if (!sessaoValida(session)) throw new Error("Sessão CTI não autenticada.")
+  geracao += 1
+  sessaoEmAndamento = null
+  bloqueadaEmMemoria = false
+  if (typeof window !== "undefined") window.localStorage.removeItem(CHAVE_SAIDA_CTI)
+  registrarSessaoCTI(session)
+}
+
 export function registrarSessaoCTI(session: Session | null) {
-  sessaoCache = session
+  if (!session) {
+    geracao += 1
+    bloqueadaEmMemoria = true
+    sessaoCache = null
+    sessaoEmAndamento = null
+    if (typeof window === "undefined") return
+    for (const storage of [window.sessionStorage, window.localStorage]) {
+      try {
+        storage.removeItem(CHAVE_SESSAO_CTI)
+        const ref = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL || "").hostname.split(".")[0]
+        const base = `sb-${ref}-auth-token`
+        storage.removeItem(base)
+        storage.removeItem(`${base}-code-verifier`)
+        for (let i = 0; i < 16; i += 1) storage.removeItem(`${base}.${i}`)
+      } catch { /* A barreira em memória continua ativa. */ }
+    }
+    try { if (!window.localStorage.getItem(CHAVE_SAIDA_CTI)) window.localStorage.setItem(CHAVE_SAIDA_CTI, String(Date.now())) } catch { /* Sem storage disponível. */ }
+    return
+  }
+  if (sessaoCTIBloqueada()) return
+  sessaoCache = sessaoValida(session) ? session : null
   if (typeof window === "undefined") return
   try {
-    if (session && sessaoValida(session)) {
-      window.sessionStorage.setItem(CHAVE_SESSAO_CTI, JSON.stringify(session))
-    } else {
-      window.sessionStorage.removeItem(CHAVE_SESSAO_CTI)
-    }
-  } catch {
-    // cache em memória continua válido mesmo se o storage do navegador estiver indisponível
-  }
+    if (sessaoCache) window.sessionStorage.setItem(CHAVE_SESSAO_CTI, JSON.stringify(sessaoCache))
+    else window.sessionStorage.removeItem(CHAVE_SESSAO_CTI)
+  } catch { /* O cache em memória permanece disponível. */ }
 }
 
 export async function obterSessaoCTI(): Promise<Session | null> {
+  if (sessaoCTIBloqueada()) return null
   if (sessaoValida(sessaoCache)) return sessaoCache
 
   const persistida = lerSessaoCTIPersistida()
@@ -131,6 +145,7 @@ export async function obterSessaoCTI(): Promise<Session | null> {
   if (sessaoEmAndamento) return sessaoEmAndamento
 
   const supabase = getSupabaseClient()
+  const geracaoInicial = geracao
   sessaoEmAndamento = Promise.race([
     supabase.auth.getSession().then(({ data, error }) => {
       if (error) throw error
@@ -141,17 +156,19 @@ export async function obterSessaoCTI(): Promise<Session | null> {
     }),
   ])
     .then((session) => {
+      if (geracaoInicial !== geracao || sessaoCTIBloqueada()) return null
       registrarSessaoCTI(session)
       return session
     })
     .finally(() => {
-      sessaoEmAndamento = null
+      if (geracaoInicial === geracao) sessaoEmAndamento = null
     })
 
   return sessaoEmAndamento
 }
 
 export async function obterTokenCTI(): Promise<string> {
+  if (sessaoCTIBloqueada()) throw new Error("Sessão CTI encerrada neste aparelho.")
   if (sessaoValida(sessaoCache)) return sessaoCache!.access_token
 
   const persistida = lerSessaoCTIPersistida()

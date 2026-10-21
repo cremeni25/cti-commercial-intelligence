@@ -28,13 +28,22 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
 ## Evidencias locais
 
 - 74 testes Python de acesso, isolamento e regressao aprovados.
-- 16 verificacoes no Chromium real de Web Crypto e IndexedDB aprovadas.
+- 24 verificacoes no Chromium real de Web Crypto e IndexedDB aprovadas,
+  incluindo contexto offline cifrado, expiracao e desbloqueio interrompido.
+- 9 verificacoes de sessao aprovadas no Chromium: saida offline, tokens do projeto
+  correto, recarga e respostas atrasadas apos saida.
 - 6 verificacoes do fluxo da tela CRM App, viewport 390x844, aprovadas.
+- 12 verificacoes da partida a frio offline, reconexao e saida em varias abas
+  aprovadas com service worker, CacheStorage, IndexedDB e Web Crypto reais.
+  Conta sintetica e servidor de API local: nao e homologacao do backend remoto.
 - 15 verificacoes SQL em PostgreSQL WASM isolado aprovadas; exercicio de fila
   com 1, 10 e 50 requisicoes, sem erros. Isso NAO mede capacidade Render/Supabase
   nem concorrencia real de varias conexoes.
 - TypeScript, lint dos arquivos alterados e build Next.js aprovados.
-- A bateria Python integral nao foi homologada: execucoes limitadas por timeout.
+- A bateria Python integral passou no GitHub na base 98f48910: 793 aprovados,
+  1 ignorado e 23 avisos; lint/build completos tambem passaram na execucao
+  39608526359. Isso nao substitui verificacao funcional remota.
+  As execucoes locais integrais foram limitadas por timeout.
   Os testes legados que acessavam rotas sem sessao foram adaptados para executar
   explicitamente como equipe interna; testes negativos de autenticacao continuam
   sem esse fixture e verificam 401/403.
@@ -48,7 +57,9 @@ Nenhum desses resultados substitui a homologacao integrada remota autenticada.
 
 No frontend: npm ci; npm run build (variaveis Supabase de teste).
 Nesta pasta: npm ci; npx playwright install chromium.
-Executar npm run test:database, npm run test:vault e npm run test:ui.
+Executar npm run test:database, npm run test:vault, npm run test:session,
+npm run test:ui e npm run test:offline. As variaveis NEXT_PUBLIC_SUPABASE_URL
+e NEXT_PUBLIC_SUPABASE_ANON_KEY devem estar presentes no build (valores de teste).
 CTI_CHROMIUM_EXECUTABLE permite usar um Chromium instalado no ambiente.
 Os testes UI iniciam o Next localmente e bloqueiam chamadas externas.
 
@@ -59,7 +70,7 @@ O manifesto evidence-summary.json lista os modulos da bateria aprovada.
 ## Impedimentos e condicoes para publicacao
 
 1. Provisionar ambiente remoto isolado. A tentativa de criar branch Supabase
-   retornou Invalid or expired requestState; uma consulta posterior confirmou
+   voltou a retornar Invalid or expired requestState nesta continuidade; consulta confirmou
    que nenhuma branch foi criada. Nao aplicar a migracao ao banco principal
    antes de validar esquema real, RLS, RPCs e permissoes nesse ambiente.
 2. Homologar cadastro, edicao e revogacao institucional no CTI Web e sessao real
@@ -68,9 +79,13 @@ O manifesto evidence-summary.json lista os modulos da bateria aprovada.
 3. Concluir regressao completa do CTI. A barreira global tambem exige verificar
    chamadas legadas que antes omitiam token e fluxos documentais compartilhados.
 4. Medir carga remota com conexoes reais, latencia, erros e recursos do servidor.
-5. Validar partida a frio sem rede: o cofre recupera bytes apos recarga, mas a
-   interface ainda depende de resolver perfil, feira e catalogo pela API. O
-   funcionamento completo apos reiniciar o aplicativo sem conexao nao foi provado.
+5. Repetir no ambiente remoto o fluxo local de partida a frio sem rede. O
+   contexto de perfil/feiras/catalogo agora fica cifrado e vinculado a identidade
+   Auth, sem tokens no cofre. O acesso offline termina quando a sessao ou o
+   contexto expira; pendencias sao preservadas. O worker guarda somente shell e
+   arquivos estaticos e nao respostas de APIs. Saida local nao depende da rede
+   e bloqueia restauracao tardia. Isso encerra a sessao deste aparelho, sem
+   revogar sessoes em outros aparelhos no servidor.
 6. Validar recuperacao em aparelho compartilhado, troca/revogacao de conta,
    multiplas abas, falha durante migracao da fila antiga e limpeza dos caches.
    Pendencias antigas de outras contas permanecem no formato anterior ate

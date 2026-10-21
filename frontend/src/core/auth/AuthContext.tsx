@@ -5,9 +5,10 @@ import { usePathname, useRouter } from "next/navigation"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
 import { buscarUsuarioAtual } from "./auth.service"
-import { obterSessaoCTI, registrarSessaoCTI } from "./session"
+import { CHAVE_SAIDA_CTI, obterSessaoCTI, registrarSessaoCTI, sessaoCTIBloqueada } from "./session"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
-import { bloquearCofre } from "@/lib/feiras-cofre"
+import type { Session } from "@supabase/supabase-js"
+import { recuperarContextoFeiras, bloquearCofre } from "@/lib/feiras-cofre"
 
 interface AuthContextType {
   usuario: UsuarioCTI | null
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [usuario, setUsuario] = useState<UsuarioCTI | null>(null)
   const [loading, setLoading] = useState(true)
+  const [sessaoOffline, setSessaoOffline] = useState<Session | null>(null)
 
   useEffect(() => {
     if (!pathname.startsWith("/crm-app")) return
@@ -63,6 +65,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function carregar() {
       setLoading(true)
+      setUsuario(null)
+      setSessaoOffline(null)
       try {
         const supabase = getSupabaseClient()
         const session = await obterSessaoCTI()
@@ -81,10 +85,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
 
+        if (!navigator.onLine && pathname === "/crm-app/feiras" && session.expires_at && session.user?.id) {
+          if (ativo) setSessaoOffline(session)
+          return
+        }
         const perfilBase = await buscarUsuarioAtual()
+        if (!ativo || sessaoCTIBloqueada()) return
         if (!perfilBase) {
-          await supabase.auth.signOut()
           registrarSessaoCTI(null)
+          supabase.auth.stopAutoRefresh()
           if (ativo) setUsuario(null)
           router.replace(rotaCrm ? "/crm-app/login?acesso=negado" : "/login?acesso=negado")
           return
@@ -144,8 +153,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUsuario(null)
       }
     })
-    return () => { data.subscription.unsubscribe() }
-  }, [])
+    const aoSairEmOutraAba = (event: StorageEvent) => {
+      if (event.key !== CHAVE_SAIDA_CTI || !event.newValue) return
+      bloquearCofre()
+      registrarSessaoCTI(null)
+      supabase.auth.stopAutoRefresh()
+      setUsuario(null)
+      router.replace(pathname.startsWith("/crm-app") ? "/crm-app/login" : "/login")
+    }
+    window.addEventListener("storage", aoSairEmOutraAba)
+    return () => { data.subscription.unsubscribe(); window.removeEventListener("storage", aoSairEmOutraAba) }
+  }, [pathname, router])
 
   async function sair() {
     bloquearCofre()
@@ -153,13 +171,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const rotaCrm = pathname.startsWith("/crm-app")
     registrarSessaoCTI(null)
     setUsuario(null)
-    await supabase.auth.signOut()
+    supabase.auth.stopAutoRefresh()
     router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
   }
 
+  useEffect(() => {
+    if (!sessaoOffline) return
+    const timer = window.setInterval(() => {
+      if (sessaoCTIBloqueada() || !sessaoOffline.expires_at || sessaoOffline.expires_at * 1000 <= Date.now()) {
+        bloquearCofre(); setUsuario(null); setSessaoOffline(null); router.replace("/crm-app/login?acesso=expirado")
+      }
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [sessaoOffline, router])
+
   const podeExibir = ROTAS_PUBLICAS.has(pathname) || (!loading && usuario && rotaAutorizadaCTI(pathname, usuario))
-  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">Validando acesso CTI...</main>}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : sessaoOffline && !loading ? <DesbloquearFeirasOffline session={sessaoOffline} aoDesbloquear={setUsuario} /> : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">Validando acesso CTI...</main>}</AuthContext.Provider>
 }
 
 export function useAuth() { return useContext(AuthContext) }
+
+function DesbloquearFeirasOffline({ session, aoDesbloquear }: { session: Session; aoDesbloquear: (perfil: UsuarioCTI) => void }) {
+  const [senha, setSenha] = useState("")
+  const [erro, setErro] = useState("")
+  const [abrindo, setAbrindo] = useState(false)
+  async function abrir(event: React.FormEvent) {
+    event.preventDefault(); setErro(""); setAbrindo(true)
+    const segredo = senha; setSenha("")
+    try {
+      const contexto = await recuperarContextoFeiras(session.user.id, segredo)
+      if (sessaoCTIBloqueada() || !session.expires_at || session.expires_at * 1000 <= Date.now()) throw Error("Sessão expirada. Conecte-se novamente. As pendências foram preservadas.")
+      if (!contexto || !contexto.perfil.ativo || !rotaAutorizadaCTI("/crm-app/feiras", contexto.perfil)) throw Error("Acesso offline não disponível para esta conta.")
+      aoDesbloquear(contexto.perfil)
+    } catch (error) { bloquearCofre(); setErro(error instanceof Error ? error.message : "Falha ao abrir cofre.") }
+    finally { setAbrindo(false) }
+  }
+  return <main className="min-h-screen bg-[#020817] p-6 text-slate-300"><form onSubmit={e => void abrir(e)} className="mx-auto max-w-md space-y-4 rounded-2xl border border-cyan-800 p-5"><h1 className="text-xl font-bold text-white">Feiras e Eventos · sem conexão</h1><p>Desbloqueie o cofre da conta deste aparelho. O acesso offline dura até a sessão expirar; suas pendências permanecem protegidas.</p><input aria-label="Senha exclusiva do cofre" type="password" required minLength={12} autoComplete="off" value={senha} onChange={e => setSenha(e.target.value)} className="w-full rounded-xl border border-cyan-800 bg-[#07162b] p-3"/><button disabled={abrindo} className="rounded-xl bg-cyan-500 px-4 py-3 text-slate-950">{abrindo ? "Abrindo..." : "Abrir Feiras offline"}</button>{erro && <p role="alert">{erro}</p>}</form></main>
+}

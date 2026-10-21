@@ -19,6 +19,11 @@
   "changed_file_lint": "passed",
   "next_build": "passed",
   "production_mutated": false,
-  "full_suite": "timeout, incomplete",
-  "migration_sha256": "9235d76531567aa9725675ef92aff37e05a936f3130ba3de6b6d78148949781a"
+  "full_suite": "793 passed, 1 skipped, 23 warnings on base 98f48910; GitHub Actions 39608526359",
+  "migration_sha256": "9235d76531567aa9725675ef92aff37e05a936f3130ba3de6b6d78148949781a",
+  "vault_chromium_checks": 24,
+  "session_chromium_checks": 9,
+  "offline_flow_checks": 12,
+  "offline_flow_environment": "real Chromium offline transport, local production Next.js, real service worker and vault, synthetic identity and local API",
+  "remote_staging": "blocked: Supabase create_branch returned Invalid or expired requestState again"
 }

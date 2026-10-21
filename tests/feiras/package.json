@@ -5,7 +5,9 @@
   "scripts": {
     "test:database": "node database.mjs",
     "test:vault": "node vault-browser.mjs",
-    "test:ui": "node ui-browser.mjs"
+    "test:ui": "node ui-browser.mjs",
+    "test:session": "node session-browser.mjs",
+    "test:offline": "node offline-browser.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15",
