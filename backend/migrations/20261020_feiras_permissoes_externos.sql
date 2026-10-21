@@ -5,4 +5,6 @@ create table if not exists public.cti_feira_profissionais (user_id uuid primary 
 alter table public.cti_feira_atendimentos add column if not exists autorizada_id uuid references public.cti_feira_autorizadas(id);
 create index if not exists idx_cti_feira_atendimentos_empresa_feira on public.cti_feira_atendimentos(autorizada_id, feira_id, criado_em desc);
 create index if not exists idx_cti_feira_atendimentos_autor_feira on public.cti_feira_atendimentos(criado_por, feira_id, criado_em desc);
+alter table public.cti_feira_atendimentos add column if not exists client_request_id text;
+create unique index if not exists idx_cti_feira_client_request on public.cti_feira_atendimentos(criado_por,client_request_id) where client_request_id is not null;
 commit;
