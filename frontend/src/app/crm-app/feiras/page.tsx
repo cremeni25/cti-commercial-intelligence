@@ -57,6 +57,23 @@ function FeirasPageContent(){
    const [a,b]=await Promise.all([fetchCrmSeguroProxy("crm-seguro/feiras"),fetchCrmSeguroProxy("crm-seguro/feiras/catalogo")]);if(!a.ok||!b.ok)throw Error("Não foi possível carregar feiras ou catálogo.");const fs=await a.json() as Feira[];const produtos=await b.json() as Produto[];if(!ativo)return;setFeiras(fs);setCatalogo(produtos);setFeira(x=>x||fs[0]?.id||"");if(desbloqueado){const sessao=await obterSessaoCTI();if(sessao?.expires_at&&sessao.user.id===usuario.auth_id&&ativo)await salvarContextoFeiras({perfil:usuario,feiras:fs,catalogo:produtos,expiraEm:sessao.expires_at*1000})}
  })().catch(e=>{if(ativo)setErro(String(e))});return()=>{ativo=false}},[usuario,desbloqueado])
  useEffect(()=>{if(feira&&desbloqueado&&navigator.onLine)void carregar(feira).catch(e=>setErro(String(e)))},[feira,carregar,desbloqueado,userId])
+ async function buscarCnpj(){
+  const numero=cnpj.replace(/[^0-9]/g,"");
+  setErro("");
+  if(numero.length!==14){setErro("Informe um CNPJ com 14 dígitos.");return}
+  if(!navigator.onLine){setErro("Consulta requer internet. Preencha manualmente.");return}
+  setBuscandoCnpj(true);
+  try{
+   const r=await fetchCrmSeguroProxy("crm-seguro/feiras/consulta-cnpj/"+numero,{cache:"no-store"});
+   const dados=await r.json().catch(()=>({}));
+   if(!r.ok)throw Error(dados.detail||"Consulta indisponível.");
+   if(dados.razao_social)setEmpresa(dados.razao_social);
+   if(dados.municipio)setCidade(dados.municipio);
+   if(dados.uf)setUf(dados.uf);
+   setSucesso("Dados encontrados. Confira antes de salvar.");
+  }catch(e){setErro(e instanceof Error?e.message:"Consulta indisponível. Preencha manualmente.")}
+  finally{setBuscandoCnpj(false)}
+ }
  function atualizar(i:number,novo:Partial<Item>){setItens(a=>a.map((x,j)=>i===j?{...x,...novo}:x))}
  async function editar(a:Atendimento){setErro("");if(!cofreDesbloqueado(userId))return;if((await listarDecifrados(userId)).some(p=>p.atendimentoId===a.id)){setErro("Já há uma edição pendente deste atendimento. Sincronize ou confira o conflito antes de editar novamente.");return}setEditando(a);setEmpresa(a.empresa);setCnpj(a.cnpj||"");setVisitante(a.visitante);setContato(a.contato||"");setEmail(a.email||"");setCidade(a.cidade||"");setUf(a.uf||"");setRegiao(a.regiao);setDestino(a.autorizado_destino||"");setObservacoes(a.observacoes||"");setMoeda(a.moeda||"");setValor(a.valor_referencia==null?"":String(a.valor_referencia));setItens(a.itens.map(i=>({...i})));window.scrollTo({top:0,behavior:"smooth"})}
  function cancelarEdicao(){setEditando(null);setEmpresa("");setCnpj("");setVisitante("");setContato("");setEmail("");setCidade("");setUf("");setRegiao("A_CONFIRMAR");setDestino("");setObservacoes("");setMoeda("");setValor("");setItens([{...vazio}])}
