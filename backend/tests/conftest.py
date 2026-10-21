@@ -11,3 +11,20 @@ def pytest_runtest_setup(item):
             self.filters.append((field, esperado))
             return self
         setattr(query, "is_", _is)
+
+
+import pytest
+
+
+@pytest.fixture
+def legacy_authenticated_client(monkeypatch):
+    """Legacy business-rule unit tests run as internal staff.
+
+    HTTP authentication/denial tests use their own client and never opt into
+    this fixture. No default authentication bypass is installed for the suite.
+    """
+    from core import application_access
+    from core.admin_auth import UsuarioAutenticado
+    usuario = UsuarioAutenticado(id="user-1", auth_id="auth-test", email="unit@example.invalid",
+        nome="Internal test", tipo_usuario="ADMIN_MASTER", permissoes={"acesso_total": True})
+    monkeypatch.setattr(application_access, "usuario_atual", lambda *_: usuario)

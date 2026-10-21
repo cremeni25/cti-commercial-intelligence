@@ -20,6 +20,7 @@ export interface PermissoesSessaoCTI {
 }
 
 export interface UsuarioCTI {
+  autorizada_id?: string | null
   id: string
   auth_id: string
   nome: string

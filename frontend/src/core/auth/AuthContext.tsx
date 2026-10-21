@@ -135,18 +135,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => { ativo = false }
   }, [pathname, router])
 
+  useEffect(() => {
+    const supabase = getSupabaseClient()
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "SIGNED_OUT") {
+        bloquearCofre()
+        registrarSessaoCTI(null)
+        setUsuario(null)
+      }
+    })
+    return () => { data.subscription.unsubscribe() }
+  }, [])
+
   async function sair() {
     bloquearCofre()
     const supabase = getSupabaseClient()
     const rotaCrm = pathname.startsWith("/crm-app")
-    await supabase.auth.signOut()
     registrarSessaoCTI(null)
     setUsuario(null)
+    await supabase.auth.signOut()
     router.replace(rotaCrm ? "/crm-app/login" : "/login")
     router.refresh()
   }
 
-  return <AuthContext.Provider value={{ usuario, loading, sair }}>{children}</AuthContext.Provider>
+  const podeExibir = ROTAS_PUBLICAS.has(pathname) || (!loading && usuario && rotaAutorizadaCTI(pathname, usuario))
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">Validando acesso CTI...</main>}</AuthContext.Provider>
 }
 
 export function useAuth() { return useContext(AuthContext) }

@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
+from typing import Literal
+from uuid import UUID
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
@@ -41,8 +43,8 @@ class UsuarioTemporario(BaseModel):
     ddds: list[str] = Field(default_factory=list, max_length=20)
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
-    autorizada_id: str | None = None
-    papel_feira: str = "INTERNO"
+    autorizada_id: UUID | None = None
+    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR"] = "INTERNO"
 
     @field_validator("email")
     @classmethod
@@ -61,8 +63,8 @@ class UsuarioAtualizacao(BaseModel):
     ddds: list[str] = Field(default_factory=list, max_length=20)
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
-    autorizada_id: str | None = None
-    papel_feira: str = "INTERNO"
+    autorizada_id: UUID | None = None
+    papel_feira: Literal["INTERNO", "PROFISSIONAL", "GESTOR"] = "INTERNO"
 
 
 class EstadoUsuario(BaseModel):
@@ -144,6 +146,52 @@ def _proteger_admin_master(alvo: dict, usuario_atual_cti: UsuarioAutenticado) ->
         raise HTTPException(status_code=409, detail="Você não pode desativar ou excluir a própria conta.")
 
 
+class AutorizadaCarrier(BaseModel):
+    nome: str = Field(min_length=2, max_length=120)
+    ativa: bool = True
+
+
+@router.get("/autorizadas-carrier")
+def listar_autorizadas(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    return _dados(supabase.table("cti_feira_autorizadas").select("*").order("nome").execute())
+
+
+@router.post("/autorizadas-carrier", status_code=201)
+def criar_autorizada(payload: AutorizadaCarrier, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    return _dados(supabase.table("cti_feira_autorizadas").insert(payload.model_dump()).execute())[0]
+
+
+@router.put("/autorizadas-carrier/{autorizada_id}")
+def atualizar_autorizada(autorizada_id: UUID, payload: AutorizadaCarrier, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _exigir_master(usuario)
+    rows = _dados(supabase.table("cti_feira_autorizadas").update(payload.model_dump()).eq("id", str(autorizada_id)).execute())
+    if not rows:
+        raise HTTPException(404, "Autorizada não encontrada.")
+    return rows[0]
+
+
+def _validar_vinculo(payload):
+    externo = payload.papel_feira != "INTERNO"
+    if externo != bool(payload.autorizada_id):
+        raise HTTPException(422, "Selecione a empresa autorizada e o papel do profissional.")
+    if externo:
+        rows = _dados(supabase.table("cti_feira_autorizadas").select("id").eq("id", str(payload.autorizada_id)).eq("ativa", True).limit(1).execute())
+        if not rows:
+            raise HTTPException(422, "Autorizada inativa ou inexistente.")
+    return externo
+
+
+def _provisionar(usuario_id, perfil, payload):
+    return supabase.rpc("cti_feira_provisionar", {
+        "p_user_id": usuario_id, "p_perfil": perfil,
+        "p_permissoes": _permissoes_dict(payload.permissoes),
+        "p_autorizada_id": str(payload.autorizada_id) if payload.autorizada_id else None,
+        "p_papel": payload.papel_feira,
+    }).execute().data
+
+
 @router.get("/usuarios")
 def listar_usuarios(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
@@ -155,17 +203,20 @@ def listar_usuarios(usuario: UsuarioAutenticado = Depends(usuario_atual)):
         .execute()
     )
     permissoes = _dados(supabase.table("cti_user_permissions").select("*").execute())
+    vinculos = {str(v["user_id"]): v for v in _dados(supabase.table("cti_feira_profissionais").select("*").execute())}
     por_usuario = {str(item.get("user_id")): item for item in permissoes}
     for item in usuarios:
         item["permissoes"] = por_usuario.get(str(item.get("id")), {})
+        v = vinculos.get(str(item.get("id")), {})
+        item["autorizada_id"] = v.get("autorizada_id")
+        item["papel_feira"] = v.get("papel", "INTERNO")
     return usuarios
 
 
 @router.post("/usuarios", status_code=status.HTTP_201_CREATED)
 def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)
-    if payload.papel_feira != "INTERNO" or payload.autorizada_id:
-        raise HTTPException(409, "Provisionamento externo bloqueado até validação transacional de vínculo e permissões.")
+    externo = _validar_vinculo(payload)
     existente = supabase.table("cti_users").select("id").ilike("email", payload.email).limit(1).execute()
     if _dados(existente):
         raise HTTPException(status_code=409, detail="Já existe usuário com este e-mail em cti_users.")
@@ -209,6 +260,11 @@ def criar_usuario(payload: UsuarioTemporario, usuario: UsuarioAutenticado = Depe
             "cadastro_completo": False,
             "senha_temporaria_criada_em": _agora(),
         }
+        if externo:
+            resultado = _provisionar(None, registro, payload)
+            if not isinstance(resultado, dict) or not resultado.get("id"):
+                raise RuntimeError("Provisionamento não confirmado.")
+            return resultado
         resposta = supabase.table("cti_users").insert(registro).execute()
         dados = _dados(resposta)
         if not dados:
@@ -248,6 +304,9 @@ def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: Usu
     _exigir_master(usuario)
     alvo = _buscar_usuario(usuario_id)
     _proteger_admin_master_edicao(alvo, usuario)
+    externo = _validar_vinculo(payload)
+    if str(alvo.get("tipo_usuario")) in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"} and not externo:
+        raise HTTPException(409, "Selecione o vínculo institucional existente; promoção para interno exige governança específica.")
     dados_cadastrais = {
         "nome": payload.nome.strip(),
         "empresa": payload.empresa.strip(),
@@ -258,6 +317,8 @@ def atualizar_usuario(usuario_id: str, payload: UsuarioAtualizacao, usuario: Usu
         "gestor_responsavel": (payload.gestor_responsavel or "").strip() or None,
         "updated_at": _agora(),
     }
+    if externo:
+        return _provisionar(usuario_id, dados_cadastrais, payload)
     resposta = supabase.table("cti_users").update(dados_cadastrais).eq("id", usuario_id).execute()
     atualizados = _dados(resposta)
     if not atualizados:
@@ -275,6 +336,8 @@ def atualizar_permissoes(usuario_id: str, payload: PermissoesUsuario, usuario: U
     _exigir_master(usuario)
     alvo = _buscar_usuario(usuario_id)
     _proteger_admin_master_edicao(alvo, usuario)
+    if alvo.get("tipo_usuario") in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        payload = PermissoesUsuario(acesso_crm=True, feiras_eventos=payload.feiras_eventos)
     dados = {"user_id": usuario_id, **_permissoes_dict(payload)}
     resposta = supabase.table("cti_user_permissions").upsert(dados, on_conflict="user_id").execute()
     return _dados(resposta)[0] if _dados(resposta) else dados

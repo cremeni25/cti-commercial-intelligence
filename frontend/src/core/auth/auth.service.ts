@@ -58,6 +58,7 @@ export async function buscarUsuarioAtual(): Promise<UsuarioCTI | null> {
     nome: String(perfil.nome || session.user.email || "Usuário CTI"),
     email: String(perfil.email || session.user.email || ""),
     empresa: String(perfil.empresa || ""),
+    autorizada_id: perfil.autorizada_id ? String(perfil.autorizada_id) : null,
     cargo: String(perfil.cargo || ""),
     tipo_usuario: String(perfil.tipo_usuario || "").trim().toUpperCase(),
     ativo: perfil.ativo !== false,

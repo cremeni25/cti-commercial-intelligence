@@ -1,0 +1,24 @@
+{
+  "status": "NOT_HOMOLOGATED_DO_NOT_PUBLISH",
+  "base_commit": "c27beb1500aab160cce1f0b8cee30b1478788176",
+  "python_passed": 74,
+  "python_modules": [
+    "test_feiras_isolamento",
+    "test_product_catalog_rbac",
+    "test_primeiro_acesso_preserva_escopo",
+    "test_onboarding_guard_frontend",
+    "test_rbac_transversal_read_contract",
+    "test_rbac_individual_comercial_contract",
+    "test_crm_router",
+    "test_endpoints_contexto",
+    "test_modulos_router",
+    "test_pipeline_quadro",
+    "test_dashboard_anfir_rbac_contract"
+  ],
+  "typescript": "passed",
+  "changed_file_lint": "passed",
+  "next_build": "passed",
+  "production_mutated": false,
+  "full_suite": "timeout, incomplete",
+  "migration_sha256": "9235d76531567aa9725675ef92aff37e05a936f3130ba3de6b6d78148949781a"
+}

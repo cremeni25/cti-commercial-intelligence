@@ -1,0 +1,15 @@
+{
+  "name": "cti-feiras-isolated-verification",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test:database": "node database.mjs",
+    "test:vault": "node vault-browser.mjs",
+    "test:ui": "node ui-browser.mjs"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.3.15",
+    "@playwright/test": "1.56.1",
+    "typescript": "5.9.3"
+  }
+}

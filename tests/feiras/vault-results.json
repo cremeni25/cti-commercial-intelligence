@@ -1,0 +1,21 @@
+{
+  "engine": "Chromium real Web Crypto + IndexedDB, isolated synthetic data",
+  "checks": [
+    "encrypted save and decrypt",
+    "no plaintext in persistent queue",
+    "network failure keeps queue",
+    "pending survives network failure",
+    "invalid acknowledgement keeps queue",
+    "locked vault unreadable",
+    "wrong password rejected",
+    "same record id isolated across accounts",
+    "unlocking B does not unlock A",
+    "acknowledging B preserves A",
+    "password verifier survives empty queue",
+    "reload discards unlock key",
+    "reload and unlock recover pending data",
+    "valid server receipt removes only acknowledged pending",
+    "AES-GCM rejects tampered ciphertext",
+    "corrupt pending preserved for recovery"
+  ]
+}

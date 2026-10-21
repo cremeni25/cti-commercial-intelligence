@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.usefixtures("legacy_authenticated_client")
+
 from fastapi.testclient import TestClient
 
 from main import app

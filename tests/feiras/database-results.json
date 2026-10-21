@@ -1,0 +1,43 @@
+{
+  "environment": "PostgreSQL WASM PGlite isolated, synthetic data; not Render/Supabase capacity",
+  "checks": [
+    "migration reapplication",
+    "professional provisioning",
+    "manager provisioning",
+    "forced least privilege",
+    "idempotent replay x20",
+    "payload conflict",
+    "item failure atomic rollback",
+    "recovery after failure",
+    "per-company ownership",
+    "company revocation",
+    "permission revocation",
+    "inactive company provisioning rejected",
+    "anon direct table denied",
+    "authenticated direct table denied",
+    "public RPC denied"
+  ],
+  "loads": [
+    {
+      "concurrency": 1,
+      "requests": 1,
+      "errors": 0,
+      "elapsedMs": 2,
+      "p95Ms": 2
+    },
+    {
+      "concurrency": 10,
+      "requests": 10,
+      "errors": 0,
+      "elapsedMs": 12,
+      "p95Ms": 12
+    },
+    {
+      "concurrency": 50,
+      "requests": 50,
+      "errors": 0,
+      "elapsedMs": 56,
+      "p95Ms": 55
+    }
+  ]
+}

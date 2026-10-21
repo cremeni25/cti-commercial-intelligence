@@ -56,6 +56,9 @@ def _cors_origins() -> list[str]:
 
 app = FastAPI(title="CTI Comercial Intelligence API")
 
+from core.application_access import application_access
+app.middleware("http")(application_access)
+
 
 @app.middleware("http")
 async def stable_request_dispatch(request: Request, call_next):
