@@ -70,6 +70,7 @@ try{
  assert.equal(await page.getByLabel('Empresa *',{exact:true}).isVisible(),true);checks.push('online attendance remains accessible with offline vault locked')
  await context.setOffline(true)
  await page.evaluate(()=>window.dispatchEvent(new Event('offline')))
+ await page.getByLabel('Empresa *',{exact:true}).waitFor({state:'hidden'});
  assert.equal(await page.getByLabel('Empresa *',{exact:true}).isVisible(),false);checks.push('offline operation requires unlocked encrypted vault')
  await context.setOffline(false)
  await page.evaluate(()=>window.dispatchEvent(new Event('online')))
