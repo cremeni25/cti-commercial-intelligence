@@ -59,6 +59,10 @@ def _vinculo_externo(usuario: UsuarioAutenticado) -> dict | None:
 
 
 def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        if not usuario.permissoes.get("feiras_eventos"):
+            raise HTTPException(403, "Feiras e Eventos não autorizado.")
+        return "global", None
     if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
         if not usuario.permissoes.get("feiras_eventos"):
             raise HTTPException(403,"Feiras e Eventos não autorizado.")
@@ -160,6 +164,8 @@ def _validar_entrada(feira_id: str, entrada: Atendimento) -> list[dict]:
 @router.post("/{feira_id}/atendimentos", status_code=201)
 def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     escopo, _ = _escopo_feira(usuario)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        raise HTTPException(403, "CARRIER Master possui acesso de consulta, sem edição de atendimentos.")
 
     if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
         vinculo = _vinculo_externo(usuario)
@@ -197,6 +203,8 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
 @router.put("/{feira_id}/atendimentos/{atendimento_id}")
 def editar_atendimento(feira_id: str, atendimento_id: str, entrada: AtendimentoEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     escopo, _ = _escopo_feira(usuario)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        raise HTTPException(403, "CARRIER Master possui acesso de consulta, sem edição de atendimentos.")
     consulta = supabase.table("cti_feira_atendimentos").select("id,criado_por,autorizada_id,oportunidade_id,status").eq("id", atendimento_id).eq("feira_id", feira_id)
     # Managers have company visibility; editing another professional is not implied.
     if escopo != "global":
@@ -237,7 +245,7 @@ def editar_atendimento(feira_id: str, atendimento_id: str, entrada: AtendimentoE
 
 @router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")
 def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER", "CARRIER_MASTER"}:
         raise HTTPException(403, "Conversão comercial reservada à equipe interna.")
     escopo, identificador = _escopo_feira(usuario)
     from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio, _negocios_ativos
