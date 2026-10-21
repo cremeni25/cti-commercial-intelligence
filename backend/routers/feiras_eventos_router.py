@@ -39,6 +39,7 @@ class Atendimento(BaseModel):
     moeda: str | None = None
     valor_referencia: Decimal | None = None
     itens: list[ItemIntencao] = Field(default_factory=list)
+    client_request_id: str | None = Field(default=None, max_length=80)
 
 
 
@@ -126,6 +127,11 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
     feiras = supabase.table("cti_feiras").select("id").eq("id",feira_id).limit(1).execute().data or []
     if not feiras:
         raise HTTPException(404,"Feira não localizada.")
+    if entrada.client_request_id:
+        existentes = (supabase.table("cti_feira_atendimentos").select("id").eq("feira_id",feira_id)
+            .eq("criado_por",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or [])
+        if existentes:
+            return {"id":existentes[0]["id"],"status":"REGISTRADO","reutilizado":True}
     payload = entrada.model_dump(exclude={"itens","feira_id"})
     payload["feira_id"] = feira_id
     payload["criado_por"] = str(usuario.id)
@@ -134,7 +140,15 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         if not vinculo:
             raise HTTPException(403,"Vínculo institucional inválido.")
         payload["autorizada_id"] = vinculo["autorizada_id"]
-    registro = supabase.table("cti_feira_atendimentos").insert(payload).execute().data
+    try:
+        registro = supabase.table("cti_feira_atendimentos").insert(payload).execute().data
+    except Exception:
+        if entrada.client_request_id:
+            existentes = (supabase.table("cti_feira_atendimentos").select("id").eq("feira_id",feira_id)
+                .eq("criado_por",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or [])
+            if existentes:
+                return {"id":existentes[0]["id"],"status":"REGISTRADO","reutilizado":True}
+        raise HTTPException(503,"Gravação não confirmada; tente sincronizar novamente.")
     if not registro:
         raise HTTPException(503,"Atendimento não confirmado.")
     atendimento = registro[0]
