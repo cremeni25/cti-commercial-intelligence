@@ -1,7 +1,7 @@
 {
   "status": "NOT_HOMOLOGATED_DO_NOT_PUBLISH",
   "base_commit": "c27beb1500aab160cce1f0b8cee30b1478788176",
-  "python_passed": 74,
+  "python_passed": 90,
   "python_modules": [
     "test_feiras_isolamento",
     "test_product_catalog_rbac",
@@ -28,5 +28,9 @@
   "remote_staging": "blocked: Supabase create_branch returned Invalid or expired requestState again",
   "ci_verified_commit": "93dd961fddf5ce8ea4bd81cc6f0d57542d706d61",
   "ci_run": 39618326294,
-  "ci_checks": "backend 793 passed, 1 skipped; lint, build, SQL, vault, session, UI and offline flow passed"
+  "ci_checks": "backend 793 passed, 1 skipped; lint, build, SQL, vault, session, UI and offline flow passed",
+  "ui_checks": 9,
+  "database_checks": 34,
+  "edit_migration_sha256": "e997e8a6c7ae33b4634242a95f030ea5f11220eb629cb1da305ae4830bd2ff48",
+  "edit_status": "local HTTP, UI and SQL passed; remote integration not homologated"
 }

@@ -15,29 +15,48 @@
     "inactive company provisioning rejected",
     "anon direct table denied",
     "authenticated direct table denied",
-    "public RPC denied"
+    "public RPC denied",
+    "edit atomically updates attendance and increments version",
+    "edit preserves creator company and original creation key",
+    "edit replaces items without duplicates",
+    "edit replay x10 returns original receipt without version bump",
+    "edit key content conflict rejected",
+    "stale edit cannot overwrite newer version",
+    "cross-company edit rejected",
+    "manager company visibility does not grant editing other professionals",
+    "revoked permission blocks edit",
+    "transferred professional cannot edit old-company record",
+    "failed edit item rolls back parent version and data",
+    "failed edit can retry successfully with same key",
+    "lost original creation receipt replay never duplicates edited attendance",
+    "new edit of converted attendance rejected",
+    "lost edit receipt recoverable after later conversion",
+    "edit receipt table and RPC inaccessible to anon and authenticated roles",
+    "service_role can execute authorized create and edit with declared table grants",
+    "internal Master can edit across authors without changing ownership",
+    "null or unknown profile cannot inherit global edit authority"
   ],
   "loads": [
     {
       "concurrency": 1,
       "requests": 1,
       "errors": 0,
-      "elapsedMs": 2,
-      "p95Ms": 2
+      "elapsedMs": 1,
+      "p95Ms": 1
     },
     {
       "concurrency": 10,
       "requests": 10,
       "errors": 0,
-      "elapsedMs": 12,
-      "p95Ms": 12
+      "elapsedMs": 9,
+      "p95Ms": 9
     },
     {
       "concurrency": 50,
       "requests": 50,
       "errors": 0,
-      "elapsedMs": 56,
-      "p95Ms": 55
+      "elapsedMs": 42,
+      "p95Ms": 41
     }
   ]
 }

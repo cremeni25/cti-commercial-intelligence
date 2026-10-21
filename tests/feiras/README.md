@@ -20,6 +20,11 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
   profissional nao concede acesso aos registros da empresa anterior.
 - Gravar atendimento e itens na mesma transacao. Repeticoes usam a mesma chave;
   conteudo diferente com a mesma chave e rejeitado e a pendencia e preservada.
+- Edicao usa o mesmo formulario e cofre, com versao esperada e recibo idempotente.
+  Profissional/gestor externo edita apenas os proprios registros da empresa
+  atual; gestao interna com escopo global pode editar conforme seu acesso.
+  Atendimento convertido nao aceita nova edicao; recibos perdidos continuam
+  recuperaveis apos conversao ou mudanca no catalogo, sem reaplicar a operacao.
 - Cofre AES-GCM por usuario, PBKDF2, senha exclusiva, chave so em memoria,
   identificadores locais segregados, verificacao de integridade e bloqueio ao
   sair/ocultar. Fila antiga so e removida depois de copia cifrada confirmada.
@@ -27,17 +32,17 @@ A producao, o banco principal e os aliases de publicacao nao foram alterados.
 
 ## Evidencias locais
 
-- 74 testes Python de acesso, isolamento e regressao aprovados.
+- 90 testes Python de acesso, isolamento e regressao aprovados.
 - 24 verificacoes no Chromium real de Web Crypto e IndexedDB aprovadas,
   incluindo contexto offline cifrado, expiracao e desbloqueio interrompido.
 - 9 verificacoes de sessao aprovadas no Chromium: saida offline, tokens do projeto
   correto, recarga e respostas atrasadas apos saida.
-- 6 verificacoes do fluxo da tela CRM App, viewport 390x844, aprovadas.
+- 9 verificacoes do fluxo da tela CRM App, viewport 390x844, aprovadas.
 - 13 verificacoes da partida a frio offline, reconexao e saida em varias abas
   aprovadas com service worker, CacheStorage, IndexedDB e Web Crypto reais,
   incluindo abertura pela URL inicial do app instalado.
   Conta sintetica e servidor de API local: nao e homologacao do backend remoto.
-- 15 verificacoes SQL em PostgreSQL WASM isolado aprovadas; exercicio de fila
+- 34 verificacoes SQL em PostgreSQL WASM isolado aprovadas; exercicio de fila
   com 1, 10 e 50 requisicoes, sem erros. Isso NAO mede capacidade Render/Supabase
   nem concorrencia real de varias conexoes.
 - TypeScript, lint dos arquivos alterados e build Next.js aprovados.
@@ -95,8 +100,9 @@ O manifesto evidence-summary.json lista os modulos da bateria aprovada.
    migracao por seus titulares; nao declarar protecao retroativa sem conferir.
 7. Validar transicao dos acessos internos existentes e politica de permissoes.
    O novo campo feiras_eventos nao foi aplicado nem atribuido na producao.
-8. Definir/testar edicao de atendimento permitido conforme o documento canonico;
-   o fluxo deste incremento cobre cadastro e sincronizacao de novos atendimentos.
+8. Homologar remotamente a edicao implementada: conflitos mantem pendencias
+   cifradas e exigem conferencia, sem sobrescrever automaticamente outra versao.
+   O incremento cobre cadastro, edicao permitida e sincronizacao idempotente.
 9. Revisar migracao/rollback com backup, aprovar a homologacao e so entao publicar
    backend e frontend coordenadamente, com verificacao posterior dos dominios.
 

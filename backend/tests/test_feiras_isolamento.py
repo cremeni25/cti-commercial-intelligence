@@ -105,3 +105,91 @@ def test_first_access_cannot_bypass_onboarding(setup):
     c,t=setup;t['cti_users'][0]['primeiro_acesso_pendente']=True
     assert request(c,'a','/crm-seguro/feiras').status_code==403
     assert request(c,'a','/auth/me').status_code==200
+
+
+def edit_payload(company='A'):
+    return dict(autorizada_id=company, feira_id='fair', empresa='Empresa editada', visitante='Contato teste', regiao='OUTRA',
+                client_request_id='edit-key', versao_esperada=0,
+                itens=[dict(codigo_produto='C1', linha_produto='Truck', nome_produto='Modelo', quantidade=2)])
+
+
+def configure_edit(monkeypatch, tables, *, code=None):
+    tables['cti_catalogo_equipamentos']=[dict(codigo='C1', ativo=True, linha_produto='Truck', nome_comercial='Modelo oficial')]
+    calls=[]
+    def rpc(name, payload):
+        calls.append((name,payload))
+        def execute():
+            if code:
+                exc=RuntimeError('database rejected edit');exc.code=code;raise exc
+            return SimpleNamespace(data={'id':'a','versao':1})
+        return SimpleNamespace(execute=execute)
+    monkeypatch.setattr(feiras.supabase,'rpc',rpc,raising=False)
+    return calls
+
+
+def test_edit_own_uses_atomic_rpc_and_catalog(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t)
+    r=c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=edit_payload())
+    assert r.status_code==200 and r.json()['versao']==1
+    assert calls[0][0]=='cti_feira_editar'
+    assert calls[0][1]['p_payload']['versao_esperada']==0
+    assert calls[0][1]['p_itens'][0]['nome_produto']=='Modelo oficial'
+
+
+@pytest.mark.parametrize('user,target,company',[('a','a2','A'),('a','b','A'),('b','a','B'),('ga','a','A')])
+def test_edit_other_professionals_denied_before_rpc(monkeypatch,setup,user,target,company):
+    c,t=setup;calls=configure_edit(monkeypatch,t)
+    r=c.put('/crm-seguro/feiras/fair/atendimentos/'+target,headers={'Authorization':'Bearer '+user},json=edit_payload(company))
+    assert r.status_code==404 and not calls
+
+
+def test_transferred_professional_cannot_edit_old_company(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t);t['cti_feira_profissionais'][0]['autorizada_id']='B'
+    r=c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=edit_payload('B'))
+    assert r.status_code==404 and not calls
+
+
+@pytest.mark.parametrize('code,expected',[('40001',409),('23505',409),('55000',409),('42501',403),('P0002',404),('08006',503)])
+def test_edit_database_failure_mapping(monkeypatch,setup,code,expected):
+    c,t=setup;configure_edit(monkeypatch,t,code=code)
+    r=c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=edit_payload())
+    assert r.status_code==expected
+
+
+def test_edit_requires_expected_version(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t);payload=edit_payload();payload.pop('versao_esperada')
+    assert c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=payload).status_code==422
+    assert not calls
+
+
+def test_lost_creation_receipt_survives_catalog_revocation(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t)
+    raw=edit_payload();raw.pop('versao_esperada')
+    original=feiras.Atendimento.model_validate(raw).model_dump(mode='json')
+    t['cti_feira_atendimentos'][0].update(client_request_id='edit-key',request_payload={'atendimento':{'request_original':original}})
+    t['cti_catalogo_equipamentos']=[]
+    r=c.post('/crm-seguro/feiras/fair/atendimentos',headers={'Authorization':'Bearer a'},json=raw)
+    assert r.status_code==201 and r.json()['id']=='a' and r.json()['reutilizado']
+    assert not calls
+
+
+def test_lost_edit_receipt_survives_conversion_and_catalog_revocation(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t)
+    original=feiras.AtendimentoEdicao.model_validate(edit_payload()).model_dump(mode='json')
+    t['cti_feira_atendimentos'][0]['oportunidade_id']='converted'
+    t['cti_feira_edicoes']=[dict(user_id='a',client_request_id='edit-key',atendimento_id='a',conteudo={'payload':{'request_original':original}},recibo={'id':'a','versao':1})]
+    t['cti_catalogo_equipamentos']=[]
+    r=c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=edit_payload())
+    assert r.status_code==200 and r.json()['versao']==1 and r.json()['reutilizado']
+    assert not calls
+    changed=edit_payload();changed['empresa']='Outro conteúdo'
+    assert c.put('/crm-seguro/feiras/fair/atendimentos/a',headers={'Authorization':'Bearer a'},json=changed).status_code==409
+
+
+def test_creation_validates_catalog_and_uses_shared_atomic_validation(monkeypatch,setup):
+    c,t=setup;calls=configure_edit(monkeypatch,t)
+    raw=edit_payload();raw.pop('versao_esperada')
+    r=c.post('/crm-seguro/feiras/fair/atendimentos',headers={'Authorization':'Bearer a'},json=raw)
+    assert r.status_code==201 and calls[0][0]=='cti_feira_registrar'
+    assert calls[0][1]['p_payload']['request_original']['itens'][0]['nome_produto']=='Modelo'
+    assert calls[0][1]['p_itens'][0]['nome_produto']=='Modelo oficial'

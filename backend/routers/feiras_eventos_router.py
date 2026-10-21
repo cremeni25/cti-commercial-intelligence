@@ -44,6 +44,10 @@ class Atendimento(BaseModel):
 
 
 
+class AtendimentoEdicao(Atendimento):
+    versao_esperada: int = Field(ge=0)
+
+
 def _vinculo_externo(usuario: UsuarioAutenticado) -> dict | None:
     registros = (supabase.table("cti_feira_profissionais").select("autorizada_id,papel,ativo")
         .eq("user_id",usuario.id).limit(1).execute().data or [])
@@ -111,14 +115,7 @@ def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usu
             r["itens"] = por_atendimento.get(r["id"], [])
     return rows
 
-@router.post("/{feira_id}/atendimentos", status_code=201)
-def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    escopo, _ = _escopo_feira(usuario)
-
-    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
-        vinculo = _vinculo_externo(usuario)
-        if not vinculo or entrada.autorizada_id != str(vinculo["autorizada_id"]):
-            raise HTTPException(409, "Vínculo institucional alterado. Pendência preservada para conferência.")
+def _validar_entrada(feira_id: str, entrada: Atendimento) -> list[dict]:
     if entrada.feira_id != feira_id:
         raise HTTPException(422,"Feira inconsistente.")
     if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR"}:
@@ -158,10 +155,32 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         lancamento_feira=i.lancamento_feira,
         descricao_lancamento=i.descricao_lancamento if i.lancamento_feira else None,
     ) for i in entrada.itens]
+    return itens
+
+@router.post("/{feira_id}/atendimentos", status_code=201)
+def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    escopo, _ = _escopo_feira(usuario)
+
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo or entrada.autorizada_id != str(vinculo["autorizada_id"]):
+            raise HTTPException(409, "Vínculo institucional alterado. Pendência preservada para conferência.")
+    if entrada.feira_id != feira_id:
+        raise HTTPException(422, "Feira inconsistente.")
+    # Recover a lost acknowledgement before revalidating a catalog that may have changed.
+    recibos = (supabase.table("cti_feira_atendimentos").select("id,autorizada_id,request_payload")
+        .eq("criado_por",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or []) if entrada.client_request_id else []
+    if recibos:
+        original = (recibos[0].get("request_payload") or {}).get("atendimento",{}).get("request_original")
+        if original is not None:
+            if original != entrada.model_dump(mode="json"):
+                raise HTTPException(409, "Chave já utilizada com conteúdo diferente. Pendência preservada.")
+            return {"id":recibos[0]["id"],"reutilizado":True}
+    itens = _validar_entrada(feira_id, entrada)
     try:
         resposta = supabase.rpc("cti_feira_registrar", {
             "p_user_id": str(usuario.id),
-            "p_payload": entrada.model_dump(mode="json", exclude={"itens"}),
+            "p_payload": {**entrada.model_dump(mode="json", exclude={"itens"}), "request_original": entrada.model_dump(mode="json")},
             "p_itens": itens,
         }).execute().data
     except Exception as exc:
@@ -173,6 +192,47 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
         raise HTTPException(503, "Gravação não confirmada; tente sincronizar novamente.") from exc
     if not isinstance(resposta, dict) or not resposta.get("id"):
         raise HTTPException(503, "Atendimento não confirmado.")
+    return resposta
+
+@router.put("/{feira_id}/atendimentos/{atendimento_id}")
+def editar_atendimento(feira_id: str, atendimento_id: str, entrada: AtendimentoEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    escopo, _ = _escopo_feira(usuario)
+    consulta = supabase.table("cti_feira_atendimentos").select("id,criado_por,autorizada_id,oportunidade_id,status").eq("id", atendimento_id).eq("feira_id", feira_id)
+    # Managers have company visibility; editing another professional is not implied.
+    if escopo != "global":
+        consulta = consulta.eq("criado_por", str(usuario.id))
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo or entrada.autorizada_id != str(vinculo["autorizada_id"]):
+            raise HTTPException(409, "Vínculo institucional alterado. Edição pendente preservada.")
+        consulta = consulta.eq("autorizada_id", vinculo["autorizada_id"])
+    registros = consulta.limit(1).execute().data or []
+    if not registros:
+        raise HTTPException(404, "Atendimento não localizado.")
+    recibos = (supabase.table("cti_feira_edicoes").select("atendimento_id,conteudo,recibo")
+        .eq("user_id",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or []) if entrada.client_request_id else []
+    if recibos:
+        anterior = recibos[0]
+        original = (anterior.get("conteudo") or {}).get("payload",{}).get("request_original")
+        if original is not None:
+            if anterior.get("atendimento_id") != atendimento_id or original != entrada.model_dump(mode="json"):
+                raise HTTPException(409, "Chave de edição já utilizada com conteúdo diferente. Pendência preservada.")
+            return {**anterior["recibo"], "reutilizado":True}
+    itens = _validar_entrada(feira_id, entrada)
+    try:
+        resposta = supabase.rpc("cti_feira_editar", {
+            "p_user_id": str(usuario.id), "p_atendimento_id": atendimento_id,
+            "p_payload": {**entrada.model_dump(mode="json", exclude={"itens"}), "request_original": entrada.model_dump(mode="json")}, "p_itens": itens,
+        }).execute().data
+    except Exception as exc:
+        codigo = str(getattr(exc, "code", ""))
+        if codigo == "P0002": raise HTTPException(404, "Atendimento não localizado.") from exc
+        if codigo == "42501": raise HTTPException(403, "Vínculo ou permissão revogados.") from exc
+        if codigo in {"40001", "23505", "55000"}:
+            raise HTTPException(409, "Edição conflitante ou atendimento convertido. Pendência preservada para conferência.") from exc
+        raise HTTPException(503, "Edição não confirmada. Pendência preservada para nova tentativa.") from exc
+    if not isinstance(resposta, dict) or not resposta.get("id"):
+        raise HTTPException(503, "Edição não confirmada.")
     return resposta
 
 @router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")

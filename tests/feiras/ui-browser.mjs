@@ -10,7 +10,7 @@ try{
  const context=await browser.newContext({viewport:{width:390,height:844}})
  const perfil={id:'external-A',auth_id:'auth-A',nome:'Profissional Teste',email:'teste@example.invalid',tipo_usuario:'AUTORIZADO_CARRIER',ativo:true,cadastro_completo:true,primeiro_acesso_pendente:false,acesso_crm:true,acesso_portal:false,permissoes:{acesso_crm:true,feiras_eventos:true}}
  await context.addInitScript(({perfil})=>{sessionStorage.setItem('cti-auth-session-v1',JSON.stringify({access_token:'synthetic-local-test-token',refresh_token:'synthetic',expires_at:Math.floor(Date.now()/1000)+3600,user:{id:perfil.auth_id,email:perfil.email}}))},{perfil})
- let received=[];let networkFail=true
+ let received=[];let edits=[];let networkFail=true;let editConflict=false;let rows=[]
  await context.route('**/*',async route=>{
    const u=new URL(route.request().url())
    if(u.hostname!=='127.0.0.1'){await route.abort();return}
@@ -20,12 +20,17 @@ try{
    if(path==='/api/cti/auth/me')return json(perfil)
    if(path==='/api/crm-proxy/crm-seguro/feiras')return json([{id:'fair',nome:'Feira isolada'}])
    if(path.endsWith('/catalogo'))return json([{codigo:'P1',linha_produto:'Truck',nome_comercial:'Equipamento Teste'}])
+   if(path.endsWith('/atendimentos/receipt-1')&&route.request().method()==='PUT'){
+    const body=route.request().postDataJSON();edits.push(body)
+    if(editConflict)return json({detail:'Conflito de versão simulado'},409)
+    rows=[{...rows[0],...body,versao:1}];return json({id:'receipt-1',versao:1})
+   }
    if(path.endsWith('/atendimentos')){
     if(route.request().method()==='POST'){
       if(networkFail)return json({detail:'Falha transitória simulada'},503)
-      const body=route.request().postDataJSON();received.push(body);return json({id:'receipt-1'},201)
+      const body=route.request().postDataJSON();received.push(body);rows=[{...body,id:'receipt-1',criado_por:'external-A',versao:0,status:'REGISTRADO',criado_em:new Date().toISOString()}];return json({id:'receipt-1'},201)
     }
-    return json([])
+    return json(rows)
    }
    return json({detail:'Forbidden in isolated test'},403)
  })
@@ -46,6 +51,21 @@ try{
  await page.getByRole('button',{name:'Sincronizar pendentes',exact:true}).click()
  await page.getByText('Pendentes neste dispositivo: 0',{exact:true}).waitFor()
  assert.equal(received.length,1);assert(received[0].client_request_id);checks.push('UI reconnect sync includes stable idempotency key')
+ await page.getByRole('button',{name:'Editar atendimento',exact:true}).click()
+ await page.getByRole('button',{name:'Salvar edição protegida',exact:true}).waitFor()
+ assert.equal(await page.getByLabel('Empresa *',{exact:true}).inputValue(),'Empresa Teste Offline');checks.push('edit reuses existing attendance form with original values')
+ await page.getByLabel('Empresa *',{exact:true}).fill('Empresa Editada')
+ editConflict=true
+ await page.getByRole('button',{name:'Salvar edição protegida',exact:true}).click()
+ await page.getByText('Pendentes neste dispositivo: 1',{exact:true}).waitFor()
+ await page.getByRole('alert').filter({hasText:'Conflito de versão'}).waitFor()
+ assert.equal(edits[0].versao_esperada,0);checks.push('edit sends expected version and preserves encrypted pending on conflict')
+ editConflict=false
+ await page.getByRole('button',{name:'Sincronizar pendentes',exact:true}).click()
+ await page.getByText('Pendentes neste dispositivo: 0',{exact:true}).waitFor()
+ assert.equal(edits[0].client_request_id,edits[1].client_request_id)
+ await page.getByText('Empresa Editada',{exact:true}).waitFor();checks.push('edit retry uses same key and updates existing attendance without duplicate creation')
+ assert.equal(received.length,1);assert.equal(rows.length,1)
  await page.getByRole('button',{name:'Bloquear cofre',exact:true}).click()
  assert.equal(await page.getByLabel('Empresa *',{exact:true}).isVisible(),false);checks.push('locked vault hides attendance form and data')
  await page.goto('http://127.0.0.1:3100/crm-app/oportunidades')

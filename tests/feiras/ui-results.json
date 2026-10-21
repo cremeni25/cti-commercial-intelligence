@@ -5,6 +5,9 @@
     "UI saves encrypted queue before failed server response",
     "local save clears submitted form",
     "UI reconnect sync includes stable idempotency key",
+    "edit reuses existing attendance form with original values",
+    "edit sends expected version and preserves encrypted pending on conflict",
+    "edit retry uses same key and updates existing attendance without duplicate creation",
     "locked vault hides attendance form and data",
     "forbidden CRM URL redirects external user"
   ]
