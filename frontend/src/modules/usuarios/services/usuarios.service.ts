@@ -26,7 +26,7 @@ export type AutorizadaCarrier = { id: string; nome: string; ativa: boolean }
 
 export type UsuarioNovo = {
   autorizada_id?: string | null
-  papel_feira?: "INTERNO" | "PROFISSIONAL" | "GESTOR"
+  papel_feira?: "INTERNO" | "PROFISSIONAL" | "GESTOR" | "CARRIER_MASTER"
   nome: string
   email: string
   senha_temporaria: string
