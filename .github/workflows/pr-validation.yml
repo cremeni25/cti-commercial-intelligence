@@ -90,6 +90,7 @@ jobs:
         working-directory: tests/feiras
         run: |
           npm run test:database
+          npm run test:production-schema
           npm run test:vault
           npm run test:session
           npm run test:ui

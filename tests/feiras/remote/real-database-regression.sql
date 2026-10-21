@@ -1,0 +1,61 @@
+-- Run only on xhrikmksydsyalxkkyot (homologation). Synthetic rows roll back.
+begin;
+create temporary table feiras_verification(check_name text primary key);
+do $$
+declare
+ org uuid; org_b uuid; fair uuid; a uuid; b uuid; manager uuid; unknown_user uuid; rec jsonb; replay jsonb; changed jsonb;
+ p jsonb; items jsonb; ed jsonb; profile jsonb; i integer;
+begin
+ insert into public.cti_feira_autorizadas(nome) values ('Homologação A') returning id into org;
+ insert into public.cti_feira_autorizadas(nome) values ('Homologação B') returning id into org_b;
+ insert into public.cti_feiras(nome) values ('Homologação '||gen_random_uuid()) returning id into fair;
+ profile='{"nome":"Profissional sintético","email":"professional-a@example.invalid","ativo":true,"ddds":[],"primeiro_acesso_pendente":true,"cadastro_completo":false}'::jsonb;
+ rec=public.cti_feira_provisionar(null,profile,'{"feiras_eventos":true,"acesso_total":true}',org,'PROFISSIONAL'); a=(rec->>'id')::uuid;
+ assert exists(select 1 from public.cti_users where id=a and updated_at is not null and cadastro_completo=false);
+ assert exists(select 1 from public.cti_user_permissions where user_id=a and feiras_eventos and acesso_crm and not acesso_total and not usuarios_administrar);
+ insert into feiras_verification values ('provisioning against exact production NOT NULL constraints'),('least privilege enforced');
+ rec=public.cti_feira_provisionar(null,profile||'{"email":"professional-b@example.invalid"}', '{"feiras_eventos":true}',org_b,'PROFISSIONAL'); b=(rec->>'id')::uuid;
+ rec=public.cti_feira_provisionar(null,profile||'{"email":"manager@example.invalid"}', '{"feiras_eventos":true}',org,'GESTOR'); manager=(rec->>'id')::uuid;
+ assert rec->>'tipo_usuario'='GESTOR_AUTORIZADO_CARRIER';
+ insert into feiras_verification values ('manager institutional provisioning');
+ p=jsonb_build_object('feira_id',fair,'empresa','Empresa sintética','visitante','Visitante','regiao','OUTRA','client_request_id','remote-create');
+ items='[{"codigo_produto":"SYNTHETIC","linha_produto":"Truck","nome_produto":"Teste","quantidade":1,"lancamento_feira":false}]'::jsonb;
+ rec=public.cti_feira_registrar(a,p,items);
+ for i in 1..20 loop
+ replay=public.cti_feira_registrar(a,p,items);
+ assert replay->>'id'=rec->>'id' and (replay->>'reutilizado')::boolean;
+ end loop;
+ assert (select count(*) from public.cti_feira_itens where atendimento_id=(rec->>'id')::uuid)=1;
+ insert into feiras_verification values ('creation replay x20 produces one record and item');
+ begin perform public.cti_feira_registrar(a,p||'{"empresa":"Conflito"}',items); raise exception 'Expected conflict'; exception when unique_violation then null; end;
+ insert into feiras_verification values ('same key with changed content rejected');
+ begin perform public.cti_feira_registrar(a,p||'{"client_request_id":"failed-create"}',jsonb_set(items,'{0,quantidade}','-1')); raise exception 'Expected constraint failure'; exception when check_violation then null; end;
+ assert not exists(select 1 from public.cti_feira_atendimentos where client_request_id='failed-create');
+ insert into feiras_verification values ('item failure rolls back entire creation');
+ ed=p||jsonb_build_object('client_request_id','remote-edit','versao_esperada',0,'autorizada_id',org,'empresa','Editada');
+ changed=public.cti_feira_editar(a,(rec->>'id')::uuid,ed,items);
+ assert (changed->>'versao')::integer=1;
+ replay=public.cti_feira_editar(a,(rec->>'id')::uuid,ed,items);
+ assert (replay->>'reutilizado')::boolean and (replay->>'versao')::integer=1;
+ insert into feiras_verification values ('atomic edit and lost acknowledgement replay');
+ begin perform public.cti_feira_editar(b,(rec->>'id')::uuid,ed,items); raise exception 'Expected company isolation'; exception when insufficient_privilege or no_data_found then null; end;
+ insert into feiras_verification values ('cross company edit denied');
+ begin perform public.cti_feira_editar(manager,(rec->>'id')::uuid,ed,items); raise exception 'Expected ownership isolation'; exception when insufficient_privilege or no_data_found then null; end;
+ insert into feiras_verification values ('manager cannot edit another professional record');
+ update public.cti_user_permissions set feiras_eventos=false where user_id=a;
+ begin perform public.cti_feira_registrar(a,p||'{"client_request_id":"revoked"}',items); raise exception 'Expected revoked permission'; exception when insufficient_privilege then null; end;
+ insert into feiras_verification values ('revoked permission prevents sync');
+ insert into public.cti_users(nome,ativo) values ('Perfil sem tipo',true) returning id into unknown_user;
+ begin perform public.cti_feira_registrar(unknown_user,p||'{"client_request_id":"unknown-role"}',items); raise exception 'Expected missing role denied'; exception when insufficient_privilege then null; end;
+ insert into feiras_verification values ('null profile type cannot bypass creation permission');
+ begin perform public.cti_feira_provisionar(null,profile,'{}',org,null); raise exception 'Expected invalid role denied'; exception when invalid_parameter_value then null; end;
+ insert into feiras_verification values ('null institutional role rejected');
+ assert not has_table_privilege('anon','public.cti_feira_atendimentos','select');
+ assert not has_table_privilege('authenticated','public.cti_feira_atendimentos','select');
+ assert not has_function_privilege('anon','public.cti_feira_registrar(uuid,jsonb,jsonb)','execute');
+ assert not has_function_privilege('authenticated','public.cti_feira_editar(uuid,uuid,jsonb,jsonb)','execute');
+ assert has_function_privilege('service_role','public.cti_feira_editar(uuid,uuid,jsonb,jsonb)','execute');
+ insert into feiras_verification values ('anon and authenticated direct access blocked; backend RPC allowed');
+end $$;
+select jsonb_build_object('environment','Supabase PostgreSQL homologation xhrikmksydsyalxkkyot','checks_passed',count(*),'checks',jsonb_agg(check_name order by check_name),'synthetic_data','transaction rolled back; no Auth accounts created') as evidence from feiras_verification;
+rollback;

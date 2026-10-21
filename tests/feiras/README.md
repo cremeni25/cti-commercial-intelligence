@@ -109,3 +109,31 @@ O manifesto evidence-summary.json lista os modulos da bateria aprovada.
    backend e frontend coordenadamente, com verificacao posterior dos dominios.
 
 Este registro documenta progresso e limites. Nao e certificado de conclusao.
+
+
+## Homologação Supabase real — 21/10/2026
+
+O projeto existente `cti-ia-homologacao` (`xhrikmksydsyalxkkyot`) estava vazio.
+A estrutura de seis tabelas foi reproduzida da produção, sem copiar registros,
+contas ou credenciais. As funções de cadastro, criação e edição foram instaladas.
+`remote/supabase-results.json` registra **11 verificações aprovadas no PostgreSQL
+remoto**, com dados sintéticos revertidos ao terminar. Consulta posterior
+confirmou zero perfis, atendimentos e contas Auth de teste remanescentes.
+
+O primeiro teste revelou que `jsonb_populate_record(null, ...)` não aplica os
+valores padrão da tabela: o cadastro externo falhava no `updated_at` obrigatório.
+A correção também preenche as permissões booleanas obrigatórias. Essa parte foi
+aplicada e passou na homologação. A revisão seguinte acrescentou rejeição de
+perfil sem tipo e papel institucional nulo. A aplicação remota desse complemento
+retornou **Migration was declined**; não foi repetida. Assim, os **13 casos locais**
+em `production-schema-results.json` não equivalem a 13 casos remotos aprovados.
+
+Reprodução local com o esquema capturado: `npm run test:production-schema`.
+A CI executa esse teste e reaplica as migrações para conferir repetibilidade.
+O arquivo `remote/real-database-regression.sql` contém o conjunto atualizado de
+13 casos e só deve ser executado no projeto de homologação, após o complemento.
+O baseline exige esquema público vazio; não deve ser reaplicado nesse projeto.
+
+Ainda faltam autenticação real, backend e frontend isolados integrados, teste
+funcional dos dois aplicativos e carga com conexões reais. A produção permanece
+sem estas migrações. Nenhum resultado SQL isolado comprova o fluxo completo.

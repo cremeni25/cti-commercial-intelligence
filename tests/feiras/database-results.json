@@ -41,22 +41,22 @@
       "concurrency": 1,
       "requests": 1,
       "errors": 0,
-      "elapsedMs": 1,
-      "p95Ms": 1
+      "elapsedMs": 2,
+      "p95Ms": 2
     },
     {
       "concurrency": 10,
       "requests": 10,
       "errors": 0,
-      "elapsedMs": 9,
-      "p95Ms": 9
+      "elapsedMs": 10,
+      "p95Ms": 10
     },
     {
       "concurrency": 50,
       "requests": 50,
       "errors": 0,
-      "elapsedMs": 42,
-      "p95Ms": 41
+      "elapsedMs": 47,
+      "p95Ms": 44
     }
   ]
 }
