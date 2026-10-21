@@ -20,6 +20,7 @@ import type { UsuarioCTI } from "@/modules/usuarios/types/usuario.types"
 const permissoesIniciais: PermissoesUsuario = {
   acesso_portal: true,
   acesso_crm: true,
+  feiras_eventos: false,
   dashboard_executivo: false,
   clientes_visualizar: true,
   clientes_editar: false,
@@ -52,6 +53,7 @@ const grupos: { titulo: string; itens: { chave: keyof PermissoesUsuario; rotulo:
   { titulo: "Canais", itens: [
     { chave: "acesso_portal", rotulo: "Acessar o site" },
     { chave: "acesso_crm", rotulo: "Acessar o CRM App" },
+    { chave: "feiras_eventos", rotulo: "Feiras e Eventos" },
     { chave: "dashboard_executivo", rotulo: "Dashboard executivo" },
   ]},
   { titulo: "Operação comercial", itens: [
