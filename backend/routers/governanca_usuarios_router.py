@@ -41,6 +41,8 @@ class UsuarioTemporario(BaseModel):
     ddds: list[str] = Field(default_factory=list, max_length=20)
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
+    autorizada_id: str | None = None
+    papel_feira: str = "INTERNO"
 
     @field_validator("email")
     @classmethod
@@ -59,6 +61,8 @@ class UsuarioAtualizacao(BaseModel):
     ddds: list[str] = Field(default_factory=list, max_length=20)
     gestor_responsavel: str | None = Field(default=None, max_length=160)
     permissoes: PermissoesUsuario
+    autorizada_id: str | None = None
+    papel_feira: str = "INTERNO"
 
 
 class EstadoUsuario(BaseModel):
