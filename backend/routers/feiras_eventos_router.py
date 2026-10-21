@@ -118,7 +118,7 @@ def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usu
 def _validar_entrada(feira_id: str, entrada: Atendimento) -> list[dict]:
     if entrada.feira_id != feira_id:
         raise HTTPException(422,"Feira inconsistente.")
-    if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR"}:
+    if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR","NORTE","CENTRO_OESTE","SUDESTE","SUL","PARAGUAY"}:
         raise HTTPException(422,"Região inválida.")
     if entrada.moeda not in {None,"BRL","USD"}:
         raise HTTPException(422,"Moeda inválida.")
