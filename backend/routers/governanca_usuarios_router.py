@@ -14,6 +14,7 @@ router = APIRouter(prefix="/governanca", tags=["governanca-usuarios"])
 class PermissoesUsuario(BaseModel):
     acesso_portal: bool = False
     acesso_crm: bool = False
+    feiras_eventos: bool = False
     dashboard_executivo: bool = False
     clientes_visualizar: bool = False
     clientes_editar: bool = False
