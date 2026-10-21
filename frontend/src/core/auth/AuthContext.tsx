@@ -7,6 +7,7 @@ import { UsuarioCTI } from "./types"
 import { buscarUsuarioAtual } from "./auth.service"
 import { obterSessaoCTI, registrarSessaoCTI } from "./session"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
+import { bloquearCofre } from "@/lib/feiras-cofre"
 
 interface AuthContextType {
   usuario: UsuarioCTI | null
@@ -135,6 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [pathname, router])
 
   async function sair() {
+    bloquearCofre()
     const supabase = getSupabaseClient()
     const rotaCrm = pathname.startsWith("/crm-app")
     await supabase.auth.signOut()
