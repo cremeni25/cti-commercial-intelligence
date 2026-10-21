@@ -40,17 +40,43 @@ class Atendimento(BaseModel):
     valor_referencia: Decimal | None = None
     itens: list[ItemIntencao] = Field(default_factory=list)
 
+
+
+def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
+    """Restringe acessos externos mesmo quando a rota e chamada diretamente."""
+    if usuario.tipo_usuario == "AUTORIZADO_CARRIER":
+        if not usuario.permissoes.get("feiras_eventos"):
+            raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
+        return "proprio", str(usuario.id)
+    if usuario.tipo_usuario == "GESTOR_AUTORIZADO_CARRIER":
+        if not usuario.permissoes.get("feiras_eventos"):
+            raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
+        return "empresa", str(usuario.id)
+    if usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"ADMIN_MASTER", "DIRETOR_VIENA_SP", "ADMIN_COMERCIAL_VIENA_SP"}:
+        return "global", None
+    if usuario.permissoes.get("feiras_eventos"):
+        return "proprio", str(usuario.id)
+    raise HTTPException(403, "Acesso a Feiras e Eventos não autorizado.")
+
 @router.get("")
 def listar_feiras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     return supabase.table("cti_feiras").select("*").order("inicio", desc=True).execute().data or []
 
 @router.get("/catalogo")
 def catalogo(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     return supabase.table("cti_catalogo_equipamentos").select("codigo,linha_produto,nome_comercial").eq("ativo",True).order("linha_produto").execute().data or []
 
 @router.get("/{feira_id}/atendimentos")
 def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    rows = supabase.table("cti_feira_atendimentos").select("*").eq("feira_id",feira_id).order("criado_em",desc=True).limit(1000).execute().data or []
+    escopo, identificador = _escopo_feira(usuario)
+    if escopo == "empresa":
+        raise HTTPException(403, "Visão empresarial pendente de vínculo institucional validado.")
+    consulta = supabase.table("cti_feira_atendimentos").select("*").eq("feira_id",feira_id)
+    if escopo == "proprio":
+        consulta = consulta.eq("criado_por", identificador)
+    rows = consulta.order("criado_em",desc=True).limit(1000).execute().data or []
     if rows:
         ids = [r["id"] for r in rows]
         itens = supabase.table("cti_feira_itens").select("*").in_("atendimento_id",ids).execute().data or []
@@ -60,6 +86,9 @@ def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usu
 
 @router.post("/{feira_id}/atendimentos", status_code=201)
 def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    escopo, _ = _escopo_feira(usuario)
+    if escopo == "empresa":
+        raise HTTPException(403, "Registro empresarial pendente de vínculo institucional validado.")
     if entrada.feira_id != feira_id:
         raise HTTPException(422,"Feira inconsistente.")
     if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR"}:
@@ -114,6 +143,9 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
 
 @router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")
 def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        raise HTTPException(403, "Conversão comercial reservada à equipe interna.")
+    _escopo_feira(usuario)
     from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio, _negocios_ativos
     from routers.clientes_oportunidade_router import ClienteOportunidadeCreate, ClienteContexto, OportunidadeContexto
     registros = (supabase.table("cti_feira_atendimentos").select("*")
@@ -163,6 +195,7 @@ def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioA
 
 @router.delete("/{feira_id}/atendimentos/{atendimento_id}")
 def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     if usuario.tipo_usuario not in {"ADMIN_MASTER","DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
         raise HTTPException(403,"Exclusão de teste restrita à gestão.")
     registros = (supabase.table("cti_feira_atendimentos").select("id,criado_por,observacoes,oportunidade_id")
@@ -179,6 +212,7 @@ def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: Usuar
 
 @router.get("/{feira_id}/relatorio.pdf")
 def relatorio_pdf(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     feira = supabase.table("cti_feiras").select("nome").eq("id",feira_id).limit(1).execute().data or []
     if not feira:
         raise HTTPException(404,"Feira não localizada.")
