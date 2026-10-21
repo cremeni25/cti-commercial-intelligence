@@ -1,6 +1,7 @@
 export interface PermissoesSessaoCTI {
   acesso_portal?: boolean
   acesso_crm?: boolean
+  feiras_eventos?: boolean
   dashboard_executivo?: boolean
   clientes_visualizar?: boolean
   clientes_editar?: boolean
