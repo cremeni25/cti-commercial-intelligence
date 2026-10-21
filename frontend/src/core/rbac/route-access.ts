@@ -18,6 +18,11 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (["/", "/login", "/redefinir-senha", "/crm-app/login", "/solicitar-acesso"].includes(pathname)) return true
   if (pathname === "/primeiro-acesso") return true
 
+  if (perfil === "AUTORIZADO_CARRIER" || perfil === "GESTOR_AUTORIZADO_CARRIER") {
+    return inicia(pathname, "/crm-app/feiras") && tem(permissoes, "feiras_eventos")
+  }
+  if (inicia(pathname, "/crm-app/feiras")) return gestao || tem(permissoes, "feiras_eventos")
+
   if (inicia(pathname, "/backoffice-fontes")) return master
   if (inicia(pathname, "/configuracoes/modelos-oficiais")) return master
   if (inicia(pathname, "/crm-app/testes-arquivados")) return master
