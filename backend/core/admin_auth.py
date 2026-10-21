@@ -14,6 +14,7 @@ PERFIS_OFICIAIS = {
     "USUARIO_CTI",
     "AUTORIZADO_CARRIER",
     "GESTOR_AUTORIZADO_CARRIER",
+    "CARRIER_MASTER",
     "DIRETOR_VIENA_SP",
     "ADMIN_COMERCIAL_VIENA_SP",
     "ADMIN_FINANCEIRO_VIENA_SP",
@@ -124,7 +125,7 @@ def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(sec
     }:
         raise HTTPException(status_code=403, detail="Conclua o primeiro acesso antes de operar o CTI.")
     tipo_usuario = _normalizar_perfil(perfil)
-    if tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+    if tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER", "CARRIER_MASTER"}:
         caminho = request.url.path.rstrip("/") if request else ""
         if not (caminho == "/auth/me" or caminho == "/crm-seguro/feiras" or caminho.startswith("/crm-seguro/feiras/") or caminho in {"/governanca/primeiro-acesso/status", "/governanca/primeiro-acesso/concluir"}):
             raise HTTPException(status_code=403, detail="Perfil externo restrito a Feiras e Eventos.")
