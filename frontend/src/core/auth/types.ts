@@ -1,6 +1,7 @@
 export interface PermissoesSessaoCTI {
   acesso_portal?: boolean
   acesso_crm?: boolean
+  feiras_eventos?: boolean
   dashboard_executivo?: boolean
   clientes_visualizar?: boolean
   clientes_editar?: boolean
@@ -19,6 +20,7 @@ export interface PermissoesSessaoCTI {
 }
 
 export interface UsuarioCTI {
+  autorizada_id?: string | null
   id: string
   auth_id: string
   nome: string

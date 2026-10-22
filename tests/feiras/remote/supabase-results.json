@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "anon and authenticated direct access blocked; backend RPC allowed",
+    "atomic edit and lost acknowledgement replay",
+    "creation replay x20 produces one record and item",
+    "cross company edit denied",
+    "item failure rolls back entire creation",
+    "least privilege enforced",
+    "manager cannot edit another professional record",
+    "manager institutional provisioning",
+    "provisioning against exact production NOT NULL constraints",
+    "revoked permission prevents sync",
+    "same key with changed content rejected"
+  ],
+  "environment": "Supabase PostgreSQL homologation xhrikmksydsyalxkkyot",
+  "checks_passed": 11,
+  "synthetic_data": "transaction rolled back; no Auth accounts created",
+  "scope": "Database RPCs and SQL grants only; does not certify Auth, CTI Web, CRM App or concurrent load",
+  "executed_on": "2026-10-21"
+}

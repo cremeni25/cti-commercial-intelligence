@@ -11,6 +11,7 @@ import {
   criarUsuario,
   excluirUsuario,
   listarUsuarios,
+  listarAutorizadas, salvarAutorizada, type AutorizadaCarrier,
   type PermissoesUsuario,
   type UsuarioAtualizacao,
   type UsuarioNovo,
@@ -20,6 +21,7 @@ import type { UsuarioCTI } from "@/modules/usuarios/types/usuario.types"
 const permissoesIniciais: PermissoesUsuario = {
   acesso_portal: true,
   acesso_crm: true,
+  feiras_eventos: false,
   dashboard_executivo: false,
   clientes_visualizar: true,
   clientes_editar: false,
@@ -52,6 +54,7 @@ const grupos: { titulo: string; itens: { chave: keyof PermissoesUsuario; rotulo:
   { titulo: "Canais", itens: [
     { chave: "acesso_portal", rotulo: "Acessar o site" },
     { chave: "acesso_crm", rotulo: "Acessar o CRM App" },
+    { chave: "feiras_eventos", rotulo: "Feiras e Eventos" },
     { chave: "dashboard_executivo", rotulo: "Dashboard executivo" },
   ]},
   { titulo: "Operação comercial", itens: [
@@ -79,6 +82,8 @@ function permissoesCompletas(item?: Partial<PermissoesUsuario>): PermissoesUsuar
 
 export default function Page() {
   const { usuario, loading: authLoading } = useAuth()
+  const [autorizadas,setAutorizadas] = useState<AutorizadaCarrier[]>([])
+  const [nomeAutorizada,setNomeAutorizada] = useState("")
   const [usuarios, setUsuarios] = useState<UsuarioCTI[]>([])
   const [novo, setNovo] = useState<UsuarioNovo>(usuarioInicial)
   const [dddsTexto, setDddsTexto] = useState("")
@@ -99,7 +104,7 @@ export default function Page() {
   async function carregar() {
     setLoading(true)
     setErro("")
-    try { setUsuarios(await listarUsuarios()) }
+    try { const [us,as] = await Promise.all([listarUsuarios(),listarAutorizadas()]);setUsuarios(us);setAutorizadas(as) }
     catch (error) { setErro(error instanceof Error ? error.message : "Não foi possível carregar os usuários.") }
     finally { setLoading(false) }
   }
@@ -140,6 +145,8 @@ export default function Page() {
     setEditando(item)
     setDddsEdicao((item.ddds || []).join(", "))
     setEdicao({
+      autorizada_id: item.autorizada_id,
+      papel_feira: item.papel_feira || "INTERNO",
       nome: item.nome,
       empresa: item.empresa || "VIENA SP",
       funcao: item.funcao || item.cargo || "",
@@ -206,9 +213,10 @@ export default function Page() {
             {mensagem && <div className="rounded-2xl border border-emerald-800 bg-emerald-950/30 px-5 py-4 text-sm text-emerald-200">{mensagem}</div>}
             {erro && <div className="rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">{erro}</div>}
 
-            {mostrarNovo && <UsuarioForm titulo="Novo usuário CTI" subtitulo="Função livre, gestor livre e permissões individuais." dados={novo} dddsTexto={dddsTexto} setDddsTexto={setDddsTexto} onChange={(valor) => setNovo(valor as UsuarioNovo)} onMarcar={marcarNovo} onSubmit={cadastrar} processando={processando} botao="Criar usuário e aplicar permissões" incluirCredenciais />}
+            <section className="rounded-3xl border border-[#17345e] bg-[#071427] p-5"><h2 className="text-lg font-bold text-cyan-300">Autorizados CARRIER</h2><form className="my-3 flex flex-wrap gap-3" onSubmit={async e=>{e.preventDefault();setProcessando(true);setErro("");try{await salvarAutorizada({nome:nomeAutorizada.trim(),ativa:true});setNomeAutorizada("");await carregar()}catch(e){setErro(e instanceof Error?e.message:String(e))}finally{setProcessando(false)}}}><input aria-label="Nome da empresa autorizada" required minLength={2} value={nomeAutorizada} onChange={e=>setNomeAutorizada(e.target.value)} className="rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3" placeholder="Nome institucional da autorizada"/><button disabled={processando} className="rounded-xl bg-cyan-500 px-4 py-3 text-slate-950">Cadastrar autorizada</button></form><div className="space-y-2">{autorizadas.map(a=><div key={a.id} className="flex items-center justify-between gap-3"><span>{a.nome} · {a.ativa?"Ativa":"Inativa"}</span><button disabled={processando} className="text-sm text-cyan-300" onClick={async()=>{setProcessando(true);try{await salvarAutorizada({...a,ativa:!a.ativa},a.id);await carregar()}catch(e){setErro(e instanceof Error?e.message:String(e))}finally{setProcessando(false)}}}>{a.ativa?"Desativar":"Reativar"}</button></div>)}</div></section>
+            {mostrarNovo && <UsuarioForm autorizadas={autorizadas} titulo="Novo usuário CTI" subtitulo="Função livre, gestor livre e permissões individuais." dados={novo} dddsTexto={dddsTexto} setDddsTexto={setDddsTexto} onChange={(valor) => setNovo(valor as UsuarioNovo)} onMarcar={marcarNovo} onSubmit={cadastrar} processando={processando} botao="Criar usuário e aplicar permissões" incluirCredenciais />}
 
-            {editando && edicao && <UsuarioForm titulo={`Editar ${editando.nome}`} subtitulo={`E-mail de autenticação: ${editando.email}`} dados={edicao} dddsTexto={dddsEdicao} setDddsTexto={setDddsEdicao} onChange={(valor) => setEdicao(valor as UsuarioAtualizacao)} onMarcar={marcarEdicao} onSubmit={salvarEdicao} processando={processando} botao="Salvar dados e permissões" onCancelar={() => { setEditando(null); setEdicao(null) }} />}
+            {editando && edicao && <UsuarioForm autorizadas={autorizadas} titulo={`Editar ${editando.nome}`} subtitulo={`E-mail de autenticação: ${editando.email}`} dados={edicao} dddsTexto={dddsEdicao} setDddsTexto={setDddsEdicao} onChange={(valor) => setEdicao(valor as UsuarioAtualizacao)} onMarcar={marcarEdicao} onSubmit={salvarEdicao} processando={processando} botao="Salvar dados e permissões" onCancelar={() => { setEditando(null); setEdicao(null) }} />}
 
             {excluindo && <section className="rounded-3xl border border-red-800 bg-red-950/20 p-6"><h2 className="text-xl font-bold text-red-200">Excluir definitivamente</h2><p className="mt-2 text-sm text-red-200/80">Disponível apenas enquanto o primeiro acesso não foi concluído. Para confirmar, digite o e-mail <strong>{excluindo.email}</strong>.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><input value={confirmacaoEmail} onChange={(e) => setConfirmacaoEmail(e.target.value)} className="flex-1 rounded-xl border border-red-700 bg-[#061126] px-4 py-3" placeholder="Digite o e-mail completo" /><button disabled={processando || confirmacaoEmail.trim().toLowerCase() !== excluindo.email.toLowerCase()} onClick={() => void confirmarExclusao()} className="rounded-xl bg-red-600 px-5 py-3 font-semibold disabled:opacity-40">Excluir conta</button><button onClick={() => { setExcluindo(null); setConfirmacaoEmail("") }} className="rounded-xl border border-slate-600 px-5 py-3">Cancelar</button></div></section>}
 
@@ -222,8 +230,8 @@ export default function Page() {
   )
 }
 
-function UsuarioForm({ titulo, subtitulo, dados, dddsTexto, setDddsTexto, onChange, onMarcar, onSubmit, processando, botao, incluirCredenciais = false, onCancelar }: { titulo: string; subtitulo: string; dados: UsuarioNovo | UsuarioAtualizacao; dddsTexto: string; setDddsTexto: (v: string) => void; onChange: (v: UsuarioNovo | UsuarioAtualizacao) => void; onMarcar: (k: keyof PermissoesUsuario, v: boolean) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; processando: boolean; botao: string; incluirCredenciais?: boolean; onCancelar?: () => void }) {
-  return <form onSubmit={onSubmit} className="space-y-6 rounded-3xl border border-cyan-900 bg-[#071427] p-5 sm:p-6"><div><h2 className="text-xl font-bold">{titulo}</h2><p className="mt-1 text-sm text-slate-400">{subtitulo}</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"><Campo label="Nome completo" value={dados.nome} onChange={(value) => onChange({ ...dados, nome: value })} required />{incluirCredenciais && "email" in dados && <><Campo label="E-mail" type="email" value={dados.email} onChange={(value) => onChange({ ...dados, email: value })} required /><Campo label="Senha temporária" type="password" value={dados.senha_temporaria} onChange={(value) => onChange({ ...dados, senha_temporaria: value })} required /></>}<Campo label="Cargo ou função" value={dados.funcao} onChange={(value) => onChange({ ...dados, funcao: value })} required /><Campo label="Empresa" value={dados.empresa} onChange={(value) => onChange({ ...dados, empresa: value })} required /><Campo label="Território" value={dados.territorio || ""} onChange={(value) => onChange({ ...dados, territorio: value })} /><Campo label="DDDs autorizados" value={dddsTexto} onChange={setDddsTexto} placeholder="011, 012, 013" /><Campo label="Gestor responsável" value={dados.gestor_responsavel || ""} onChange={(value) => onChange({ ...dados, gestor_responsavel: value })} /></div><div className="grid gap-4 lg:grid-cols-3">{grupos.map((grupo) => <fieldset key={grupo.titulo} className="rounded-2xl border border-[#17345e] bg-[#061126] p-4"><legend className="px-2 font-semibold text-cyan-300">{grupo.titulo}</legend><div className="space-y-3">{grupo.itens.map((item) => <label key={item.chave} className="flex items-center gap-3 text-sm text-slate-200"><input type="checkbox" checked={dados.permissoes[item.chave]} onChange={(e) => onMarcar(item.chave, e.target.checked)} className="h-4 w-4 accent-cyan-500" />{item.rotulo}</label>)}</div></fieldset>)}</div><div className="flex flex-wrap gap-3"><button disabled={processando} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">{processando ? "Processando..." : botao}</button>{onCancelar && <button type="button" onClick={onCancelar} className="rounded-xl border border-slate-600 px-5 py-3">Cancelar</button>}</div></form>
+function UsuarioForm({ autorizadas, titulo, subtitulo, dados, dddsTexto, setDddsTexto, onChange, onMarcar, onSubmit, processando, botao, incluirCredenciais = false, onCancelar }: { autorizadas: AutorizadaCarrier[]; titulo: string; subtitulo: string; dados: UsuarioNovo | UsuarioAtualizacao; dddsTexto: string; setDddsTexto: (v: string) => void; onChange: (v: UsuarioNovo | UsuarioAtualizacao) => void; onMarcar: (k: keyof PermissoesUsuario, v: boolean) => void; onSubmit: (e: FormEvent<HTMLFormElement>) => void; processando: boolean; botao: string; incluirCredenciais?: boolean; onCancelar?: () => void }) {
+  return <form onSubmit={onSubmit} className="space-y-6 rounded-3xl border border-cyan-900 bg-[#071427] p-5 sm:p-6"><div><h2 className="text-xl font-bold">{titulo}</h2><p className="mt-1 text-sm text-slate-400">{subtitulo}</p></div><div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3"><label className="text-sm text-slate-300">Tipo de acesso<select aria-label="Tipo de acesso" value={dados.papel_feira||"INTERNO"} onChange={e=>{const papel=e.target.value as "INTERNO"|"PROFISSIONAL"|"GESTOR"|"CARRIER_MASTER";const permissoes=papel==="INTERNO"?permissoesCompletas():Object.fromEntries(Object.keys(permissoesIniciais).map(k=>[k,k==="acesso_crm"||k==="feiras_eventos"])) as PermissoesUsuario;onChange({...dados,papel_feira:papel,autorizada_id:null,permissoes})}} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3"><option value="INTERNO">Equipe interna CTI</option><option value="PROFISSIONAL">Profissional Autorizado CARRIER</option><option value="GESTOR">Gestor Autorizado CARRIER</option><option value="CARRIER_MASTER">CARRIER Master — Direção e Gerência</option></select></label>{dados.papel_feira&&dados.papel_feira!=="INTERNO"&&dados.papel_feira!=="CARRIER_MASTER"&&<label className="text-sm text-slate-300">Empresa autorizada<select aria-label="Empresa autorizada" required value={dados.autorizada_id||""} onChange={e=>{const a=autorizadas.find(a=>a.id===e.target.value);onChange({...dados,autorizada_id:e.target.value,empresa:a?.nome||dados.empresa})}} className="mt-2 w-full rounded-xl border border-[#1d3b67] bg-[#061126] px-4 py-3"><option value="">Selecione a autorizada</option>{autorizadas.map(a=><option key={a.id} value={a.id} disabled={!a.ativa}>{a.nome}{!a.ativa?" (inativa)":""}</option>)}</select></label>}<Campo label="Nome completo" value={dados.nome} onChange={(value) => onChange({ ...dados, nome: value })} required />{incluirCredenciais && "email" in dados && <><Campo label="E-mail" type="email" value={dados.email} onChange={(value) => onChange({ ...dados, email: value })} required /><Campo label="Senha temporária" type="password" value={dados.senha_temporaria} onChange={(value) => onChange({ ...dados, senha_temporaria: value })} required /></>}<Campo label="Cargo ou função" value={dados.funcao} onChange={(value) => onChange({ ...dados, funcao: value })} required /><Campo label="Empresa" value={dados.empresa} onChange={(value) => onChange({ ...dados, empresa: value })} required /><Campo label="Território" value={dados.territorio || ""} onChange={(value) => onChange({ ...dados, territorio: value })} /><Campo label="DDDs autorizados" value={dddsTexto} onChange={setDddsTexto} placeholder="011, 012, 013" /><Campo label="Gestor responsável" value={dados.gestor_responsavel || ""} onChange={(value) => onChange({ ...dados, gestor_responsavel: value })} /></div><div className="grid gap-4 lg:grid-cols-3">{grupos.map((grupo) => <fieldset key={grupo.titulo} className="rounded-2xl border border-[#17345e] bg-[#061126] p-4"><legend className="px-2 font-semibold text-cyan-300">{grupo.titulo}</legend><div className="space-y-3">{grupo.itens.map((item) => <label key={item.chave} className="flex items-center gap-3 text-sm text-slate-200"><input type="checkbox" disabled={Boolean(dados.papel_feira&&dados.papel_feira!=="INTERNO"&&item.chave!=="feiras_eventos")} checked={dados.permissoes[item.chave]} onChange={(e) => onMarcar(item.chave, e.target.checked)} className="h-4 w-4 accent-cyan-500" />{item.rotulo}</label>)}</div></fieldset>)}</div><div className="flex flex-wrap gap-3"><button disabled={processando} className="rounded-xl bg-cyan-500 px-5 py-3 font-semibold text-slate-950 disabled:opacity-60">{processando ? "Processando..." : botao}</button>{onCancelar && <button type="button" onClick={onCancelar} className="rounded-xl border border-slate-600 px-5 py-3">Cancelar</button>}</div></form>
 }
 
 function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-2xl border border-[#13203f] bg-[#071427] p-5"><div className="text-xs uppercase text-slate-500">{label}</div><div className="mt-2 text-2xl font-bold text-cyan-300">{value}</div></div> }

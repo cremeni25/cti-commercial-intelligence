@@ -116,7 +116,8 @@ def test_frontend_autentica_as_leituras_existentes_sem_reescrever_dashboard():
     assert 'ANFIR_WORKBOOK_PATH = "/api/cti/analytics/anfir-workbook-2026"' in bridge
     assert "supabase.auth.getSession()" in bridge
     assert 'headers.set("Authorization", `Bearer ${token}`)' in bridge
-    assert "if (!url.includes(ANFIR_WORKBOOK_PATH))" in bridge
+    assert 'parsed.pathname.startsWith("/api/cti/")' in bridge
+    assert 'parsed.origin !== window.location.origin' in bridge
 
 
 def test_correcao_nao_adiciona_escrita_na_base_anfir():

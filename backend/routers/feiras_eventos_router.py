@@ -10,6 +10,9 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, TableStyle, 
 from xml.sax.saxutils import escape
 from pydantic import BaseModel, Field
 from decimal import Decimal
+from urllib.request import urlopen
+from urllib.error import HTTPError, URLError
+import json
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 
@@ -24,6 +27,7 @@ class ItemIntencao(BaseModel):
     quantidade: int = Field(ge=1, le=100000)
 
 class Atendimento(BaseModel):
+    autorizada_id: str | None = None
     feira_id: str
     empresa: str = Field(min_length=2)
     cnpj: str | None = None
@@ -39,30 +43,108 @@ class Atendimento(BaseModel):
     moeda: str | None = None
     valor_referencia: Decimal | None = None
     itens: list[ItemIntencao] = Field(default_factory=list)
+    client_request_id: str | None = Field(default=None, max_length=80)
+
+
+
+class AtendimentoEdicao(Atendimento):
+    versao_esperada: int = Field(ge=0)
+
+
+def _vinculo_externo(usuario: UsuarioAutenticado) -> dict | None:
+    registros = (supabase.table("cti_feira_profissionais").select("autorizada_id,papel,ativo")
+        .eq("user_id",usuario.id).limit(1).execute().data or [])
+    if not registros or not registros[0].get("ativo"):
+        return None
+    empresa = (supabase.table("cti_feira_autorizadas").select("ativa")
+        .eq("id",registros[0]["autorizada_id"]).limit(1).execute().data or [])
+    return registros[0] if empresa and empresa[0].get("ativa") else None
+
+
+def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        if not usuario.permissoes.get("feiras_eventos"):
+            raise HTTPException(403, "Feiras e Eventos não autorizado.")
+        return "global", None
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        if not usuario.permissoes.get("feiras_eventos"):
+            raise HTTPException(403,"Feiras e Eventos não autorizado.")
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo:
+            raise HTTPException(403,"Vínculo institucional inexistente ou inativo.")
+        return ("empresa",str(vinculo["autorizada_id"])) if vinculo["papel"] == "GESTOR" else ("proprio",str(usuario.id))
+    if usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
+        return "global",None
+    if usuario.permissoes.get("feiras_eventos"):
+        return "proprio",str(usuario.id)
+    raise HTTPException(403,"Feiras e Eventos não autorizado.")
 
 @router.get("")
 def listar_feiras(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     return supabase.table("cti_feiras").select("*").order("inicio", desc=True).execute().data or []
 
 @router.get("/catalogo")
 def catalogo(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     return supabase.table("cti_catalogo_equipamentos").select("codigo,linha_produto,nome_comercial").eq("ativo",True).order("linha_produto").execute().data or []
 
+@router.get("/consulta-cnpj/{cnpj}")
+def consultar_cnpj(cnpj: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
+    numero = "".join(c for c in cnpj if c.isdigit())
+    if len(numero) != 14 or numero != cnpj:
+        raise HTTPException(422, "CNPJ inválido.")
+    try:
+        with urlopen("https://brasilapi.com.br/api/cnpj/v1/" + numero, timeout=6) as resposta:
+            dados = json.load(resposta)
+    except HTTPError as exc:
+        if exc.code == 404:
+            raise HTTPException(404, "CNPJ não localizado.") from exc
+        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
+    except (URLError, TimeoutError, ValueError, OSError) as exc:
+        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
+    return {"razao_social": dados.get("razao_social") or "", "nome_fantasia": dados.get("nome_fantasia") or "", "municipio": dados.get("municipio") or "", "uf": dados.get("uf") or ""}
+
 @router.get("/{feira_id}/atendimentos")
-def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    rows = supabase.table("cti_feira_atendimentos").select("*").eq("feira_id",feira_id).order("criado_em",desc=True).limit(1000).execute().data or []
+def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual), offset: int = 0, limit: int = 100):
+    if offset < 0 or not 1 <= limit <= 500:
+        raise HTTPException(422, "Paginação inválida.")
+    escopo, identificador = _escopo_feira(usuario)
+
+    consulta = supabase.table("cti_feira_atendimentos").select("*").eq("feira_id",feira_id)
+    if escopo == "proprio":
+        consulta = consulta.eq("criado_por", identificador)
+        if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+            consulta = consulta.eq("autorizada_id", _vinculo_externo(usuario)["autorizada_id"])
+    elif escopo == "empresa":
+        consulta = consulta.eq("autorizada_id", identificador)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        consulta = consulta.in_("regiao", ["NORTE", "CENTRO_OESTE", "SUDESTE", "SUL", "PARAGUAY"])
+    rows = consulta.order("criado_em",desc=True).order("id").range(offset, offset + limit - 1).execute().data or []
     if rows:
         ids = [r["id"] for r in rows]
-        itens = supabase.table("cti_feira_itens").select("*").in_("atendimento_id",ids).execute().data or []
+        itens = []
+        item_offset = 0
+        while True:
+            pagina_itens = (supabase.table("cti_feira_itens").select("*").in_("atendimento_id",ids)
+                .order("id").range(item_offset, item_offset + 999).execute().data or [])
+            itens.extend(pagina_itens)
+            if len(pagina_itens) < 1000:
+                break
+            item_offset += len(pagina_itens)
+        por_atendimento = {}
+        for item in itens:
+            por_atendimento.setdefault(item["atendimento_id"], []).append(item)
         for r in rows:
-            r["itens"] = [i for i in itens if i["atendimento_id"] == r["id"]]
+            r.pop("request_payload", None)
+            r["itens"] = por_atendimento.get(r["id"], [])
     return rows
 
-@router.post("/{feira_id}/atendimentos", status_code=201)
-def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+def _validar_entrada(feira_id: str, entrada: Atendimento) -> list[dict]:
     if entrada.feira_id != feira_id:
         raise HTTPException(422,"Feira inconsistente.")
-    if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR"}:
+    if entrada.regiao not in {"VIENA","OUTRA","A_CONFIRMAR","NORTE","CENTRO_OESTE","SUDESTE","SUL","PARAGUAY"}:
         raise HTTPException(422,"Região inválida.")
     if entrada.moeda not in {None,"BRL","USD"}:
         raise HTTPException(422,"Moeda inválida.")
@@ -89,31 +171,105 @@ def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioA
     feiras = supabase.table("cti_feiras").select("id").eq("id",feira_id).limit(1).execute().data or []
     if not feiras:
         raise HTTPException(404,"Feira não localizada.")
-    payload = entrada.model_dump(exclude={"itens","feira_id"})
-    payload["feira_id"] = feira_id
-    payload["criado_por"] = str(usuario.id)
-    registro = supabase.table("cti_feira_atendimentos").insert(payload).execute().data
-    if not registro:
-        raise HTTPException(503,"Atendimento não confirmado.")
-    atendimento = registro[0]
+    if not entrada.client_request_id:
+        raise HTTPException(422, "Chave de sincronização obrigatória.")
+    itens = [dict(
+        codigo_produto=str(i.codigo_produto).strip(),
+        linha_produto=i.linha_produto if i.lancamento_feira else por_codigo[str(i.codigo_produto).strip()]["linha_produto"],
+        nome_produto=i.nome_produto if i.lancamento_feira else por_codigo[str(i.codigo_produto).strip()]["nome_comercial"],
+        quantidade=i.quantidade,
+        lancamento_feira=i.lancamento_feira,
+        descricao_lancamento=i.descricao_lancamento if i.lancamento_feira else None,
+    ) for i in entrada.itens]
+    return itens
+
+@router.post("/{feira_id}/atendimentos", status_code=201)
+def registrar_atendimento(feira_id: str, entrada: Atendimento, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    escopo, _ = _escopo_feira(usuario)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        raise HTTPException(403, "CARRIER Master possui acesso de consulta, sem edição de atendimentos.")
+
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo or entrada.autorizada_id != str(vinculo["autorizada_id"]):
+            raise HTTPException(409, "Vínculo institucional alterado. Pendência preservada para conferência.")
+    if entrada.feira_id != feira_id:
+        raise HTTPException(422, "Feira inconsistente.")
+    # Recover a lost acknowledgement before revalidating a catalog that may have changed.
+    recibos = (supabase.table("cti_feira_atendimentos").select("id,autorizada_id,request_payload")
+        .eq("criado_por",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or []) if entrada.client_request_id else []
+    if recibos:
+        original = (recibos[0].get("request_payload") or {}).get("atendimento",{}).get("request_original")
+        if original is not None:
+            if original != entrada.model_dump(mode="json"):
+                raise HTTPException(409, "Chave já utilizada com conteúdo diferente. Pendência preservada.")
+            return {"id":recibos[0]["id"],"reutilizado":True}
+    itens = _validar_entrada(feira_id, entrada)
     try:
-        itens = [dict(
-            atendimento_id=atendimento["id"],
-            codigo_produto=i.codigo_produto,
-            linha_produto=i.linha_produto if i.lancamento_feira else por_codigo[i.codigo_produto]["linha_produto"],
-            nome_produto=i.nome_produto if i.lancamento_feira else por_codigo[i.codigo_produto]["nome_comercial"],
-            quantidade=i.quantidade,
-            lancamento_feira=i.lancamento_feira,
-            descricao_lancamento=i.descricao_lancamento if i.lancamento_feira else None
-        ) for i in entrada.itens]
-        supabase.table("cti_feira_itens").insert(itens).execute()
-    except Exception:
-        supabase.table("cti_feira_atendimentos").delete().eq("id",atendimento["id"]).execute()
-        raise HTTPException(503,"Itens não gravados; atendimento revertido.")
-    return {"id":atendimento["id"],"status":"REGISTRADO"}
+        resposta = supabase.rpc("cti_feira_registrar", {
+            "p_user_id": str(usuario.id),
+            "p_payload": {**entrada.model_dump(mode="json", exclude={"itens"}), "request_original": entrada.model_dump(mode="json")},
+            "p_itens": itens,
+        }).execute().data
+    except Exception as exc:
+        codigo = str(getattr(exc, "code", ""))
+        if codigo == "23505":
+            raise HTTPException(409, "Chave já utilizada com conteúdo diferente. Pendência preservada.") from exc
+        if codigo == "42501":
+            raise HTTPException(403, "Vínculo ou permissão revogados.") from exc
+        raise HTTPException(503, "Gravação não confirmada; tente sincronizar novamente.") from exc
+    if not isinstance(resposta, dict) or not resposta.get("id"):
+        raise HTTPException(503, "Atendimento não confirmado.")
+    return resposta
+
+@router.put("/{feira_id}/atendimentos/{atendimento_id}")
+def editar_atendimento(feira_id: str, atendimento_id: str, entrada: AtendimentoEdicao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    escopo, _ = _escopo_feira(usuario)
+    if usuario.tipo_usuario == "CARRIER_MASTER":
+        raise HTTPException(403, "CARRIER Master possui acesso de consulta, sem edição de atendimentos.")
+    consulta = supabase.table("cti_feira_atendimentos").select("id,criado_por,autorizada_id,oportunidade_id,status").eq("id", atendimento_id).eq("feira_id", feira_id)
+    # Managers have company visibility; editing another professional is not implied.
+    if escopo != "global":
+        consulta = consulta.eq("criado_por", str(usuario.id))
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        vinculo = _vinculo_externo(usuario)
+        if not vinculo or entrada.autorizada_id != str(vinculo["autorizada_id"]):
+            raise HTTPException(409, "Vínculo institucional alterado. Edição pendente preservada.")
+        consulta = consulta.eq("autorizada_id", vinculo["autorizada_id"])
+    registros = consulta.limit(1).execute().data or []
+    if not registros:
+        raise HTTPException(404, "Atendimento não localizado.")
+    recibos = (supabase.table("cti_feira_edicoes").select("atendimento_id,conteudo,recibo")
+        .eq("user_id",str(usuario.id)).eq("client_request_id",entrada.client_request_id).limit(1).execute().data or []) if entrada.client_request_id else []
+    if recibos:
+        anterior = recibos[0]
+        original = (anterior.get("conteudo") or {}).get("payload",{}).get("request_original")
+        if original is not None:
+            if anterior.get("atendimento_id") != atendimento_id or original != entrada.model_dump(mode="json"):
+                raise HTTPException(409, "Chave de edição já utilizada com conteúdo diferente. Pendência preservada.")
+            return {**anterior["recibo"], "reutilizado":True}
+    itens = _validar_entrada(feira_id, entrada)
+    try:
+        resposta = supabase.rpc("cti_feira_editar", {
+            "p_user_id": str(usuario.id), "p_atendimento_id": atendimento_id,
+            "p_payload": {**entrada.model_dump(mode="json", exclude={"itens"}), "request_original": entrada.model_dump(mode="json")}, "p_itens": itens,
+        }).execute().data
+    except Exception as exc:
+        codigo = str(getattr(exc, "code", ""))
+        if codigo == "P0002": raise HTTPException(404, "Atendimento não localizado.") from exc
+        if codigo == "42501": raise HTTPException(403, "Vínculo ou permissão revogados.") from exc
+        if codigo in {"40001", "23505", "55000"}:
+            raise HTTPException(409, "Edição conflitante ou atendimento convertido. Pendência preservada para conferência.") from exc
+        raise HTTPException(503, "Edição não confirmada. Pendência preservada para nova tentativa.") from exc
+    if not isinstance(resposta, dict) or not resposta.get("id"):
+        raise HTTPException(503, "Edição não confirmada.")
+    return resposta
 
 @router.post("/{feira_id}/atendimentos/{atendimento_id}/converter-oportunidade")
 def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER", "CARRIER_MASTER"}:
+        raise HTTPException(403, "Conversão comercial reservada à equipe interna.")
+    escopo, identificador = _escopo_feira(usuario)
     from routers.crm_scope_cliente_referencia_router import _criar_oportunidade, _resolver_cliente, _usa_escopo_proprio, _negocios_ativos
     from routers.clientes_oportunidade_router import ClienteOportunidadeCreate, ClienteContexto, OportunidadeContexto
     registros = (supabase.table("cti_feira_atendimentos").select("*")
@@ -121,6 +277,8 @@ def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioA
     if not registros:
         raise HTTPException(404,"Atendimento não localizado.")
     a = registros[0]
+    if escopo == "proprio" and a.get("criado_por") != identificador:
+        raise HTTPException(404, "Atendimento não localizado.")
     if a.get("regiao") != "VIENA":
         raise HTTPException(403,"Somente intenções da região VIENA podem gerar oportunidade no CTI.")
     if a.get("oportunidade_id"):
@@ -163,6 +321,7 @@ def converter_oportunidade(feira_id: str, atendimento_id: str, usuario: UsuarioA
 
 @router.delete("/{feira_id}/atendimentos/{atendimento_id}")
 def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     if usuario.tipo_usuario not in {"ADMIN_MASTER","DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
         raise HTTPException(403,"Exclusão de teste restrita à gestão.")
     registros = (supabase.table("cti_feira_atendimentos").select("id,criado_por,observacoes,oportunidade_id")
@@ -179,10 +338,18 @@ def excluir_atendimento_teste(feira_id: str, atendimento_id: str, usuario: Usuar
 
 @router.get("/{feira_id}/relatorio.pdf")
 def relatorio_pdf(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    _escopo_feira(usuario)
     feira = supabase.table("cti_feiras").select("nome").eq("id",feira_id).limit(1).execute().data or []
     if not feira:
         raise HTTPException(404,"Feira não localizada.")
-    registros = listar_atendimentos(feira_id, usuario)
+    registros = []
+    offset = 0
+    while True:
+        pagina = listar_atendimentos(feira_id, usuario, offset=offset, limit=500)
+        registros.extend(pagina)
+        if len(pagina) < 500:
+            break
+        offset += len(pagina)
     memoria = BytesIO()
     doc = SimpleDocTemplate(memoria,pagesize=landscape(A4),leftMargin=25,rightMargin=25,topMargin=30,bottomMargin=30)
     estilo = getSampleStyleSheet()

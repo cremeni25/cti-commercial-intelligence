@@ -39,6 +39,10 @@ jobs:
 
   frontend-validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: isolated-test-key
     defaults:
       run:
         working-directory: frontend
@@ -76,3 +80,24 @@ jobs:
         with:
           name: frontend-build-log
           path: frontend/build.log
+
+      - name: Install isolated Feiras verification tools
+        working-directory: tests/feiras
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verify Feiras database, vault, session and offline flow
+        working-directory: tests/feiras
+        run: |
+          npm run test:database
+          npm run test:production-schema
+          npm run test:vault
+          npm run test:session
+          npm run test:ui
+          npm run test:offline
+      - name: Upload Feiras verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: feiras-isolated-results
+          path: tests/feiras/*-results.json

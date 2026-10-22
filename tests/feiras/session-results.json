@@ -1,0 +1,14 @@
+{
+  "engine": "real Chromium; synthetic SDK responses, real localStorage/sessionStorage",
+  "checks": [
+    "unrelated Supabase project cannot supply CTI identity",
+    "logout removes current-project persisted tokens",
+    "logout preserves unrelated project storage",
+    "offline logout immediately blocks session restoration",
+    "late refresh cannot undo explicit logout",
+    "API token unavailable after logout",
+    "explicit login enables only newly authenticated account",
+    "in-flight session response cannot restore a logged-out identity",
+    "reload preserves logout barrier even with stale SDK session"
+  ]
+}

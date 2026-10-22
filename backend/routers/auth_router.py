@@ -344,6 +344,12 @@ def obter_usuario_atual(usuario: UsuarioAutenticado = Depends(usuario_atual)):
         "ativo": True,
     }
     perfil["permissoes"] = dict(usuario.permissoes)
+    if usuario.tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"}:
+        from routers.feiras_eventos_router import _escopo_feira, _vinculo_externo
+        _escopo_feira(usuario)
+        perfil["autorizada_id"] = _vinculo_externo(usuario)["autorizada_id"]
+        perfil["acesso_portal"] = False
+        perfil["acesso_crm"] = True
     perfil["acesso_total"] = bool(usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total"))
     return perfil
 

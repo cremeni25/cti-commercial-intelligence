@@ -1,0 +1,29 @@
+{
+  "engine": "Chromium real Web Crypto + IndexedDB, isolated synthetic data",
+  "checks": [
+    "encrypted save and decrypt",
+    "no plaintext in persistent queue",
+    "network failure keeps queue",
+    "pending survives network failure",
+    "invalid acknowledgement keeps queue",
+    "locked vault unreadable",
+    "wrong password rejected",
+    "same record id isolated across accounts",
+    "unlocking B does not unlock A",
+    "acknowledging B preserves A",
+    "password verifier survives empty queue",
+    "reload discards unlock key",
+    "reload and unlock recover pending data",
+    "valid server receipt removes only acknowledged pending",
+    "AES-GCM rejects tampered ciphertext",
+    "corrupt pending preserved for recovery",
+    "logout cancels in-flight vault unlock without restoring key",
+    "encrypted offline context bound to profile and auth identity",
+    "locked offline context cannot reveal profile or catalog",
+    "another Auth identity cannot discover or unlock A context",
+    "unlocking B cannot decrypt offline context A",
+    "matching identity and vault password restore offline catalog",
+    "expired offline authorization rejected independently of pending records",
+    "expired offline context preserves encrypted pending for later recovery"
+  ]
+}

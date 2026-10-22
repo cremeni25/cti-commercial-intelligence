@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.usefixtures("legacy_authenticated_client")
+
 import os
 from copy import deepcopy
 

@@ -52,6 +52,8 @@ export function CrmAppShellNav() {
   const [erro, setErro] = useState("")
   if (pathname.startsWith("/crm-app/login")) return null
 
+  if (["AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER"].includes(String(usuario?.tipo_usuario || "").toUpperCase())) return null
+
   const itens = [
     { href: "/crm-app", label: tx.home, icon: Building2 },
     { href: "/crm-app/agenda", label: tx.agenda, icon: CalendarDays },

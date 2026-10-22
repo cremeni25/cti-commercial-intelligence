@@ -5,6 +5,7 @@ import { UsuarioCTI } from "../types/usuario.types"
 export type PermissoesUsuario = {
   acesso_portal: boolean
   acesso_crm: boolean
+  feiras_eventos: boolean
   dashboard_executivo: boolean
   clientes_visualizar: boolean
   clientes_editar: boolean
@@ -21,7 +22,11 @@ export type PermissoesUsuario = {
   acesso_total: boolean
 }
 
+export type AutorizadaCarrier = { id: string; nome: string; ativa: boolean }
+
 export type UsuarioNovo = {
+  autorizada_id?: string | null
+  papel_feira?: "INTERNO" | "PROFISSIONAL" | "GESTOR" | "CARRIER_MASTER"
   nome: string
   email: string
   senha_temporaria: string
@@ -87,4 +92,11 @@ export function excluirUsuario(usuarioId: string, email: string): Promise<{ excl
     method: "DELETE",
     body: JSON.stringify({ email }),
   })
+}
+
+export function listarAutorizadas(): Promise<AutorizadaCarrier[]> {
+  return requisicao("/governanca/autorizadas-carrier")
+}
+export function salvarAutorizada(dados: {nome: string; ativa: boolean}, id?: string): Promise<AutorizadaCarrier> {
+  return requisicao("/governanca/autorizadas-carrier" + (id ? "/" + id : ""), {method: id ? "PUT" : "POST", body: JSON.stringify(dados)})
 }

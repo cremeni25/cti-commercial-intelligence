@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.usefixtures("legacy_authenticated_client")
+
 import os
 
 os.environ.setdefault("SUPABASE_URL", "https://example.supabase.co")

@@ -58,11 +58,12 @@ export default function AuthenticatedAnfirFetchBridge() {
       const metodo = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase()
       const legadoSeguro = destinoSeguroLeitura(url, metodo)
 
-      if (!url.includes(ANFIR_WORKBOOK_PATH)) {
-        if (!url.includes(CTI_ANALYTICS_PATH) && !url.includes(CRM_PROXY_PATH) && !legadoSeguro) {
-          return originalFetch(input, init)
-        }
-      }
+      const parsed = new URL(url, window.location.origin)
+      const apiCti = parsed.origin === window.location.origin && parsed.pathname.startsWith("/api/cti/")
+      const publica = new Set(["/api/cti/auth/bootstrap/status", "/api/cti/auth/bootstrap", "/api/cti/auth/access-requests", "/api/cti/auth/access-requests/health"])
+      if (publica.has(parsed.pathname)) return originalFetch(input, init)
+      if (!apiCti && !url.includes(ANFIR_WORKBOOK_PATH) && !url.includes(CTI_ANALYTICS_PATH) && !url.includes(CRM_PROXY_PATH) && !legadoSeguro) return originalFetch(input, init)
+      if (parsed.origin !== window.location.origin) return originalFetch(input, init)
 
       const destino = legadoSeguro || input
       const leituraSegura = metodo === "GET" || metodo === "HEAD"
@@ -91,6 +92,8 @@ export default function AuthenticatedAnfirFetchBridge() {
       if (!tokenRenovado || tokenRenovado === token) return resposta
 
       registrarSessaoCTI(renovada.data.session)
+      // Uma saída ocorrida durante a renovação invalida também esta repetição.
+      if (await obterTokenCTI().catch(() => null) !== tokenRenovado) return resposta
       const headersRenovados = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined))
       headersRenovados.set("Authorization", `Bearer ${tokenRenovado}`)
       if (!legadoSeguro) {

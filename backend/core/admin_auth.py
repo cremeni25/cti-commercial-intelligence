@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from core.supabase_client import supabase
@@ -12,6 +12,9 @@ security = HTTPBearer(auto_error=False)
 PERFIS_OFICIAIS = {
     "ADMIN_MASTER",
     "USUARIO_CTI",
+    "AUTORIZADO_CARRIER",
+    "GESTOR_AUTORIZADO_CARRIER",
+    "CARRIER_MASTER",
     "DIRETOR_VIENA_SP",
     "ADMIN_COMERCIAL_VIENA_SP",
     "ADMIN_FINANCEIRO_VIENA_SP",
@@ -100,7 +103,9 @@ def _buscar_permissoes(user_id: str, tipo_usuario: str) -> dict[str, bool]:
     return permissoes
 
 
-def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(security)) -> UsuarioAutenticado:
+def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(security), request: Request = None) -> UsuarioAutenticado:
+    if request is not None and getattr(request.state, "cti_usuario", None) is not None:
+        return request.state.cti_usuario
     if credenciais is None or credenciais.scheme.lower() != "bearer":
         raise HTTPException(status_code=401, detail="Autenticação obrigatória.", headers={"WWW-Authenticate": "Bearer"})
     try:
@@ -112,9 +117,18 @@ def usuario_atual(credenciais: HTTPAuthorizationCredentials | None = Depends(sec
     if not auth_id:
         raise HTTPException(status_code=401, detail="Usuário autenticado inválido.")
     perfil = _buscar_perfil(auth_id, email)
-    if not perfil or perfil.get("ativo") is False:
+    if not perfil or perfil.get("ativo") is False or str(perfil.get("status_acesso") or "").upper() in {"INATIVO", "BLOQUEADO", "REJEITADO"}:
         raise HTTPException(status_code=403, detail="Perfil CTI inativo ou inexistente.")
+    caminho = request.url.path.rstrip("/") if request else ""
+    if (perfil.get("primeiro_acesso_pendente") is True or perfil.get("cadastro_completo") is False) and caminho not in {
+        "/auth/me", "/governanca/primeiro-acesso/status", "/governanca/primeiro-acesso/concluir"
+    }:
+        raise HTTPException(status_code=403, detail="Conclua o primeiro acesso antes de operar o CTI.")
     tipo_usuario = _normalizar_perfil(perfil)
+    if tipo_usuario in {"AUTORIZADO_CARRIER", "GESTOR_AUTORIZADO_CARRIER", "CARRIER_MASTER"}:
+        caminho = request.url.path.rstrip("/") if request else ""
+        if not (caminho == "/auth/me" or caminho == "/crm-seguro/feiras" or caminho.startswith("/crm-seguro/feiras/") or caminho in {"/governanca/primeiro-acesso/status", "/governanca/primeiro-acesso/concluir"}):
+            raise HTTPException(status_code=403, detail="Perfil externo restrito a Feiras e Eventos.")
     user_id = str(perfil.get("id") or auth_id)
     return UsuarioAutenticado(
         id=user_id,

@@ -1,6 +1,8 @@
 import type { PermissoesUsuario } from "../services/usuarios.service"
 
 export interface UsuarioCTI {
+  autorizada_id?: string | null
+  papel_feira?: "INTERNO" | "PROFISSIONAL" | "GESTOR"
   id: string
   auth_id: string
   nome: string

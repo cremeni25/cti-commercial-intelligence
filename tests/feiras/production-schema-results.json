@@ -1,0 +1,20 @@
+{
+  "checks": [
+    "anon and authenticated direct access blocked; backend RPC allowed",
+    "atomic edit and lost acknowledgement replay",
+    "creation replay x20 produces one record and item",
+    "cross company edit denied",
+    "item failure rolls back entire creation",
+    "least privilege enforced",
+    "manager cannot edit another professional record",
+    "manager institutional provisioning",
+    "null institutional role rejected",
+    "null profile type cannot bypass creation permission",
+    "provisioning against exact production NOT NULL constraints",
+    "revoked permission prevents sync",
+    "same key with changed content rejected"
+  ],
+  "environment": "PGlite with captured production schema; not remote Supabase capacity",
+  "checks_passed": 13,
+  "synthetic_data": "transaction rolled back; no Auth accounts created"
+}
