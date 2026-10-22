@@ -104,7 +104,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           return
         }
         const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 12000))])
-        if (!ativo || sessaoCTIBloqueada()) return
+        if (!ativo) return
+        if (sessaoCTIBloqueada()) {
+          if (!ROTAS_PUBLICAS.has(pathname)) router.replace(rotaCrm ? "/crm-app/login?acesso=expirado" : "/login?acesso=expirado")
+          return
+        }
         if (!perfilBase) {
           registrarSessaoCTI(null)
           supabase.auth.stopAutoRefresh()
@@ -144,11 +148,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (ativo) setUsuario(perfil)
-        if (pathname === "/login") router.replace(rotaInicial(perfil))
-        if (pathname === "/crm-app/login") router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
+        // Telas públicas de login permanecem acessíveis para recuperação explícita da sessão.
+        if (pathname === "/login" && !window.location.search.includes("acesso=")) router.replace(rotaInicial(perfil))
+        if (pathname === "/crm-app/login" && !window.location.search.includes("acesso=")) router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
         if (ativo) { setUsuario(null); setErroAcesso(true) }
+        if (!ROTAS_PUBLICAS.has(pathname)) router.replace(pathname.startsWith("/crm-app") ? "/crm-app/login?acesso=indisponivel" : "/login?acesso=indisponivel")
       } finally {
         if (ativo) setLoading(false)
       }
