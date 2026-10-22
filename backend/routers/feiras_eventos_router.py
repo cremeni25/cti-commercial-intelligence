@@ -96,7 +96,7 @@ def consultar_cnpj(cnpj: str, usuario: UsuarioAutenticado = Depends(usuario_atua
     if len(numero) != 14 or numero != cnpj:
         raise HTTPException(422, "CNPJ inválido.")
     try:
-        with urlopen("https://brasilapi.com.br/api/cnpj/v1/" + numero, timeout=6) as resposta:
+        with urlopen("https://brasilapi.com.br/api/cnpj/v1/" + numero, timeout=2.5) as resposta:
             dados = json.load(resposta)
     except HTTPError as exc:
         if exc.code == 404:
