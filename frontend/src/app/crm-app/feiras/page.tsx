@@ -84,7 +84,7 @@ function FeirasPageContent(){
   const resposta=await fetchCrmSeguroProxy(endpoint,{method:editando?"PUT":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
   const dados=await resposta.json().catch(()=>({}));
   if(!resposta.ok)throw Error(dados.detail||"Servidor não confirmou o atendimento. Confira antes de tentar novamente.");
-  setSucesso("Atendimento confirmado pelo servidor.");cancelarEdicao();await carregar(feira);return;
+  cancelarEdicao();setSucesso("Atendimento confirmado pelo servidor.");try{await carregar(feira)}catch{setErro("Atendimento salvo, mas não foi possível atualizar a lista. Use a sincronização para consultar novamente.")}return;
  }
  await salvarCifrado(userId,{id:chave,feiraId:feira,...(editando?{atendimentoId:editando.id}:{}),payload});await atualizarPendentes();setSucesso("Atendimento protegido neste dispositivo; aguardando confirmação do servidor.");if(navigator.onLine)await sincronizar();cancelarEdicao();if(navigator.onLine)await carregar(feira)}catch(e){setErro(e instanceof Error?e.message:String(e))}finally{setSalvando(false)}}
  async function converter(a:Atendimento){if(!window.confirm("Criar oportunidade no CTI para "+a.empresa+"? Lançamentos da feira exigem homologação antes de proposta formal."))return;setErro("");try{const r=await fetchCrmSeguroProxy("crm-seguro/feiras/"+encodeURIComponent(feira)+"/atendimentos/"+encodeURIComponent(a.id)+"/converter-oportunidade",{method:"POST"});const p=await r.json().catch(()=>({}));if(!r.ok)throw Error(p.detail||"Falha na conversão.");setSucesso("Oportunidade CTI vinculada: "+p.oportunidade_id);await carregar(feira)}catch(e){setErro(e instanceof Error?e.message:"Não foi possível converter.")}}
