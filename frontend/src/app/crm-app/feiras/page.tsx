@@ -66,14 +66,14 @@ function FeirasPageContent(){
   if(!navigator.onLine){setErro("Consulta requer internet. Preencha manualmente.");return}
   setBuscandoCnpj(true);
   try{
-   const r=await fetchCrmSeguroProxy("crm-seguro/feiras/consulta-cnpj/"+numero,{cache:"no-store"});
+   const r=await fetchCrmSeguroProxy("crm-seguro/feiras/consulta-cnpj/"+numero,{cache:"no-store"},{timeoutMs:4000,tentativas:1});
    const dados=await r.json().catch(()=>({}));
    if(!r.ok)throw Error(dados.detail||"Consulta indisponível.");
    if(dados.razao_social)setEmpresa(dados.razao_social);
    if(dados.municipio)setCidade(dados.municipio);
    if(dados.uf)setUf(dados.uf);
    setSucesso("Dados encontrados. Confira antes de salvar.");
-  }catch(e){setErro(e instanceof Error?e.message:"Consulta indisponível. Preencha manualmente.")}
+  }catch(e){setErro("Não foi possível consultar o CNPJ agora. Você pode preencher empresa, cidade e UF manualmente e continuar o atendimento.")}
   finally{setBuscandoCnpj(false)}
  }
  function atualizar(i:number,novo:Partial<Item>){setItens(a=>a.map((x,j)=>i===j?{...x,...novo}:x))}
