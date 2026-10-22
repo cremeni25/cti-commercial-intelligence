@@ -1,4 +1,4 @@
-const CACHE_NAME = "cti-crm-v3"
+const CACHE_NAME = "cti-crm-v4"
 // Somente documentos sem dados de usuário e arquivos estáticos entram no cache.
 // Perfil, catálogo, atendimentos e tokens nunca são armazenados pelo service worker.
 const DOCUMENTOS = new Set(["/crm-app", "/crm-app/", "/crm-app/feiras", "/crm-app/login"])
@@ -32,6 +32,8 @@ self.addEventListener("fetch", event => {
   const url = new URL(request.url)
   if (url.origin !== self.location.origin) return
   const documento = request.mode === "navigate" && DOCUMENTOS.has(url.pathname)
+  // Feiras exige sempre a versão publicada: não servir HTML antigo do cache.
+  if (request.mode === "navigate" && url.pathname === "/crm-app/feiras") return
   const estatico = url.pathname.startsWith("/_next/static/") || ESTATICOS.has(url.pathname)
   if (!documento && !estatico) return
   const key = documento ? url.pathname.replace(/\/$/, "") : request
