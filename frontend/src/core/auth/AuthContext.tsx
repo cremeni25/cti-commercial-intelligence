@@ -1,6 +1,6 @@
 "use client"
 
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useRef, useState } from "react"
 import { usePathname, useRouter } from "next/navigation"
 import { getSupabaseClient } from "../database/supabase"
 import { UsuarioCTI } from "./types"
@@ -29,6 +29,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const [usuario, setUsuario] = useState<UsuarioCTI | null>(null)
+  const usuarioAtualRef = useRef<UsuarioCTI | null>(null)
+  usuarioAtualRef.current = usuario
   const [loading, setLoading] = useState(true)
   const [erroAcesso, setErroAcesso] = useState(false)
   const [demoraAcesso, setDemoraAcesso] = useState(false)
@@ -72,6 +74,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     let ativo = true
 
     async function carregar() {
+      const perfilAtual = usuarioAtualRef.current
+      if (perfilAtual && perfilAtual.ativo !== false && rotaAutorizadaCTI(pathname, perfilAtual)) {
+        setLoading(false)
+        return
+      }
       setLoading(true)
       setErroAcesso(false)
       setDemoraAcesso(false)
