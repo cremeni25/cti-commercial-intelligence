@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [usuario, setUsuario] = useState<UsuarioCTI | null>(null)
   const [loading, setLoading] = useState(true)
+  const [erroAcesso, setErroAcesso] = useState(false)
   const [sessaoOffline, setSessaoOffline] = useState<Session | null>(null)
 
   useEffect(() => {
@@ -65,11 +66,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function carregar() {
       setLoading(true)
+      setErroAcesso(false)
       setUsuario(null)
       setSessaoOffline(null)
       try {
         const supabase = getSupabaseClient()
-        const session = await obterSessaoCTI()
+        const session = await Promise.race([obterSessaoCTI(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na validação da sessão.")), 12000))])
         const rotaPublica = ROTAS_PUBLICAS.has(pathname)
         const rotaCrm = pathname.startsWith("/crm-app")
         const rotaPrimeiroAcesso = pathname === "/primeiro-acesso"
@@ -93,7 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (ativo) setSessaoOffline(session)
           return
         }
-        const perfilBase = await buscarUsuarioAtual()
+        const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 12000))])
         if (!ativo || sessaoCTIBloqueada()) return
         if (!perfilBase) {
           registrarSessaoCTI(null)
@@ -138,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (pathname === "/crm-app/login") router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
-        if (ativo) setUsuario(null)
+        if (ativo) { setUsuario(null); setErroAcesso(true) }
       } finally {
         if (ativo) setLoading(false)
       }
@@ -191,7 +193,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [sessaoOffline, router])
 
   const podeExibir = ROTAS_PUBLICAS.has(pathname) || (!loading && usuario && rotaAutorizadaCTI(pathname, usuario))
-  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : sessaoOffline && !loading ? <DesbloquearFeirasOffline session={sessaoOffline} aoDesbloquear={setUsuario} /> : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">Validando acesso CTI...</main>}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : sessaoOffline && !loading ? <DesbloquearFeirasOffline session={sessaoOffline} aoDesbloquear={setUsuario} /> : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">{erroAcesso ? <div className="mx-auto max-w-md space-y-4"><p>Não foi possível validar o acesso ao CTI. Sua sessão e seus dados não foram apagados.</p><button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950">Tentar novamente</button></div> : "Validando acesso CTI..."}</main>}</AuthContext.Provider>
 }
 
 export function useAuth() { return useContext(AuthContext) }
