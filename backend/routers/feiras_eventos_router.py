@@ -95,16 +95,22 @@ def consultar_cnpj(cnpj: str, usuario: UsuarioAutenticado = Depends(usuario_atua
     numero = "".join(c for c in cnpj if c.isdigit())
     if len(numero) != 14 or numero != cnpj:
         raise HTTPException(422, "CNPJ inválido.")
-    try:
-        with urlopen("https://brasilapi.com.br/api/cnpj/v1/" + numero, timeout=2.5) as resposta:
-            dados = json.load(resposta)
-    except HTTPError as exc:
-        if exc.code == 404:
-            raise HTTPException(404, "CNPJ não localizado.") from exc
-        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
-    except (URLError, TimeoutError, ValueError, OSError) as exc:
-        raise HTTPException(503, "Consulta temporariamente indisponível. Preencha manualmente.") from exc
-    return {"razao_social": dados.get("razao_social") or "", "nome_fantasia": dados.get("nome_fantasia") or "", "municipio": dados.get("municipio") or "", "uf": dados.get("uf") or ""}
+    fontes = [
+        ("https://brasilapi.com.br/api/cnpj/v1/" + numero, "brasilapi"),
+        ("https://publica.cnpj.ws/cnpj/" + numero, "cnpjws"),
+    ]
+    for url, fonte in fontes:
+        try:
+            with urlopen(url, timeout=2.0) as resposta:
+                dados = json.load(resposta)
+            if fonte == "cnpjws":
+                estabelecimento = dados.get("estabelecimento") or {}
+                cidade = estabelecimento.get("cidade") or {}
+                return {"razao_social": dados.get("razao_social") or "", "nome_fantasia": estabelecimento.get("nome_fantasia") or "", "municipio": cidade.get("nome") or "", "uf": (estabelecimento.get("estado") or {}).get("sigla") or ""}
+            return {"razao_social": dados.get("razao_social") or "", "nome_fantasia": dados.get("nome_fantasia") or "", "municipio": dados.get("municipio") or "", "uf": dados.get("uf") or ""}
+        except (HTTPError, URLError, TimeoutError, ValueError, OSError):
+            continue
+    raise HTTPException(503, "Fontes públicas de CNPJ indisponíveis no momento. Preencha manualmente.")
 
 @router.get("/{feira_id}/atendimentos")
 def listar_atendimentos(feira_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual), offset: int = 0, limit: int = 100):
