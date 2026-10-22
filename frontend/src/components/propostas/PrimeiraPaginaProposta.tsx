@@ -82,10 +82,15 @@ export default function PrimeiraPaginaProposta({ propostaId, compacto = false }:
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload.detail || "Não foi possível salvar os dados complementares."))
       const pendentes = Array.isArray(payload.campos_pendentes) ? payload.campos_pendentes : []
+      setDados(payload && payload.campos ? payload : (anterior) => anterior ? { ...anterior, campos: { ...campos }, campos_pendentes: pendentes, pronto_para_emitir: pendentes.length === 0 } : anterior)
       setMensagem(pendentes.length
         ? `Dados salvos. Ainda falta preencher: ${pendentes.join(", ")}.`
         : "Dados complementares salvos. Documento pronto para emissão.")
-      await carregar()
+      try {
+        await carregar()
+      } catch {
+        setErro("Dados salvos, mas não foi possível atualizar a consulta. Não é necessário salvar novamente.")
+      }
     } catch (falha) { setErro(falha instanceof Error ? falha.message : "Falha ao salvar os campos.") }
     finally { setSalvando(false) }
   }
