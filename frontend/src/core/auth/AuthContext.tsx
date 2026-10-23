@@ -30,14 +30,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [usuario, setUsuario] = useState<UsuarioCTI | null>(null)
   const usuarioAtualRef = useRef<UsuarioCTI | null>(null)
-  usuarioAtualRef.current = usuario
+  useEffect(() => { usuarioAtualRef.current = usuario }, [usuario])
   const [loading, setLoading] = useState(true)
   const [erroAcesso, setErroAcesso] = useState(false)
   const [demoraAcesso, setDemoraAcesso] = useState(false)
   const [sessaoOffline, setSessaoOffline] = useState<Session | null>(null)
 
   useEffect(() => {
-    if (!loading) { setDemoraAcesso(false); return }
+    if (!loading) { const id = window.setTimeout(() => setDemoraAcesso(false), 0); return () => window.clearTimeout(id) }
     const timer = window.setTimeout(() => setDemoraAcesso(true), 15000)
     return () => window.clearTimeout(timer)
   }, [loading, pathname])
