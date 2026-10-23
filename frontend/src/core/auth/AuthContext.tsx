@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       setErroAcesso(false)
       setDemoraAcesso(false)
-      setUsuario(null)
+      // Preserve the last validated identity during transient revalidation.
       setSessaoOffline(null)
       try {
         const supabase = getSupabaseClient()
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (pathname === "/crm-app/login" && !window.location.search.includes("acesso=")) router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
-        if (ativo) { setUsuario(null); setErroAcesso(true) }
+        if (ativo) { setErroAcesso(true) }
         // Falhas transitórias na consulta do perfil não invalidam a sessão autenticada.
         // Redirecionar ao login aqui criava ciclo login -> validação -> login.
         // A tela de recuperação permanece na rota atual até uma nova tentativa explícita.
