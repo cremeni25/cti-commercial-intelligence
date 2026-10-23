@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const usuarioAtualRef = useRef<UsuarioCTI | null>(null)
   useEffect(() => { usuarioAtualRef.current = usuario }, [usuario])
   const [loading, setLoading] = useState(true)
+  const [tentativa, setTentativa] = useState(0)
   const [erroAcesso, setErroAcesso] = useState(false)
   const [demoraAcesso, setDemoraAcesso] = useState(false)
   const [sessaoOffline, setSessaoOffline] = useState<Session | null>(null)
@@ -82,7 +83,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       setErroAcesso(false)
       setDemoraAcesso(false)
-      setUsuario(null)
       setSessaoOffline(null)
       try {
         const supabase = getSupabaseClient()
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (pathname === "/crm-app/login" && !window.location.search.includes("acesso=")) router.replace(perfil.acesso_crm === false && perfil.acesso_portal !== false ? ROTA_PORTAL_PRINCIPAL : "/crm-app")
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
-        if (ativo) { setUsuario(null); setErroAcesso(true) }
+        if (ativo) { setUsuario(usuarioAtualRef.current); setErroAcesso(true) }
         // Falhas transitórias na consulta do perfil não invalidam a sessão autenticada.
         // Redirecionar ao login aqui criava ciclo login -> validação -> login.
         // A tela de recuperação permanece na rota atual até uma nova tentativa explícita.
@@ -171,7 +171,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     void carregar()
     return () => { ativo = false }
-  }, [pathname, router])
+  }, [pathname, router, tentativa])
 
   useEffect(() => {
     const supabase = getSupabaseClient()
@@ -216,7 +216,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [sessaoOffline, router])
 
   const podeExibir = ROTAS_PUBLICAS.has(pathname) || (!loading && usuario && rotaAutorizadaCTI(pathname, usuario))
-  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : sessaoOffline && !loading ? <DesbloquearFeirasOffline session={sessaoOffline} aoDesbloquear={setUsuario} /> : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">{erroAcesso || !loading || demoraAcesso ? <div className="mx-auto max-w-md space-y-4"><p>{loading ? "A validação do acesso está demorando mais que o esperado." : "Não foi possível concluir a validação do acesso ao CTI."} Sua sessão e seus dados não foram apagados.</p><button type="button" onClick={() => window.location.reload()} className="rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950">Tentar novamente</button><a href={pathname.startsWith("/crm-app") ? "/crm-app/login" : "/login"} className="block text-cyan-300 underline">Ir para a tela de login</a></div> : "Validando acesso CTI..."}</main>}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ usuario, loading, sair }}>{podeExibir ? children : sessaoOffline && !loading ? <DesbloquearFeirasOffline session={sessaoOffline} aoDesbloquear={setUsuario} /> : <main className="min-h-screen bg-[#020817] p-6 text-slate-300" role="status">{erroAcesso || !loading || demoraAcesso ? <div className="mx-auto max-w-md space-y-4"><p>{loading ? "A validação do acesso está demorando mais que o esperado." : "Não foi possível concluir a validação do acesso ao CTI."} Sua sessão e seus dados não foram apagados.</p><button type="button" onClick={() => { setErroAcesso(false); setDemoraAcesso(false); setTentativa(n => n + 1) }} className="rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950">Tentar novamente</button><a href={pathname.startsWith("/crm-app") ? "/crm-app/login" : "/login"} className="block text-cyan-300 underline">Ir para a tela de login</a></div> : "Validando acesso CTI..."}</main>}</AuthContext.Provider>
 }
 
 export function useAuth() { return useContext(AuthContext) }
