@@ -2,8 +2,8 @@ import { API_URL } from "@/lib/api"
 import { obterSessaoCTI } from "./session"
 import { UsuarioCTI } from "./types"
 
-const AUTH_TIMEOUT_MS = 8000
-const AUTH_TENTATIVAS = 3
+const AUTH_TIMEOUT_MS = 20000
+const AUTH_TENTATIVAS = 2
 const TRANSIENTES = new Set([502, 503, 504])
 
 function aguardar(ms: number) {
