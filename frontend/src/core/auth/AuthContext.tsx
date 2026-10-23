@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (ativo) setSessaoOffline(session)
           return
         }
-        const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 12000))])
+        const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 30000))])
         if (!ativo) return
         if (sessaoCTIBloqueada()) {
           if (!ROTAS_PUBLICAS.has(pathname)) router.replace(rotaCrm ? "/crm-app/login?acesso=expirado" : "/login?acesso=expirado")
@@ -161,7 +161,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (error) {
         console.error("Falha ao resolver identidade CTI:", error)
         if (ativo) { setUsuario(null); setErroAcesso(true) }
-        if (!ROTAS_PUBLICAS.has(pathname)) router.replace(pathname.startsWith("/crm-app") ? "/crm-app/login?acesso=indisponivel" : "/login?acesso=indisponivel")
+        // Falhas transitórias na consulta do perfil não invalidam a sessão autenticada.
+        // Redirecionar ao login aqui criava ciclo login -> validação -> login.
+        // A tela de recuperação permanece na rota atual até uma nova tentativa explícita.
       } finally {
         if (ativo) setLoading(false)
       }
