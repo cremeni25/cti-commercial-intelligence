@@ -82,7 +82,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true)
       setErroAcesso(false)
       setDemoraAcesso(false)
-      setUsuario(null)
+      // Preserve o perfil confirmado durante revalidações transitórias.
       setSessaoOffline(null)
       try {
         const supabase = getSupabaseClient()
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           if (ativo) setSessaoOffline(session)
           return
         }
-        const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 30000))])
+        const perfilBase = await Promise.race([buscarUsuarioAtual(), new Promise<null>((_, reject) => window.setTimeout(() => reject(new Error("Tempo excedido na consulta do perfil.")), 45000))])
         if (!ativo) return
         if (sessaoCTIBloqueada()) {
           if (!ROTAS_PUBLICAS.has(pathname)) router.replace(rotaCrm ? "/crm-app/login?acesso=expirado" : "/login?acesso=expirado")
