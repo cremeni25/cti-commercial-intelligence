@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.admin_auth import UsuarioAutenticado, usuario_atual
 from core.supabase_client import supabase
 from routers import clientes_oportunidade_router as legado
-from routers.clientes_oportunidade_router import ClienteCreate, ClienteOportunidadeCreate
+from routers.clientes_oportunidade_router import ClienteOportunidadeCreate
 
 router = APIRouter(prefix="/crm-seguro", tags=["crm-seguro-cliente-referencia"])
 
@@ -159,11 +159,6 @@ def _criar_oportunidade(dados: ClienteOportunidadeCreate, cliente: dict, compat_
     }
 
 
-@router.get("/clientes")
-def listar_clientes_seguros(usuario: UsuarioAutenticado = Depends(usuario_atual)):
-    return legado._clientes_unificados()
-
-
 @router.get("/clientes/{cliente_id}/negocio-ativo")
 def obter_negocio_ativo_cliente(
     cliente_id: str,
@@ -178,14 +173,6 @@ def obter_negocio_ativo_cliente(
         "oportunidade": ativos[0] if ativos else None,
         "quantidade": len(ativos),
     }
-
-
-@router.post("/clientes")
-def criar_cliente_seguro(
-    dados: ClienteCreate,
-    usuario: UsuarioAutenticado = Depends(usuario_atual),
-):
-    return legado.criar_cliente_crm_app(dados)
 
 
 @router.post("/cliente-oportunidade")

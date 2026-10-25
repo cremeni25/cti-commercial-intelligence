@@ -47,7 +47,14 @@ def _clientes_filtrados(usuario: UsuarioAutenticado, responsavel_id: str | None 
     # Fonte de verdade para a propriedade comercial: public.clientes.
     # Cadastros de cti_clientes nao sao identidades comerciais confirmadas.
     # Mantemos a visao Master de todos os cadastros canonicos, inclusive sem dono.
-    resolvidos = supabase.table("clientes").select("*").execute().data or []
+    resolvidos: list[dict[str, Any]] = []
+    inicio = 0
+    while True:
+        pagina = supabase.table("clientes").select("*").order("id").range(inicio, inicio + 499).execute().data or []
+        if not pagina:
+            break
+        resolvidos.extend(pagina)
+        inicio += len(pagina)
     if not _visao_total(usuario):
         return [item for item in resolvidos if _cliente_no_escopo(item, usuario)]
     if somente_nao_atribuidos:
@@ -67,6 +74,25 @@ def _anotar_responsavel(item: dict[str, Any]) -> dict[str, Any]:
     if not responsavel_id: return item
     perfil = _perfil_usuario(responsavel_id)
     return {**item,"responsavel_comercial_nome": perfil.get("nome"),"responsavel_comercial_tipo": perfil.get("tipo_usuario")}
+def _anotar_responsaveis(itens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    ids = sorted({str(item.get("responsavel_comercial_id")) for item in itens if item.get("responsavel_comercial_id")})
+    perfis: dict[str, dict[str, Any]] = {}
+    for inicio in range(0, len(ids), 100):
+        try:
+            dados = supabase.table("cti_users").select("id,nome,tipo_usuario").in_("id", ids[inicio:inicio + 100]).execute().data or []
+            perfis.update({str(perfil["id"]): perfil for perfil in dados})
+        except Exception:
+            # A indisponibilidade do nome não altera a responsabilidade gravada.
+            continue
+    saida = []
+    for item in itens:
+        perfil = perfis.get(str(item.get("responsavel_comercial_id")))
+        if perfil:
+            item = {**item, "responsavel_comercial_nome": perfil.get("nome"), "responsavel_comercial_tipo": perfil.get("tipo_usuario")}
+        saida.append(item)
+    return saida
+
+
 def _responsavel_territorial(cliente: dict[str, Any]) -> dict[str, Any] | None:
     codigo = _codigo_regional(cliente.get("sub_regiao"))
     if codigo not in {"REGIAO01", "REGIAO02"}: return None
@@ -90,7 +116,7 @@ def listar_clientes_seguro(responsavel_id: str | None = Query(default=None), nao
     nao_atribuidos = nao_atribuidos if isinstance(nao_atribuidos, bool) else False
     if (responsavel_id or nao_atribuidos) and not _visao_total(usuario):
         raise HTTPException(status_code=403, detail="Filtro de carteira disponível somente para usuários Master.")
-    return [_anotar_responsavel(item) for item in _clientes_filtrados(usuario, responsavel_id, nao_atribuidos)]
+    return _anotar_responsaveis(_clientes_filtrados(usuario, responsavel_id, nao_atribuidos))
 
 @router.post("")
 def criar_cliente_seguro(dados: ClienteCreate, usuario: UsuarioAutenticado = Depends(usuario_atual)):

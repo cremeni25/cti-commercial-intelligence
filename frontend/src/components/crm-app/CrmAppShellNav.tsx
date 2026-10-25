@@ -4,6 +4,8 @@ import Link from "next/link"
 import { Archive, ArchiveRestore, Building2, CalendarDays, Layers3, Plus, Target } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
+import { fetchCrmSeguroProxy } from "@/services/crm-secure"
+import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 import { useAuth } from "@/core/auth"
 import { useI18n } from "@/core/i18n"
 
@@ -59,7 +61,7 @@ export function CrmAppShellNav() {
     { href: "/crm-app/agenda", label: tx.agenda, icon: CalendarDays },
     { href: "/crm-app/oportunidades", label: tx.deals, icon: Target },
     { href: "/crm-app/acao", label: tx.register, icon: Plus, destaque: true },
-  ]
+  ].filter((item) => usuario && rotaAutorizadaCTI(item.href, usuario))
 
   const matchEditar = pathname.match(/^\/crm-app\/oportunidades\/([^/]+)\/editar$/)
   const oportunidadeId = matchEditar ? decodeURIComponent(matchEditar[1]) : ""
@@ -71,7 +73,7 @@ export function CrmAppShellNav() {
     setArquivando(true)
     setErro("")
     try {
-      const resposta = await fetch(`/api/crm-proxy/crm-app/oportunidades/${encodeURIComponent(oportunidadeId)}/arquivar-teste`, { method: "POST" })
+      const resposta = await fetchCrmSeguroProxy(`crm-app/oportunidades/${encodeURIComponent(oportunidadeId)}/arquivar-teste`, { method: "POST" })
       const payload = await resposta.json().catch(() => ({}))
       if (!resposta.ok) throw new Error(String(payload?.detail || `${tx.failure} ${resposta.status}`))
       router.push("/crm-app/oportunidades")
@@ -113,7 +115,7 @@ export function CrmAppShellNav() {
       )}
 
       <nav aria-label={tx.navLabel} className="fixed inset-x-0 bottom-0 z-50 border-t border-[#16325c] bg-[#061126]/98 px-3 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 text-white backdrop-blur">
-        <div className="mx-auto grid max-w-4xl grid-cols-4 gap-2">
+        <div className="mx-auto grid max-w-4xl gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(itens.length, 1)}, minmax(0, 1fr))` }}>
           {itens.map(({ href, label, icon: Icon, destaque }) => {
             const selecionado = ativo(pathname, href)
             return (

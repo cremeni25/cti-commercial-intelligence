@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:crm-home": "node crm-home-browser.mjs",
     "test:database": "node database.mjs",
     "test:vault": "node vault-browser.mjs",
     "test:ui": "node ui-browser.mjs",

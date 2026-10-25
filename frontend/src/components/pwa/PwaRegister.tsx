@@ -11,7 +11,7 @@ export function PwaRegister() {
         const registros = await navigator.serviceWorker.getRegistrations()
         await Promise.all(
           registros
-            .filter((registro) => [`${window.location.origin}/`, `${window.location.origin}/crm-app/`].includes(registro.scope) && [registro.active, registro.waiting, registro.installing].some(worker => worker?.scriptURL === `${window.location.origin}/sw.js`))
+            .filter((registro) => [`${window.location.origin}/`].includes(registro.scope) && [registro.active, registro.waiting, registro.installing].some(worker => worker?.scriptURL === `${window.location.origin}/sw.js`))
             .map((registro) => registro.unregister()),
         )
         const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/crm-app", updateViaCache: "none" })

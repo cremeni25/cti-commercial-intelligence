@@ -1,0 +1,12 @@
+{
+  "engine": "Chromium real e Next build; APIs e identidades sintéticas, sem produção",
+  "checks": [
+    "falha parcial não vira zero e preserva indicadores confirmados",
+    "cliques simultâneos não duplicam a sincronização",
+    "visita de hoje permanece no dia brasileiro depois de 21h",
+    "tela inicial sem rolagem horizontal em 390px",
+    "negociação e proposta compartilham uma única entrada",
+    "carteira autentica as duas fontes e preserva homônimos com negócios por ID",
+    "atalhos respeitam permissões sem mudar a autorização do backend"
+  ]
+}

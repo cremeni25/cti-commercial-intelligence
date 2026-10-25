@@ -19,9 +19,13 @@ def test_catalogo_clientes_respeita_responsabilidade_comercial(monkeypatch):
         {"id": "c2", "nome": "Conta direta Master", "cnpj": "22222222000122", "responsavel_comercial_id": "user-master", "responsabilidade_tipo": "CONTA_DIRETA_MASTER"},
     ]
     monkeypatch.setattr(clientes_scope, "listar_clientes_crm_app", lambda: base)
-    monkeypatch.setattr(clientes_scope, "_anotar_responsavel", lambda item: item)
+    monkeypatch.setattr(clientes_scope, "_anotar_responsaveis", lambda itens: itens)
     class Consulta:
-        data = base
+        def __init__(self): self.data = base
+        def order(self, *_args): return self
+        def range(self, inicio, fim):
+            self.data = self.data[inicio:fim + 1]
+            return self
         def select(self, *_args): return self
         def execute(self): return self
     monkeypatch.setattr(clientes_scope.supabase, "table", lambda nome: Consulta() if nome == "clientes" else None)

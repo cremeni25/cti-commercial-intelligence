@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   BriefcaseBusiness,
@@ -24,20 +24,22 @@ import { useOperationalI18n } from "@/core/i18n/operational"
 import LanguageSwitcher from "@/components/i18n/LanguageSwitcher"
 import { pertenceAoEscopoDoUsuario, possuiEscopoProprio } from "@/core/rbac/commercial-scope"
 import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
+import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
+import { ocorreuNoDiaCrm, registrosResumoCrm } from "@/services/crm-resumo"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 
 type Registro = Record<string, unknown>
 type Locale = "pt-BR" | "en" | "es"
 type Resumo = {
-  visitas: number
-  pendencias: number
-  atividades: number
-  oportunidades: number
-  pipeline: number
-  clientes: number
-  propostas: number
-  pedidos: number
-  vendas: number
+  visitas: number | null
+  pendencias: number | null
+  atividades: number | null
+  oportunidades: number | null
+  pipeline: number | null
+  clientes: number | null
+  propostas: number | null
+  pedidos: number | null
+  vendas: number | null
   destaque: string
 }
 
@@ -70,17 +72,6 @@ const textos = {
   },
 } satisfies Record<Locale, Record<string, string>>
 
-function lista(payload: unknown): Registro[] {
-  if (Array.isArray(payload)) return payload as Registro[]
-  if (payload && typeof payload === "object") {
-    const item = payload as Registro
-    for (const chave of ["dados", "itens", "oportunidades", "resultado", "atividades", "clientes", "propostas", "pedidos", "vendas"]) {
-      if (Array.isArray(item[chave])) return item[chave] as Registro[]
-    }
-  }
-  return []
-}
-
 async function carregar(path: string) {
   const resposta = await fetchCrmSeguroProxy(path, { cache: "no-store" })
   const payload = await resposta.json().catch(() => null)
@@ -88,7 +79,7 @@ async function carregar(path: string) {
     const detalhe = payload && typeof payload === "object" && "detail" in payload ? String((payload as Registro).detail || "") : ""
     throw new Error(detalhe || `HTTP ${resposta.status}`)
   }
-  return payload
+  return registrosResumoCrm(payload)
 }
 
 function etapa(item: Registro) {
@@ -101,13 +92,18 @@ export default function CrmAppPage() {
   const idioma = (locale as Locale) || "pt-BR"
   const t = textos[idioma] || textos["pt-BR"]
   const adminMaster = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
-  const [resumo, setResumo] = useState<Resumo>({ visitas: 0, pendencias: 0, atividades: 0, oportunidades: 0, pipeline: 0, clientes: 0, propostas: 0, pedidos: 0, vendas: 0, destaque: t.noCurrent })
+  const [resumo, setResumo] = useState<Resumo>({ visitas: null, pendencias: null, atividades: null, oportunidades: null, pipeline: null, clientes: null, propostas: null, pedidos: null, vendas: null, destaque: t.noCurrent })
   const [sincronizando, setSincronizando] = useState(false)
-  const [online, setOnline] = useState(true)
+  const [online, setOnline] = useState(false)
+  const emCurso = useRef(false)
+  const geracao = useRef(0)
+  const [resumoUsuarioId, setResumoUsuarioId] = useState("")
   const [aviso, setAviso] = useState("")
 
   const sincronizar = useCallback(async () => {
-    if (!usuario?.id) return
+    if (!usuario?.id || emCurso.current) return
+    emCurso.current = true
+    const requisicao = ++geracao.current
     setSincronizando(true)
     setAviso("")
     try {
@@ -121,24 +117,25 @@ export default function CrmAppPage() {
         carregar("crm-seguro/vendas"),
       ])
       const [nucleoR, agendaR, atividadesR, clientesR, propostasR, pedidosR, vendasR] = resultados
+      if (requisicao !== geracao.current) return
       if (nucleoR.status === "rejected") throw nucleoR.reason
 
-      const oportunidadesTodas = lista(nucleoR.value)
+      const oportunidadesTodas = nucleoR.value
       const oportunidades = oportunidadesTodas.filter((item) => pertenceAoEscopoDoUsuario(String(item.responsavel_id || ""), usuario))
       const abertas = oportunidades.filter((item) => !FINAIS.has(etapa(item)))
       const idsPermitidos = new Set(oportunidades.map((item) => String(item.oportunidade_id || item.id || "")).filter(Boolean))
       const escopoProprio = possuiEscopoProprio(usuario)
-      const agendaItens = agendaR.status === "fulfilled" ? lista(agendaR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
-      const atividades = atividadesR.status === "fulfilled" ? lista(atividadesR.value).filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
-      const clientes = clientesR.status === "fulfilled" ? lista(clientesR.value) : []
-      const propostasTodas = propostasR.status === "fulfilled" ? lista(propostasR.value) : []
-      const pedidosTodos = pedidosR.status === "fulfilled" ? lista(pedidosR.value) : []
-      const vendasTodas = vendasR.status === "fulfilled" ? lista(vendasR.value) : []
+      const agendaItens = agendaR.status === "fulfilled" ? agendaR.value.filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
+      const atividades = atividadesR.status === "fulfilled" ? atividadesR.value.filter((item) => pertenceAoEscopoDoUsuario(String(item.usuario_id || item.responsavel_id || ""), usuario)) : []
+      const clientes = clientesR.status === "fulfilled" ? clientesR.value : []
+      const propostasTodas = propostasR.status === "fulfilled" ? propostasR.value : []
+      const pedidosTodos = pedidosR.status === "fulfilled" ? pedidosR.value : []
+      const vendasTodas = vendasR.status === "fulfilled" ? vendasR.value : []
       const propostas = escopoProprio ? propostasTodas.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : propostasTodas
       const pedidos = escopoProprio ? pedidosTodos.filter((item) => idsPermitidos.has(String(item.oportunidade_id || ""))) : pedidosTodos
       const vendas = escopoProprio ? vendasTodas.filter((item) => pertenceAoEscopoDoUsuario(String(item.responsavel_id || ""), usuario) || idsPermitidos.has(String(item.oportunidade_id || ""))) : vendasTodas
-      const hoje = new Date().toISOString().slice(0, 10)
-      const visitas = atividades.filter((item) => String(item.tipo || "").toUpperCase().includes("VISITA") && String(item.data || item.data_atividade || "").slice(0, 10) === hoje).length
+      const hoje = new Date()
+      const visitas = atividades.filter((item) => String(item.tipo || "").toUpperCase().includes("VISITA") && ocorreuNoDiaCrm(item.data || item.data_atividade, hoje)).length
       const pendencias = agendaItens.filter((item) => !["CONCLUIDA", "CONCLUÍDA", "CANCELADA"].includes(String(item.status || "").toUpperCase())).length
       const destaque = abertas[0]
       const contexto = destaque ? lerContextoOportunidade(destaque) : null
@@ -146,32 +143,44 @@ export default function CrmAppPage() {
       const cliente = destaque ? textoSeguro(destaque.cliente_nome) || "Cliente" : ""
 
       setResumo({
-        visitas,
-        pendencias,
-        atividades: atividades.length,
+        visitas: atividadesR.status === "fulfilled" ? visitas : null,
+        pendencias: agendaR.status === "fulfilled" ? pendencias : null,
+        atividades: atividadesR.status === "fulfilled" ? atividades.length : null,
         oportunidades: abertas.length,
         pipeline: oportunidades.length,
-        clientes: clientes.length,
-        propostas: propostas.length,
-        pedidos: pedidos.length,
-        vendas: vendas.length,
+        clientes: clientesR.status === "fulfilled" ? clientes.length : null,
+        propostas: propostasR.status === "fulfilled" ? propostas.length : null,
+        pedidos: pedidosR.status === "fulfilled" ? pedidos.length : null,
+        vendas: vendasR.status === "fulfilled" ? vendas.length : null,
         destaque: destaque ? `${cliente} · ${titulo} · ${contexto?.quantidade || 1} un.` : t.noCurrent,
       })
+      setResumoUsuarioId(usuario.id)
       setOnline(true)
       if (resultados.some((r) => r.status === "rejected")) setAviso(t.syncError)
     } catch {
+      if (requisicao !== geracao.current) return
+      setResumoUsuarioId("")
       setOnline(false)
       setAviso(t.syncError)
     } finally {
-      setSincronizando(false)
+      if (requisicao === geracao.current) {
+        emCurso.current = false
+        setSincronizando(false)
+      }
     }
   }, [t.noCurrent, t.syncError, usuario])
 
   useEffect(() => {
     if (!usuario?.id) return
-    queueMicrotask(() => void sincronizar())
+    let ativo = true
+    queueMicrotask(() => { if (ativo) void sincronizar() })
     const id = window.setInterval(() => void sincronizar(), 60_000)
-    return () => window.clearInterval(id)
+    return () => {
+      ativo = false
+      window.clearInterval(id)
+      geracao.current += 1
+      emCurso.current = false
+    }
   }, [sincronizar, usuario?.id])
 
   const recursos = useMemo(() => {
@@ -184,9 +193,10 @@ export default function CrmAppPage() {
       { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
     ]
     if (adminMaster) base.push({ href: "/crm-app/controle-financeiro", label: t.financial, valor: "MASTER", icon: PiggyBank })
-    return base
-  }, [adminMaster, resumo, t])
+    return base.filter((item) => usuario && rotaAutorizadaCTI(item.href, usuario))
+  }, [adminMaster, resumo, t, usuario])
 
+  const resumoAtual = resumoUsuarioId === usuario?.id
   const nome = usuario?.nome?.trim() || usuario?.email?.trim() || t.user
   const primeiroNome = nome.includes("@") ? nome : nome.split(" ")[0]
   const hello = t.hello.replace("{name}", primeiroNome)
@@ -213,20 +223,20 @@ export default function CrmAppPage() {
         <section className="rounded-3xl border border-[#163356] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl">
           <div className="flex items-start justify-between gap-3">
             <div><h2 className="text-3xl font-bold">{hello}</h2><p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p></div>
-            <button type="button" onClick={() => void sincronizar()} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-cyan-400"><RefreshCw size={20} className={sincronizando ? "animate-spin" : ""}/></button>
+            <button type="button" onClick={() => void sincronizar()} disabled={sincronizando} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-cyan-400"><RefreshCw size={20} className={sincronizando ? "animate-spin" : ""}/></button>
           </div>
           <div className="mt-5 grid grid-cols-3 gap-2">
-            <Indicador href="/crm-app/visitas" valor={resumo.visitas} label={t.visits}/>
-            <Indicador href="/crm-app/agenda" valor={resumo.pendencias} label={t.pending}/>
-            <Indicador href="/crm-app/oportunidades" valor={resumo.oportunidades} label={t.openDeals}/>
+            <Indicador href="/crm-app/visitas" valor={resumoAtual ? resumo.visitas : null} label={t.visits}/>
+            <Indicador href="/crm-app/agenda" valor={resumoAtual ? resumo.pendencias : null} label={t.pending}/>
+            <Indicador href="/crm-app/oportunidades" valor={resumoAtual ? resumo.oportunidades : null} label={t.openDeals}/>
           </div>
         </section>
 
         <section className="mt-5 grid gap-3">
-          <Link href="/crm-app/acao" className="flex min-h-28 items-center gap-4 rounded-3xl bg-cyan-500 p-5 text-slate-950 shadow-xl active:scale-[.99]">
+          <LinkCrm href="/crm-app/acao" className="flex min-h-28 items-center gap-4 rounded-3xl bg-cyan-500 p-5 text-slate-950 shadow-xl active:scale-[.99]">
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950/10"><Plus size={30}/></span>
             <span className="min-w-0 flex-1"><span className="block text-2xl font-black">{t.mainAction}</span><span className="mt-1 block text-sm font-medium text-slate-900/75">{t.mainActionHelp}</span></span><ChevronRight size={25}/>
-          </Link>
+          </LinkCrm>
           <div className="grid gap-3 sm:grid-cols-3">
             <Acao href="/crm-app/oportunidades" titulo={t.next} descricao={t.nextHelp} icon={Target}/>
             <Acao href="/crm-app/agenda" titulo={t.agenda} descricao={t.agendaHelp} icon={CalendarDays}/>
@@ -235,24 +245,31 @@ export default function CrmAppPage() {
         </section>
 
         <section className="mt-5 rounded-3xl border border-[#163356] bg-[#081a32] p-5">
-          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-400"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumo.destaque}</p></div></div>
-          <Link href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#22466d] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></Link>
+          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-400"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumoAtual ? resumo.destaque : "—"}</p></div></div>
+          <LinkCrm href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#22466d] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></LinkCrm>
         </section>
 
-        <Link href="/crm-app/feiras" className="mt-5 flex items-center justify-between rounded-3xl border border-cyan-700 bg-[#08233b] p-5 text-white"><span><strong className="block text-lg">Feiras e Eventos</strong><span className="block text-sm text-slate-300">Atendimentos, intenções e lançamentos</span></span><ChevronRight size={22}/></Link>
+        <LinkCrm href="/crm-app/feiras" className="mt-5 flex items-center justify-between rounded-3xl border border-cyan-700 bg-[#08233b] p-5 text-white"><span><strong className="block text-lg">Feiras e Eventos</strong><span className="block text-sm text-slate-300">Atendimentos, intenções e lançamentos</span></span><ChevronRight size={22}/></LinkCrm>
         <details className="mt-5 rounded-3xl border border-[#163356] bg-[#061126] p-4">
           <summary className="cursor-pointer list-none rounded-2xl px-1 py-2"><span className="block text-lg font-semibold">{t.more}</span><span className="mt-1 block text-sm text-slate-400">{t.moreHelp}</span></summary>
-          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{recursos.map(({ href, label, valor, icon: Icon }) => <Link key={href} href={href} className="rounded-2xl border border-[#163356] bg-[#0b1d38] p-4"><div className="flex items-center justify-between gap-2"><Icon size={20} className="text-cyan-400"/><strong className="text-sm text-cyan-200">{valor}</strong></div><span className="mt-3 block text-sm font-semibold">{label}</span></Link>)}</div>
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">{recursos.map(({ href, label, valor, icon: Icon }) => <LinkCrm key={href} href={href} className="rounded-2xl border border-[#163356] bg-[#0b1d38] p-4"><div className="flex items-center justify-between gap-2"><Icon size={20} className="text-cyan-400"/><strong className="text-sm text-cyan-200">{typeof valor === "string" ? valor : resumoAtual ? valor ?? "—" : "—"}</strong></div><span className="mt-3 block text-sm font-semibold">{label}</span></LinkCrm>)}</div>
         </details>
       </div>
     </main>
   )
 }
 
-function Indicador({ href, valor, label }: { href: string; valor: number; label: string }) {
-  return <Link href={href} className="rounded-2xl border border-[#163356] bg-[#0b1d38] px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-cyan-400">{valor}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></Link>
+function Indicador({ href, valor, label }: { href: string; valor: number | null; label: string }) {
+  return <LinkCrm href={href} className="rounded-2xl border border-[#163356] bg-[#0b1d38] px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-cyan-400">{valor ?? "—"}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></LinkCrm>
 }
 
 function Acao({ href, titulo, descricao, icon: Icon }: { href: string; titulo: string; descricao: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
-  return <Link href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#163356] bg-[#0b1d38] p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#07304b] text-cyan-400"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-400 sm:hidden"/></Link>
+  return <LinkCrm href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#163356] bg-[#0b1d38] p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#07304b] text-cyan-400"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-400 sm:hidden"/></LinkCrm>
+}
+
+function LinkCrm(props: React.ComponentProps<typeof Link>) {
+  const { usuario } = useAuth()
+  const href = typeof props.href === "string" ? props.href : props.href.pathname || ""
+  if (!usuario || !rotaAutorizadaCTI(href, usuario)) return null
+  return <Link {...props} />
 }
