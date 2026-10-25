@@ -16,6 +16,26 @@ def pytest_runtest_setup(item):
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def bloquear_transporte_supabase_real(monkeypatch):
+    """Testes nunca acessam bancos remotos por uma consulta não simulada.
+
+    TestClient e MockTransport continuam usando seus próprios transportes.
+    Falha imediata evita retentativas longas e protege dados operacionais.
+    """
+    import httpx
+
+    original = httpx.HTTPTransport.handle_request
+
+    def enviar(transport, request):
+        host = request.url.host
+        if host.endswith((".supabase.co", ".supabase.in")):
+            raise RuntimeError("Consulta Supabase remota bloqueada no teste; simule o transporte explicitamente.")
+        return original(transport, request)
+
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", enviar)
+
+
 @pytest.fixture
 def legacy_authenticated_client(monkeypatch):
     """Legacy business-rule unit tests run as internal staff.

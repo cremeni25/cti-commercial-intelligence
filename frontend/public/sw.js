@@ -19,6 +19,9 @@ async function prepararShell() {
     }))
   }
 }
+self.addEventListener("message", event => {
+  if (event.data?.type === "SKIP_WAITING") void self.skipWaiting()
+})
 self.addEventListener("install", event => { event.waitUntil(prepararShell().then(() => self.skipWaiting())) })
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {

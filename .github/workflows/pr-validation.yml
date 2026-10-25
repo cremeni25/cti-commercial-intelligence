@@ -54,6 +54,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Verify CRM summary semantics
+        working-directory: .
+        run: node --experimental-strip-types --test tests/crm/*.test.mjs
       - name: Run frontend lint
         run: |
           set +e
@@ -95,6 +98,7 @@ jobs:
           npm run test:session
           npm run test:ui
           npm run test:offline
+          npm run test:crm-home
       - name: Upload Feiras verification evidence
         if: always()
         uses: actions/upload-artifact@v4
