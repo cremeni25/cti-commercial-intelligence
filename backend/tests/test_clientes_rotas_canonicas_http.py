@@ -19,9 +19,20 @@ def cti(monkeypatch):
     ]
     perfil = SimpleNamespace(id="master", tipo_usuario="ADMIN_MASTER", permissoes={})
     monkeypatch.setattr(application_access, "usuario_atual", lambda *_: perfil)
-    monkeypatch.setattr(clientes, "supabase", SimpleNamespace(table=lambda _: SimpleNamespace(
-        select=lambda *_: SimpleNamespace(execute=lambda: SimpleNamespace(data=registros)))))
-    monkeypatch.setattr(clientes, "_perfil_usuario", lambda id: {"id": id, "nome": id})
+    class Consulta:
+        def __init__(self, tabela):
+            self.rows = registros if tabela == "clientes" else [
+                {"id": "regional-a", "nome": "Regional A"}, {"id": "regional-b", "nome": "Regional B"}]
+        def select(self, *_): return self
+        def order(self, *_): return self
+        def range(self, inicio, fim):
+            self.rows = self.rows[inicio:fim + 1]
+            return self
+        def in_(self, chave, valores):
+            self.rows = [r for r in self.rows if r.get(chave) in valores]
+            return self
+        def execute(self): return SimpleNamespace(data=self.rows)
+    monkeypatch.setattr(clientes, "supabase", SimpleNamespace(table=Consulta))
     anteriores = dict(app.dependency_overrides)
     app.dependency_overrides[usuario_atual] = lambda: perfil
     try:

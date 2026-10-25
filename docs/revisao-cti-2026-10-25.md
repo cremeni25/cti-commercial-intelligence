@@ -21,11 +21,12 @@ Base examinada: `db5c72a7427f663c9e9480bfe65be9f087765754`, mesma revisão ident
 | Arquivamento de teste sem o transporte autenticado comum | A ação não fornecia explicitamente o token esperado pelo proxy | Uso do mesmo serviço autenticado das demais operações do CRM |
 | Registro PWA atual removido a cada montagem | Abertura do app podia desfazer o registro existente, inclusive em situações de conectividade ruim | Somente o registro legado da raiz é removido; o registro atual é mantido e atualizado |
 | Mensagem `SKIP_WAITING` enviada sem handler no service worker | Solicitação de ativação não era tratada | Handler explícito da mensagem |
+| Carteira sem paginação e responsável consultado por cliente | Possibilidade de truncamento e centenas de consultas repetidas | Leitura ordenada em páginas até esgotar a fonte e responsáveis carregados em lotes; teste de 1.503 clientes com limite simulado de 137 registros por resposta |
 | Testes com consultas Supabase não simuladas | Retentativas demoradas e possibilidade de alcançar um banco externo durante os testes | Bloqueio do transporte real Supabase no pytest; TestClient e transportes simulados permanecem disponíveis |
 
 ## Evidências locais
 
-- Backend completo: **813 aprovados, 1 ignorado, 23 avisos**. A única alteração após essa rodada foi na filtragem de atalhos da página Nova ação; frontend recompilado e teste de navegador repetido depois disso.
+- Backend completo: **815 aprovados, 1 ignorado, 23 avisos**. Inclui regressões de paginação e leitura dos responsáveis em lote; frontend compilado e verificado em navegador.
 - Regressões HTTP novas: uma única implementação para GET/POST de clientes; Master filtra responsável e não atribuídos; regional recebe só sua carteira; ausência de permissão impede listar/cadastrar.
 - Build de produção Next.js e TypeScript: aprovado.
 - Lint completo: zero erros e 52 avisos preexistentes. Arquivos frontend alterados: lint específico sem avisos.
@@ -44,7 +45,7 @@ A abertura do app publicado chegou à tela de login. Não havia sessão autentic
 
 ## Pontos de evolução ainda abertos
 
-1. **Escala das carteiras:** a leitura canônica de clientes usa uma consulta sem paginação explícita e consulta o responsável individualmente por registro. Confirmar limite efetivo do projeto e volume real; implementar leitura paginada ou resumo no servidor e enriquecimento em lote com teste acima do limite de página. Não fixar a quantidade de clientes.
+1. **Escala das carteiras:** a paginação e o enriquecimento em lote foram implementados nesta revisão. O tamanho de página e de lote limita somente cada consulta; não limita o total de clientes retornados. Medir latência com o volume operacional após a publicação.
 2. **Reprodutibilidade do backend:** `requirements.txt` contém dependências sem versões fixas. Preparar um conjunto de versões homologadas antes de novos upgrades; a instalação futura pode resolver versões diferentes.
 3. **Organização do código:** 6.018 arquivos rastreados estão em `backend/.venv`. Retirar dependências geradas do versionamento em uma alteração própria, verificando previamente que nenhum processo depende desse caminho. Não remover dados comerciais ou documentos de origem.
 4. **Avisos frontend:** revisar os 52 avisos, especialmente dependências de efeitos em agenda, atividades e propostas. Não acrescentar dependências mecanicamente: isso pode introduzir recarregamentos repetidos.
