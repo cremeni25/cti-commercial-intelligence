@@ -25,11 +25,13 @@ try {
     if (url.hostname !== '127.0.0.1') return route.abort()
     if (!url.pathname.startsWith('/api/')) return route.continue()
     const json = (obj, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(obj) })
+    if (url.pathname.startsWith('/api/crm-proxy/') && !route.request().headers().authorization) return json({detail: 'Authentication required'}, 401)
+    if (url.pathname.endsWith('/clientes')) return json([{id:'account-a',nome:'Cliente isolado',cnpj:'11111111000111'},{id:'account-b',nome:'Cliente isolado',cnpj:'22222222000122'}])
     if (url.pathname === '/api/cti/auth/me') return json(perfil)
     if (url.pathname.endsWith('/nucleo-comercial')) {
       consultas += 1
       await new Promise(resolve => setTimeout(resolve, 150))
-      return json([{ id: 'deal-1', cliente_nome: 'Cliente isolado', titulo: 'Proposta em andamento', etapa: 'PROPOSTA', responsavel_id: 'master' }])
+      return json([{ id: 'deal-1', cliente_id: 'account-b', cliente_nome: 'Cliente isolado', titulo: 'Proposta em andamento', etapa: 'PROPOSTA', responsavel_id: 'master' }])
     }
     if (url.pathname.endsWith('/atividades')) return falharAtividades ? json({ detail: 'Fonte temporariamente indisponível' }, 500) : json([{ id: 'visit-1', tipo: 'VISITA', data: '2026-10-25', usuario_id: 'master' }])
     return json([])
@@ -56,6 +58,13 @@ try {
   await page.getByRole('heading', { name: 'O que você quer fazer agora?' }).waitFor()
   assert.equal(await page.locator('a[href="/crm-app/acao/negociacao"]').count(), 1)
   checks.push('negociação e proposta compartilham uma única entrada')
+  await page.goto('http://127.0.0.1:3103/crm-app/clientes')
+  await page.getByText('2 clientes cadastrados', {exact: true}).waitFor()
+  await page.getByPlaceholder('Buscar por nome, razão social, fantasia ou CNPJ').fill('Cliente isolado')
+  assert.equal(await page.locator('a[href^="/crm-app/clientes/account-"]').count(), 2)
+  assert.match(await page.locator('a[href^="/crm-app/clientes/account-a"]').innerText(), /0 negociações/)
+  assert.match(await page.locator('a[href^="/crm-app/clientes/account-b"]').innerText(), /1 negociação/)
+  checks.push('carteira autentica as duas fontes e preserva homônimos com negócios por ID')
   perfil.tipo_usuario = 'USUARIO_CTI'
   perfil.permissoes = { oportunidades_visualizar: true }
   await page.goto('http://127.0.0.1:3103/crm-app')

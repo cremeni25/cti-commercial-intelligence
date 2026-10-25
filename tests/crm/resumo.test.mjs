@@ -24,3 +24,17 @@ test('zero só pode resultar de uma lista válida e vazia', () => {
     assert.deepEqual(registrosResumoCrm({[chave]: [{id: 'real'}]}), [{id: 'real'}])
   }
 })
+
+import { montarCarteiraClientes } from '../../frontend/src/services/crm-clientes.ts'
+
+test('clientes homônimos permanecem distintos e negócios não migram entre cadastros', () => {
+  const cadastro = [{id: 'a', nome: 'Mesmo Nome', cnpj: '11111111000111'}, {id: 'b', nome: 'Mesmo Nome', cnpj: '22222222000122'}, {id: 'c', nome: 'Único'}]
+  const resultado = montarCarteiraClientes(cadastro, [
+    {cliente_id: 'b', cliente_nome: 'Mesmo Nome'},
+    {cliente_nome: 'Mesmo Nome'},
+    {cliente_id: 'outro', cliente_nome: 'Único'},
+    {cliente_nome: 'Unico'},
+  ])
+  assert.equal(resultado.length, 3)
+  assert.deepEqual(resultado.map(c => [c.id, c.negocios]), [['a', 0], ['b', 1], ['c', 1]])
+})

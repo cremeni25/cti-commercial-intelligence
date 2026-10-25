@@ -19,6 +19,7 @@ Base examinada: `db5c72a7427f663c9e9480bfe65be9f087765754`, mesma revisão ident
 | “Continuar negociação” e “Proposta” abriam o mesmo destino | Duas escolhas aparentes para uma única jornada | Entrada única “Continuar negociação / proposta”, com explicação do próximo passo |
 | Atalhos sem considerar todas as permissões | Usuário podia encontrar ações cujo destino seria negado | Aplicação do contrato de autorização existente à tela inicial, Nova ação e navegação inferior |
 | Arquivamento de teste sem o transporte autenticado comum | A ação não fornecia explicitamente o token esperado pelo proxy | Uso do mesmo serviço autenticado das demais operações do CRM |
+| Consulta de clientes do app com núcleo não autenticado e agrupamento por nome | Consulta podia falhar por autenticação e cadastros homônimos podiam ser colapsados | As duas fontes usam o serviço autenticado; identidade pelo cadastro e negócios vinculados por ID, com fallback de nome somente quando único; contraste de texto corrigido na carteira clara |
 | Registro PWA atual removido a cada montagem | Abertura do app podia desfazer o registro existente, inclusive em situações de conectividade ruim | Somente o registro legado da raiz é removido; o registro atual é mantido e atualizado |
 | Mensagem `SKIP_WAITING` enviada sem handler no service worker | Solicitação de ativação não era tratada | Handler explícito da mensagem |
 | Carteira sem paginação e responsável consultado por cliente | Possibilidade de truncamento e centenas de consultas repetidas | Leitura ordenada em páginas até esgotar a fonte e responsáveis carregados em lotes; teste de 1.503 clientes com limite simulado de 137 registros por resposta |
@@ -30,8 +31,8 @@ Base examinada: `db5c72a7427f663c9e9480bfe65be9f087765754`, mesma revisão ident
 - Regressões HTTP novas: uma única implementação para GET/POST de clientes; Master filtra responsável e não atribuídos; regional recebe só sua carteira; ausência de permissão impede listar/cadastrar.
 - Build de produção Next.js e TypeScript: aprovado.
 - Lint completo: zero erros e 52 avisos preexistentes. Arquivos frontend alterados: lint específico sem avisos.
-- Testes semânticos de resumo/data: 2 aprovados.
-- Chromium com build real, viewport de 390px e fontes sintéticas: 6 verificações aprovadas — falha parcial, atualização sem duplicação, dia brasileiro, ausência de rolagem horizontal, entrada única negociação/proposta e atalhos conforme permissões.
+- Testes semânticos de resumo/data/identidade de clientes: 3 aprovados.
+- Chromium com build real, viewport de 390px e fontes sintéticas: 7 verificações aprovadas — falha parcial, atualização sem duplicação, dia brasileiro, ausência de rolagem horizontal, entrada única negociação/proposta atalhos conforme permissões e carteira com homônimos vinculados por ID.
 - Regressões existentes de Feiras: banco PostgreSQL isolado, esquema capturado, cofre, sessão, interface e modo offline executados com sucesso.
 - CI ampliada para executar as regressões semânticas e a jornada inicial do CRM em navegador.
 

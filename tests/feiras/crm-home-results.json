@@ -6,6 +6,7 @@
     "visita de hoje permanece no dia brasileiro depois de 21h",
     "tela inicial sem rolagem horizontal em 390px",
     "negociação e proposta compartilham uma única entrada",
+    "carteira autentica as duas fontes e preserva homônimos com negócios por ID",
     "atalhos respeitam permissões sem mudar a autorização do backend"
   ]
 }

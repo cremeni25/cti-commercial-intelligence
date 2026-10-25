@@ -11,6 +11,7 @@ def test_carteira_clientes_usa_fetch_seguro_autenticado():
     assert 'fetch("/api/crm-proxy/crm-seguro/clientes"' not in source
 
 
-def test_nucleo_comercial_mantem_leitura_no_proxy_normal():
+def test_nucleo_comercial_da_carteira_tambem_envia_autenticacao():
     source = CLIENTES_PAGE.read_text(encoding="utf-8")
-    assert 'fetch("/api/crm-proxy/crm/nucleo-comercial"' in source
+    assert 'fetchCrmSeguroProxy("crm-seguro/nucleo-comercial"' in source
+    assert 'fetch("/api/crm-proxy/crm/nucleo-comercial"' not in source
