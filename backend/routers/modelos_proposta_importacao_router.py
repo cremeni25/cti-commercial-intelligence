@@ -232,3 +232,82 @@ async def importar_pacote(
         "resultados": resultados,
         "proxima_etapa": "GERAR_PROPOSTA_PDF_COM_MESTRE_OFICIAL",
     }
+
+
+@router.post("/substituir/{modelo_id}")
+async def preparar_substituicao_individual(
+    modelo_id: str,
+    arquivo: UploadFile = File(...),
+    usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo),
+):
+    """Registra nova versão integral, sem sobrescrever o modelo homologado."""
+    from uuid import uuid4
+
+    anteriores = (
+        supabase.table("cti_modelos_proposta").select("*")
+        .eq("id", modelo_id).limit(1).execute().data or []
+    )
+    if not anteriores:
+        raise HTTPException(status_code=404, detail="Modelo não encontrado.")
+    anterior = anteriores[0]
+    nome = PurePosixPath(arquivo.filename or "").name
+    extensao = PurePosixPath(nome).suffix.lower()
+    if extensao not in ALLOWED_EXTENSIONS or nome.startswith("."):
+        raise HTTPException(status_code=422, detail="Envie um documento Word válido.")
+    binario = await arquivo.read(MAX_PACKAGE_BYTES + 1)
+    if not binario or len(binario) > MAX_PACKAGE_BYTES:
+        raise HTTPException(status_code=413, detail="Documento vazio ou maior que 30 MB.")
+    if extensao == ".docx" and not zipfile.is_zipfile(io.BytesIO(binario)):
+        raise HTTPException(status_code=422, detail="DOCX inválido.")
+    equipamento = str(anterior["equipamento"])
+    existentes = (
+        supabase.table("cti_modelos_proposta").select("versao")
+        .eq("equipamento", equipamento).execute().data or []
+    )
+    versao = max((int(item.get("versao") or 0) for item in existentes), default=0) + 1
+    hash_recebido = hashlib.sha256(binario).hexdigest()
+    caminho = f"oficiais/{_slug(equipamento)}/v{versao}/{uuid4().hex}-{nome}"
+    mime = mimetypes.guess_type(nome)[0] or "application/octet-stream"
+    supabase.storage.from_(BUCKET).upload(
+        caminho, binario, {"content-type": mime, "upsert": "false"}
+    )
+    agora = _agora()
+    registro = {
+        "nome": anterior.get("nome") or equipamento,
+        "linha_produto": anterior["linha_produto"],
+        "equipamento": equipamento,
+        "versao": versao,
+        "arquivo_template_nome_original": nome,
+        "arquivo_template_tamanho_bytes": len(binario),
+        "arquivo_template_hash_sha256": hash_recebido,
+        "arquivo_template_storage": caminho,
+        "homologado_em": None,
+        "layout_preservado": True,
+        "conteudo_integral_obrigatorio": True,
+        "imutavel": True,
+        "ativo": False,
+        "created_at": agora,
+        "updated_at": agora,
+    }
+    try:
+        criado = supabase.table("cti_modelos_proposta").insert(registro).execute().data or []
+        if not criado:
+            raise RuntimeError("Falha ao registrar a versão.")
+        supabase.table("cti_modelos_proposta_auditoria").insert({
+            "modelo_proposta_id": criado[0]["id"],
+            "nome": equipamento,
+            "operacao": "ATIVACAO",
+            "versao": versao,
+            "arquivo_template_storage": caminho,
+            "arquivo_template_nome_original": nome,
+            "arquivo_template_hash_sha256": hash_recebido,
+            "conteudo_template": {},
+            "justificativa": f"Nova versão integral pendente de homologação por {usuario.email}.",
+        }).execute()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Não foi possível registrar a nova versão.") from exc
+    return {
+        "ok": True, "modelo_id": criado[0]["id"], "equipamento": equipamento,
+        "versao": versao, "sha256": hash_recebido,
+        "situacao": "PENDENTE_HOMOLOGACAO", "modelo_anterior_preservado": True,
+    }
