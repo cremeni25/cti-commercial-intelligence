@@ -159,26 +159,26 @@ export default function Page() {
   }
 
   return (
-    <main className="flex min-h-screen bg-[#F1F5F9] text-[#0F172A]">
+    <main className="flex min-h-screen bg-[#020817] text-slate-100">
       <Sidebar />
       <section className="min-w-0 flex-1">
         <Topbar />
         <div className="space-y-4 p-4 sm:p-6 lg:p-8">
           <header className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[.2em] text-sky-700">Inteligência comercial</p>
+              <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-300">Inteligência comercial</p>
               <h1 className="mt-1 text-3xl font-bold">Mapa Comercial Estratégico</h1>
-              <p className="mt-2 max-w-3xl text-sm text-slate-600">
+              <p className="mt-2 max-w-3xl text-sm text-slate-300">
                 Mercado, evolução competitiva, acompanhamento e resultado comercial de 2026.
               </p>
             </div>
             {dados?.pode_selecionar_responsavel && (
-              <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-600">
+              <label className="min-w-[320px] text-xs font-semibold uppercase tracking-[.12em] text-slate-300">
                 Responsável comercial
                 <select
                   value={responsavelId}
                   onChange={(e) => trocarResponsavel(e.target.value)}
-                  className="mt-2 w-full rounded-xl border border-[#214363] bg-white px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400"
+                  className="mt-2 w-full rounded-xl border border-[#214363] bg-[#0b1e35] px-4 py-3 text-sm font-medium normal-case tracking-normal text-white outline-none focus:border-cyan-400"
                 >
                   <option value="">Toda a equipe comercial</option>
                   {dados.equipe.map((item) => (
@@ -192,7 +192,7 @@ export default function Page() {
           </header>
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/20 p-4 text-red-200">{erro}</div>}
           {loading && (
-            <div className="rounded-2xl border border-[#D8E2EC] bg-white p-6 text-slate-600">
+            <div className="rounded-2xl border border-[#24466f] bg-[#0b1e35] p-6 text-slate-300">
               Carregando informações comerciais...
             </div>
           )}
@@ -305,11 +305,11 @@ function VisaoComercial({
             className={`rounded-2xl border p-4 text-left transition ${
               foco === item.id
                 ? "border-cyan-400 bg-cyan-500/10"
-                : "border-[#D8E2EC] bg-white hover:border-cyan-500/40"
+                : "border-[#24466f] bg-[#0b1e35] hover:border-cyan-500/40"
             }`}
           >
-            <strong className={foco === item.id ? "text-sky-700" : "text-white"}>{item.titulo}</strong>
-            <span className="mt-1 block text-xs text-slate-500">{item.apoio}</span>
+            <strong className={foco === item.id ? "text-cyan-300" : "text-white"}>{item.titulo}</strong>
+            <span className="mt-1 block text-xs text-slate-400">{item.apoio}</span>
           </button>
         ))}
       </section>
@@ -362,11 +362,11 @@ function VisaoGeral({
     <section className="space-y-4">
       {consolidado && !responsavelId && (
         <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-sky-700">
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">
             Base executiva auditável · ANFIR 2026
           </p>
           <h2 className="mt-1 text-xl font-bold">Mercado total → retiradas → mercado real Viena</h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-slate-300">
             Número e percentual sobre a mesma base. O mercado total e o mercado real podem ser abertos até os registros que os formam.
           </p>
           {mercadoMacro ? (
@@ -374,14 +374,14 @@ function VisaoGeral({
               <BarraMercado total={mercadoMacro.total} fora={mercadoMacro.foraDisputa} real={mercadoMacro.real} />
             </div>
           ) : (
-            <p className="mt-4 text-sm text-slate-500">Aguardando composição auditável do mercado.</p>
+            <p className="mt-4 text-sm text-slate-400">Aguardando composição auditável do mercado.</p>
           )}
         </div>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <div className="rounded-3xl border border-[#D8E2EC] bg-[#061126] p-5">
-          <p className="text-xs font-semibold uppercase tracking-[.16em] text-sky-700">Composição por linha</p>
+        <div className="rounded-3xl border border-[#24466f] bg-[#061126] p-5">
+          <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Composição por linha</p>
           <h2 className="mt-1 text-xl font-bold">Onde está o volume da seleção</h2>
           <div className="mt-5 space-y-3">
             <BarraComercial
@@ -426,7 +426,7 @@ function VisaoGeral({
         <div className="rounded-3xl border border-violet-500/20 bg-[#061126] p-5">
           <p className="text-xs font-semibold uppercase tracking-[.16em] text-violet-300">Caminho comercial</p>
           <h2 className="mt-1 text-xl font-bold">Mercado → Histórico/Funil → CRM → evidência ANFIR</h2>
-          <p className="mt-2 text-sm text-slate-600">
+          <p className="mt-2 text-sm text-slate-300">
             As fontes permanecem separadas; a inteligência mostra onde houve acompanhamento e onde o mercado apareceu sem evidência comercial anterior.
           </p>
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -481,19 +481,19 @@ function VisaoRegioes({ insights }: { insights: MapaInsights }) {
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-sky-700">Inteligência de regiões · 2026</p>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Inteligência de regiões · 2026</p>
         <h2 className="mt-1 text-xl font-bold">Mercado e atuação por responsável comercial</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-slate-300">
           Responsabilidade comercial prevalece; DDD não redistribui mercado entre pessoas.
         </p>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {insights.regioes.map((item) => (
-          <article key={item.id} className="rounded-3xl border border-[#D8E2EC] bg-[#061126] p-5">
+          <article key={item.id} className="rounded-3xl border border-[#24466f] bg-[#061126] p-5">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="text-xs uppercase tracking-[.14em] text-slate-500">Responsável comercial</p>
+                <p className="text-xs uppercase tracking-[.14em] text-slate-400">Responsável comercial</p>
                 <h3 className="mt-1 text-lg font-bold">{item.nome}</h3>
               </div>
               <Link
@@ -505,10 +505,10 @@ function VisaoRegioes({ insights }: { insights: MapaInsights }) {
                 })}
                 className="text-right"
               >
-                <strong className="text-2xl text-sky-700 underline decoration-cyan-500/40 underline-offset-4">
+                <strong className="text-2xl text-cyan-300 underline decoration-cyan-500/40 underline-offset-4">
                   {item.mercado_2026}
                 </strong>
-                <p className="text-xs text-slate-500">abrir unidades</p>
+                <p className="text-xs text-slate-400">abrir unidades</p>
               </Link>
             </div>
 
@@ -538,9 +538,9 @@ function VisaoLinhas({ insights, responsavelId }: { insights: MapaInsights; resp
   return (
     <section className="space-y-4">
       <div className="rounded-3xl border border-cyan-500/20 bg-[#061126] p-5">
-        <p className="text-xs font-semibold uppercase tracking-[.16em] text-sky-700">Evolução por linha · ANFIR 2026</p>
+        <p className="text-xs font-semibold uppercase tracking-[.16em] text-cyan-300">Evolução por linha · ANFIR 2026</p>
         <h2 className="mt-1 text-xl font-bold">Mercado primeiro. Marca depois.</h2>
-        <p className="mt-2 text-sm text-slate-600">
+        <p className="mt-2 text-sm text-slate-300">
           TR/Trailer, DT/Diesel Truck e DD/Direct Drive fecham primeiro o mercado da linha. Carrier e demais marcas são abertas depois, sempre sobre o mesmo total.
         </p>
       </div>
@@ -555,10 +555,10 @@ function VisaoLinhas({ insights, responsavelId }: { insights: MapaInsights; resp
                 : "trailer"
 
           return (
-            <article key={linha.codigo} className="rounded-3xl border border-[#D8E2EC] bg-[#061126] p-5">
+            <article key={linha.codigo} className="rounded-3xl border border-[#24466f] bg-[#061126] p-5">
               <div className="flex items-end justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[.14em] text-slate-500">Mercado da linha</p>
+                  <p className="text-xs uppercase tracking-[.14em] text-slate-400">Mercado da linha</p>
                   <h3 className="mt-1 text-lg font-bold">{linha.nome}</h3>
                 </div>
                 <Link
@@ -571,10 +571,10 @@ function VisaoLinhas({ insights, responsavelId }: { insights: MapaInsights; resp
                   })}
                   className="text-right"
                 >
-                  <strong className="text-2xl text-sky-700 underline decoration-cyan-500/40 underline-offset-4">
+                  <strong className="text-2xl text-cyan-300 underline decoration-cyan-500/40 underline-offset-4">
                     {linha.total_2026}
                   </strong>
-                  <span className="block text-[10px] text-slate-500">abrir unidades</span>
+                  <span className="block text-[10px] text-slate-400">abrir unidades</span>
                 </Link>
               </div>
 
@@ -635,7 +635,7 @@ function VisaoPerdas({ insights, responsavelId }: { insights: MapaInsights; resp
             <strong className="text-3xl text-amber-300 underline decoration-amber-500/40 underline-offset-4">
               {insights.perdas.total_perdido}
             </strong>
-            <p className="text-xs text-slate-500">abrir perdas</p>
+            <p className="text-xs text-slate-400">abrir perdas</p>
           </Link>
         </div>
         <div className="mt-5">
@@ -663,7 +663,7 @@ function VisaoPerdas({ insights, responsavelId }: { insights: MapaInsights; resp
                 />
               ))
             ) : (
-              <p className="text-sm text-slate-500">Sem motivo estruturado suficiente.</p>
+              <p className="text-sm text-slate-400">Sem motivo estruturado suficiente.</p>
             )}
           </div>
         </div>
@@ -675,7 +675,7 @@ function VisaoPerdas({ insights, responsavelId }: { insights: MapaInsights; resp
                 <BarraComercial key={i.nome} nome={i.nome} valor={i.quantidade} total={totalLinhas} />
               ))
             ) : (
-              <p className="text-sm text-slate-500">Sem linha classificada nas perdas.</p>
+              <p className="text-sm text-slate-400">Sem linha classificada nas perdas.</p>
             )}
           </div>
         </div>
@@ -764,35 +764,35 @@ function SinalDecisao({
             )}
           </div>
           <p className="mt-2 truncate text-base font-semibold text-white">{alvo.cliente}</p>
-          <p className="mt-1 text-xs text-slate-600">
+          <p className="mt-1 text-xs text-slate-300">
             {alvo.responsavel} · {alvo.linha_principal}{ultimoAnfir ? ` · ANFIR ${ultimoAnfir}` : ""}
           </p>
         </div>
         <div className="flex shrink-0 gap-2 text-center">
-          <div className="min-w-[68px] rounded-xl border border-[#D8E2EC] bg-[#08152a] px-3 py-2">
-            <strong className={destaque === "amber" ? "block text-base text-amber-300" : "block text-base text-sky-700"}>{alvo.unidades}</strong>
-            <span className="text-[9px] uppercase tracking-[.1em] text-slate-500">unidades</span>
+          <div className="min-w-[68px] rounded-xl border border-[#24466f] bg-[#08152a] px-3 py-2">
+            <strong className={destaque === "amber" ? "block text-base text-amber-300" : "block text-base text-cyan-300"}>{alvo.unidades}</strong>
+            <span className="text-[9px] uppercase tracking-[.1em] text-slate-400">unidades</span>
           </div>
-          <div className="min-w-[68px] rounded-xl border border-[#D8E2EC] bg-[#08152a] px-3 py-2">
+          <div className="min-w-[68px] rounded-xl border border-[#24466f] bg-[#08152a] px-3 py-2">
             <strong className="block text-base text-white">{alvo.ocorrencias}</strong>
-            <span className="text-[9px] uppercase tracking-[.1em] text-slate-500">ocorrências</span>
+            <span className="text-[9px] uppercase tracking-[.1em] text-slate-400">ocorrências</span>
           </div>
         </div>
       </div>
 
       <details className="group mt-2">
-        <summary className={`cursor-pointer list-none py-2 text-xs font-semibold ${destaque === "amber" ? "text-amber-300" : "text-sky-700"}`}>
+        <summary className={`cursor-pointer list-none py-2 text-xs font-semibold ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>
           <span className="group-open:hidden">Ver decisão e evidências ↓</span>
           <span className="hidden group-open:inline">Recolher decisão ↑</span>
         </summary>
 
-        <div className="grid gap-3 rounded-2xl border border-[#D8E2EC] bg-white p-4 md:grid-cols-3">
+        <div className="grid gap-3 rounded-2xl border border-[#24466f] bg-[#0b1e35] p-4 md:grid-cols-3">
           <div>
-            <p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-sky-700"}`}>Interpretação</p>
+            <p className={`text-[10px] font-semibold uppercase tracking-[.14em] ${destaque === "amber" ? "text-amber-300" : "text-cyan-300"}`}>Interpretação</p>
             <p className="mt-2 text-sm leading-6 text-slate-300">{leitura}</p>
           </div>
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-emerald-700">Ação</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-emerald-300">Ação</p>
             <p className="mt-2 text-sm leading-6 text-slate-300">{acaoLimpa || acao}</p>
           </div>
           <div>
@@ -800,22 +800,22 @@ function SinalDecisao({
             <div className="mt-2 grid grid-cols-3 gap-2 text-center">
               <div className="rounded-xl border border-cyan-500/20 px-2 py-2">
                 <strong className="block text-sm text-cyan-200">{alvo.fontes?.anfir?.unidades ?? alvo.unidades}</strong>
-                <span className="text-[9px] uppercase text-slate-500">ANFIR</span>
+                <span className="text-[9px] uppercase text-slate-400">ANFIR</span>
               </div>
               <div className="rounded-xl border border-violet-500/20 px-2 py-2">
                 <strong className="block text-sm text-violet-200">{alvo.fontes?.historico?.registros ?? 0}</strong>
-                <span className="text-[9px] uppercase text-slate-500">Histórico</span>
+                <span className="text-[9px] uppercase text-slate-400">Histórico</span>
               </div>
               <div className="rounded-xl border border-emerald-500/20 px-2 py-2">
                 <strong className="block text-sm text-emerald-200">{alvo.fontes?.crm?.ativos ?? 0}</strong>
-                <span className="text-[9px] uppercase text-slate-500">CRM ativo</span>
+                <span className="text-[9px] uppercase text-slate-400">CRM ativo</span>
               </div>
             </div>
             <div className="mt-3 space-y-2">
               {direcionamento?.alvos.slice(0, 5).map((item, index) => (
                 <div key={`${item.responsavel}-${item.cliente}-${index}`} className="rounded-xl border border-slate-700/50 px-3 py-2">
                   <p className="truncate text-xs font-semibold text-slate-200">{item.cliente}</p>
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-[10px] text-slate-400">
                     {item.responsavel} · {item.unidades} un. · {item.ocorrencias} ocorr. · {item.linha_principal}
                     {item.fontes?.crm?.ativos ? ` · CRM ${item.fontes.crm.ativos}` : " · sem CRM ativo"}
                   </p>
@@ -862,7 +862,7 @@ function BarraMercado({ total, fora, real }: { total: number; fora: number; real
       </div>
       <div className="mt-2 flex justify-end gap-4 text-xs">
         <span className="text-amber-300">Retirado {foraPct.toFixed(1)}%</span>
-        <span className="text-emerald-700">Mercado real {realPct.toFixed(1)}%</span>
+        <span className="text-emerald-300">Mercado real {realPct.toFixed(1)}%</span>
       </div>
     </div>
   )
@@ -924,12 +924,12 @@ function Kpi({
   href?: string
 }) {
   const cor =
-    destaque === "emerald" ? "text-emerald-700" : destaque === "cyan" ? "text-sky-700" : "text-white"
+    destaque === "emerald" ? "text-emerald-300" : destaque === "cyan" ? "text-cyan-300" : "text-white"
   const corpo = (
-    <div className="rounded-2xl border border-[#D8E2EC] bg-white p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-500">{titulo}</p>
+    <div className="rounded-2xl border border-[#24466f] bg-[#0b1e35] p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-slate-400">{titulo}</p>
       <div className={`mt-2 text-2xl font-bold ${cor}`}>{valor}</div>
-      {apoio && <p className="mt-1 text-xs text-slate-500">{apoio}</p>}
+      {apoio && <p className="mt-1 text-xs text-slate-400">{apoio}</p>}
     </div>
   )
   return href ? (
@@ -951,8 +951,8 @@ function MiniKpi({
   destaque?: "amber"
 }) {
   return (
-    <div className="rounded-xl border border-[#D8E2EC] bg-[#09152a] p-3">
-      <p className="text-[10px] uppercase tracking-[.12em] text-slate-500">{rotulo}</p>
+    <div className="rounded-xl border border-[#24466f] bg-[#09152a] p-3">
+      <p className="text-[10px] uppercase tracking-[.12em] text-slate-400">{rotulo}</p>
       <strong className={`mt-1 block text-lg ${destaque === "amber" ? "text-amber-300" : "text-white"}`}>
         {valor}
       </strong>
@@ -976,7 +976,7 @@ function BarraComercial({
     <>
       <div className="mb-1.5 flex items-center justify-between gap-3 text-xs">
         <span className="font-medium text-slate-300">{nome}</span>
-        <span className="font-semibold text-sky-700">
+        <span className="font-semibold text-cyan-300">
           {valor} · {percentual.toFixed(0)}%
         </span>
       </div>
@@ -1008,7 +1008,7 @@ function LeituraAcao({
       <div>
         <p
           className={`text-[11px] font-semibold uppercase tracking-[.14em] ${
-            destaque === "amber" ? "text-amber-300" : "text-sky-700"
+            destaque === "amber" ? "text-amber-300" : "text-cyan-300"
           }`}
         >
           Leitura comercial
@@ -1016,7 +1016,7 @@ function LeituraAcao({
         <p className="mt-2 text-sm leading-6 text-slate-300">{leitura}</p>
       </div>
       <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-emerald-700">O que fazer</p>
+        <p className="text-[11px] font-semibold uppercase tracking-[.14em] text-emerald-300">O que fazer</p>
         <p className="mt-2 text-sm leading-6 text-slate-300">{acao}</p>
       </div>
     </div>
@@ -1039,21 +1039,21 @@ function GraficoLinha({ valores, meses, rotulo }: { valores: number[]; meses: st
   const path = pts.map((p, i) => `${i ? "L" : "M"}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ")
 
   return (
-    <div className="rounded-2xl border border-[#D8E2EC] bg-white p-3" aria-label={rotulo}>
+    <div className="rounded-2xl border border-[#24466f] bg-[#0b1e35] p-3" aria-label={rotulo}>
       <svg viewBox={`0 0 ${w} ${h + 26}`} className="h-48 w-full">
         <line x1={mx} y1={h - my} x2={w - mx} y2={h - my} stroke="currentColor" className="text-slate-700" />
         <path
           d={path}
           fill="none"
           stroke="currentColor"
-          className="text-sky-700"
+          className="text-cyan-300"
           strokeWidth="4"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         {pts.map((p, i) => (
           <g key={i}>
-            <circle cx={p.x} cy={p.y} r="4" fill="currentColor" className="text-sky-700" />
+            <circle cx={p.x} cy={p.y} r="4" fill="currentColor" className="text-cyan-300" />
             <text
               x={p.x}
               y={Math.max(12, p.y - 9)}
@@ -1074,7 +1074,7 @@ function GraficoLinha({ valores, meses, rotulo }: { valores: number[]; meses: st
             textAnchor="middle"
             fontSize="10"
             fill="currentColor"
-            className="text-slate-500"
+            className="text-slate-400"
           >
             {m}
           </text>
