@@ -32,7 +32,7 @@ export default function NovoClientePage() {
     const cnpj=texto((form.elements.namedItem("cnpj") as HTMLInputElement|null)?.value)
     setConsultando(true);setErro("");setSucesso("");setAviso("")
     try{
-      const resposta=await fetch(`/api/crm-proxy/crm-app/clientes/cnpj/${encodeURIComponent(cnpj)}`,{cache:"no-store"})
+      const resposta=await fetchCrmSeguroProxy(`crm-app/clientes/cnpj/${encodeURIComponent(cnpj)}`,{cache:"no-store"})
       const retorno=await resposta.json().catch(()=>({})) as Registro
       if(!resposta.ok)throw new Error(texto(retorno.detail)||`${tOp("clients.taxLookupFailed")} (${resposta.status})`)
       if(retorno.status==="CLIENTE_EXISTENTE"){
@@ -50,7 +50,7 @@ export default function NovoClientePage() {
     const payload={nome:valor(dados,"nome"),cnpj:valor(dados,"cnpj")||null,inscricao_estadual:valor(dados,"inscricao_estadual")||null,endereco:valor(dados,"endereco")||null,numero:valor(dados,"numero")||null,complemento:valor(dados,"complemento")||null,bairro:valor(dados,"bairro")||null,cidade:valor(dados,"cidade")||null,estado:valor(dados,"estado").toUpperCase()||null,cep:valor(dados,"cep")||null,contato:valor(dados,"contato")||null,fone:valor(dados,"fone")||null,email:valor(dados,"email")||null,email_xml:valor(dados,"email_xml")||null,categoria:valor(dados,"categoria")||"TRANSPORTADORA",ddd:valor(dados,"ddd")||null,sub_regiao:valor(dados,"sub_regiao")||null}
     if(!payload.nome||!payload.cnpj||!payload.cidade||!payload.estado||!payload.categoria){setErro(tOp("clients.required"));setSalvando(false);return}
     try{
-      const checagem=await fetch(`/api/crm-proxy/crm-app/clientes/cnpj/${encodeURIComponent(payload.cnpj)}`,{cache:"no-store"})
+      const checagem=await fetchCrmSeguroProxy(`crm-app/clientes/cnpj/${encodeURIComponent(payload.cnpj)}`,{cache:"no-store"})
       const existente=await checagem.json().catch(()=>({})) as Registro
       if(checagem.ok&&existente.status==="CLIENTE_EXISTENTE")throw new Error(tOp("clients.duplicate",{name:texto((existente.cliente as Registro)?.nome)||tOp("clients.commercialRecord")}))
       const resposta=await fetchCrmSeguroProxy("crm-seguro/clientes",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)})
