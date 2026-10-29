@@ -90,6 +90,7 @@ def build_preview_official_proposal(
             output_number=output_number,
             validate_required=False,
             require_all_requested_anchors=False,
+            source_version=int(model.get("versao") or template.version),
         )
     except Exception as exc:
         raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc

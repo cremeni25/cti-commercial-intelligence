@@ -76,7 +76,7 @@ def finalize_official_proposal(
         proposal=dict(proposta), item=dict(item), opportunity=dict(oportunidade), client=dict(cliente), validate_required=False,
     )
     generated = render_official_docx(
-        source, equipment, payload, output_number=numero_saida, validate_required=False, require_all_requested_anchors=False,
+        source, equipment, payload, output_number=numero_saida, validate_required=False, require_all_requested_anchors=False, source_version=int(model.get("versao") or template.version),
     )
     if not verify_media_preserved(source, generated.content):
         raise ProposalDocumentRepositoryError("Imagens, logomarca Carrier ou estrutura protegida foram alteradas.")

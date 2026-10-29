@@ -163,6 +163,7 @@ def render_official_docx(
     output_number: str,
     validate_required: bool = True,
     require_all_requested_anchors: bool = True,
+    source_version: int | None = None,
 ) -> GeneratedOfficialDocument:
     template = template_for_equipment(equipment)
 
@@ -204,13 +205,16 @@ def render_official_docx(
         )
 
     generated = output_buffer.getvalue()
-    filename = f"{output_number}-{template.code}-v{template.version}.docx"
+    version = template.version if source_version is None else int(source_version)
+    if version < 1:
+        raise OfficialProposalDocumentError("Versão do modelo oficial inválida.")
+    filename = f"{output_number}-{template.code}-v{version}.docx"
     return GeneratedOfficialDocument(
         filename=filename,
         content=generated,
         sha256=sha256(generated).hexdigest(),
         template_code=template.code,
-        template_version=template.version,
+        template_version=version,
         source_sha256=source_hash,
     )
 
