@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, exigir_escrita_catalogo
 from core.supabase_client import supabase
@@ -340,3 +342,23 @@ def ativar_versao(modelo_id: str, usuario: UsuarioAutenticado = Depends(exigir_e
             raise HTTPException(403 if exc.code == "42501" else 409, "Ativação não confirmada. Confira a versão, a homologação e o acesso Master.") from exc
         raise HTTPException(503, "Não foi possível confirmar a ativação. Atualize a lista antes de tentar novamente.") from exc
     return {"ok": True, "modelo": resultado}
+
+
+class TesteModelo(BaseModel):
+    proposta_numero: str = Field(min_length=3, max_length=100)
+
+
+@router.post("/testar/{modelo_id}")
+def testar_versao(modelo_id: str, dados: TesteModelo, usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo)):
+    from routers.propostas_documentos_oficiais_router import _proposal_package
+    from services.proposal_document_preview import build_preview_official_proposal
+    from services.proposal_document_repository import ProposalDocumentRepositoryError, DOCX_MIME
+    modelos = supabase.table("cti_propostas").select("id").eq("numero", dados.proposta_numero.strip()).limit(2).execute().data or []
+    if len(modelos) != 1:
+        raise HTTPException(404, "Informe o número exato de uma proposta existente para a prévia.")
+    proposta, item, oportunidade, cliente = _proposal_package(str(modelos[0]["id"]))
+    try:
+        preview = build_preview_official_proposal(supabase, proposta={**proposta, "numero": "PREVIA-SEM-VALIDADE-" + dados.proposta_numero.strip()}, item=item, oportunidade=oportunidade, cliente=cliente, model_id=modelo_id)
+    except ProposalDocumentRepositoryError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return StreamingResponse(io.BytesIO(preview["content"]), media_type=DOCX_MIME, headers={"Content-Disposition": 'attachment; filename="PREVIA-SEM-VALIDADE.docx"', "Cache-Control": "no-store"})

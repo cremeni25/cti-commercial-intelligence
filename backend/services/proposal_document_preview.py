@@ -23,19 +23,17 @@ def build_preview_official_proposal(
     oportunidade: Mapping[str, Any],
     cliente: Mapping[str, Any],
     application: Mapping[str, Any] | None = None,
+    model_id: str | None = None,
 ) -> dict[str, Any]:
     equipment = str(item.get("equipamento") or "").strip()
     template = template_for_equipment(equipment)
-    rows = (
+    query = (
         supabase.table("cti_modelos_proposta")
         .select("*")
         .eq("equipamento", template.equipment)
-        .eq("ativo", True)
-        .limit(2)
-        .execute()
-        .data
-        or []
     )
+    query = query.eq("id", model_id) if model_id else query.eq("ativo", True)
+    rows = query.limit(2).execute().data or []
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
 

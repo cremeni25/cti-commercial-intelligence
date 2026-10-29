@@ -26,6 +26,7 @@ export default function ModelosOficiaisPage() {
   const master = usuario?.tipo_usuario === "ADMIN_MASTER"
   const [modelos, setModelos] = useState<Modelo[]>([])
   const [equipamento, setEquipamento] = useState("")
+  const [numeroTeste, setNumeroTeste] = useState("")
   const [arquivo, setArquivo] = useState<File | null>(null)
   const [ocupado, setOcupado] = useState(false)
   const [carregando, setCarregando] = useState(true)
@@ -72,6 +73,15 @@ export default function ModelosOficiaisPage() {
       setMensagem(`Versão ${m.versao} homologada. A ativação é uma etapa separada.`)
     })
   }
+  async function testar(m: Modelo) {
+    await executar(async () => {
+      const r = await fetch(`${API_URL}/modelos-proposta-importacao/testar/${encodeURIComponent(m.id)}`, {method: "POST", headers: { Authorization: `Bearer ${await obterTokenCTI()}`, "Content-Type": "application/json" }, body: JSON.stringify({proposta_numero: numeroTeste.trim()})})
+      if (!r.ok) await lerResposta(r)
+      const url = URL.createObjectURL(await r.blob())
+      const a = document.createElement("a"); a.href = url; a.download = `PREVIA-SEM-VALIDADE-v${m.versao}.docx`; a.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setMensagem("Prévia gerada sem alterar a proposta, o documento emitido ou o modelo vigente. Confira o preenchimento e a apresentação antes de homologar.")
+    })
+  }
   async function ativar(m: Modelo) {
     await executar(async () => {
       await lerResposta(await fetchCrmSeguroProxy(`modelos-proposta-importacao/ativar/${encodeURIComponent(m.id)}`, { method: "POST" }, { timeoutMs: 60000, tentativas: 1 }))
@@ -87,12 +97,14 @@ export default function ModelosOficiaisPage() {
         {carregando ? <p>Carregando modelos...</p> : <>
           <section className="space-y-4 rounded-2xl border border-[#16325c] bg-[#07162b] p-5">
             <label className="block">Equipamento<select value={selecionado} onChange={e => {setEquipamento(e.target.value);setArquivo(null)}} disabled={ocupado} className="mt-2 block w-full rounded-xl border border-[#24466f] bg-[#020817] p-3">{equipamentos.map(e => <option key={e}>{e}</option>)}</select></label>
-            <label className="block">Novo documento oficial<input key={selecionado} type="file" accept=".doc,.docx" disabled={ocupado} onChange={e => setArquivo(e.target.files?.[0] || null)} className="mt-2 block w-full rounded-xl border border-[#24466f] p-3"/></label>
+            <label className="block">Novo documento oficial<input key={`${selecionado}:${versoes.length}`} type="file" accept=".doc,.docx" disabled={ocupado} onChange={e => setArquivo(e.target.files?.[0] || null)} className="mt-2 block w-full rounded-xl border border-[#24466f] p-3"/></label>
             <p className="text-sm text-slate-400">O envio registra uma nova versão inativa. O modelo vigente permanece disponível até a ativação da substituição homologada.</p>
             <button type="button" onClick={() => void enviar()} disabled={ocupado || !arquivo || !referencia} className={botao}>{ocupado ? "Processando..." : "Enviar nova versão"}</button>
           </section>
+          <label className="block">Proposta para teste de preenchimento (número exato)<input value={numeroTeste} onChange={e=>setNumeroTeste(e.target.value)} placeholder="PROP-..." className="mt-2 block w-full rounded-xl border border-[#24466f] bg-[#020817] p-3"/><span className="mt-2 block text-sm text-slate-400">Usa dados de uma proposta existente do mesmo equipamento apenas para gerar uma prévia, sem gravar alterações.</span></label>
           <section aria-label="Histórico de versões" className="space-y-3"><h2 className="text-xl font-bold">Versões de {selecionado || "modelo"}</h2>
             {versoes.map(m => <article key={m.id} className="rounded-2xl border border-[#16325c] bg-[#07162b] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-semibold">Versão {m.versao} · {m.ativo ? "Vigente" : m.homologado_em ? "Homologada / inativa" : "Pendente de homologação"}</h3><p className="mt-1 break-all text-sm text-slate-400">{m.arquivo_template_nome_original || "Sem arquivo"}</p></div>{m.url_temporaria && <a href={m.url_temporaria} target="_blank" rel="noreferrer" className={botao}>Abrir documento</a>}</div>
+              {m.url_temporaria && <button type="button" className={`${botao} mt-4`} disabled={ocupado || !numeroTeste.trim()} onClick={()=>void testar(m)}>Testar preenchimento nesta versão</button>}
               {!m.homologado_em && m.url_temporaria && <div className="mt-4 flex flex-wrap items-center gap-4"><label className="flex items-center gap-2"><input type="checkbox" checked={!!conferidos[m.id]} disabled={ocupado} onChange={e=>setConferidos(a=>({...a,[m.id]:e.target.checked}))}/>Conferi integralmente o documento</label><button type="button" className={botao} disabled={ocupado || !conferidos[m.id]} onClick={()=>void homologar(m)}>Homologar versão {m.versao}</button></div>}
               {!m.ativo && !!m.homologado_em && <button type="button" className={`${botao} mt-4`} disabled={ocupado} onClick={()=>void ativar(m)}>Ativar versão {m.versao} para novas emissões</button>}
             </article>)}

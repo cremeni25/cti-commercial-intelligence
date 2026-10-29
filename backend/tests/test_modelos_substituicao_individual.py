@@ -87,3 +87,18 @@ def test_gestao_nao_e_publica():
     app=FastAPI();app.include_router(router.router);c=TestClient(app)
     assert c.get("/modelos-proposta-importacao/versoes").status_code==401
     assert c.post("/modelos-proposta-importacao/ativar/m1").status_code==401
+
+
+def test_previa_usa_versao_selecionada_sem_alterar_proposta(contexto,monkeypatch):
+    from routers import propostas_documentos_oficiais_router as documentos
+    from services import proposal_document_preview as preview
+    c,t,uploads,rpc,_=contexto;t["cti_propostas"]=[{"id":"p1","numero":"PROP-REAL"}]
+    proposta={"id":"p1","numero":"PROP-REAL","arquivo_documento":{"path":"emitido.docx"}}; chamadas=[]
+    monkeypatch.setattr(documentos,"_proposal_package",lambda _:(proposta,{"equipamento":"SUPRA 750"},{},{}))
+    monkeypatch.setattr(preview,"build_preview_official_proposal",lambda db,**kw:chamadas.append(kw) or {"content":b"preview"})
+    r=c.post("/modelos-proposta-importacao/testar/m1",json={"proposta_numero":"PROP-REAL"})
+    assert r.status_code==200 and r.content==b"preview"
+    assert chamadas[0]["model_id"]=="m1"
+    assert chamadas[0]["proposta"]["numero"].startswith("PREVIA-SEM-VALIDADE-")
+    assert proposta["numero"]=="PROP-REAL" and proposta["arquivo_documento"]["path"]=="emitido.docx"
+    assert not uploads and not rpc

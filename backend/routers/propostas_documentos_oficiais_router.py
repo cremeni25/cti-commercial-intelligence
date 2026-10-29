@@ -58,7 +58,7 @@ def _client_by_id(record_id: object, *, required: bool) -> dict[str, Any] | None
         return None
 
     failures: list[str] = []
-    for table in ("cti_clientes", "clientes"):
+    for table in ("clientes", "cti_clientes"):
         try:
             rows = supabase.table(table).select("*").eq("id", normalized).limit(1).execute().data or []
         except Exception as exc:
