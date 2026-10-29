@@ -28,7 +28,7 @@ def _buscar_cliente(*fontes: dict[str, Any] | None) -> dict[str, Any] | None:
         cliente_id = fonte.get("cliente_id")
         if not cliente_id:
             continue
-        for tabela in ("cti_clientes", "clientes"):
+        for tabela in ("clientes", "cti_clientes"):
             try:
                 clientes = supabase.table(tabela).select("*").eq("id", cliente_id).limit(1).execute().data or []
             except Exception:
