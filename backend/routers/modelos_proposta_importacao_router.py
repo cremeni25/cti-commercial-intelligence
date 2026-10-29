@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, exigir_escrita_catalogo
 from core.supabase_client import supabase
@@ -259,6 +261,10 @@ async def preparar_substituicao_individual(
         raise HTTPException(status_code=413, detail="Documento vazio ou maior que 30 MB.")
     if extensao == ".docx" and not zipfile.is_zipfile(io.BytesIO(binario)):
         raise HTTPException(status_code=422, detail="DOCX inválido.")
+    if extensao == ".docx":
+        with zipfile.ZipFile(io.BytesIO(binario)) as documento:
+            if not {"[Content_Types].xml", "word/document.xml"}.issubset(documento.namelist()):
+                raise HTTPException(422, "O arquivo não contém um documento Word válido.")
     equipamento = str(anterior["equipamento"])
     existentes = (
         supabase.table("cti_modelos_proposta").select("versao")
@@ -278,6 +284,7 @@ async def preparar_substituicao_individual(
         "equipamento": equipamento,
         "versao": versao,
         "arquivo_template_nome_original": nome,
+        "arquivo_template_mime": mime,
         "arquivo_template_tamanho_bytes": len(binario),
         "arquivo_template_hash_sha256": hash_recebido,
         "arquivo_template_storage": caminho,
@@ -296,7 +303,7 @@ async def preparar_substituicao_individual(
         supabase.table("cti_modelos_proposta_auditoria").insert({
             "modelo_proposta_id": criado[0]["id"],
             "nome": equipamento,
-            "operacao": "ATIVACAO",
+            "operacao": "NOVA_VERSAO",
             "versao": versao,
             "arquivo_template_storage": caminho,
             "arquivo_template_nome_original": nome,
@@ -311,3 +318,47 @@ async def preparar_substituicao_individual(
         "versao": versao, "sha256": hash_recebido,
         "situacao": "PENDENTE_HOMOLOGACAO", "modelo_anterior_preservado": True,
     }
+
+
+@router.get("/versoes")
+def listar_versoes(usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo)):
+    from routers.modelos_proposta_storage_router import _url_temporaria
+    modelos = supabase.table("cti_modelos_proposta").select("*").order("equipamento").order("versao", desc=True).execute().data or []
+    return [{**m, "url_temporaria": _url_temporaria(m["arquivo_template_storage"], 900) if m.get("arquivo_template_storage") else None} for m in modelos]
+
+
+@router.post("/ativar/{modelo_id}")
+def ativar_versao(modelo_id: str, usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo)):
+    from routers.modelos_proposta_storage_router import _modelo, _baixar_e_validar_arquivo_armazenado
+    modelo = _modelo(modelo_id)
+    if not modelo.get("homologado_em"):
+        raise HTTPException(409, "Homologue o documento antes de ativar esta versão.")
+    _baixar_e_validar_arquivo_armazenado(modelo)
+    from postgrest.exceptions import APIError
+    try:
+        resultado = supabase.rpc("cti_ativar_modelo_proposta", {"p_modelo_id": modelo_id, "p_usuario_id": usuario.id, "p_sha256": modelo["arquivo_template_hash_sha256"]}).execute().data
+    except APIError as exc:
+        if exc.code in {"42501", "55000", "P0002"}:
+            raise HTTPException(403 if exc.code == "42501" else 409, "Ativação não confirmada. Confira a versão, a homologação e o acesso Master.") from exc
+        raise HTTPException(503, "Não foi possível confirmar a ativação. Atualize a lista antes de tentar novamente.") from exc
+    return {"ok": True, "modelo": resultado}
+
+
+class TesteModelo(BaseModel):
+    proposta_numero: str = Field(min_length=3, max_length=100)
+
+
+@router.post("/testar/{modelo_id}")
+def testar_versao(modelo_id: str, dados: TesteModelo, usuario: UsuarioAutenticado = Depends(exigir_escrita_catalogo)):
+    from routers.propostas_documentos_oficiais_router import _proposal_package
+    from services.proposal_document_preview import build_preview_official_proposal
+    from services.proposal_document_repository import ProposalDocumentRepositoryError, DOCX_MIME
+    modelos = supabase.table("cti_propostas").select("id").eq("numero", dados.proposta_numero.strip()).limit(2).execute().data or []
+    if len(modelos) != 1:
+        raise HTTPException(404, "Informe o número exato de uma proposta existente para a prévia.")
+    proposta, item, oportunidade, cliente = _proposal_package(str(modelos[0]["id"]))
+    try:
+        preview = build_preview_official_proposal(supabase, proposta={**proposta, "numero": "PREVIA-SEM-VALIDADE-" + dados.proposta_numero.strip()}, item=item, oportunidade=oportunidade, cliente=cliente, model_id=modelo_id)
+    except ProposalDocumentRepositoryError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    return StreamingResponse(io.BytesIO(preview["content"]), media_type=DOCX_MIME, headers={"Content-Disposition": 'attachment; filename="PREVIA-SEM-VALIDADE.docx"', "Cache-Control": "no-store"})

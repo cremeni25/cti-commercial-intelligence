@@ -23,23 +23,22 @@ def build_preview_official_proposal(
     oportunidade: Mapping[str, Any],
     cliente: Mapping[str, Any],
     application: Mapping[str, Any] | None = None,
+    model_id: str | None = None,
 ) -> dict[str, Any]:
     equipment = str(item.get("equipamento") or "").strip()
     template = template_for_equipment(equipment)
-    rows = (
+    query = (
         supabase.table("cti_modelos_proposta")
         .select("*")
         .eq("equipamento", template.equipment)
-        .eq("versao", template.version)
-        .eq("ativo", True)
-        .limit(1)
-        .execute()
-        .data
-        or []
     )
+    query = query.eq("id", model_id) if model_id else query.eq("ativo", True)
+    rows = query.limit(2).execute().data or []
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
 
+    if len(rows) != 1:
+        raise ProposalDocumentRepositoryError("Mais de um modelo ativo para este equipamento. Revise os modelos oficiais.")
     model = rows[0]
     source_path = str(model.get("arquivo_template_storage") or "").strip()
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
@@ -91,6 +90,7 @@ def build_preview_official_proposal(
             output_number=output_number,
             validate_required=False,
             require_all_requested_anchors=False,
+            source_version=int(model.get("versao") or template.version),
         )
     except Exception as exc:
         raise ProposalDocumentRepositoryError(f"Falha ao preencher o modelo oficial: {exc}") from exc
@@ -104,7 +104,7 @@ def build_preview_official_proposal(
         "sha256": generated.sha256,
         "source_sha256": source_hash,
         "template_code": template.code,
-        "template_version": template.version,
+        "template_version": int(model.get("versao") or template.version),
         "homologado": bool(model.get("homologado_em")),
         "preview_mode": "WORD_PREENCHIDO",
         "mime_type": DOCX_MIME,

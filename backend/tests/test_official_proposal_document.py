@@ -89,3 +89,9 @@ def test_missing_anchor_blocks_document_instead_of_changing_layout():
             package.writestr(info, content)
     with pytest.raises(OfficialProposalDocumentError, match="cpf_cnpj"):
         render_official_docx(broken.getvalue(), "SUPRA 750", PAYLOAD, output_number="PROP-TESTE")
+
+
+def test_nome_e_metadados_refletem_versao_efetiva_do_arquivo_mestre():
+    result = render_official_docx(fake_docx(), "SUPRA 750", PAYLOAD, output_number="PREVIA", source_version=3)
+    assert result.filename.endswith("-v3.docx")
+    assert result.template_version == 3
