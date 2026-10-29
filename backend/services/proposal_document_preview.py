@@ -30,9 +30,8 @@ def build_preview_official_proposal(
         supabase.table("cti_modelos_proposta")
         .select("*")
         .eq("equipamento", template.equipment)
-        .eq("versao", template.version)
         .eq("ativo", True)
-        .limit(1)
+        .limit(2)
         .execute()
         .data
         or []
@@ -40,6 +39,8 @@ def build_preview_official_proposal(
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
 
+    if len(rows) != 1:
+        raise ProposalDocumentRepositoryError("Mais de um modelo ativo para este equipamento. Revise os modelos oficiais.")
     model = rows[0]
     source_path = str(model.get("arquivo_template_storage") or "").strip()
     expected_hash = str(model.get("arquivo_template_hash_sha256") or "").lower()
@@ -104,7 +105,7 @@ def build_preview_official_proposal(
         "sha256": generated.sha256,
         "source_sha256": source_hash,
         "template_code": template.code,
-        "template_version": template.version,
+        "template_version": int(model.get("versao") or template.version),
         "homologado": bool(model.get("homologado_em")),
         "preview_mode": "WORD_PREENCHIDO",
         "mime_type": DOCX_MIME,

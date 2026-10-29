@@ -35,9 +35,11 @@ def finalize_official_proposal(
 ) -> dict[str, Any]:
     equipment = str(item.get("equipamento") or "").strip()
     template = template_for_equipment(equipment)
-    rows = supabase.table("cti_modelos_proposta").select("*").eq("equipamento", template.equipment).eq("versao", template.version).eq("ativo", True).limit(1).execute().data or []
+    rows = supabase.table("cti_modelos_proposta").select("*").eq("equipamento", template.equipment).eq("ativo", True).limit(2).execute().data or []
     if not rows:
         raise ProposalDocumentRepositoryError("Modelo oficial ativo não encontrado.")
+    if len(rows) != 1:
+        raise ProposalDocumentRepositoryError("Mais de um modelo ativo para este equipamento. Revise os modelos oficiais.")
     model = rows[0]
     if not model.get("homologado_em"):
         raise ProposalDocumentRepositoryError("Modelo oficial não homologado.")
@@ -96,7 +98,7 @@ def finalize_official_proposal(
         "bucket": FINAL_BUCKET, "path": path, "filename": generated.filename, "mime_type": DOCX_MIME,
         "sha256": generated.sha256, "source_bucket": MASTER_BUCKET, "source_path": source_path,
         "source_sha256": original_hash, "normalized_source_sha256": generated.source_sha256,
-        "template_code": generated.template_code, "template_version": generated.template_version,
+        "template_code": generated.template_code, "template_version": int(model.get("versao") or template.version),
         "document_revision": revisao_documental, "finalized_at": _now(), "preserves_images": True,
         "preserves_carrier_branding": True, "immutable": True, "document_format": "DOCX",
     }

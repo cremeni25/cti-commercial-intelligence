@@ -101,3 +101,22 @@ def test_non_homologated_model_is_rejected():
             oportunidade={},
             cliente={},
         )
+
+
+@patch("services.proposal_document_repository.build_proposal_document_payload", return_value={})
+@patch("services.proposal_document_repository.verify_media_preserved", return_value=True)
+@patch("services.proposal_document_repository.render_official_docx")
+def test_emissao_usa_versao_ativa_nova_e_registra_sua_origem(render, _verify, _payload):
+    render.return_value = GeneratedOfficialDocument(filename="preview.docx", content=b"final", sha256="final", template_code="SUPRA_750", template_version=1, source_sha256=SOURCE_HASH)
+    class ConsultaVersao(Query):
+        def eq(self, campo, valor):
+            assert campo != "versao", "A emissão não pode continuar presa à versão do catálogo em código"
+            return self
+    class Banco(Supabase):
+        def table(self, nome):
+            if nome == "cti_modelos_proposta": return ConsultaVersao([self.model])
+            return super().table(nome)
+    banco = Banco({**BASE_MODEL, "id": "m2", "versao": 2, "arquivo_template_storage": "nova-versao.docx"})
+    result = finalize_official_proposal(banco, proposta={"id":"p1"}, item={"equipamento":"SUPRA 750"}, oportunidade={}, cliente={})
+    assert result["document"]["template_version"] == 2
+    assert result["document"]["source_path"] == "nova-versao.docx"

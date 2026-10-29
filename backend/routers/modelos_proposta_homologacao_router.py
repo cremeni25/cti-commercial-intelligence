@@ -37,7 +37,6 @@ def fila_homologacao(
             "arquivo_template_tamanho_bytes,arquivo_template_hash_sha256,"
             "arquivo_template_storage,homologado_em,ativo"
         )
-        .eq("ativo", True)
         .not_.is_("arquivo_template_storage", "null")
         .is_("homologado_em", "null")
         .order("linha_produto")
