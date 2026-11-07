@@ -44,6 +44,35 @@ Cada prioridade traz ações que resolvem o item sem sair da lista:
 
   Um material de modelo que não encontra o modelo no catálogo aparece na linha. Material sem linha nem modelo aparece em "Materiais de divulgação". Somente links `https://` são aceitos, e o teste `test_arquivo_de_materiais_versionado_e_valido` impede um material inválido.
 
+## Resumo diário no celular (Web Push)
+
+- **No app:** em `/crm-app/prioridades`, o botão **Ativar resumo diário** inscreve o aparelho. Também há opções para enviar um teste e para desativar.
+- **Envio:** nos dias úteis às 07:40 (Brasília), cada pessoa inscrita e ativa recebe "Seu dia comercial · N prioridades" e "Comece por: <primeira prioridade>". Ao tocar, abre a tela de Prioridades.
+  - Sem prioridades, sem notificação.
+  - Nenhum valor em reais aparece na tela bloqueada.
+  - Perfil e permissões são relidos no momento do envio: usuário inativado não recebe.
+  - Aparelhos desinscritos (404/410) são desativados sozinhos.
+- **iPhone:** só recebe com o app instalado na tela de início (iOS 16.4 ou superior). A própria tela explica o passo a passo.
+
+### Ativação (uma vez)
+
+1. **Banco:** aplicar `supabase/migrations/20261107140000_cti_push_assinaturas.sql`.
+2. **Chaves VAPID:** gere o par uma única vez, em qualquer máquina com o `requirements.txt` instalado. Não versionar e não colar em chat.
+
+```bash
+python -c "import base64; from py_vapid import Vapid; from cryptography.hazmat.primitives import serialization as s; v=Vapid(); v.generate_keys(); b=lambda x: base64.urlsafe_b64encode(x).rstrip(b'=').decode(); print('VAPID_PUBLIC_KEY=' + b(v.public_key.public_bytes(s.Encoding.X962, s.PublicFormat.UncompressedPoint))); print('VAPID_PRIVATE_KEY=' + b(v.private_key.private_numbers().private_value.to_bytes(32, 'big')))"
+```
+
+3. **Render (`cti-backend`) → Environment:**
+   - `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`, com os valores gerados acima;
+   - `VAPID_SUBJECT`: contato do remetente, por exemplo um `mailto:` da operação ou `https://app.cti-intelligence.com`;
+   - `CTI_CRON_TOKEN`: um texto aleatório longo, por exemplo gerado com `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
+4. **GitHub → Settings → Secrets and variables → Actions:**
+   - `CTI_BACKEND_URL` = `https://cti-backend-5ugf.onrender.com`;
+   - `CTI_CRON_TOKEN` = o mesmo valor configurado no Render.
+
+O workflow `.github/workflows/resumo-diario.yml` passa a disparar depois do merge na `main`, e também pode ser executado manualmente em Actions. Sem os secrets, ele termina sem fazer nada. Sem as chaves VAPID, o app explica que o recurso está sendo ativado e não oferece o botão.
+
 ## Regras de escopo
 
 Seguem a regra oficial do CRM seguro: o Master e o Diretor com acesso total veem a equipe e podem filtrar por responsável. Todos os demais perfis veem apenas a própria carteira; se tentarem filtrar outro responsável, recebem 403. Na IA conversacional vale a regra já aplicada pela IA: somente o ADMIN_MASTER tem visão consolidada. Links de prioridades que o perfil não pode abrir são exibidos como texto, sem link.

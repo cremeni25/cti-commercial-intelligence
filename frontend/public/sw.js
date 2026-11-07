@@ -52,3 +52,34 @@ self.addEventListener("fetch", event => {
     }
   })())
 })
+
+// Resumo diário do Agente de Inteligência (Web Push). A mensagem já chega
+// pronta do backend e nunca é armazenada em cache.
+self.addEventListener("push", event => {
+  let dados = {}
+  try { dados = event.data ? event.data.json() : {} } catch { dados = { body: event.data ? event.data.text() : "" } }
+  const destino = typeof dados.url === "string" && dados.url.startsWith("/crm-app") ? dados.url : "/crm-app/prioridades"
+  event.waitUntil(self.registration.showNotification(dados.title || "CTI · seu dia comercial", {
+    body: dados.body || "Abra o CTI para ver suas prioridades.",
+    icon: "/cti-crm-icon.svg",
+    badge: "/cti-crm-icon.svg",
+    tag: dados.tag || "cti-resumo-diario",
+    renotify: false,
+    data: { url: destino },
+  }))
+})
+self.addEventListener("notificationclick", event => {
+  event.notification.close()
+  const destino = new URL(event.notification.data?.url || "/crm-app/prioridades", self.location.origin).href
+  event.waitUntil((async () => {
+    const janelas = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
+    for (const janela of janelas) {
+      if (new URL(janela.url).pathname.startsWith("/crm-app") && "focus" in janela) {
+        await janela.focus()
+        if ("navigate" in janela) await janela.navigate(destino)
+        return
+      }
+    }
+    await self.clients.openWindow(destino)
+  })())
+})

@@ -38,3 +38,12 @@ O frontend tolera um backend anterior: sem o endpoint, o card do app não aparec
 - **App:** indicadores em formato compacto (ex.: "R$ 2,35 mi") para não cortar valores em 390px.
 - **Evidências:** backend com 885 aprovados; navegador com 10 verificações novas e as 7 existentes mantidas.
 - **Pendente no banco:** aplicar `20261107120000_cti_inteligencia_feedback.sql` para ativar "não se aplica/adiar".
+
+## Terceira entrega: resumo diário no celular
+
+- **Web Push com chaves VAPID:** inscrição por aparelho na tela de Prioridades e envio nos dias úteis às 07:40, a partir da leitura do agente no escopo de cada pessoa.
+- **Privacidade e respeito:** sem valores na tela bloqueada, sem envio quando não há prioridades, perfil relido no envio e aparelhos expirados desativados.
+- **Disparo:** endpoint interno `/interno/notificacoes/resumo-diario`, protegido por `CTI_CRON_TOKEN` com comparação em tempo constante. É a única exceção pública acrescentada à fronteira de autenticação, e há teste que confirma que as demais rotas continuam exigindo sessão.
+- **Correção encontrada pelo teste:** sem service worker registrado, a ativação esperava para sempre; agora o limite é de 5 s, com mensagem.
+- **Evidências:** backend com 892 aprovados; navegador com 12 verificações (duas execuções seguidas) e as 7 existentes mantidas; criptografia aes128gcm e assinatura VAPID validadas localmente com chaves reais geradas no teste.
+- **Pendente:** migração `20261107140000_cti_push_assinaturas.sql`, variáveis no Render e secrets no GitHub (passo a passo em `AGENTE_INTELIGENCIA_COMERCIAL.md`).

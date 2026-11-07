@@ -82,6 +82,7 @@ async function contexto(perfil, viewport, cenario) {
       return cenario.briefing === 'legado' ? json([]) : cenario.briefing === 'ausente' ? json({ detail: 'Not Found' }, 404) : json(briefing)
     }
     if (url.pathname.endsWith('/plataforma/modulos')) return json({ modulos })
+    if (url.pathname.endsWith('/notificacoes/config')) return json({ disponivel: cenario.push !== 'servidor_inativo', chave_publica: cenario.push === 'servidor_inativo' ? null : 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U' })
     const metodo = route.request().method()
     if (metodo !== 'GET') {
       const corpo = route.request().postData()
@@ -157,6 +158,7 @@ try {
   // 2c. Catálogo no app
   await page.goto(`${BASE}/crm-app/catalogo`)
   await page.getByRole('heading', { name: 'Catálogo de produtos' }).waitFor()
+  await page.locator('a[href="https://linktr.ee/exemplo-cti"]').waitFor()
   assert.equal(await page.locator('a[href="https://linktr.ee/exemplo-cti"]').count(), 1)
   assert.equal(await page.getByText('Preço de tabela').count(), 0, 'vendedor sem proposta não vê preço')
   await page.getByPlaceholder('Buscar modelo, linha ou compressor').fill('05k')
@@ -173,6 +175,45 @@ try {
   checks.push('catálogo no app: Linktree, busca, filtro por linha, material por modelo e resumo pronto para WhatsApp em 390px')
   await page.getByRole('tab', { name: 'Todas' }).click()
   if (capturas) await page.screenshot({ path: `${capturas}/app-catalogo.png`, fullPage: true })
+  await ctx.close()
+
+  // 2d. Resumo diário no celular (serviço de push do aparelho simulado)
+  cenario = { briefing: 'ok', consultas: [] }
+  ctx = await contexto(vendedor, { width: 390, height: 844 }, cenario)
+  await ctx.addInitScript(() => {
+    let assinatura = null
+    const falsa = { endpoint: 'https://push.exemplo/aparelho-1', toJSON: () => ({ endpoint: 'https://push.exemplo/aparelho-1', keys: { p256dh: 'chave-p256dh', auth: 'chave-auth' } }), unsubscribe: async () => { assinatura = null; return true } }
+    const pushManager = {
+      getSubscription: async () => assinatura,
+      subscribe: async (opcoes) => { if (!(opcoes.applicationServerKey instanceof Uint8Array)) throw Error('chave inválida'); assinatura = falsa; return falsa },
+    }
+    // O harness bloqueia service workers: simula o registro do app em /crm-app.
+    navigator.serviceWorker.getRegistration = async () => ({ scope: location.origin + '/crm-app', pushManager })
+    Object.defineProperty(Notification, 'permission', { get: () => 'default', configurable: true })
+    Notification.requestPermission = async () => 'granted'
+  })
+  page = await ctx.newPage()
+  await page.goto(`${BASE}/crm-app/prioridades`)
+  await page.getByRole('button', { name: 'Ativar resumo diário' }).click({ timeout: 20000 })
+  await page.getByText('Ativado. Nos dias úteis').waitFor()
+  const inscricao = cenario.escritas.find(item => item.caminho.endsWith('/notificacoes/assinatura'))
+  assert.deepEqual(inscricao.corpo, { endpoint: 'https://push.exemplo/aparelho-1', keys: { p256dh: 'chave-p256dh', auth: 'chave-auth' } })
+  await page.getByRole('button', { name: 'Enviar teste' }).click()
+  await page.getByText('Notificação de teste enviada').waitFor()
+  await page.getByRole('button', { name: 'Desativar' }).click()
+  await page.getByRole('button', { name: 'Ativar resumo diário' }).waitFor()
+  assert.ok(cenario.escritas.some(item => item.caminho.endsWith('/notificacoes/assinatura/remover')))
+  checks.push('resumo diário: ativar inscreve o aparelho, teste e desativação funcionam')
+  if (capturas) await page.screenshot({ path: `${capturas}/app-resumo-diario.png` })
+  await ctx.close()
+
+  cenario = { briefing: 'ok', consultas: [], push: 'servidor_inativo' }
+  ctx = await contexto(vendedor, { width: 390, height: 844 }, cenario)
+  page = await ctx.newPage()
+  await page.goto(`${BASE}/crm-app/prioridades`)
+  await page.getByText('sendo ativado no servidor').waitFor({ timeout: 20000 })
+  assert.equal(await page.getByRole('button', { name: 'Ativar resumo diário' }).count(), 0)
+  checks.push('sem chaves no servidor, o app explica e não oferece ativação')
   await ctx.close()
 
   // 3. Backend anterior ao agente: o app segue intacto e o card some
