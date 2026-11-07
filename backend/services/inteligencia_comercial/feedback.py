@@ -8,18 +8,22 @@ fica gravado com autor e motivo. Assim:
 - a gestão enxerga quais alertas a equipe mais dispensa e por quê, e calibra
   os limiares com base em uso real (ver ``resumo_aprendizado``).
 
-A tabela ``cti_inteligencia_feedback`` é opcional: se ainda não existir no
-banco, a leitura segue sem supressões e o registro devolve um erro claro.
+Armazenamento: cofre do agente (``services/cofre_agente``), um documento por
+usuário em ``feedback/<usuario_id>.json`` — criado automaticamente, sem
+migração. Registros com mais de ``RETENCAO_DIAS`` são expurgados na gravação.
 """
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
+
+from services import cofre_agente as cofre
 
 from .sinais import data, texto
 
-TABELA = "cti_inteligencia_feedback"
+PASTA = "feedback"
+RETENCAO_DIAS = 180
 DECISOES = {"NAO_SE_APLICA", "ADIAR"}
 MOTIVOS = {
     "JA_TRATADO": "Já tratado fora do sistema",
@@ -34,13 +38,7 @@ MAX_DIAS_ADIAR = 60
 
 
 class FeedbackIndisponivel(RuntimeError):
-    """A tabela de ajustes ainda não foi criada no banco."""
-
-
-def _cliente():
-    from core.supabase_client import supabase
-
-    return supabase
+    """O cofre do agente não respondeu."""
 
 
 def prazo_supressao(decisao: str, hoje: date, adiar_ate: date | None) -> date:
@@ -53,12 +51,13 @@ def prazo_supressao(decisao: str, hoje: date, adiar_ate: date | None) -> date:
 
 def carregar_feedback(desde: date | None = None) -> list[dict[str, Any]]:
     try:
-        consulta = _cliente().table(TABELA).select("*")
-        if desde:
-            consulta = consulta.gte("created_at", desde.isoformat())
-        return consulta.execute().data or []
+        documentos = cofre.ler_pasta(PASTA)
     except Exception:
-        return []
+        return []  # leitura derivada: sem cofre, a leitura segue sem supressões
+    registros = [r for lista in documentos.values() if isinstance(lista, list) for r in lista if isinstance(r, dict)]
+    if desde:
+        registros = [r for r in registros if (data(r.get("created_at")) or date.max) >= desde]
+    return registros
 
 
 def supressoes_ativas(registros: list[dict[str, Any]], hoje: date) -> set[tuple[str, str, str]]:
@@ -81,13 +80,17 @@ def registrar_feedback(*, usuario_id: str, codigo: str, entidade_tipo: str, enti
         "motivo": motivo,
         "observacao": (observacao or "").strip()[:500] or None,
         "suprimir_ate": prazo_supressao(decisao, hoje, adiar_ate).isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     try:
-        resposta = _cliente().table(TABELA).insert(registro).execute()
+        caminho_doc = cofre.caminho(PASTA, f"{usuario_id}.json")
+        atuais = cofre.ler(caminho_doc, []) or []
+        limite = (hoje - timedelta(days=RETENCAO_DIAS)).isoformat()
+        mantidos = [r for r in atuais if isinstance(r, dict) and str(r.get("created_at") or "")[:10] >= limite]
+        cofre.gravar(caminho_doc, [*mantidos, registro])
     except Exception as erro:
         raise FeedbackIndisponivel(str(erro)) from erro
-    dados = getattr(resposta, "data", None) or [registro]
-    return dados[0]
+    return registro
 
 
 def resumo_aprendizado(registros: list[dict[str, Any]]) -> dict[str, Any]:

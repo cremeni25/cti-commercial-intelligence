@@ -37,7 +37,7 @@ O frontend tolera um backend anterior: sem o endpoint, o card do app não aparec
 - **Catálogo de produtos** no portal e no app, com os 17 materiais do Linktree oficial mapeados por modelo e por linha e o resumo pronto para WhatsApp.
 - **App:** indicadores em formato compacto (ex.: "R$ 2,35 mi") para não cortar valores em 390px.
 - **Evidências:** backend com 885 aprovados; navegador com 10 verificações novas e as 7 existentes mantidas.
-- **Pendente no banco:** aplicar `20261107120000_cti_inteligencia_feedback.sql` para ativar "não se aplica/adiar".
+- ~~Pendente no banco~~: substituído pelo cofre do agente, criado automaticamente (ver a quarta entrega).
 
 ## Terceira entrega: resumo diário no celular
 
@@ -46,4 +46,16 @@ O frontend tolera um backend anterior: sem o endpoint, o card do app não aparec
 - **Disparo:** endpoint interno `/interno/notificacoes/resumo-diario`, protegido por `CTI_CRON_TOKEN` com comparação em tempo constante. É a única exceção pública acrescentada à fronteira de autenticação, e há teste que confirma que as demais rotas continuam exigindo sessão.
 - **Correção encontrada pelo teste:** sem service worker registrado, a ativação esperava para sempre; agora o limite é de 5 s, com mensagem.
 - **Evidências:** backend com 892 aprovados; navegador com 12 verificações (duas execuções seguidas) e as 7 existentes mantidas; criptografia aes128gcm e assinatura VAPID validadas localmente com chaves reais geradas no teste.
-- **Pendente:** migração `20261107140000_cti_push_assinaturas.sql`, variáveis no Render e secrets no GitHub (passo a passo em `AGENTE_INTELIGENCIA_COMERCIAL.md`).
+- ~~Pendente: migração, variáveis e secrets~~: eliminados na quarta entrega.
+
+## Quarta entrega: zero passo manual
+
+A pedido do proprietário ("não faço nada manual"):
+
+- **Sem migrações:** ajustes de alertas e inscrições passam ao cofre do agente, um bucket privado `cti-agente` criado pelo próprio backend com a chave de serviço existente. As duas migrações desta branch foram removidas antes de chegar à `main`.
+- **Sem chaves para gerar:** o par VAPID é gerado na primeira utilização e guardado no cofre, com criação exclusiva entre instâncias.
+- **Sem secrets no GitHub:** o agendamento se autentica por OIDC do GitHub, com validação de emissor, público, repositório, branch `main`, workflow e evento, além de testes de rejeição para cada desvio.
+- **Envio idempotente por dia:** marca exclusiva no cofre.
+- **Privacidade:** um aparelho usado por outra pessoa passa a ser dela; a inscrição anterior é removida.
+- **CI:** o job `frontend-validation` foi fixado em `ubuntu-24.04`, porque o `ubuntu-latest` passou a 26.04, sem suporte do Playwright 1.56.1.
+- **Evidências:** backend com 905 aprovados; envio real do `pywebpush` com chave autogerada validado contra POST interceptado (aes128gcm, VAPID e TTL).

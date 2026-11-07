@@ -32,7 +32,7 @@ Cada prioridade traz ações que resolvem o item sem sair da lista:
 
 "Não se aplica" e "adiar" **não apagam nada**: só escondem aquele alerta daquele negócio até o prazo. Depois disso, o alerta volta se a situação continuar. Cada ajuste fica registrado com autor e motivo. A gestão vê em `GET /crm-seguro/inteligencia/aprendizado` quais alertas a equipe mais dispensa e por quê. Exemplo: se "negócio parado" for dispensado muitas vezes com "alerta cedo demais", é sinal de aumentar o limiar de 21 dias.
 
-**Ativação no banco:** o ajuste usa a tabela `cti_inteligencia_feedback` (migração `supabase/migrations/20261107120000_cti_inteligencia_feedback.sql`). Até ela ser aplicada, agendar, concluir e reagendar funcionam normalmente; o "não se aplica" responde com um aviso claro e nada quebra.
+**Armazenamento automático:** os ajustes ficam no **cofre do agente** (`services/cofre_agente.py`), um bucket privado `cti-agente` do Supabase Storage. O próprio backend cria esse bucket na primeira utilização, com a chave de serviço que já existe no Render. Não há migração nem passo manual.
 
 ## Catálogo de produtos
 
@@ -54,24 +54,21 @@ Cada prioridade traz ações que resolvem o item sem sair da lista:
   - Aparelhos desinscritos (404/410) são desativados sozinhos.
 - **iPhone:** só recebe com o app instalado na tela de início (iOS 16.4 ou superior). A própria tela explica o passo a passo.
 
-### Ativação (uma vez)
+### Ativação: automática
 
-1. **Banco:** aplicar `supabase/migrations/20261107140000_cti_push_assinaturas.sql`.
-2. **Chaves VAPID:** gere o par uma única vez, em qualquer máquina com o `requirements.txt` instalado. Não versionar e não colar em chat.
+Nenhum passo manual. Ao publicar o backend:
 
-```bash
-python -c "import base64; from py_vapid import Vapid; from cryptography.hazmat.primitives import serialization as s; v=Vapid(); v.generate_keys(); b=lambda x: base64.urlsafe_b64encode(x).rstrip(b'=').decode(); print('VAPID_PUBLIC_KEY=' + b(v.public_key.public_bytes(s.Encoding.X962, s.PublicFormat.UncompressedPoint))); print('VAPID_PRIVATE_KEY=' + b(v.private_key.private_numbers().private_value.to_bytes(32, 'big')))"
-```
+1. **Chaves do push (VAPID):** o par é gerado na primeira utilização e guardado no cofre privado (`config/vapid.json`). Por criação exclusiva, todas as instâncias passam a usar a mesma chave. Se `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` existirem no ambiente, elas têm precedência.
+2. **Inscrições:** ficam no cofre, em `push/<usuario_id>.json`. Se outra pessoa entrar no CTI pelo mesmo aparelho, a inscrição muda de dono, para que ninguém receba as prioridades de outro vendedor.
+3. **Agendamento:** `.github/workflows/resumo-diario.yml` roda nos dias úteis às 07:40 e se autentica com o **token de identidade (OIDC) que o próprio GitHub emite**, sem segredo para cadastrar. O backend (`core/github_oidc.py`) só aceita tokens com estas características:
+   - assinados pelo GitHub e emitidos para o público `cti-resumo-diario`;
+   - vindos deste repositório, da branch `main` e deste workflow;
+   - disparados por agenda ou execução manual.
 
-3. **Render (`cti-backend`) → Environment:**
-   - `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`, com os valores gerados acima;
-   - `VAPID_SUBJECT`: contato do remetente, por exemplo um `mailto:` da operação ou `https://app.cti-intelligence.com`;
-   - `CTI_CRON_TOKEN`: um texto aleatório longo, por exemplo gerado com `python -c "import secrets; print(secrets.token_urlsafe(32))"`.
-4. **GitHub → Settings → Secrets and variables → Actions:**
-   - `CTI_BACKEND_URL` = `https://cti-backend-5ugf.onrender.com`;
-   - `CTI_CRON_TOKEN` = o mesmo valor configurado no Render.
+   Forks, outras branches, outros workflows e eventos de PR são recusados.
+4. **Um envio por dia:** a marca `envios/resumo-diario-<data>.json`, criada de forma exclusiva, impede duplicidade mesmo que o agendamento repita a chamada.
 
-O workflow `.github/workflows/resumo-diario.yml` passa a disparar depois do merge na `main`, e também pode ser executado manualmente em Actions. Sem os secrets, ele termina sem fazer nada. Sem as chaves VAPID, o app explica que o recurso está sendo ativado e não oferece o botão.
+`CTI_CRON_TOKEN`, se configurado, funciona como alternativa opcional ao OIDC.
 
 ## Regras de escopo
 

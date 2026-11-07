@@ -3,9 +3,10 @@
 - ``/crm-seguro/notificacoes/*``: autenticado; cada pessoa só gerencia os
   próprios aparelhos.
 - ``/interno/notificacoes/resumo-diario``: chamado pelo agendamento. Não usa
-  sessão de usuário: exige o cabeçalho ``X-CTI-Cron-Token`` igual a
-  ``CTI_CRON_TOKEN`` (comparação em tempo constante). Sem o token configurado,
-  o endpoint fica desligado.
+  sessão de usuário. Aceita o token de identidade (OIDC) que o próprio GitHub
+  emite para o workflow ``resumo-diario.yml`` deste repositório na ``main``
+  (sem segredo manual), ou, opcionalmente, ``X-CTI-Cron-Token`` igual a
+  ``CTI_CRON_TOKEN`` se essa variável existir (comparação em tempo constante).
 """
 from __future__ import annotations
 
@@ -16,10 +17,13 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
+from core.github_oidc import TokenInvalido, validar_token_workflow
 from services import notificacoes_push as push
 
 router = APIRouter(tags=["Notificações"])
 ROTA_DISPARO = "/interno/notificacoes/resumo-diario"
+PUBLICO_OIDC = "cti-resumo-diario"
+WORKFLOW_RESUMO = "resumo-diario.yml"
 
 
 class ChavesAssinatura(BaseModel):
@@ -37,7 +41,7 @@ class RemoverAssinaturaRequest(BaseModel):
 
 
 def _indisponivel() -> HTTPException:
-    return HTTPException(status_code=503, detail="O resumo no celular ainda está sendo ativado no servidor. Tente novamente mais tarde.")
+    return HTTPException(status_code=503, detail="O resumo no celular está temporariamente indisponível. Tente novamente em alguns minutos.")
 
 
 @router.get("/crm-seguro/notificacoes/config")
@@ -81,13 +85,27 @@ def enviar_teste(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     return push.enviar_para_assinaturas(assinaturas, mensagem)
 
 
-@router.post(ROTA_DISPARO)
-def disparar_resumo_diario(x_cti_cron_token: str | None = Header(default=None)):
+def _disparo_autorizado(token_cron: str | None, autorizacao: str | None) -> bool:
     esperado = os.getenv("CTI_CRON_TOKEN", "").strip()
-    if not esperado:
-        raise HTTPException(status_code=503, detail="Disparo agendado desligado (CTI_CRON_TOKEN ausente).")
-    if not x_cti_cron_token or not hmac.compare_digest(x_cti_cron_token.encode(), esperado.encode()):
-        raise HTTPException(status_code=401, detail="Token de agendamento inválido.")
+    if esperado and token_cron and hmac.compare_digest(token_cron.encode(), esperado.encode()):
+        return True
+    partes = (autorizacao or "").split(" ", 1)
+    if len(partes) == 2 and partes[0].lower() == "bearer" and partes[1].strip():
+        try:
+            validar_token_workflow(partes[1].strip(), publico=PUBLICO_OIDC, workflow=WORKFLOW_RESUMO)
+            return True
+        except TokenInvalido:
+            return False
+    return False
+
+
+@router.post(ROTA_DISPARO)
+def disparar_resumo_diario(
+    x_cti_cron_token: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+):
+    if not _disparo_autorizado(x_cti_cron_token, authorization):
+        raise HTTPException(status_code=401, detail="Disparo agendado não autorizado.")
     try:
         return push.enviar_resumo_diario()
     except push.PushIndisponivel:
