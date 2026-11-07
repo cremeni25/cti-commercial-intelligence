@@ -38,3 +38,7 @@ modelos-propostas-carrier/
 **/S 9*.docx
 **/*proposta*carrier*.doc
 **/*proposta*carrier*.docx
+
+# Ambientes virtuais locais
+.venv/
+**/.venv/
