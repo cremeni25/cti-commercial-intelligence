@@ -12,7 +12,7 @@ await new Promise((resolve, reject) => {
   next.stdout.on('data', data => { if (String(data).includes('Ready')) { clearTimeout(timer); resolve() } })
   next.on('exit', code => reject(Error('Next exit ' + code)))
 })
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
+const browser = await chromium.launch({ headless: true, executablePath: process.env.CTI_CHROMIUM_PATH || undefined, args: ['--no-sandbox', '--disable-dev-shm-usage'] })
 const checks = []
 try {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, timezoneId: 'America/Sao_Paulo', serviceWorkers: 'block' })

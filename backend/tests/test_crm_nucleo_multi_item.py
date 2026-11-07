@@ -143,3 +143,22 @@ def test_titulo_comercial_legitimo_e_preservado_mesmo_com_classificacao_diferent
     )
 
     assert titulo == "Tomada de Preços"
+
+
+def test_etapas_de_pedido_usam_escala_0_100_no_valor_ponderado(monkeypatch):
+    oportunidade_id = "opp-pedido"
+    tabelas = {
+        "cti_oportunidades": [{"id": oportunidade_id, "cliente_id": "cli-1", "titulo": "Frota", "status": "PROPOSTA", "probabilidade": 50, "created_at": "2026-08-26T17:18:25+00:00"}],
+        "cti_oportunidade_itens": [], "cti_atividades": [], "cti_propostas": [],
+        "cti_pedidos": [{"id": "ped-1", "oportunidade_id": oportunidade_id, "status": "PEDIDO", "valor": 200000, "updated_at": "2026-11-05T10:00:00+00:00"}],
+        "cti_clientes": [], "clientes": [{"id": "cli-1", "nome": "CLIENTE TESTE"}],
+    }
+    monkeypatch.setattr(core, "_ler_tabela", lambda nome, obrigatoria=False: tabelas.get(nome, []))
+
+    resultado = core.nucleo_comercial()
+
+    assert resultado[0]["etapa"] == "PEDIDO"
+    assert resultado[0]["probabilidade"] == 100.0
+    assert resultado[0]["valor_ponderado"] == 200000.0
+    assert resultado[0]["pedido_atualizado_em"] == "2026-11-05T10:00:00+00:00"
+    assert resultado[0]["proposta_atualizada_em"] is None

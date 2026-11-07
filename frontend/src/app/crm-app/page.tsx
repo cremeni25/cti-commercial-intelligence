@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
+  BookOpen,
   BriefcaseBusiness,
   CalendarDays,
   ChevronRight,
@@ -27,6 +28,7 @@ import { lerContextoOportunidade, textoSeguro } from "@/lib/crm-opportunity"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 import { ocorreuNoDiaCrm, registrosResumoCrm } from "@/services/crm-resumo"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
+import PrioridadesAgenteCard from "@/components/inteligencia/PrioridadesAgenteCard"
 
 type Registro = Record<string, unknown>
 type Locale = "pt-BR" | "en" | "es"
@@ -190,6 +192,7 @@ export default function CrmAppPage() {
       { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
       { href: "/crm-app/pedidos", label: t.orders, valor: resumo.pedidos, icon: PackageCheck },
       { href: "/crm-app/vendas", label: t.sales, valor: resumo.vendas, icon: CircleDollarSign },
+      { href: "/crm-app/catalogo", label: "Catálogo", valor: "TR · DT · DD", icon: BookOpen },
       { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
     ]
     if (adminMaster) base.push({ href: "/crm-app/controle-financeiro", label: t.financial, valor: "MASTER", icon: PiggyBank })
@@ -243,6 +246,8 @@ export default function CrmAppPage() {
             <Acao href="/crm-app/clientes" titulo={t.clients} descricao={t.clientsHelp} icon={Search}/>
           </div>
         </section>
+
+        {usuario && rotaAutorizadaCTI("/crm-app/prioridades", usuario) && <PrioridadesAgenteCard />}
 
         <section className="mt-5 rounded-3xl border border-[#163356] bg-[#081a32] p-5">
           <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-400"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumoAtual ? resumo.destaque : "—"}</p></div></div>

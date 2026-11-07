@@ -1,0 +1,17 @@
+{
+  "engine": "Chromium real e Next build; APIs e identidades sintéticas, sem produção",
+  "checks": [
+    "tela inicial do app mostra manchete e 3 prioridades sem link para destino não autorizado",
+    "data de referência exibida como data civil brasileira (sem recuo de fuso)",
+    "filtro por categoria reduz a lista às oportunidades",
+    "prioridades sem rolagem horizontal em 390px",
+    "agendar próximo passo usa o endpoint seguro de atividades e tira o item da lista",
+    "follow-up atrasado é concluído direto da prioridade",
+    "\"não se aplica\" registra motivo para calibrar o agente e mantém a lista limpa após recarregar",
+    "catálogo no app: Linktree, busca, filtro por linha, material por modelo e resumo pronto para WhatsApp em 390px",
+    "resumo diário: ativar inscreve o aparelho, teste e desativação funcionam",
+    "sem chaves no servidor, o app explica e não oferece ativação",
+    "resposta fora do contrato ou 404 esconde o card sem erro e preserva a tela inicial",
+    "Central no portal: manchete, KPIs, prioridades, módulos e menu"
+  ]
+}

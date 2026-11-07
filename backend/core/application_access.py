@@ -12,6 +12,9 @@ PUBLIC = {
     ("GET", "/auth/bootstrap/status"), ("POST", "/auth/bootstrap"),
     ("POST", "/auth/access-requests"), ("GET", "/auth/access-requests/health"),
     ("GET", "/docs"), ("GET", "/openapi.json"), ("GET", "/redoc"),
+    # Disparo agendado do resumo diário: sem sessão de usuário, protegido por
+    # token próprio validado no endpoint (routers/notificacoes_router.py).
+    ("POST", "/interno/notificacoes/resumo-diario"),
 }
 
 async def application_access(request: Request, call_next):

@@ -38,7 +38,9 @@ jobs:
           path: backend/pytest.log
 
   frontend-validation:
-    runs-on: ubuntu-latest
+    # Fixado em 24.04: o ubuntu-latest passou a 26.04, sem suporte do Playwright
+    # 1.56.1 usado pelas regressões em navegador (tests/feiras).
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
@@ -99,6 +101,7 @@ jobs:
           npm run test:ui
           npm run test:offline
           npm run test:crm-home
+          npm run test:central
       - name: Upload Feiras verification evidence
         if: always()
         uses: actions/upload-artifact@v4
