@@ -1,7 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { useMemo, useState } from "react"
-import { Check, Copy, Snowflake } from "lucide-react"
+import { Check, Copy, FileText, Snowflake } from "lucide-react"
 import type { TabelaAplicacao } from "@/services/inteligencia-comercial"
 
 const TEMPERATURAS = [0, -10, -18, -20, -22, -25] as const
@@ -14,7 +15,7 @@ function grau(valor: number) {
  * "Qual equipamento atende?" — escolha o tamanho do baú e a temperatura que o
  * cliente precisa; a tabela oficial diz quais equipamentos chegam lá.
  */
-export default function TabelaAplicacaoView({ tabela, onCopiado }: { tabela: TabelaAplicacao; onCopiado: (mensagem: string) => void }) {
+export default function TabelaAplicacaoView({ tabela, onCopiado, documentoHref }: { tabela: TabelaAplicacao; onCopiado: (mensagem: string) => void; documentoHref: string }) {
   const [tamanho, setTamanho] = useState(3)
   const [alvo, setAlvo] = useState<number>(-18)
   const [copiado, setCopiado] = useState(false)
@@ -44,7 +45,10 @@ export default function TabelaAplicacaoView({ tabela, onCopiado }: { tabela: Tab
 
   return (
     <section className="rounded-3xl border border-cyan-900/70 bg-[#06182f] p-4 sm:p-5" aria-label="Tabela de aplicação">
-      <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-cyan-400"><Snowflake size={14}/> Qual equipamento atende?</p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-cyan-400"><Snowflake size={14}/> Qual equipamento atende?</p>
+        <Link href={documentoHref} className="inline-flex min-h-9 items-center gap-1.5 rounded-xl border border-cyan-700 px-3 text-xs font-semibold text-cyan-100"><FileText size={14}/> Tabela de aplicação</Link>
+      </div>
 
       <p className="mt-3 text-sm font-semibold text-white">Tamanho do baú</p>
       <div className="mt-2 flex gap-2 overflow-x-auto pb-1" role="radiogroup" aria-label="Tamanho do baú">

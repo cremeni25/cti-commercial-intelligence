@@ -89,7 +89,7 @@ export function CrmAppShellNav() {
   return (
     <>
       {adminMaster && pathname === "/crm-app" && (
-        <div className="fixed right-3 bottom-[82px] z-40">
+        <div className="fixed right-3 bottom-[82px] z-40 print:hidden">
           <Link href="/crm-app/testes-arquivados" className="flex min-h-11 items-center gap-2 rounded-xl border border-amber-700 bg-[#07162b]/98 px-4 text-xs font-semibold text-amber-200 shadow-xl backdrop-blur">
             <ArchiveRestore size={16} />
             {tx.archivedTests}
@@ -115,7 +115,7 @@ export function CrmAppShellNav() {
         </div>
       )}
 
-      <nav aria-label={tx.navLabel} className="fixed inset-x-0 bottom-0 z-50 border-t border-[#16325c] bg-[#061126]/98 px-3 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 text-white backdrop-blur">
+      <nav aria-label={tx.navLabel} className="fixed inset-x-0 bottom-0 z-50 print:hidden border-t border-[#16325c] bg-[#061126]/98 px-3 pb-[max(8px,env(safe-area-inset-bottom))] pt-2 text-white backdrop-blur">
         <div className="mx-auto grid max-w-4xl gap-2" style={{ gridTemplateColumns: `repeat(${Math.max(itens.length, 1)}, minmax(0, 1fr))` }}>
           {itens.map(({ href, label, icon: Icon, destaque }) => {
             const selecionado = ativo(pathname, href)

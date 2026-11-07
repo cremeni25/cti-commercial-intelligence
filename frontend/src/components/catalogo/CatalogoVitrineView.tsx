@@ -150,7 +150,7 @@ export default function CatalogoVitrineView({ compacto = false }: { compacto?: b
 
   return (
     <div className="space-y-5">
-      {vitrine.tabela_aplicacao && <TabelaAplicacaoView tabela={vitrine.tabela_aplicacao} onCopiado={setCopiado}/>}
+      {vitrine.tabela_aplicacao && <TabelaAplicacaoView tabela={vitrine.tabela_aplicacao} onCopiado={setCopiado} documentoHref={compacto ? "/crm-app/catalogo/tabela-aplicacao" : "/catalogo/tabela-aplicacao"}/>}
 
       {(vitrine.linktree_url || vitrine.materiais_gerais.length > 0 || (vitrine.materiais_internos || []).length > 0 || master) && (
         <section className="rounded-3xl border border-cyan-900/70 bg-[#06182f] p-5">
