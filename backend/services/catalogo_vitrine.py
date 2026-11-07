@@ -22,6 +22,9 @@ from pathlib import Path
 from typing import Any
 
 ARQUIVO_MATERIAIS = Path(__file__).resolve().parents[1] / "data" / "catalogo_materiais.json"
+ARQUIVO_TABELA_APLICACAO = Path(__file__).resolve().parents[1] / "data" / "tabela_aplicacao.json"
+PASTA_MATERIAIS_INTERNOS = "materiais"
+INDICE_MATERIAIS_INTERNOS = "materiais/indice.json"
 LINHAS = (
     ("TRAILER", "Trailer", "TR", "Semirreboques e carretas frigoríficas"),
     ("DIESEL TRUCK", "Diesel Truck", "DT", "Caminhões com motor diesel próprio"),
@@ -47,6 +50,36 @@ def _materiais_brutos(caminho: str = str(ARQUIVO_MATERIAIS)) -> dict[str, Any]:
         return json.loads(Path(caminho).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"linktree_url": None, "materiais": []}
+
+
+@lru_cache(maxsize=1)
+def tabela_aplicacao() -> dict[str, Any] | None:
+    """Tabela de aplicação (equipamento x tamanho do baú x temperatura mínima)."""
+    try:
+        dados = json.loads(ARQUIVO_TABELA_APLICACAO.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    tamanhos = dados.get("tamanhos") or []
+    equipamentos = [e for e in dados.get("equipamentos") or [] if len(e.get("temperaturas") or []) == len(tamanhos)]
+    return {**dados, "equipamentos": equipamentos} if tamanhos and equipamentos else None
+
+
+def materiais_internos() -> list[dict[str, Any]]:
+    """Materiais privados (ex.: PDF original da tabela) com link temporário de 1 h."""
+    from services import cofre_agente as cofre
+
+    try:
+        indice = cofre.ler(INDICE_MATERIAIS_INTERNOS, []) or []
+    except Exception:
+        return []
+    saida = []
+    for item in indice:
+        if not isinstance(item, dict) or not item.get("arquivo"):
+            continue
+        url = cofre.url_assinada(f"{PASTA_MATERIAIS_INTERNOS}/{item['arquivo']}")
+        if url:
+            saida.append({"titulo": item.get("titulo") or item["arquivo"], "url": url, "tipo": item.get("tipo") or "catalogo", "enviado_em": item.get("enviado_em")})
+    return saida
 
 
 def materiais_validos(conteudo: dict[str, Any]) -> list[dict[str, Any]]:
@@ -174,5 +207,8 @@ def carregar_vitrine(*, ver_precos: bool, hoje: date) -> dict[str, Any]:
             raise LookupError("catálogo comercial vazio")
     except Exception:
         equipamentos, precos, fonte = _equipamentos_do_catalogo_oficial(), [], "catalogo_oficial_sem_precos"
-    return montar_vitrine(equipamentos=equipamentos, precos=precos, materiais_conteudo=_materiais_brutos(),
-                          ver_precos=ver_precos and fonte == "catalogo_comercial", hoje=hoje, fonte=fonte)
+    vitrine = montar_vitrine(equipamentos=equipamentos, precos=precos, materiais_conteudo=_materiais_brutos(),
+                             ver_precos=ver_precos and fonte == "catalogo_comercial", hoje=hoje, fonte=fonte)
+    vitrine["tabela_aplicacao"] = tabela_aplicacao()
+    vitrine["materiais_internos"] = materiais_internos()
+    return vitrine

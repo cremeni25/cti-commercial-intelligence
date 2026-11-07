@@ -1,0 +1,36 @@
+{
+  "titulo": "Tabela de aplicação",
+  "fonte": "Tabela de Aplicação Carrier / Viena Refrigeração",
+  "condicao": "Temperaturas para baús novos com isolamento mínimo de 75 mm nas paredes, 100 mm no frontal e no teto e 120 mm no piso, em poliuretano.",
+  "tamanhos": [
+    {"codigo": "2,8m", "comprimento_m": 2.8, "volume_m3": 7.5},
+    {"codigo": "3,5m", "comprimento_m": 3.5, "volume_m3": 14.0},
+    {"codigo": "4,2m", "comprimento_m": 4.2, "volume_m3": 17.0},
+    {"codigo": "5,5m", "comprimento_m": 5.5, "volume_m3": 21.3},
+    {"codigo": "6,5m", "comprimento_m": 6.5, "volume_m3": 36.5},
+    {"codigo": "7,5m", "comprimento_m": 7.5, "volume_m3": 42.2},
+    {"codigo": "8,5m", "comprimento_m": 8.5, "volume_m3": 47.9},
+    {"codigo": "9,4m", "comprimento_m": 9.4, "volume_m3": 53.7}
+  ],
+  "equipamentos": [
+    {"modelo": "CITIMAX 280", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Acoplado", "isolamento_mm": 65, "temperaturas": [-20, -16, -8, 0, null, null, null, null]},
+    {"modelo": "CITIMAX 400", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Acoplado", "isolamento_mm": 65, "temperaturas": [-22, -18, -10, -6, 0, null, null, null]},
+    {"modelo": "CITIMAX 500", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Somente acoplado ou acoplado e elétrico", "isolamento_mm": 75, "temperaturas": [null, -25, -22, -18, -10, 0, null, null]},
+    {"modelo": "CITIMAX 600", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Somente acoplado ou acoplado e elétrico", "isolamento_mm": 75, "temperaturas": [null, -25, -24, -20, -12, -8, 0, null]},
+    {"modelo": "CITIMAX 700", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Somente acoplado ou acoplado e elétrico", "isolamento_mm": 75, "temperaturas": [null, -25, -24, -22, -18, -12, -8, 0]},
+    {"modelo": "XARIOS 350", "linha": "DIRECT DRIVE", "refrigerante": "R404", "acoplamento": "Acoplado e elétrico", "isolamento_mm": null, "temperaturas": [-22, -18, -10, -6, 0, null, null, null]},
+    {"modelo": "XARIOS 6", "linha": "DIRECT DRIVE", "refrigerante": "R452", "acoplamento": "Acoplado e elétrico", "isolamento_mm": null, "temperaturas": [null, -25, -24, -20, -12, 0, null, null]},
+    {"modelo": "SUPRA 750", "linha": "DIESEL TRUCK", "refrigerante": "R404", "acoplamento": "Diesel", "isolamento_mm": 80, "temperaturas": [null, null, null, null, null, -24, -22, -18]},
+    {"modelo": "SUPRA 850", "linha": "DIESEL TRUCK", "refrigerante": "R404", "acoplamento": "Diesel", "isolamento_mm": 80, "temperaturas": [null, null, null, null, null, -26, -24, -22]},
+    {"modelo": "SUPRA 1150", "linha": "DIESEL TRUCK", "refrigerante": "R404", "acoplamento": "Diesel", "isolamento_mm": 80, "temperaturas": [null, null, null, null, null, -29, -26, -24]}
+  ],
+  "premissas": [
+    "Simulação em ambiente externo de aproximadamente 42 °C.",
+    "Equipamento trabalhando 12 h por dia.",
+    "Média de 10 aberturas de porta por trajeto, com cerca de 5 minutos de porta aberta em cada.",
+    "Espessuras iguais em porta, base, teto e laterais, conforme a condição acima (exceto em medidas mistas).",
+    "Comprimento, altura e largura simulados conforme os tamanhos de baú da tabela.",
+    "Citimax 500 e Citimax 700 têm motor elétrico opcional."
+  ],
+  "observacao": "Para outras configurações, procure o departamento comercial técnico."
+}

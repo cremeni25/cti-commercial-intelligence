@@ -232,3 +232,41 @@ def test_movimento_da_proposta_ou_do_pedido_conta_como_atividade_do_negocio():
     pedido = _op("o2", etapa="PEDIDO", pedido_id="p2", created_at="2026-08-01T00:00:00+00:00", updated_at="2026-08-01T00:00:00+00:00")
     assert "PEDIDO_SEM_MOVIMENTO" in montar_briefing([pedido], [], hoje=HOJE)["sinais_por_codigo"]
     assert "PEDIDO_SEM_MOVIMENTO" not in montar_briefing([{**pedido, "pedido_atualizado_em": "2026-11-05"}], [], hoje=HOJE)["sinais_por_codigo"]
+
+
+# ---- Tabela de aplicação, materiais internos e fonte da IA ----
+
+def test_tabela_aplicacao_coerente_com_o_pdf():
+    tabela = vitrine.tabela_aplicacao()
+    modelos = {e["modelo"]: e for e in tabela["equipamentos"]}
+    assert [t["codigo"] for t in tabela["tamanhos"]] == ["2,8m", "3,5m", "4,2m", "5,5m", "6,5m", "7,5m", "8,5m", "9,4m"]
+    assert modelos["CITIMAX 500"]["temperaturas"][3] == -18  # 5,5 m
+    assert modelos["SUPRA 1150"]["temperaturas"][5:] == [-29, -26, -24]
+    assert modelos["CITIMAX 280"]["temperaturas"][4:] == [None, None, None, None]
+    assert modelos["XARIOS 6"]["refrigerante"] == "R452"
+
+
+def test_ia_le_tabela_de_aplicacao_como_fonte(monkeypatch):
+    from services import ia_comercial_fonte_aplicacao as fonte
+    from services import ia_comercial_universo as universo
+
+    monkeypatch.setattr(fonte, "_ORIGINAL", lambda u, t: ({}, {}))
+    fontes, metadados = fonte._carregar_fontes_com_aplicacao("u", "REPRES_REGIAO_01")
+    atende = {l["modelo"] for l in fontes["tabela_aplicacao"] if l["tamanho_bau"] == "5,5m" and l["temperatura_minima_c"] <= -18}
+    assert atende == {"CITIMAX 500", "CITIMAX 600", "CITIMAX 700", "XARIOS 6"}
+    assert "tabela_aplicacao" in universo.FONTES_PUBLICAS and metadados["tabela_aplicacao"]["total_registros"] > 0
+
+
+def test_http_material_interno_somente_master_e_pdf(http, monkeypatch):
+    from tests import cofre_falso
+
+    cofre_falso.instalar(monkeypatch)
+    client, estado = http
+    pdf = ("tabela.pdf", b"%PDF-1.4 conteudo", "application/pdf")
+    assert client.post("/crm-seguro/catalogo/materiais", data={"titulo": "Tabela de aplicação"}, files={"arquivo": pdf}).status_code == 403
+    estado["perfil"] = SimpleNamespace(id="master", tipo_usuario="ADMIN_MASTER", permissoes={})
+    assert client.post("/crm-seguro/catalogo/materiais", data={"titulo": "Falso"}, files={"arquivo": ("x.pdf", b"nao e pdf", "application/pdf")}).status_code == 422
+    resposta = client.post("/crm-seguro/catalogo/materiais", data={"titulo": "Tabela de aplicação"}, files={"arquivo": pdf})
+    assert resposta.status_code == 201 and resposta.json()["arquivo"] == "tabela-de-aplicacao.pdf"
+    from services import cofre_agente as cofre
+    assert cofre.ler("materiais/indice.json")[0]["titulo"] == "Tabela de aplicação"

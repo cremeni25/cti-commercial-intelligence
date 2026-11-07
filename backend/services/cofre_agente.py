@@ -118,3 +118,23 @@ def listar(pasta: str) -> list[str]:
 def ler_pasta(pasta: str) -> dict[str, Any]:
     """Todos os documentos JSON de uma pasta, por nome de arquivo."""
     return {nome: ler(f"{pasta}/{nome}") for nome in listar(pasta)}
+
+
+def gravar_binario(caminho_doc: str, conteudo: bytes, tipo: str) -> None:
+    provisionar()
+    try:
+        _supabase().storage.from_(BUCKET).upload(caminho_doc, conteudo, {"content-type": tipo, "upsert": "true"})
+    except Exception as erro:
+        raise CofreIndisponivel(str(erro)) from erro
+
+
+def url_assinada(caminho_doc: str, segundos: int = 3600) -> str | None:
+    """Link temporário para um arquivo do bucket privado (nunca público)."""
+    provisionar()
+    try:
+        resposta = _supabase().storage.from_(BUCKET).create_signed_url(caminho_doc, segundos)
+    except Exception:
+        return None
+    if isinstance(resposta, dict):
+        return resposta.get("signedURL") or resposta.get("signedUrl") or resposta.get("signed_url")
+    return getattr(resposta, "signed_url", None) or getattr(resposta, "signedURL", None)

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, Field
 
 from core.admin_auth import UsuarioAutenticado, usuario_atual
@@ -120,3 +120,39 @@ def vitrine_catalogo(usuario: UsuarioAutenticado = Depends(usuario_atual)):
         raise HTTPException(status_code=403, detail="Catálogo disponível para a equipe comercial.")
     ver_precos = gestao or _permissao(usuario, "propostas_visualizar", "propostas_emitir")
     return carregar_vitrine(ver_precos=ver_precos, hoje=hoje_operacional())
+
+
+TAMANHO_MAXIMO_MATERIAL = 15 * 1024 * 1024
+
+
+@router.post("/catalogo/materiais", status_code=201)
+async def anexar_material_interno(
+    titulo: str = Form(..., min_length=2, max_length=120),
+    arquivo: UploadFile = File(...),
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    """Master anexa um PDF interno ao Catálogo (fica no cofre privado, nunca público)."""
+    import re
+    import unicodedata
+    from datetime import datetime, timezone
+
+    from services import cofre_agente as cofre
+    from services.catalogo_vitrine import INDICE_MATERIAIS_INTERNOS, PASTA_MATERIAIS_INTERNOS
+
+    if usuario.tipo_usuario != "ADMIN_MASTER":
+        raise HTTPException(status_code=403, detail="Somente o Master anexa materiais ao Catálogo.")
+    conteudo = await arquivo.read(TAMANHO_MAXIMO_MATERIAL + 1)
+    if len(conteudo) > TAMANHO_MAXIMO_MATERIAL:
+        raise HTTPException(status_code=413, detail="Arquivo acima de 15 MB.")
+    if not conteudo.startswith(b"%PDF"):
+        raise HTTPException(status_code=422, detail="Envie um arquivo PDF.")
+    base = unicodedata.normalize("NFKD", titulo).encode("ascii", "ignore").decode()
+    nome = (re.sub(r"[^a-z0-9]+", "-", base.lower()).strip("-") or "material")[:60] + ".pdf"
+    try:
+        cofre.gravar_binario(cofre.caminho(PASTA_MATERIAIS_INTERNOS, nome), conteudo, "application/pdf")
+        indice = [i for i in (cofre.ler(INDICE_MATERIAIS_INTERNOS, []) or []) if isinstance(i, dict) and i.get("arquivo") != nome]
+        indice.append({"titulo": titulo.strip(), "arquivo": nome, "tipo": "catalogo", "enviado_em": datetime.now(timezone.utc).isoformat(), "enviado_por": str(usuario.id)})
+        cofre.gravar(INDICE_MATERIAIS_INTERNOS, indice)
+    except cofre.CofreIndisponivel:
+        raise HTTPException(status_code=503, detail="Armazenamento indisponível no momento. Tente novamente.")
+    return {"titulo": titulo.strip(), "arquivo": nome}

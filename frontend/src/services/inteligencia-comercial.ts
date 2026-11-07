@@ -206,7 +206,18 @@ export type EquipamentoCatalogo = {
   materiais: MaterialCatalogo[]
 }
 export type LinhaCatalogo = { codigo: string; nome: string; sigla: string; descricao: string; equipamentos: EquipamentoCatalogo[]; materiais: MaterialCatalogo[] }
+export type TabelaAplicacao = {
+  titulo: string
+  condicao: string
+  tamanhos: { codigo: string; comprimento_m: number; volume_m3: number }[]
+  equipamentos: { modelo: string; linha: string; refrigerante: string | null; acoplamento: string | null; isolamento_mm: number | null; temperaturas: (number | null)[] }[]
+  premissas: string[]
+  observacao: string
+}
+
 export type VitrineCatalogo = {
+  tabela_aplicacao?: TabelaAplicacao | null
+  materiais_internos?: (MaterialCatalogo & { enviado_em?: string })[]
   fonte: string
   precos_visiveis: boolean
   linktree_url: string | null
@@ -220,4 +231,17 @@ export async function buscarVitrineCatalogo() {
   const payload = await lerJson<VitrineCatalogo>(resposta, "O catálogo")
   if (!payload || !Array.isArray(payload.linhas)) throw new Error("O catálogo ainda não está disponível neste ambiente.")
   return payload
+}
+
+export async function anexarMaterialCatalogo(titulo: string, arquivo: File) {
+  const corpo = new FormData()
+  corpo.set("titulo", titulo)
+  corpo.set("arquivo", arquivo)
+  const resposta = await fetchCrmSeguroProxy("crm-seguro/catalogo/materiais", { method: "POST", body: corpo }, { timeoutMs: 60000, tentativas: 1 })
+  if (!resposta.ok) {
+    const payload = await resposta.json().catch(() => null)
+    const detalhe = payload && typeof payload === "object" && "detail" in payload ? String((payload as { detail?: unknown }).detail || "") : ""
+    throw new Error(detalhe || `Não foi possível anexar o material (${resposta.status}).`)
+  }
+  return resposta.json()
 }

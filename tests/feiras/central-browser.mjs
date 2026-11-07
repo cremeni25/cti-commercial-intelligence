@@ -1,7 +1,7 @@
 // Central de Inteligência e Prioridades do app: Chromium real, build Next real,
 // APIs e identidades sintéticas. Nenhum dado de produção é acessado.
 import { chromium } from '@playwright/test'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import assert from 'node:assert/strict'
 import { spawn } from 'node:child_process'
 
@@ -56,7 +56,10 @@ const modulos = [
   { codigo: 'treinamentos', nome: 'Treinamentos comerciais', descricao: 'Trilhas por produto.', categoria: 'conhecimento', categoria_rotulo: 'Conhecimento', status: 'planejado', rota_web: null, rota_app: null, consultado_pela_ia: false },
 ]
 
+const tabelaAplicacao = JSON.parse(readFileSync(new URL('../../backend/data/tabela_aplicacao.json', import.meta.url), 'utf8'))
 const vitrine = {
+  tabela_aplicacao: tabelaAplicacao,
+  materiais_internos: [{ titulo: 'Tabela de aplicação (PDF)', url: 'https://exemplo.com/assinado/tabela.pdf', tipo: 'catalogo' }],
   fonte: 'catalogo_comercial', precos_visiveis: false, linktree_url: 'https://linktr.ee/exemplo-cti', total_equipamentos: 2,
   materiais_gerais: [{ titulo: 'Catálogo geral 2026', url: 'https://exemplo.com/geral.pdf', tipo: 'catalogo' }],
   linhas: [
@@ -173,6 +176,22 @@ try {
   await page.locator('a[href="https://linktr.ee/exemplo-cti"]').waitFor()
   assert.equal(await page.locator('a[href="https://linktr.ee/exemplo-cti"]').count(), 1)
   assert.equal(await page.getByText('Preço de tabela').count(), 0, 'vendedor sem proposta não vê preço')
+  const aplicacao = page.getByRole('region', { name: 'Tabela de aplicação' })
+  await aplicacao.getByRole('radio', { name: /5,5m/ }).click()
+  await aplicacao.getByRole('radio', { name: '-18 °C' }).click()
+  const atendem = await aplicacao.getByRole('list', { name: 'Equipamentos que atendem' }).locator('strong.block.text-white').allTextContents()
+  assert.deepEqual(atendem.sort(), ['CITIMAX 500', 'CITIMAX 600', 'CITIMAX 700', 'XARIOS 6'])
+  await aplicacao.getByRole('radio', { name: /2,8m/ }).click()
+  await aplicacao.getByRole('radio', { name: '-25 °C' }).click()
+  await aplicacao.getByText('Nenhum equipamento da tabela atende').waitFor()
+  await aplicacao.getByRole('radio', { name: /5,5m/ }).click()
+  await aplicacao.getByRole('radio', { name: '-18 °C' }).click()
+  await aplicacao.getByRole('button', { name: 'Copiar recomendação para WhatsApp' }).click()
+  assert.match(await page.evaluate(() => navigator.clipboard.readText()), /Baú 5,5m \(21,3 m³\) a -18 °C/)
+  assert.equal(await page.locator('a[href="https://exemplo.com/assinado/tabela.pdf"]').count(), 1, 'PDF interno disponível')
+  assert.equal(await page.getByText('Anexar PDF interno (Master)').count(), 0, 'vendedor não anexa materiais')
+  if (capturas) await aplicacao.screenshot({ path: `${capturas}/app-tabela-aplicacao.png` })
+  checks.push('tabela de aplicação no app: baú 5,5m a -18 °C indica Citimax 500/600/700 e Xarios 6, sem opção para combinação impossível, recomendação copiável e PDF interno')
   await page.getByPlaceholder('Buscar modelo, linha ou compressor').fill('05k')
   assert.equal(await page.locator('article').count(), 1)
   await page.getByRole('button', { name: 'Copiar para WhatsApp' }).click()
