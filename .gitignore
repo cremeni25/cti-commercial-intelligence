@@ -42,3 +42,9 @@ modelos-propostas-carrier/
 # Ambientes virtuais locais
 .venv/
 **/.venv/
+
+# Planilhas comerciais originais nunca entram no repositório público;
+# a carga vai cifrada em backend/data/planilhas_cifradas/.
+*.xlsx
+*.xlsm
+*.xls

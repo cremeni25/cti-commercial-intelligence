@@ -15,6 +15,8 @@ PUBLIC = {
     # Disparo agendado do resumo diário: sem sessão de usuário, protegido por
     # token próprio validado no endpoint (routers/notificacoes_router.py).
     ("POST", "/interno/notificacoes/resumo-diario"),
+    # Só a chave PÚBLICA de cifragem (não abre nada); ver services/cofre_cifrado.py.
+    ("GET", "/ingestao-cifrada/chave-publica"),
 }
 
 async def application_access(request: Request, call_next):
