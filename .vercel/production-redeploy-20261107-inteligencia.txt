@@ -1,0 +1,4 @@
+Redeploy de produção solicitado em 2026-11-07 para publicar o PR 609 já incorporado à main
+(Central de Inteligência, Prioridades, Catálogo e resumo diário no app).
+Source merge: c866defb8548dd1bfd1e95039d4a5be5224a965f
+Nenhuma regra funcional, dado ou layout foi alterado neste gatilho.
