@@ -130,7 +130,9 @@ def _etapa_comercial(oportunidade: dict[str, Any], atividades: list[dict[str, An
 
 
 def _probabilidade(etapa: str, oportunidade: dict[str, Any]) -> float:
-    if etapa in ETAPAS_PROBABILIDADE_TOTAL: return 1.0
+    # Escala única 0–100, a mesma de _normalizar_probabilidade. Antes as etapas
+    # de pedido devolviam 1.0, o que tornava valor_ponderado 1% do valor real.
+    if etapa in ETAPAS_PROBABILIDADE_TOTAL: return 100.0
     if etapa in ETAPAS_PROBABILIDADE_ZERO: return 0.0
     return _normalizar_probabilidade(oportunidade.get("probabilidade"))
 
