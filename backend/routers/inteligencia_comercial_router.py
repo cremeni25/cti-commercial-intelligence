@@ -156,3 +156,31 @@ async def anexar_material_interno(
     except cofre.CofreIndisponivel:
         raise HTTPException(status_code=503, detail="Armazenamento indisponível no momento. Tente novamente.")
     return {"titulo": titulo.strip(), "arquivo": nome}
+
+
+@router.get("/planilhas-comerciais/resumo")
+def resumo_planilhas_comerciais(usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    """O que o CTI já leu do funil e das NEGOCIAÇÕES. Somente gestão."""
+    if not _visao_consolidada(usuario):
+        raise HTTPException(status_code=403, detail="Resumo das planilhas disponível somente para a gestão.")
+    from services.planilhas_comerciais import resumo
+
+    return resumo()
+
+
+chave_router = APIRouter(tags=["Ingestão cifrada"])
+
+
+@chave_router.get("/ingestao-cifrada/chave-publica")
+def chave_publica_ingestao():
+    """Chave pública para cifrar cargas que passam pelo repositório público.
+
+    Só serve para CIFRAR; abrir exige a chave privada, que nunca sai do cofre.
+    """
+    from services.cofre_agente import CofreIndisponivel
+    from services.cofre_cifrado import ALG, chave_publica_b64
+
+    try:
+        return {"alg": ALG, "chave_publica": chave_publica_b64()}
+    except CofreIndisponivel as erro:
+        raise HTTPException(status_code=503, detail="Cofre do agente indisponível no momento.") from erro
