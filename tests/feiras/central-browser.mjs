@@ -127,8 +127,10 @@ try {
   // 2. App: tela completa de prioridades
   await page.goto(`${BASE}/crm-app/prioridades`)
   await page.getByRole('heading', { name: 'Prioridades do dia' }).waitFor()
-  assert.equal(await page.getByText(briefing.manchete).count(), 0, 'app sem parágrafo do agente')
+  // Espera a lista carregar antes de contar: no CI a tela pode chegar antes dos dados.
+  await page.getByRole('list', { name: 'Lista de prioridades' }).locator('li').nth(3).waitFor({ timeout: 15000 })
   assert.equal(await page.locator('ol > li').count(), 4)
+  assert.equal(await page.getByText(briefing.manchete).count(), 0, 'app sem parágrafo do agente')
   await page.getByRole('tab', { name: /^Oportunidade/ }).click()
   assert.equal(await page.locator('ol > li').count(), 1)
   checks.push('filtro por categoria reduz a lista às oportunidades')
