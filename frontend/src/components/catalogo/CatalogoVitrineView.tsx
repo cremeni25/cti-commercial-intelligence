@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Check, Copy, ExternalLink, FileText, Loader2, PlayCircle, Search, Zap } from "lucide-react"
+import { useAuth } from "@/core/auth/AuthContext"
 import { useOperationalI18n } from "@/core/i18n/operational"
-import { buscarVitrineCatalogo, type EquipamentoCatalogo, type LinhaCatalogo, type MaterialCatalogo, type VitrineCatalogo } from "@/services/inteligencia-comercial"
+import TabelaAplicacaoView from "@/components/catalogo/TabelaAplicacaoView"
+import { anexarMaterialCatalogo, buscarVitrineCatalogo, type EquipamentoCatalogo, type LinhaCatalogo, type MaterialCatalogo, type VitrineCatalogo } from "@/services/inteligencia-comercial"
 
 const ROTULO_CONFIGURACAO: Record<string, string> = {
   PADRAO: "Padrão",
@@ -68,8 +70,45 @@ function LinksMateriais({ materiais }: { materiais: MaterialCatalogo[] }) {
   )
 }
 
+function AnexarMaterial({ onAnexado }: { onAnexado: () => void }) {
+  const [titulo, setTitulo] = useState("")
+  const [enviando, setEnviando] = useState(false)
+  const [mensagem, setMensagem] = useState("")
+  async function enviar(evento: React.FormEvent<HTMLFormElement>) {
+    evento.preventDefault()
+    const arquivo = (evento.currentTarget.elements.namedItem("arquivo") as HTMLInputElement | null)?.files?.[0]
+    if (!arquivo || !titulo.trim()) return
+    setEnviando(true)
+    setMensagem("")
+    try {
+      await anexarMaterialCatalogo(titulo.trim(), arquivo)
+      setMensagem("Material anexado. Já aparece para a equipe no web e no app.")
+      setTitulo("")
+      onAnexado()
+    } catch (falha) {
+      setMensagem(falha instanceof Error ? falha.message : "Não foi possível anexar.")
+    } finally {
+      setEnviando(false)
+    }
+  }
+  return (
+    <details className="mt-3 rounded-2xl border border-[#163356] bg-[#050f22] p-3">
+      <summary className="cursor-pointer text-xs font-semibold text-slate-300">Anexar PDF interno (Master)</summary>
+      <form onSubmit={enviar} className="mt-3 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+        <input value={titulo} onChange={(e) => setTitulo(e.target.value)} placeholder="Título do material" aria-label="Título do material" maxLength={120} className="min-h-10 rounded-xl border border-[#24466f] bg-[#020817] px-3 text-sm text-white"/>
+        <input name="arquivo" type="file" accept="application/pdf" aria-label="Arquivo PDF" className="text-xs text-slate-300"/>
+        <button type="submit" disabled={enviando} className="min-h-10 rounded-xl bg-cyan-500 px-4 text-sm font-bold text-slate-950 disabled:opacity-60">{enviando ? "Enviando..." : "Anexar"}</button>
+      </form>
+      {mensagem && <p role="status" className="mt-2 text-xs text-cyan-100">{mensagem}</p>}
+    </details>
+  )
+}
+
 export default function CatalogoVitrineView({ compacto = false }: { compacto?: boolean }) {
   const { formatCurrency } = useOperationalI18n()
+  const { usuario } = useAuth()
+  const master = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
+  const [versao, setVersao] = useState(0)
   const [vitrine, setVitrine] = useState<VitrineCatalogo | null>(null)
   const [erro, setErro] = useState("")
   const [linhaAtiva, setLinhaAtiva] = useState("TODAS")
@@ -82,7 +121,7 @@ export default function CatalogoVitrineView({ compacto = false }: { compacto?: b
       .then((dados) => { if (ativo) setVitrine(dados) })
       .catch((falha: unknown) => { if (ativo) setErro(falha instanceof Error ? falha.message : "Não foi possível carregar o catálogo.") })
     return () => { ativo = false }
-  }, [])
+  }, [versao])
 
   useEffect(() => {
     if (!copiado) return
@@ -111,13 +150,16 @@ export default function CatalogoVitrineView({ compacto = false }: { compacto?: b
 
   return (
     <div className="space-y-5">
-      {(vitrine.linktree_url || vitrine.materiais_gerais.length > 0) && (
+      {vitrine.tabela_aplicacao && <TabelaAplicacaoView tabela={vitrine.tabela_aplicacao} onCopiado={setCopiado} documentoHref={compacto ? "/crm-app/catalogo/tabela-aplicacao" : "/catalogo/tabela-aplicacao"}/>}
+
+      {(vitrine.linktree_url || vitrine.materiais_gerais.length > 0 || (vitrine.materiais_internos || []).length > 0 || master) && (
         <section className="rounded-3xl border border-cyan-900/70 bg-[#06182f] p-5">
           <p className="text-xs font-semibold uppercase tracking-[.2em] text-cyan-400">Materiais de divulgação</p>
           <div className="mt-3 flex flex-wrap gap-2">
             {vitrine.linktree_url && <a href={vitrine.linktree_url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-10 items-center gap-2 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-bold text-slate-950">Catálogo completo<ExternalLink size={14}/></a>}
           </div>
-          <LinksMateriais materiais={vitrine.materiais_gerais}/>
+          <LinksMateriais materiais={[...(vitrine.materiais_internos || []), ...vitrine.materiais_gerais]}/>
+          {master && !compacto && <AnexarMaterial onAnexado={() => setVersao((v) => v + 1)}/>}
         </section>
       )}
 
