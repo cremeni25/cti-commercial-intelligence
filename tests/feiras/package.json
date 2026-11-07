@@ -9,7 +9,8 @@
     "test:ui": "node ui-browser.mjs",
     "test:session": "node session-browser.mjs",
     "test:offline": "node offline-browser.mjs",
-    "test:production-schema": "node production-schema.mjs"
+    "test:production-schema": "node production-schema.mjs",
+    "test:central": "node central-browser.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.3.15",

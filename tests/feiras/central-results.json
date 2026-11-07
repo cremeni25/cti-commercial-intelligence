@@ -1,0 +1,11 @@
+{
+  "engine": "Chromium real e Next build; APIs e identidades sintéticas, sem produção",
+  "checks": [
+    "tela inicial do app mostra manchete e 3 prioridades sem link para destino não autorizado",
+    "data de referência exibida como data civil brasileira (sem recuo de fuso)",
+    "filtro por categoria reduz a lista às oportunidades",
+    "prioridades sem rolagem horizontal em 390px",
+    "resposta fora do contrato ou 404 esconde o card sem erro e preserva a tela inicial",
+    "Central no portal: manchete, KPIs, prioridades, módulos e menu"
+  ]
+}

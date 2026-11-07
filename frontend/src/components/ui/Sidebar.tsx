@@ -20,6 +20,7 @@ type MenuGroup = { tituloKey?: MessageKey; titulo?: LocalizedLabel; itens: MenuI
 
 const menuGroups: MenuGroup[] = [
   { titulo: { "pt-BR": "Leitura Estratégica", en: "Strategic Intelligence", es: "Lectura Estratégica" }, itens: [
+    { label: { "pt-BR": "Central de Inteligência", en: "Intelligence Center", es: "Central de Inteligencia" }, href: "/central", icon: "✦", type: "emoji" },
     { label: { "pt-BR": "Feiras e Eventos", en: "Fairs and Events", es: "Ferias y Eventos" }, href: "/crm-app/feiras", icon: "🎪", type: "emoji" },
     { label: { "pt-BR": "Mapa Estratégico", en: "Strategic Map", es: "Mapa Estratégico" }, href: "/mapa-estrategico", aliases: ["/inteligencia-comercial"], icon: "◎", type: "emoji" },
     { labelKey: "nav.salesAi", href: "/ia-comercial", icon: "🧠", type: "emoji" },
@@ -68,6 +69,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/upload") return gestao
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
+  if (href === "/central") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
   if (href === "/propostas") return gestao || tem(permissoes, "propostas_visualizar")

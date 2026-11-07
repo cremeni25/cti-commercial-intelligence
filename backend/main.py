@@ -37,6 +37,7 @@ from routers.crm_scope_vendas_router import router as crm_scope_vendas_router
 from routers.cti_api_router import router as cti_api_router
 from routers.drilldown_router import router as drilldown_router
 from routers.feiras_eventos_router import router as feiras_eventos_router
+from routers.inteligencia_comercial_router import router as inteligencia_comercial_router
 from routers.engine_router import router as engine_router
 from routers.modulos_router import router as modulos_router
 from routers.negociacoes_router import router as negociacoes_router
@@ -84,6 +85,7 @@ app.add_middleware(
 app.include_router(crm_atividades_governanca_router)
 app.include_router(crm_router)
 app.include_router(crm_scope_router)
+app.include_router(inteligencia_comercial_router)
 app.include_router(crm_scope_estabelecimento_router)
 app.include_router(crm_scope_atividades_router)
 app.include_router(crm_scope_carrier_router)

@@ -34,6 +34,7 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
 
   if (inicia(pathname, "/dashboard")) return gestao || tem(permissoes, "dashboard_executivo")
   if (inicia(pathname, "/empresas") || inicia(pathname, "/implementadoras")) return gestao || tem(permissoes, "clientes_visualizar")
+  if (inicia(pathname, "/central") || inicia(pathname, "/crm-app/prioridades")) return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (inicia(pathname, "/oportunidades") || inicia(pathname, "/pipeline") || inicia(pathname, "/historico-comercial") || inicia(pathname, "/ia-comercial") || inicia(pathname, "/atividades") || inicia(pathname, "/forecast") || inicia(pathname, "/mapa-estrategico") || inicia(pathname, "/detalhamento") || inicia(pathname, "/equipamentos")) return gestao || tem(permissoes, "oportunidades_visualizar")
   if (inicia(pathname, "/propostas")) return gestao || tem(permissoes, "propostas_visualizar")
   if (inicia(pathname, "/pedidos")) return gestao || tem(permissoes, "pedidos_visualizar")

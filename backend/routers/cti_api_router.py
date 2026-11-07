@@ -39,6 +39,7 @@ from routers.backoffice_fontes_semantica_router import router as backoffice_font
 from routers.backoffice_fontes_reconciliacao_router import router as backoffice_fontes_reconciliacao_router
 from routers.backoffice_fontes_promocao_router import router as backoffice_fontes_promocao_router
 from services import ia_comercial_fontes_dinamicas as _ia_fontes_dinamicas  # noqa: F401
+from services import ia_comercial_fonte_prioridades as _ia_fonte_prioridades  # noqa: F401
 from services import ia_comercial_rbac_runtime as _ia_rbac_runtime  # noqa: F401
 
 router = APIRouter()
