@@ -203,3 +203,32 @@ def test_linktree_oficial_mapeado_para_o_catalogo_seedado():
     assert {"Catálogo Citimax", "Catálogo Xarios"} <= set(linhas["DIRECT DRIVE"])
     assert resultado["linktree_url"] == "https://linktr.ee/carriertransicoldbrasil"
     assert "Lynx Fleet (telemetria)" in [m["titulo"] for m in resultado["materiais_gerais"]]
+
+
+@pytest.mark.parametrize("status_final", ["REALIZADA", "FINALIZADA", "NÃO REALIZADA", "NAO_REALIZADA", "Concluída"])
+def test_atividade_com_status_terminal_nao_vira_followup_nem_proximo_passo(status_final):
+    atividade = {"id": "a1", "status": status_final, "data": "2026-11-20", "oportunidade_id": "o1", "usuario_id": "vend-1"}
+    vencida = {**atividade, "id": "a2", "data": "2026-10-20", "oportunidade_id": None}
+    briefing = montar_briefing([_op("o1", data_fechamento_prevista="2026-12-20")], [atividade, vencida], hoje=HOJE)
+    assert "FOLLOWUP_ATRASADO" not in briefing["sinais_por_codigo"]
+    assert briefing["sinais_por_codigo"].get("SEM_PROXIMO_PASSO") == 1  # futura, mas já encerrada
+
+
+def test_compromisso_que_apenas_venceu_nao_conta_como_contato():
+    proposta = _op("o1", etapa="PROPOSTA", status_proposta="ENVIADA", data_fechamento_prevista="2026-12-20",
+                   created_at="2026-09-01T00:00:00+00:00", updated_at="2026-09-10T00:00:00+00:00")
+    pendente = {"id": "a1", "status": "PENDENTE", "data": "2026-11-06", "oportunidade_id": "o1", "created_at": "2026-09-10T00:00:00+00:00"}
+    briefing = montar_briefing([proposta], [pendente], hoje=HOJE)
+    assert "PROPOSTA_SEM_RETORNO" in briefing["sinais_por_codigo"]
+    realizada = {**pendente, "status": "REALIZADA"}
+    assert "PROPOSTA_SEM_RETORNO" not in montar_briefing([proposta], [realizada], hoje=HOJE)["sinais_por_codigo"]
+
+
+def test_movimento_da_proposta_ou_do_pedido_conta_como_atividade_do_negocio():
+    parada = _op("o1", data_fechamento_prevista="2026-12-20", created_at="2026-08-01T00:00:00+00:00", updated_at="2026-08-01T00:00:00+00:00")
+    assert "OPORTUNIDADE_PARADA" in montar_briefing([parada], [], hoje=HOJE)["sinais_por_codigo"]
+    com_proposta = {**parada, "proposta_atualizada_em": "2026-11-06T15:00:00+00:00"}
+    assert "OPORTUNIDADE_PARADA" not in montar_briefing([com_proposta], [], hoje=HOJE)["sinais_por_codigo"]
+    pedido = _op("o2", etapa="PEDIDO", pedido_id="p2", created_at="2026-08-01T00:00:00+00:00", updated_at="2026-08-01T00:00:00+00:00")
+    assert "PEDIDO_SEM_MOVIMENTO" in montar_briefing([pedido], [], hoje=HOJE)["sinais_por_codigo"]
+    assert "PEDIDO_SEM_MOVIMENTO" not in montar_briefing([{**pedido, "pedido_atualizado_em": "2026-11-05"}], [], hoje=HOJE)["sinais_por_codigo"]

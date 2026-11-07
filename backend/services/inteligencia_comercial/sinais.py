@@ -129,7 +129,10 @@ def remover_provedor(codigo: str) -> None:
 
 # --- utilidades compartilhadas -------------------------------------------------
 
-STATUS_ATIVIDADE_FINAL = {"CONCLUIDA", "CONCLUÍDA", "CONCLUIDO", "CONCLUÍDO", "CANCELADA", "CANCELADO", "ARQUIVADA"}
+# Mesmos estados terminais usados pela governança de atividades e pela tela de
+# visitas (REALIZADA / NÃO REALIZADA): nada disso é pendência.
+STATUS_ATIVIDADE_REALIZADA = {"CONCLUIDA", "CONCLUÍDA", "CONCLUIDO", "CONCLUÍDO", "REALIZADA", "REALIZADO", "FINALIZADA", "FINALIZADO"}
+STATUS_ATIVIDADE_FINAL = STATUS_ATIVIDADE_REALIZADA | {"CANCELADA", "CANCELADO", "ARQUIVADA", "NAO_REALIZADA", "NÃO_REALIZADA"}
 
 
 def texto(valor: Any) -> str:
@@ -158,6 +161,10 @@ def data(valor: Any) -> date | None:
             return date.fromisoformat(bruto[:10])
         except ValueError:
             return None
+
+
+def atividade_realizada(atividade: dict[str, Any]) -> bool:
+    return status(atividade.get("status")) in STATUS_ATIVIDADE_REALIZADA
 
 
 def atividade_pendente(atividade: dict[str, Any]) -> bool:

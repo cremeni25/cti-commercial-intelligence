@@ -13,6 +13,7 @@ from .sinais import (
     ContextoInteligencia,
     Sinal,
     atividade_pendente,
+    atividade_realizada,
     data,
     numero,
     registrar_provedor,
@@ -60,13 +61,18 @@ def _nome(oportunidade: dict) -> str:
 
 
 def ultimo_contato(oportunidade: dict, contexto: ContextoInteligencia):
-    """Data mais recente de qualquer movimento registrado na oportunidade."""
-    candidatos = [data(oportunidade.get("updated_at")), data(oportunidade.get("created_at"))]
+    """Data mais recente de qualquer movimento registrado na oportunidade.
+
+    Conta: atualização da oportunidade, da proposta vigente e do pedido vigente,
+    e registro/conclusão de atividades. A data AGENDADA de uma atividade só conta
+    se ela foi realizada — um compromisso que apenas venceu não é contato.
+    """
+    candidatos = [data(oportunidade.get(campo)) for campo in ("updated_at", "created_at", "proposta_atualizada_em", "pedido_atualizado_em")]
     for atividade in contexto.atividades_da_oportunidade(texto(oportunidade.get("oportunidade_id"))):
         for campo in ("concluida_em", "updated_at", "created_at"):
             candidatos.append(data(atividade.get(campo)))
         data_atividade = data(atividade.get("data"))
-        if data_atividade and data_atividade <= contexto.hoje:
+        if data_atividade and data_atividade <= contexto.hoje and atividade_realizada(atividade):
             candidatos.append(data_atividade)
     validos = [item for item in candidatos if item and item <= contexto.hoje]
     return max(validos) if validos else None
