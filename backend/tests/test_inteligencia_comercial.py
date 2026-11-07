@@ -168,6 +168,7 @@ def cliente_http(monkeypatch):
     monkeypatch.setattr(application_access, "usuario_atual", lambda *_: estado["perfil"])
     monkeypatch.setattr(servico, "_carregar_oportunidades", lambda: [_op("o1", responsavel_id="vend-1"), _op("o2", responsavel_id="vend-2", data_fechamento_prevista="2026-10-01")])
     monkeypatch.setattr(servico, "_carregar_atividades", lambda: [_at("a1", oportunidade_id="o1")])
+    monkeypatch.setattr(servico, "_carregar_feedback", lambda hoje: [])
     anteriores = dict(app.dependency_overrides)
     app.dependency_overrides[usuario_atual] = lambda: estado["perfil"]
     try:
@@ -202,8 +203,8 @@ def test_http_master_ve_equipe_e_filtra_responsavel(cliente_http):
 def test_http_modulos_respeitam_permissoes(cliente_http):
     client, estado = cliente_http
     vendedor = {m["codigo"] for m in client.get("/crm-seguro/plataforma/modulos").json()["modulos"]}
-    assert {"central", "oportunidades", "treinamentos"} <= vendedor
-    assert "catalogo-produtos" not in vendedor and "pedidos" not in vendedor
+    assert {"central", "oportunidades", "treinamentos", "catalogo-produtos"} <= vendedor
+    assert "pedidos" not in vendedor
     estado["perfil"] = SimpleNamespace(id="master", tipo_usuario="ADMIN_MASTER", permissoes={})
     corpo = client.get("/crm-seguro/plataforma/modulos").json()
     assert "catalogo-produtos" in {m["codigo"] for m in corpo["modulos"]}

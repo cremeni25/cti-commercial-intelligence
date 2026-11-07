@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
+  BookOpen,
   BriefcaseBusiness,
   CalendarDays,
   ChevronRight,
@@ -191,6 +192,7 @@ export default function CrmAppPage() {
       { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
       { href: "/crm-app/pedidos", label: t.orders, valor: resumo.pedidos, icon: PackageCheck },
       { href: "/crm-app/vendas", label: t.sales, valor: resumo.vendas, icon: CircleDollarSign },
+      { href: "/crm-app/catalogo", label: "Catálogo", valor: "TR · DT · DD", icon: BookOpen },
       { href: "/ia-comercial", label: t.ai, valor: "IA", icon: Bot },
     ]
     if (adminMaster) base.push({ href: "/crm-app/controle-financeiro", label: t.financial, valor: "MASTER", icon: PiggyBank })

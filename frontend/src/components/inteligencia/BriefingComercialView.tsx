@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock3, Flame, Gauge, ListChecks, ShieldCheck, Sparkles } from "lucide-react"
 import { useAuth } from "@/core/auth/AuthContext"
 import { useOperationalI18n } from "@/core/i18n/operational"
 import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
+import AcoesPrioridade from "@/components/inteligencia/AcoesPrioridade"
 import type { BriefingComercial, CategoriaSinal, IndicadorBriefing, PrioridadeComercial } from "@/services/inteligencia-comercial"
 
 export type CanalBriefing = "web" | "app"
@@ -49,18 +50,33 @@ export function LinkSeguro({ href, className, children, ...resto }: Omit<React.C
   return <Link href={href} className={className} {...resto}>{children}</Link>
 }
 
-export default function BriefingComercialView({ briefing, canal }: { briefing: BriefingComercial; canal: CanalBriefing }) {
+export default function BriefingComercialView({ briefing, canal, onAtualizar }: { briefing: BriefingComercial; canal: CanalBriefing; onAtualizar?: () => void }) {
   const { formatCurrency, formatNumber } = useOperationalI18n()
   const [filtro, setFiltro] = useState<Filtro>("todas")
+  // Itens resolvidos somem na hora; a leitura completa é refeita em seguida.
+  const [resolvidos, setResolvidos] = useState<Set<string>>(() => new Set())
+  const [aviso, setAviso] = useState("")
+  const chaveItem = (item: PrioridadeComercial) => `${item.entidade_tipo}:${item.entidade_id}`
+  const ativos = useMemo(() => briefing.prioridades.filter((item) => !resolvidos.has(chaveItem(item))), [briefing.prioridades, resolvidos])
+  useEffect(() => {
+    if (!aviso) return
+    const temporizador = window.setTimeout(() => setAviso(""), 5000)
+    return () => window.clearTimeout(temporizador)
+  }, [aviso])
+  function resolver(item: PrioridadeComercial, mensagem: string) {
+    setResolvidos((atual) => new Set(atual).add(chaveItem(item)))
+    setAviso(mensagem)
+    if (onAtualizar) window.setTimeout(onAtualizar, 600)
+  }
 
   const contagem = useMemo(() => {
-    const base: Record<Filtro, number> = { todas: briefing.prioridades.length, acao: 0, risco: 0, oportunidade: 0, qualidade: 0 }
-    briefing.prioridades.forEach((item) => { base[item.categoria] += 1 })
+    const base: Record<Filtro, number> = { todas: ativos.length, acao: 0, risco: 0, oportunidade: 0, qualidade: 0 }
+    ativos.forEach((item) => { base[item.categoria] += 1 })
     return base
-  }, [briefing.prioridades])
+  }, [ativos])
 
-  const prioridades = filtro === "todas" ? briefing.prioridades : briefing.prioridades.filter((item) => item.categoria === filtro)
-  const formatar = (indicador: IndicadorBriefing) => indicador.formato === "moeda" ? formatCurrency(indicador.valor) : indicador.formato === "percentual" ? `${formatNumber(indicador.valor)}%` : formatNumber(indicador.valor)
+  const prioridades = filtro === "todas" ? ativos : ativos.filter((item) => item.categoria === filtro)
+  const formatar = (indicador: IndicadorBriefing) => indicador.formato === "moeda" ? (canal === "app" ? formatCurrency(indicador.valor, { currency: "BRL", notation: "compact", maximumFractionDigits: 2 }) : formatCurrency(indicador.valor)) : indicador.formato === "percentual" ? `${formatNumber(indicador.valor)}%` : formatNumber(indicador.valor)
   const maiorEtapa = Math.max(1, ...briefing.pipeline.etapas.map((etapa) => etapa.valor))
   const compacto = canal === "app"
 
@@ -76,7 +92,7 @@ export default function BriefingComercialView({ briefing, canal }: { briefing: B
         {briefing.indicadores.map((indicador) => (
           <LinkSeguro key={indicador.codigo} href={rotaDoCanal(indicador, canal)} className="rounded-2xl border border-[#163356] bg-[#081a32] p-4 transition hover:border-cyan-700">
             <span className="block text-xs uppercase tracking-wider text-slate-400">{indicador.rotulo}</span>
-            <strong className={`mt-2 block text-2xl font-bold ${ESTILO_TOM[indicador.tom]}`}>{formatar(indicador)}</strong>
+            <strong className={`mt-2 block font-bold [overflow-wrap:anywhere] ${canal === "app" ? "text-xl" : "text-2xl"} ${ESTILO_TOM[indicador.tom]}`}>{formatar(indicador)}</strong>
             <span className="mt-1 block text-xs leading-5 text-slate-500">{indicador.detalhe}</span>
           </LinkSeguro>
         ))}
@@ -94,11 +110,12 @@ export default function BriefingComercialView({ briefing, canal }: { briefing: B
               ))}
             </div>
           </div>
+          {aviso && <p role="status" className="mt-3 rounded-xl border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">{aviso}</p>}
           {prioridades.length === 0 ? (
             <div className="mt-4 flex items-center gap-3 rounded-2xl border border-dashed border-[#24466f] p-6 text-sm text-slate-400"><CheckCircle2 className="text-emerald-400"/> Nada pendente nesta categoria.</div>
           ) : (
-            <ol className="mt-4 space-y-3">
-              {prioridades.map((item, indice) => <CartaoPrioridade key={`${item.entidade_tipo}-${item.entidade_id}-${item.codigo}`} item={item} posicao={indice + 1} canal={canal} formatCurrency={formatCurrency}/>)}
+            <ol className="mt-4 space-y-3" aria-label="Lista de prioridades">
+              {prioridades.map((item, indice) => <CartaoPrioridade key={`${item.entidade_tipo}-${item.entidade_id}-${item.codigo}`} item={item} posicao={indice + 1} canal={canal} formatCurrency={formatCurrency} onResolvido={(mensagem) => resolver(item, mensagem)}/>)}
             </ol>
           )}
         </section>
@@ -160,7 +177,7 @@ export default function BriefingComercialView({ briefing, canal }: { briefing: B
   )
 }
 
-function CartaoPrioridade({ item, posicao, canal, formatCurrency }: { item: PrioridadeComercial; posicao: number; canal: CanalBriefing; formatCurrency: (valor: number) => string }) {
+function CartaoPrioridade({ item, posicao, canal, formatCurrency, onResolvido }: { item: PrioridadeComercial; posicao: number; canal: CanalBriefing; formatCurrency: (valor: number) => string; onResolvido: (mensagem: string) => void }) {
   const Icone = item.categoria === "oportunidade" ? Flame : item.categoria === "risco" ? AlertTriangle : Clock3
   return (
     <li className="rounded-2xl border border-[#163356] bg-[#081a32] p-4">
@@ -176,6 +193,7 @@ function CartaoPrioridade({ item, posicao, canal, formatCurrency }: { item: Prio
           <p className="mt-1 text-sm leading-6 text-slate-400">{item.explicacao}</p>
           <p className="mt-2 rounded-xl bg-[#0b1d38] px-3 py-2 text-sm leading-6 text-cyan-100"><strong className="text-cyan-300">Próximo passo:</strong> {item.acao_recomendada}</p>
           {item.sinais_relacionados.length > 0 && <p className="mt-2 text-xs text-slate-500">+{item.sinais_relacionados.length} outro{item.sinais_relacionados.length > 1 ? "s" : ""} sinal{item.sinais_relacionados.length > 1 ? "is" : ""} neste negócio</p>}
+          <AcoesPrioridade item={item} onResolvido={onResolvido}/>
         </div>
         <LinkSeguro href={rotaDoCanal(item, canal)} aria-label={`Abrir ${item.cliente_nome || item.titulo}`} className="grid size-10 shrink-0 place-items-center rounded-xl border border-cyan-800 text-cyan-300 hover:bg-cyan-950/40"><ArrowRight size={18}/></LinkSeguro>
       </div>

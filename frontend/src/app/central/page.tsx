@@ -60,7 +60,7 @@ export default function CentralInteligenciaPage() {
           </header>
 
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
-          {briefing ? <BriefingComercialView briefing={briefing} canal="web"/> : carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : null}
+          {briefing ? <BriefingComercialView briefing={briefing} canal="web" onAtualizar={atualizar}/> : carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : null}
 
           {outrosModulos.length > 0 && (
             <section className="rounded-3xl border border-[#13203f] bg-[#061126] p-5">

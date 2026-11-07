@@ -20,6 +20,30 @@ O agente **somente lê**: não altera registros e não depende de modelo de ling
 - **App de campo:** card "Prioridades do agente" na tela inicial, abaixo das ações principais, e leitura completa em `/crm-app/prioridades`. Se a leitura falhar, o card simplesmente não aparece e o restante do app continua igual.
 - **API:** `GET /crm-seguro/inteligencia/briefing?responsavel_id=&limite=` e `GET /crm-seguro/plataforma/modulos`.
 
+## Resolver direto da prioridade
+
+Cada prioridade traz ações que resolvem o item sem sair da lista:
+
+| Prioridade | Ações | Por onde passa |
+|---|---|---|
+| Negócio (parado, vencido, sem retorno, sem próximo passo, pronto para fechar) | **Agendar próximo passo**: tipo, data e assunto | `POST /crm-seguro/atividades`, o mesmo fluxo seguro do app (escopo, responsável e histórico) |
+| Atividade (follow-up atrasado, compromisso de hoje) | **Concluir** ou **Reagendar** | `PUT /crm-seguro/atividades/{id}/concluir` e `PUT /crm-seguro/atividades/{id}` |
+| Qualquer alerta | **Não se aplica** (esconde por 30 dias) ou **Adiar até** uma data (máximo de 60 dias), sempre com motivo | `POST /crm-seguro/inteligencia/feedback` |
+
+"Não se aplica" e "adiar" **não apagam nada**: só escondem aquele alerta daquele negócio até o prazo. Depois disso, o alerta volta se a situação continuar. Cada ajuste fica registrado com autor e motivo. A gestão vê em `GET /crm-seguro/inteligencia/aprendizado` quais alertas a equipe mais dispensa e por quê. Exemplo: se "negócio parado" for dispensado muitas vezes com "alerta cedo demais", é sinal de aumentar o limiar de 21 dias.
+
+**Ativação no banco:** o ajuste usa a tabela `cti_inteligencia_feedback` (migração `supabase/migrations/20261107120000_cti_inteligencia_feedback.sql`). Até ela ser aplicada, agendar, concluir e reagendar funcionam normalmente; o "não se aplica" responde com um aviso claro e nada quebra.
+
+## Catálogo de produtos
+
+- Portal em `/catalogo` e app em `/crm-app/catalogo`: busca por modelo, linha ou compressor; filtro TR/DT/DD; materiais por modelo e por linha; botão **Copiar para WhatsApp**, que gera o resumo do modelo com o link do material.
+- O preço de tabela vigente aparece só para a gestão e para quem visualiza ou emite propostas.
+- Os materiais vêm do Linktree oficial (`@carriertransicoldbrasil`) e ficam em `backend/data/catalogo_materiais.json`. Para incluir ou alterar um material, edite o arquivo:
+  - `linhas` (`TRAILER`, `DIESEL TRUCK`, `DIRECT DRIVE` ou `TR`/`DT`/`DD`) liga o material à linha;
+  - `termos` (trecho do nome do modelo) ou `equipamentos` (código do catálogo) ligam o material a um modelo.
+
+  Um material de modelo que não encontra o modelo no catálogo aparece na linha. Material sem linha nem modelo aparece em "Materiais de divulgação". Somente links `https://` são aceitos, e o teste `test_arquivo_de_materiais_versionado_e_valido` impede um material inválido.
+
 ## Regras de escopo
 
 Seguem a regra oficial do CRM seguro: o Master e o Diretor com acesso total veem a equipe e podem filtrar por responsável. Todos os demais perfis veem apenas a própria carteira; se tentarem filtrar outro responsável, recebem 403. Na IA conversacional vale a regra já aplicada pela IA: somente o ADMIN_MASTER tem visão consolidada. Links de prioridades que o perfil não pode abrir são exibidos como texto, sem link.

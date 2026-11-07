@@ -94,7 +94,7 @@ def provedor_agenda(contexto: ContextoInteligencia) -> list[Sinal]:
                 titulo=f"Hoje: {assunto} — {cliente}",
                 explicacao="Compromisso comercial agendado para hoje.",
                 acao_recomendada="Realize o contato e registre o resultado logo em seguida para manter o histórico vivo.",
-                entidade_tipo="atividade", entidade_id=atividade_id, cliente_nome=cliente, responsavel_id=responsavel,
+                entidade_tipo="atividade", entidade_id=atividade_id, cliente_nome=cliente, cliente_id=texto(atividade.get("cliente_id")), responsavel_id=responsavel,
                 valor=valor, dias=0, rota="/atividades", rota_app="/crm-app/atividades",
                 evidencias=(f"Atividade {atividade_id} com data {quando.isoformat()}",),
             ))
@@ -106,7 +106,7 @@ def provedor_agenda(contexto: ContextoInteligencia) -> list[Sinal]:
             titulo=f"Follow-up atrasado há {atraso} dia{'s' if atraso != 1 else ''}: {cliente}",
             explicacao=f"“{assunto}” estava previsto para {quando.strftime('%d/%m/%Y')} e continua pendente.",
             acao_recomendada="Faça o contato hoje; se não fizer mais sentido, conclua ou reagende a atividade com o motivo.",
-            entidade_tipo="atividade", entidade_id=atividade_id, cliente_nome=cliente, responsavel_id=responsavel,
+            entidade_tipo="atividade", entidade_id=atividade_id, cliente_nome=cliente, cliente_id=texto(atividade.get("cliente_id")), responsavel_id=responsavel,
             valor=valor, dias=atraso, rota="/atividades", rota_app="/crm-app/atividades",
             evidencias=(f"Atividade {atividade_id} pendente desde {quando.isoformat()}",),
         ))
@@ -130,7 +130,7 @@ def provedor_pipeline(contexto: ContextoInteligencia) -> list[Sinal]:
         valor = numero(oportunidade.get("valor"))
         responsavel = texto(oportunidade.get("responsavel_id"))
         titulo_negocio = texto(oportunidade.get("titulo")) or "Oportunidade comercial"
-        base = dict(entidade_tipo="oportunidade", entidade_id=oid, cliente_nome=cliente, responsavel_id=responsavel, valor=valor, rota=rota, rota_app=rota_app)
+        base = dict(entidade_tipo="oportunidade", entidade_id=oid, cliente_nome=cliente, cliente_id=texto(oportunidade.get("cliente_id")), responsavel_id=responsavel, valor=valor, rota=rota, rota_app=rota_app)
 
         previsto = data(oportunidade.get("data_fechamento_prevista"))
         if previsto and previsto < contexto.hoje:
@@ -212,7 +212,7 @@ def provedor_pedidos(contexto: ContextoInteligencia) -> list[Sinal]:
             explicacao=f"Pedido {texto(oportunidade.get('pedido_numero')) or pedido_id or ''} está na etapa {etapa.title()} sem atualização registrada.".replace("  ", " "),
             acao_recomendada="Confira dossiê, aprovação Carrier e prazo de entrega; atualize o cliente sobre o andamento.",
             entidade_tipo="pedido" if pedido_id else "oportunidade", entidade_id=pedido_id or oid,
-            cliente_nome=cliente, responsavel_id=texto(oportunidade.get("responsavel_id")), valor=numero(oportunidade.get("valor")),
+            cliente_nome=cliente, cliente_id=texto(oportunidade.get("cliente_id")), responsavel_id=texto(oportunidade.get("responsavel_id")), valor=numero(oportunidade.get("valor")),
             dias=parado,
             rota=f"/pedidos/{pedido_id}" if pedido_id else f"/oportunidades/{oid}",
             rota_app=f"/crm-app/pedidos/{pedido_id}" if pedido_id else f"/crm-app/oportunidades/{oid}",

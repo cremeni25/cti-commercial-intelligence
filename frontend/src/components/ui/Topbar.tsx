@@ -8,6 +8,7 @@ import { OPERATIONAL_CONTEXTS, useOperationalContext, type OperationalContextVal
 type Pagina = { tituloKey?: MessageKey; titulo?: string; descricao: { "pt-BR": string; en: string; es: string } };
 
 const paginas: Record<string, Pagina> = {
+  "/catalogo": { titulo: "Catálogo de Produtos", descricao: { "pt-BR": "Modelos, materiais e preço de tabela por linha", en: "Models, materials and list price by line", es: "Modelos, materiales y precio de lista por línea" } },
   "/central": { titulo: "Central de Inteligência", descricao: { "pt-BR": "Prioridades, riscos e saúde da carteira organizados pelo agente", en: "Priorities, risks and portfolio health organized by the agent", es: "Prioridades, riesgos y salud de la cartera organizados por el agente" } },
   "/dashboard": { tituloKey: "nav.dashboard", descricao: { "pt-BR": "Plataforma corporativa de inteligência comercial", en: "Corporate commercial intelligence platform", es: "Plataforma corporativa de inteligencia comercial" } },
   "/inteligencia": { titulo: "Inteligência de Mercado", descricao: { "pt-BR": "Leitura executiva do mercado realizado ANFIR", en: "Executive reading of realized ANFIR market", es: "Lectura ejecutiva del mercado realizado ANFIR" } },

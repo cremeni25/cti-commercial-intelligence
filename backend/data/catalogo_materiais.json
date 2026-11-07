@@ -1,0 +1,24 @@
+{
+  "linktree_url": "https://linktr.ee/carriertransicoldbrasil",
+  "fonte": "Linktree oficial @carriertransicoldbrasil",
+  "atualizado_em": "2026-11-07",
+  "materiais": [
+    {"titulo": "Catálogo X4 7500", "url": "https://drive.google.com/file/d/1DnOl1VXgw34MmfTTmTU6M5ZiC7GJ9DX2/view?usp=sharing", "tipo": "catalogo", "linhas": ["TRAILER"], "termos": ["x4 7500"]},
+    {"titulo": "Catálogo X4 7700", "url": "https://drive.google.com/file/d/1kfbLc54djT2enVhc3PKz8G0yD9wdQ7zQ/view?usp=sharing", "tipo": "catalogo", "linhas": ["TRAILER"], "termos": ["x4 7700"]},
+    {"titulo": "Catálogo Vector 8500", "url": "https://drive.google.com/file/d/1uxc94DGjuRq4RnbTPBZ7t2h5D54I42Dm/view?usp=sharing", "tipo": "catalogo", "linhas": ["TRAILER"], "termos": ["vector 8500"]},
+    {"titulo": "Catálogo Vector 8700", "url": "https://drive.google.com/file/d/1RR67BkMlDGQhdsUukIuFvJNTbe6tOEMt/view?usp=sharing", "tipo": "catalogo", "linhas": ["TRAILER"], "termos": ["vector 8700"]},
+    {"titulo": "Catálogo Vector HE 19", "url": "https://drive.google.com/file/d/1ySYyiSWS-T1eH8X1zVpXmMCbUzhTxL32/view?usp=sharing", "tipo": "catalogo", "linhas": ["TRAILER"], "termos": ["vector he 19", "vector he19"]},
+    {"titulo": "Catálogo Supra", "url": "https://drive.google.com/file/d/1QfuepfIiOfLUiFd4heKP_jSRjCvh3bOO/view?usp=sharing", "tipo": "catalogo", "linhas": ["DIESEL TRUCK"]},
+    {"titulo": "Supra Series", "url": "https://drive.google.com/file/d/1YPCUiCIMX7jFzaiFVZjWJjm7QN5blDPZ/view?usp=sharing", "tipo": "catalogo", "linhas": ["DIESEL TRUCK"]},
+    {"titulo": "Catálogo Citimax", "url": "https://drive.google.com/file/d/17JKdHvAjdQ8rfV3bN5i1VU51GBjGV9nN/view", "tipo": "catalogo", "linhas": ["DIRECT DRIVE"]},
+    {"titulo": "Catálogo Citimax D", "url": "https://drive.google.com/file/d/1frzI5EKIAvY6htaEmPHRZRmYpp4qO0UY/view?usp=sharing", "tipo": "catalogo", "linhas": ["DIRECT DRIVE"], "termos": ["citimax d"]},
+    {"titulo": "Catálogo Xarios", "url": "https://drive.google.com/file/d/1Y2DQdFCoSiikTYKZD1GMYhvkRdyhAEvJ/view?usp=sharing", "tipo": "catalogo", "linhas": ["DIRECT DRIVE"], "termos": ["xarios"]},
+    {"titulo": "Eco Drive", "url": "https://drive.google.com/file/d/1oUzyg5Fv06OSczu4RL1b646ahRCzEJhn/view?usp=sharing", "tipo": "catalogo"},
+    {"titulo": "Genset", "url": "https://drive.google.com/file/d/1XcbqWcBut-I0RUTe9yvvSyjSd7tbBvwI/view?usp=sharing", "tipo": "catalogo"},
+    {"titulo": "Lynx Fleet (telemetria)", "url": "https://drive.google.com/file/d/1MbATS4siPzEIgiU8pAtZAnivtD9WqI0N/view?usp=sharing", "tipo": "apresentacao"},
+    {"titulo": "BluEdge Garantia Estendida", "url": "https://drive.google.com/file/d/1oRaGvF_tz2X_TeEbKZGvNm546DV7T6WX/view?usp=sharing", "tipo": "apresentacao"},
+    {"titulo": "Site Carrier Transicold Brasil", "url": "https://www.carrier.com/truck-trailer/pt/br/", "tipo": "outro"},
+    {"titulo": "App Locator (rede de assistência) — iPhone", "url": "https://apps.apple.com/us/app/carrier-transicolds-locator/id638907917", "tipo": "outro"},
+    {"titulo": "App Locator (rede de assistência) — Android", "url": "https://play.google.com/store/apps/details?id=com.carriertransicold.locator&hl=pt_BR", "tipo": "outro"}
+  ]
+}

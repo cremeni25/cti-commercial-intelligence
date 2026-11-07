@@ -29,3 +29,12 @@ Nenhum teste usou contas reais ou dados de produção. Após o deploy, conferir 
 ## Ordem de publicação
 
 O frontend tolera um backend anterior: sem o endpoint, o card do app não aparece e a Central mostra um aviso. O ideal é publicar o backend (Render) antes ou junto do frontend (Vercel).
+
+## Segunda entrega do mesmo dia: ação e catálogo
+
+- **Resolver direto da prioridade:** agendar o próximo passo, concluir, reagendar e "não se aplica/adiar" com motivo. A lista é limpa na hora e a leitura é refeita.
+- **Calibração do agente:** ajustes ficam registrados com autor e motivo; leitura de aprendizado para a gestão.
+- **Catálogo de produtos** no portal e no app, com os 17 materiais do Linktree oficial mapeados por modelo e por linha e o resumo pronto para WhatsApp.
+- **App:** indicadores em formato compacto (ex.: "R$ 2,35 mi") para não cortar valores em 390px.
+- **Evidências:** backend com 885 aprovados; navegador com 10 verificações novas e as 7 existentes mantidas.
+- **Pendente no banco:** aplicar `20261107120000_cti_inteligencia_feedback.sql` para ativar "não se aplica/adiar".

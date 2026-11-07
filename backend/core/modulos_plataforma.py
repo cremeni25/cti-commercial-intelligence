@@ -71,7 +71,7 @@ MODULOS: tuple[ModuloPlataforma, ...] = (
     ModuloPlataforma("mapa-estrategico", "Mapa Estratégico", "Mercado por região, linha e concorrente com base ANFIR.", "mercado", "ativo", "/mapa-estrategico", None, VER_OPORTUNIDADES, (), True),
     ModuloPlataforma("feiras", "Feiras e eventos", "Captação de contatos em eventos, inclusive offline.", "mercado", "ativo", "/crm-app/feiras", "/crm-app/feiras", VER_OPORTUNIDADES, (), False),
     ModuloPlataforma("relatorios", "Relatórios", "Relatórios gerenciais e geração modular em PDF.", "inteligencia", "ativo", "/relatorios", "/crm-app/relatorios", ("dashboard_executivo",), (), False),
-    ModuloPlataforma("catalogo-produtos", "Catálogo de produtos", "Linhas, modelos e preços oficiais (TR, DT, DD). Hoje administrado em Configurações e consultado pela IA; próxima etapa: vitrine de consulta para a equipe.", "conhecimento", "beta", "/configuracoes", None, ("configuracoes_administrar",), (), True),
+    ModuloPlataforma("catalogo-produtos", "Catálogo de produtos", "Linhas Trailer, Diesel Truck e Direct Drive com modelos, configuração, materiais de divulgação e preço de tabela para quem emite propostas.", "conhecimento", "ativo", "/catalogo", "/crm-app/catalogo", VER_OPORTUNIDADES + ("propostas_visualizar", "propostas_emitir"), (), True),
     ModuloPlataforma("treinamentos", "Treinamentos comerciais", "Trilhas por produto e etapa de venda, com recomendação do agente a partir das dificuldades observadas no pipeline.", "conhecimento", "planejado", None, None, VER_OPORTUNIDADES, (), False),
 )
 

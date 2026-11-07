@@ -5,6 +5,10 @@
     "data de referência exibida como data civil brasileira (sem recuo de fuso)",
     "filtro por categoria reduz a lista às oportunidades",
     "prioridades sem rolagem horizontal em 390px",
+    "agendar próximo passo usa o endpoint seguro de atividades e tira o item da lista",
+    "follow-up atrasado é concluído direto da prioridade",
+    "\"não se aplica\" registra motivo para calibrar o agente e mantém a lista limpa após recarregar",
+    "catálogo no app: Linktree, busca, filtro por linha, material por modelo e resumo pronto para WhatsApp em 390px",
     "resposta fora do contrato ou 404 esconde o card sem erro e preserva a tela inicial",
     "Central no portal: manchete, KPIs, prioridades, módulos e menu"
   ]

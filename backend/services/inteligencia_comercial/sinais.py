@@ -42,6 +42,7 @@ class Sinal:
     entidade_tipo: str
     entidade_id: str
     cliente_nome: str = ""
+    cliente_id: str = ""
     responsavel_id: str = ""
     valor: float = 0.0
     dias: int | None = None

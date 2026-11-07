@@ -189,10 +189,16 @@ def montar_briefing(
     escopo: dict[str, Any] | None = None,
     limite_prioridades: int = LIMITE_PRIORIDADES,
     extras: dict[str, Any] | None = None,
+    supressoes: set[tuple[str, str, str]] | None = None,
 ) -> dict[str, Any]:
     hoje = hoje or hoje_operacional()
     contexto = ContextoInteligencia(hoje=hoje, oportunidades=list(oportunidades or []), atividades=list(atividades or []), extras=dict(extras or {}))
     sinais, situacao_provedores = _executar_provedores(contexto)
+    # Ajustes da equipe ("não se aplica"/"adiar") escondem o sinal até o prazo.
+    total_antes = len(sinais)
+    if supressoes:
+        sinais = [s for s in sinais if (s.codigo, s.entidade_tipo, s.entidade_id) not in supressoes]
+    sinais_suprimidos = total_antes - len(sinais)
 
     contagem = Counter(s.codigo for s in sinais)
     abertas = [o for o in contexto.oportunidades if oportunidade_aberta(o)]
@@ -231,6 +237,7 @@ def montar_briefing(
         "qualidade": _qualidade(abertas),
         "sinais_por_codigo": dict(contagem),
         "total_sinais": len(sinais),
+        "sinais_suprimidos": sinais_suprimidos,
         "provedores": situacao_provedores,
         "fontes": ["Núcleo comercial (oportunidades, propostas, pedidos)", "Atividades e agenda"],
         "limitacoes": limitacoes,

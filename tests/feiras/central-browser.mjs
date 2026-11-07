@@ -23,7 +23,7 @@ await new Promise((resolve, reject) => {
 const prioridade = (id, extra) => ({
   codigo: 'PROPOSTA_SEM_RETORNO', categoria: 'risco', severidade: 'alta', titulo: `Proposta sem retorno há 12 dias: Frigorífico ${id}`,
   explicacao: 'Proposta P-12 enviada e sem nenhum movimento registrado desde 26/10/2026.', acao_recomendada: 'Ligue para o decisor e registre o retorno.',
-  entidade_tipo: 'oportunidade', entidade_id: id, cliente_nome: `Frigorífico ${id}`, responsavel_id: 'vend-1', valor: 480000, dias: 12,
+  entidade_tipo: 'oportunidade', entidade_id: id, cliente_nome: `Frigorífico ${id}`, cliente_id: `cli-${id}`, responsavel_id: 'vend-1', valor: 480000, dias: 12,
   rota: `/oportunidades/${id}`, rota_app: `/crm-app/oportunidades/${id}`, evidencias: ['status_proposta=ENVIADA'], pontuacao: 120, sinais_relacionados: ['SEM_PROXIMO_PASSO'], ...extra,
 })
 const briefing = {
@@ -56,10 +56,19 @@ const modulos = [
   { codigo: 'treinamentos', nome: 'Treinamentos comerciais', descricao: 'Trilhas por produto.', categoria: 'conhecimento', categoria_rotulo: 'Conhecimento', status: 'planejado', rota_web: null, rota_app: null, consultado_pela_ia: false },
 ]
 
+const vitrine = {
+  fonte: 'catalogo_comercial', precos_visiveis: false, linktree_url: 'https://linktr.ee/exemplo-cti', total_equipamentos: 2,
+  materiais_gerais: [{ titulo: 'Catálogo geral 2026', url: 'https://exemplo.com/geral.pdf', tipo: 'catalogo' }],
+  linhas: [
+    { codigo: 'TRAILER', nome: 'Trailer', sigla: 'TR', descricao: 'Semirreboques', materiais: [], equipamentos: [{ codigo: 'VECTOR-8500', nome_comercial: 'VECTOR 8500', modelo_base: 'VECTOR 8500', configuracao: 'PADRAO', compressor: null, possui_eletrico: false, descricao_tecnica: {}, preco_vigente: null, materiais: [{ titulo: 'Ficha Vector', url: 'https://exemplo.com/vector.pdf', tipo: 'ficha_tecnica' }] }] },
+    { codigo: 'DIESEL TRUCK', nome: 'Diesel Truck', sigla: 'DT', descricao: 'Caminhões', materiais: [], equipamentos: [{ codigo: 'SUPRA-850', nome_comercial: 'SUPRA 850', modelo_base: 'SUPRA 850', configuracao: 'PADRAO', compressor: '05K 4CC', possui_eletrico: true, descricao_tecnica: {}, preco_vigente: null, materiais: [] }] },
+    { codigo: 'DIRECT DRIVE', nome: 'Direct Drive', sigla: 'DD', descricao: 'Leves', materiais: [], equipamentos: [] },
+  ],
+}
 let browser
 const checks = []
 async function contexto(perfil, viewport, cenario) {
-  const ctx = await browser.newContext({ viewport, timezoneId: 'America/Sao_Paulo', serviceWorkers: 'block', deviceScaleFactor: capturas ? 2 : 1 })
+  const ctx = await browser.newContext({ viewport, permissions: ['clipboard-read', 'clipboard-write'], timezoneId: 'America/Sao_Paulo', serviceWorkers: 'block', deviceScaleFactor: capturas ? 2 : 1 })
   await ctx.addInitScript(p => sessionStorage.setItem('cti-auth-session-v1', JSON.stringify({ access_token: 'synthetic-only', refresh_token: 'synthetic', expires_at: 1893456000, user: { id: p.auth_id, email: p.email } })), perfil)
   await ctx.route('**/*', async route => {
     const url = new URL(route.request().url())
@@ -73,6 +82,13 @@ async function contexto(perfil, viewport, cenario) {
       return cenario.briefing === 'legado' ? json([]) : cenario.briefing === 'ausente' ? json({ detail: 'Not Found' }, 404) : json(briefing)
     }
     if (url.pathname.endsWith('/plataforma/modulos')) return json({ modulos })
+    const metodo = route.request().method()
+    if (metodo !== 'GET') {
+      const corpo = route.request().postData()
+      ;(cenario.escritas ||= []).push({ metodo, caminho: url.pathname, corpo: corpo ? JSON.parse(corpo) : null })
+      return json({ ok: true, suprimir_ate: '2026-12-06' }, url.pathname.endsWith('/inteligencia/feedback') ? 201 : 200)
+    }
+    if (url.pathname.endsWith('/catalogo/vitrine')) return json(vitrine)
     if (url.pathname.endsWith('/nucleo-comercial')) return json([{ id: 'deal-1', cliente_nome: 'Cliente isolado', titulo: 'Proposta', etapa: 'PROPOSTA', responsavel_id: perfil.id }])
     return json([])
   })
@@ -109,6 +125,54 @@ try {
   checks.push('prioridades sem rolagem horizontal em 390px')
   await page.getByRole('tab', { name: /^Todas/ }).click()
   if (capturas) await page.screenshot({ path: `${capturas}/app-prioridades.png`, fullPage: true })
+
+  // 2b. Resolver prioridades sem sair da lista
+  const lista = page.getByRole('list', { name: 'Lista de prioridades' })
+  const alfa = lista.locator('li').filter({ hasText: 'Frigorífico Alfa' })
+  await alfa.getByRole('button', { name: 'Agendar próximo passo' }).click()
+  await alfa.getByLabel('Tipo de contato').selectOption('VISITA')
+  await alfa.getByRole('button', { name: 'Agendar', exact: true }).click()
+  await page.getByRole('status').filter({ hasText: 'Próximo passo agendado' }).waitFor()
+  assert.equal(await lista.locator('li').filter({ hasText: 'Frigorífico Alfa' }).count(), 0)
+  const agendamento = cenario.escritas.find(item => item.caminho.endsWith('/crm-seguro/atividades'))
+  assert.equal(agendamento.corpo.cliente_id, 'cli-Alfa')
+  assert.equal(agendamento.corpo.oportunidade_id, 'Alfa')
+  assert.equal(agendamento.corpo.tipo, 'VISITA')
+  checks.push('agendar próximo passo usa o endpoint seguro de atividades e tira o item da lista')
+  await lista.locator('li').filter({ hasText: 'Frigorífico Delta' }).getByRole('button', { name: 'Concluir' }).click()
+  await page.getByRole('status').filter({ hasText: 'Atividade concluída' }).waitFor()
+  assert.ok(cenario.escritas.some(item => item.metodo === 'PUT' && item.caminho.endsWith('/atividades/Delta/concluir')))
+  checks.push('follow-up atrasado é concluído direto da prioridade')
+  const gama = lista.locator('li').filter({ hasText: 'Frigorífico Gama' })
+  await gama.getByRole('button', { name: 'Não se aplica / adiar' }).click()
+  await gama.getByLabel('Motivo').selectOption('ALERTA_CEDO_DEMAIS')
+  await gama.getByRole('button', { name: 'Confirmar' }).click()
+  await page.getByRole('status').filter({ hasText: 'Alerta dispensado' }).waitFor()
+  const ajuste = cenario.escritas.find(item => item.caminho.endsWith('/inteligencia/feedback'))
+  assert.deepEqual([ajuste.corpo.codigo, ajuste.corpo.entidade_id, ajuste.corpo.decisao, ajuste.corpo.motivo], ['PRONTO_PARA_FECHAR', 'Gama', 'NAO_SE_APLICA', 'ALERTA_CEDO_DEMAIS'])
+  await page.waitForTimeout(900)
+  assert.equal(await lista.locator('li').count(), 1, 'itens resolvidos continuam fora após a releitura')
+  checks.push('"não se aplica" registra motivo para calibrar o agente e mantém a lista limpa após recarregar')
+
+  // 2c. Catálogo no app
+  await page.goto(`${BASE}/crm-app/catalogo`)
+  await page.getByRole('heading', { name: 'Catálogo de produtos' }).waitFor()
+  assert.equal(await page.locator('a[href="https://linktr.ee/exemplo-cti"]').count(), 1)
+  assert.equal(await page.getByText('Preço de tabela').count(), 0, 'vendedor sem proposta não vê preço')
+  await page.getByPlaceholder('Buscar modelo, linha ou compressor').fill('05k')
+  assert.equal(await page.locator('article').count(), 1)
+  await page.getByRole('button', { name: 'Copiar para WhatsApp' }).click()
+  await page.getByRole('status').filter({ hasText: 'SUPRA 850 copiado' }).waitFor()
+  const copiadoTexto = await page.evaluate(() => navigator.clipboard.readText())
+  assert.match(copiadoTexto, /\*SUPRA 850\* — Carrier Transicold, linha Diesel Truck \(DT\)/)
+  assert.match(copiadoTexto, /Compressor: 05K 4CC/)
+  await page.getByPlaceholder('Buscar modelo, linha ou compressor').fill('')
+  await page.getByRole('tab', { name: 'Trailer' }).click()
+  assert.equal(await page.locator('a[href="https://exemplo.com/vector.pdf"]').count(), 1)
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false)
+  checks.push('catálogo no app: Linktree, busca, filtro por linha, material por modelo e resumo pronto para WhatsApp em 390px')
+  await page.getByRole('tab', { name: 'Todas' }).click()
+  if (capturas) await page.screenshot({ path: `${capturas}/app-catalogo.png`, fullPage: true })
   await ctx.close()
 
   // 3. Backend anterior ao agente: o app segue intacto e o card some

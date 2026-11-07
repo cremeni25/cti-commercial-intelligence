@@ -9,7 +9,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
-from .briefing import montar_briefing
+from .briefing import hoje_operacional, montar_briefing
+from .feedback import carregar_feedback, supressoes_ativas
 from .sinais import texto
 
 
@@ -23,6 +24,13 @@ def _carregar_atividades() -> list[dict[str, Any]]:
     from routers.crm_atividades_governanca_router import listar_atividades_operacionais
 
     return listar_atividades_operacionais() or []
+
+
+def _carregar_feedback(hoje: date) -> list[dict[str, Any]]:
+    # Apenas ajustes que ainda podem estar vigentes (o prazo máximo é 60 dias).
+    from datetime import timedelta
+
+    return carregar_feedback(desde=hoje - timedelta(days=90))
 
 
 def filtrar_escopo(
@@ -65,6 +73,8 @@ def gerar_briefing(
         "tipo": "consolidado" if consolidado and not responsavel_id else "individual",
         "responsavel_id": filtro or None,
     }
-    briefing = montar_briefing(oportunidades, atividades, hoje=hoje, escopo=escopo, limite_prioridades=limite_prioridades)
+    hoje = hoje or hoje_operacional()
+    supressoes = supressoes_ativas(_carregar_feedback(hoje), hoje)
+    briefing = montar_briefing(oportunidades, atividades, hoje=hoje, escopo=escopo, limite_prioridades=limite_prioridades, supressoes=supressoes)
     briefing["limitacoes"] = limitacoes_carga + briefing["limitacoes"]
     return briefing

@@ -44,6 +44,7 @@ const menuGroups: MenuGroup[] = [
     { labelKey: "nav.bodyBuilders", href: "/implementadoras", icon: "🏭", type: "emoji" },
   ]},
   { tituloKey: "nav.equipment", itens: [
+    { label: { "pt-BR": "Catálogo de Produtos", en: "Product Catalog", es: "Catálogo de Productos" }, href: "/catalogo", icon: "📘", type: "emoji" },
     { labelKey: "nav.trailer", href: "/equipamentos/trailer", icon: trailerIcon, type: "image" },
     { labelKey: "nav.dieselTruck", href: "/equipamentos/diesel-truck", icon: dieselTruckIcon, type: "image" },
     { labelKey: "nav.directDrive", href: "/equipamentos/direct-drive", icon: directDriveIcon, type: "image" },
@@ -69,6 +70,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/upload") return gestao
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
+  if (href === "/catalogo") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar") || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")
   if (href === "/central") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")
