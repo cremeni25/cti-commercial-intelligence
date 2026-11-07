@@ -28,7 +28,7 @@ export default function PrioridadesAgenteCard() {
     <section className="mt-4 rounded-3xl border border-cyan-900/70 bg-[#06182f] p-4" aria-busy={carregando} aria-label="Comece por aqui">
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.2em] text-cyan-400"><Sparkles size={14}/> Comece por aqui</p>
-        {pendentes.length > 1 && <Link href="/crm-app/prioridades" className="flex items-center gap-1 text-xs font-semibold text-cyan-200">Ver todas ({pendentes.length})<ChevronRight size={14}/></Link>}
+        <Link href="/crm-app/prioridades" className="flex items-center gap-1 text-xs font-semibold text-cyan-200">{pendentes.length > 1 ? `Ver todas (${pendentes.length})` : "Abrir prioridades"}<ChevronRight size={14}/></Link>
       </div>
 
       {aviso && <p role="status" className="mt-3 rounded-xl border border-emerald-800 bg-emerald-950/40 px-3 py-2 text-sm text-emerald-200">{aviso}</p>}

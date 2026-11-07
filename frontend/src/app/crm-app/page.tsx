@@ -15,6 +15,7 @@ import {
   Plus,
   RefreshCw,
   Search,
+  Sparkles,
   TrendingUp,
 } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -184,6 +185,7 @@ export default function CrmAppPage() {
 
   const recursos = useMemo(() => {
     const base = [
+      { href: "/crm-app/prioridades", label: "Prioridades", valor: "Agente", icon: Sparkles },
       { href: "/crm-app/atividades", label: t.activities, valor: resumo.atividades, icon: ClipboardCheck },
       { href: "/crm-app/pipeline", label: t.pipeline, valor: resumo.pipeline, icon: TrendingUp },
       { href: "/crm-app/propostas", label: t.proposals, valor: resumo.propostas, icon: FileText },
