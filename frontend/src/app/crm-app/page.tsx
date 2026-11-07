@@ -5,8 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   Bot,
   BookOpen,
-  BriefcaseBusiness,
-  CalendarDays,
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
@@ -17,7 +15,6 @@ import {
   Plus,
   RefreshCw,
   Search,
-  Target,
   TrendingUp,
 } from "lucide-react"
 import { useAuth } from "@/core/auth"
@@ -223,12 +220,12 @@ export default function CrmAppPage() {
 
       <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
         {aviso && <div className="mb-4 rounded-2xl border border-amber-900/70 bg-amber-950/20 p-4 text-sm text-amber-100">{aviso}</div>}
-        <section className="rounded-3xl border border-[#163356] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 shadow-xl">
-          <div className="flex items-start justify-between gap-3">
-            <div><h2 className="text-3xl font-bold">{hello}</h2><p className="mt-2 text-base leading-6 text-slate-300">{t.subtitle}</p></div>
+        <section className="rounded-3xl border border-[#163356] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-4 shadow-xl">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-2xl font-bold">{hello}</h2>
             <button type="button" onClick={() => void sincronizar()} disabled={sincronizando} aria-label="Sincronizar CRM" className="grid size-12 shrink-0 place-items-center rounded-2xl border border-cyan-800 bg-cyan-950/30 text-cyan-400"><RefreshCw size={20} className={sincronizando ? "animate-spin" : ""}/></button>
           </div>
-          <div className="mt-5 grid grid-cols-3 gap-2">
+          <div className="mt-4 grid grid-cols-3 gap-2">
             <Indicador href="/crm-app/visitas" valor={resumoAtual ? resumo.visitas : null} label={t.visits}/>
             <Indicador href="/crm-app/agenda" valor={resumoAtual ? resumo.pendencias : null} label={t.pending}/>
             <Indicador href="/crm-app/oportunidades" valor={resumoAtual ? resumo.oportunidades : null} label={t.openDeals}/>
@@ -240,19 +237,11 @@ export default function CrmAppPage() {
             <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-slate-950/10"><Plus size={30}/></span>
             <span className="min-w-0 flex-1"><span className="block text-2xl font-black">{t.mainAction}</span><span className="mt-1 block text-sm font-medium text-slate-900/75">{t.mainActionHelp}</span></span><ChevronRight size={25}/>
           </LinkCrm>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Acao href="/crm-app/oportunidades" titulo={t.next} descricao={t.nextHelp} icon={Target}/>
-            <Acao href="/crm-app/agenda" titulo={t.agenda} descricao={t.agendaHelp} icon={CalendarDays}/>
-            <Acao href="/crm-app/clientes" titulo={t.clients} descricao={t.clientsHelp} icon={Search}/>
-          </div>
+          <LinkCrm href="/crm-app/clientes" className="flex min-h-12 items-center gap-3 rounded-2xl border border-[#163356] bg-[#0b1d38] px-4 text-sm text-slate-300 active:scale-[.99]"><Search size={18} className="text-cyan-400"/><span className="flex-1">{t.clients}</span><ChevronRight size={18} className="text-slate-500"/></LinkCrm>
         </section>
 
         {usuario && rotaAutorizadaCTI("/crm-app/prioridades", usuario) && <PrioridadesAgenteCard />}
 
-        <section className="mt-5 rounded-3xl border border-[#163356] bg-[#081a32] p-5">
-          <div className="flex items-center gap-3"><span className="grid size-11 place-items-center rounded-xl bg-cyan-950/60 text-cyan-400"><BriefcaseBusiness size={22}/></span><div><p className="text-xs uppercase tracking-[.18em] text-slate-500">{t.current}</p><p className="mt-1 font-semibold leading-6">{resumoAtual ? resumo.destaque : "—"}</p></div></div>
-          <LinkCrm href="/crm-app/oportunidades" className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#22466d] bg-[#0b2342] font-semibold text-cyan-200">{t.details}<ChevronRight size={18}/></LinkCrm>
-        </section>
 
         <LinkCrm href="/crm-app/feiras" className="mt-5 flex items-center justify-between rounded-3xl border border-cyan-700 bg-[#08233b] p-5 text-white"><span><strong className="block text-lg">Feiras e Eventos</strong><span className="block text-sm text-slate-300">Atendimentos, intenções e lançamentos</span></span><ChevronRight size={22}/></LinkCrm>
         <details className="mt-5 rounded-3xl border border-[#163356] bg-[#061126] p-4">
@@ -268,9 +257,6 @@ function Indicador({ href, valor, label }: { href: string; valor: number | null;
   return <LinkCrm href={href} className="rounded-2xl border border-[#163356] bg-[#0b1d38] px-2 py-4 text-center transition active:scale-[.98]"><strong className="block text-2xl text-cyan-400">{valor ?? "—"}</strong><span className="mt-1 block text-[11px] leading-4 text-slate-400">{label}</span></LinkCrm>
 }
 
-function Acao({ href, titulo, descricao, icon: Icon }: { href: string; titulo: string; descricao: string; icon: React.ComponentType<{ size?: number; className?: string }> }) {
-  return <LinkCrm href={href} className="flex min-h-28 items-center gap-3 rounded-2xl border border-[#163356] bg-[#0b1d38] p-4 active:scale-[.99] sm:block"><span className="grid size-11 shrink-0 place-items-center rounded-xl bg-[#07304b] text-cyan-400"><Icon size={21}/></span><span className="min-w-0 flex-1 sm:mt-3 sm:block"><span className="block text-base font-semibold">{titulo}</span><span className="mt-1 block text-xs leading-5 text-slate-400">{descricao}</span></span><ChevronRight size={18} className="shrink-0 text-slate-400 sm:hidden"/></LinkCrm>
-}
 
 function LinkCrm(props: React.ComponentProps<typeof Link>) {
   const { usuario } = useAuth()

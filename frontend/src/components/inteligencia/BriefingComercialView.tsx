@@ -82,21 +82,21 @@ export default function BriefingComercialView({ briefing, canal, onAtualizar }: 
 
   return (
     <div className="space-y-5">
-      <section className="rounded-3xl border border-[#163356] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 sm:p-6">
+      {!compacto && (<section className={`rounded-3xl border border-[#163356] bg-gradient-to-br from-[#0a2242] to-[#07162b] p-5 sm:p-6`}>
         <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[.22em] text-cyan-400"><Sparkles size={14}/> Leitura do agente · {dataCivil(briefing.data_referencia)}</p>
-        <h2 className="mt-3 text-xl font-bold leading-snug text-white sm:text-2xl">{briefing.manchete}</h2>
-        <p className="mt-2 text-sm text-slate-400">{briefing.escopo.tipo === "consolidado" ? "Visão consolidada da equipe" : "Sua carteira comercial"} · {briefing.total_sinais} sinais analisados</p>
-      </section>
+        <h2 className={`mt-3 font-bold leading-snug text-white ${compacto ? "text-base" : "text-xl sm:text-2xl"}`}>{briefing.manchete}</h2>
+        {!compacto && <p className="mt-2 text-sm text-slate-400">{briefing.escopo.tipo === "consolidado" ? "Visão consolidada da equipe" : "Sua carteira comercial"} · {briefing.total_sinais} sinais analisados</p>}
+      </section>)}
 
-      <section className={`grid gap-3 ${compacto ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-5"}`} aria-label="Indicadores principais">
+{!compacto && (<section className={`grid gap-3 ${compacto ? "grid-cols-2" : "grid-cols-2 lg:grid-cols-5"}`} aria-label="Indicadores principais">
         {briefing.indicadores.map((indicador) => (
           <LinkSeguro key={indicador.codigo} href={rotaDoCanal(indicador, canal)} className="rounded-2xl border border-[#163356] bg-[#081a32] p-4 transition hover:border-cyan-700">
             <span className="block text-xs uppercase tracking-wider text-slate-400">{indicador.rotulo}</span>
-            <strong className={`mt-2 block font-bold [overflow-wrap:anywhere] ${canal === "app" ? "text-xl" : "text-2xl"} ${ESTILO_TOM[indicador.tom]}`}>{formatar(indicador)}</strong>
+            <strong className={`mt-2 block font-bold [overflow-wrap:anywhere] text-2xl ${ESTILO_TOM[indicador.tom]}`}>{formatar(indicador)}</strong>
             <span className="mt-1 block text-xs leading-5 text-slate-500">{indicador.detalhe}</span>
           </LinkSeguro>
         ))}
-      </section>
+      </section>)}
 
       <div className={`grid gap-5 ${compacto ? "" : "xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]"}`}>
         <section className="rounded-3xl border border-[#163356] bg-[#061126] p-4 sm:p-5">
@@ -120,7 +120,17 @@ export default function BriefingComercialView({ briefing, canal, onAtualizar }: 
           )}
         </section>
 
-        <aside className="space-y-5">
+        <BlocoAnalise compacto={compacto}>
+          {compacto && (
+            <section className="grid grid-cols-2 gap-3" aria-label="Indicadores principais">
+              {briefing.indicadores.map((indicador) => (
+                <LinkSeguro key={indicador.codigo} href={rotaDoCanal(indicador, canal)} className="rounded-2xl border border-[#163356] bg-[#081a32] p-3">
+                  <span className="block text-[11px] uppercase tracking-wider text-slate-400">{indicador.rotulo}</span>
+                  <strong className={`mt-1 block text-lg font-bold [overflow-wrap:anywhere] ${ESTILO_TOM[indicador.tom]}`}>{formatar(indicador)}</strong>
+                </LinkSeguro>
+              ))}
+            </section>
+          )}
           <section className="rounded-3xl border border-[#163356] bg-[#061126] p-5">
             <h3 className="flex items-center gap-2 font-semibold text-white"><AlertTriangle size={18} className="text-amber-300"/> Onde está o risco</h3>
             {briefing.riscos.length === 0 ? <p className="mt-3 text-sm text-slate-400">Nenhum risco identificado na carteira.</p> : (
@@ -164,16 +174,26 @@ export default function BriefingComercialView({ briefing, canal, onAtualizar }: 
               </ul>
             )}
           </section>
-        </aside>
+        </BlocoAnalise>
       </div>
 
-      <details className="rounded-2xl border border-[#13203f] bg-[#050f22] p-4 text-xs text-slate-400">
+{!compacto && (      <details className="rounded-2xl border border-[#13203f] bg-[#050f22] p-4 text-xs text-slate-400">
         <summary className="cursor-pointer font-semibold text-slate-300">Como o agente chegou a esta leitura</summary>
         <p className="mt-2">Fontes: {briefing.fontes.join(" · ")}. As prioridades combinam gravidade, valor em jogo e tempo parado; cada negócio aparece uma única vez, com seus demais sinais agrupados. O agente apenas lê — nenhum registro é alterado.</p>
         {briefing.limitacoes.length > 0 && <ul className="mt-2 list-disc pl-5 text-amber-200/80">{briefing.limitacoes.map((limitacao) => <li key={limitacao}>{limitacao}</li>)}</ul>}
         <p className="mt-2 text-slate-600">Gerado em {new Date(briefing.gerado_em).toLocaleString("pt-BR")} · versão {briefing.versao}</p>
-      </details>
+      </details>)}
     </div>
+  )
+}
+
+function BlocoAnalise({ compacto, children }: { compacto: boolean; children: React.ReactNode }) {
+  if (!compacto) return <aside className="space-y-5">{children}</aside>
+  return (
+    <details className="rounded-3xl border border-[#163356] bg-[#061126] p-4">
+      <summary className="cursor-pointer list-none font-semibold text-cyan-200">Ver análise da carteira</summary>
+      <div className="mt-4 space-y-5">{children}</div>
+    </details>
   )
 }
 
@@ -186,13 +206,13 @@ function CartaoPrioridade({ item, posicao, canal, formatCurrency, onResolvido }:
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${ESTILO_CATEGORIA[item.categoria]}`}><Icone size={12}/>{ROTULO_CATEGORIA[item.categoria]}</span>
-            {item.severidade === "alta" || item.severidade === "critica" ? <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-300">Alta prioridade</span> : null}
+            {canal === "web" && (item.severidade === "alta" || item.severidade === "critica") ? <span className="text-[11px] font-semibold uppercase tracking-wider text-amber-300">Alta prioridade</span> : null}
             {item.valor > 0 && <span className="text-xs text-emerald-300">{formatCurrency(item.valor)}</span>}
           </div>
           <p className="mt-2 font-semibold leading-6 text-white">{item.titulo}</p>
-          <p className="mt-1 text-sm leading-6 text-slate-400">{item.explicacao}</p>
-          <p className="mt-2 rounded-xl bg-[#0b1d38] px-3 py-2 text-sm leading-6 text-cyan-100"><strong className="text-cyan-300">Próximo passo:</strong> {item.acao_recomendada}</p>
-          {item.sinais_relacionados.length > 0 && <p className="mt-2 text-xs text-slate-500">+{item.sinais_relacionados.length} outro{item.sinais_relacionados.length > 1 ? "s" : ""} sinal{item.sinais_relacionados.length > 1 ? "is" : ""} neste negócio</p>}
+          {canal === "web" && <p className="mt-1 line-clamp-2 text-sm leading-6 text-slate-400">{item.explicacao}</p>}
+          {canal === "web" ? <p className="mt-2 rounded-xl bg-[#0b1d38] px-3 py-2 text-sm leading-6 text-cyan-100"><strong className="text-cyan-300">Próximo passo:</strong> {item.acao_recomendada}</p> : <p className="mt-1 text-sm leading-6 text-cyan-100">{item.acao_recomendada}</p>}
+          {canal === "web" && item.sinais_relacionados.length > 0 && <p className="mt-2 text-xs text-slate-500">+{item.sinais_relacionados.length} outro{item.sinais_relacionados.length > 1 ? "s" : ""} sinal{item.sinais_relacionados.length > 1 ? "is" : ""} neste negócio</p>}
           <AcoesPrioridade item={item} onResolvido={onResolvido}/>
         </div>
         <LinkSeguro href={rotaDoCanal(item, canal)} aria-label={`Abrir ${item.cliente_nome || item.titulo}`} className="grid size-10 shrink-0 place-items-center rounded-xl border border-cyan-800 text-cyan-300 hover:bg-cyan-950/40"><ArrowRight size={18}/></LinkSeguro>

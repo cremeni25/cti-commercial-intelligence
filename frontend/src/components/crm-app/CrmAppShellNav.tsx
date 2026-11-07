@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Archive, ArchiveRestore, Building2, CalendarDays, Layers3, Plus, Target } from "lucide-react"
+import { Archive, ArchiveRestore, BookOpen, Building2, CalendarDays, Layers3, Plus, Target } from "lucide-react"
 import { usePathname, useRouter } from "next/navigation"
 import { useState } from "react"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
@@ -11,21 +11,21 @@ import { useI18n } from "@/core/i18n"
 
 const textos = {
   "pt-BR": {
-    home: "Início", agenda: "Agenda", deals: "Negócios", register: "Nova ação",
+    home: "Início", agenda: "Agenda", deals: "Negócios", catalog: "Catálogo", register: "Nova ação",
     archivedTests: "Testes arquivados", manageItems: "Gerenciar itens", archiving: "Arquivando...", archiveTest: "Arquivar teste",
     navLabel: "Navegação principal do CRM",
     archiveConfirm: "Arquivar esta oportunidade como registro de teste? Ela deixará de participar de Pipeline, Forecast, Relatórios e IA, mas continuará preservada para auditoria.",
     archiveError: "Não foi possível arquivar o registro de teste.", failure: "Falha",
   },
   en: {
-    home: "Home", agenda: "Agenda", deals: "Deals", register: "New action",
+    home: "Home", agenda: "Agenda", deals: "Deals", catalog: "Catalog", register: "New action",
     archivedTests: "Archived tests", manageItems: "Manage items", archiving: "Archiving...", archiveTest: "Archive test",
     navLabel: "CRM primary navigation",
     archiveConfirm: "Archive this opportunity as a test record? It will no longer participate in Pipeline, Forecast, Reports or AI, but will remain preserved for audit.",
     archiveError: "The test record could not be archived.", failure: "Failure",
   },
   es: {
-    home: "Inicio", agenda: "Agenda", deals: "Negocios", register: "Nueva acción",
+    home: "Inicio", agenda: "Agenda", deals: "Negocios", catalog: "Catálogo", register: "Nueva acción",
     archivedTests: "Pruebas archivadas", manageItems: "Gestionar ítems", archiving: "Archivando...", archiveTest: "Archivar prueba",
     navLabel: "Navegación principal del CRM",
     archiveConfirm: "¿Archivar esta oportunidad como registro de prueba? Dejará de participar en Pipeline, Forecast, Informes e IA, pero seguirá preservada para auditoría.",
@@ -60,6 +60,7 @@ export function CrmAppShellNav() {
     { href: "/crm-app", label: tx.home, icon: Building2 },
     { href: "/crm-app/agenda", label: tx.agenda, icon: CalendarDays },
     { href: "/crm-app/oportunidades", label: tx.deals, icon: Target },
+    { href: "/crm-app/catalogo", label: tx.catalog, icon: BookOpen },
     { href: "/crm-app/acao", label: tx.register, icon: Plus, destaque: true },
   ].filter((item) => usuario && rotaAutorizadaCTI(item.href, usuario))
 
@@ -119,7 +120,7 @@ export function CrmAppShellNav() {
           {itens.map(({ href, label, icon: Icon, destaque }) => {
             const selecionado = ativo(pathname, href)
             return (
-              <Link key={href} href={href} aria-current={selecionado ? "page" : undefined} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-2 py-2 text-xs transition ${destaque ? selecionado ? "bg-cyan-300 font-bold text-slate-950" : "bg-cyan-500 font-semibold text-slate-950" : selecionado ? "bg-cyan-950/60 font-semibold text-cyan-200" : "text-slate-400 hover:bg-[#0a1d38] hover:text-slate-200"}`}>
+              <Link key={href} href={href} aria-current={selecionado ? "page" : undefined} className={`flex min-h-16 flex-col items-center justify-center gap-1 rounded-xl px-1 py-2 text-[11px] transition ${destaque ? selecionado ? "bg-cyan-300 font-bold text-slate-950" : "bg-cyan-500 font-semibold text-slate-950" : selecionado ? "bg-cyan-950/60 font-semibold text-cyan-200" : "text-slate-400 hover:bg-[#0a1d38] hover:text-slate-200"}`}>
                 <Icon size={20} />
                 <span>{label}</span>
               </Link>
