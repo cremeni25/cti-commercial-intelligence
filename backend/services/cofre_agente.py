@@ -128,6 +128,18 @@ def gravar_binario(caminho_doc: str, conteudo: bytes, tipo: str) -> None:
         raise CofreIndisponivel(str(erro)) from erro
 
 
+def ler_binario(caminho_doc: str) -> bytes | None:
+    """Arquivo binário do bucket privado; None quando ainda não existe."""
+    provisionar()
+    try:
+        bruto = _supabase().storage.from_(BUCKET).download(caminho_doc)
+    except Exception as erro:
+        if _nao_encontrado(erro):
+            return None
+        raise CofreIndisponivel(str(erro)) from erro
+    return bytes(bruto or b"")
+
+
 def url_assinada(caminho_doc: str, segundos: int = 3600) -> str | None:
     """Link temporário para um arquivo do bucket privado (nunca público)."""
     provisionar()

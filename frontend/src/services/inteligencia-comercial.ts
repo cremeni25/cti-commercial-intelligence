@@ -245,3 +245,26 @@ export async function anexarMaterialCatalogo(titulo: string, arquivo: File) {
   }
   return resposta.json()
 }
+
+/* ---------- Planilhas comerciais (funil e NEGOCIAÇÕES) ---------- */
+
+export type ResumoPlanilhasComerciais = {
+  disponivel: boolean
+  erro?: string | null
+  gerado_em?: string
+  arquivos?: { nome: string; tipo: "FUNIL_VENDAS" | "NEGOCIACOES" | string; enviado_em?: string | null }[]
+  totais?: { funil_vendas_atual: number; negociacoes_andamento: number; vendas_realizadas: number }
+}
+
+export async function buscarResumoPlanilhas() {
+  const resposta = await fetchCrmSeguroProxy("crm-seguro/planilhas-comerciais/resumo", { cache: "no-store" }, { timeoutMs: 30000, tentativas: 2 })
+  return lerJson<ResumoPlanilhasComerciais>(resposta, "O resumo das planilhas")
+}
+
+export async function enviarPlanilhasComerciais(arquivos: { funil?: File | null; negociacoes?: File | null }) {
+  const corpo = new FormData()
+  if (arquivos.funil) corpo.set("funil", arquivos.funil)
+  if (arquivos.negociacoes) corpo.set("negociacoes", arquivos.negociacoes)
+  const resposta = await fetchCrmSeguroProxy("crm-seguro/planilhas-comerciais/carga", { method: "POST", body: corpo }, { timeoutMs: 120000, tentativas: 1 })
+  return lerJson<ResumoPlanilhasComerciais>(resposta, "O envio das planilhas")
+}

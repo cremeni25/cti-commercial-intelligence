@@ -15,6 +15,7 @@
     "sem chaves no servidor, o app explica e não oferece ativação",
     "resposta fora do contrato ou 404 esconde o card sem erro e preserva a tela inicial",
     "data de referência exibida como data civil brasileira (sem recuo de fuso)",
-    "Central no portal: manchete, KPIs, prioridades, módulos e menu"
+    "Central no portal: manchete, KPIs, prioridades, módulos e menu",
+    "Master envia funil e NEGOCIAÇÕES pela Central e vê o que a IA leu; vendedor não vê o envio"
   ]
 }

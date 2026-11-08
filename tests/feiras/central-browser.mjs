@@ -87,6 +87,13 @@ async function contexto(perfil, viewport, cenario) {
     if (url.pathname.endsWith('/plataforma/modulos')) return json({ modulos })
     if (url.pathname.endsWith('/notificacoes/config')) return json({ disponivel: cenario.push !== 'servidor_inativo', chave_publica: cenario.push === 'servidor_inativo' ? null : 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U' })
     const metodo = route.request().method()
+    if (url.pathname.endsWith('/planilhas-comerciais/resumo')) return json(cenario.planilhas || { disponivel: false })
+    if (url.pathname.endsWith('/planilhas-comerciais/carga')) {
+      const corpo = route.request().postDataBuffer()?.toString('latin1') || ''
+      cenario.cargaPlanilhas = { funil: corpo.includes('name="funil"'), negociacoes: corpo.includes('name="negociacoes"') }
+      cenario.planilhas = { disponivel: true, arquivos: [{ nome: 'funil.xlsx', tipo: 'FUNIL_VENDAS', enviado_em: '2026-11-08T12:00:00Z' }, { nome: 'NEGOCIAÇÕES.xlsx', tipo: 'NEGOCIACOES', enviado_em: '2026-11-08T12:00:00Z' }], totais: { funil_vendas_atual: 979, negociacoes_andamento: 1841, vendas_realizadas: 2119 } }
+      return json(cenario.planilhas)
+    }
     if (metodo !== 'GET') {
       const corpo = route.request().postData()
       ;(cenario.escritas ||= []).push({ metodo, caminho: url.pathname, corpo: corpo ? JSON.parse(corpo) : null })
@@ -134,6 +141,7 @@ try {
   await page.getByRole('list', { name: 'Lista de prioridades' }).locator('li').nth(3).waitFor({ timeout: 15000 })
   assert.equal(await page.locator('ol > li').count(), 4)
   assert.equal(await page.getByText(briefing.manchete).count(), 0, 'app sem parágrafo do agente')
+  assert.equal(await page.getByRole('region', { name: 'Planilhas comerciais' }).count(), 0, 'vendedor não vê o envio de planilhas')
   await page.getByRole('tab', { name: /^Oportunidade/ }).click()
   assert.equal(await page.locator('ol > li').count(), 1)
   checks.push('filtro por categoria reduz a lista às oportunidades')
@@ -293,6 +301,17 @@ try {
   assert.equal(await page.locator('a[href="/pedidos/ped-9"]').count(), 1, 'gestão abre o pedido')
   assert.equal(await page.locator('a[href="/central"]').count() >= 1, true, 'Central aparece no menu')
   checks.push('Central no portal: manchete, KPIs, prioridades, módulos e menu')
+  const cartaoPlanilhas = page.getByRole('region', { name: 'Planilhas comerciais' })
+  await cartaoPlanilhas.getByText('A IA ainda não recebeu as planilhas').waitFor()
+  const xlsx = { mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from('sintetico') }
+  await cartaoPlanilhas.getByLabel('Funil de vendas (.xlsx)').setInputFiles({ name: 'funil.xlsx', ...xlsx })
+  await cartaoPlanilhas.getByLabel('NEGOCIAÇÕES (.xlsx)').setInputFiles({ name: 'negociacoes.xlsx', ...xlsx })
+  await cartaoPlanilhas.getByRole('button', { name: 'Enviar planilhas' }).click()
+  await cartaoPlanilhas.getByText('A IA Comercial já usa os dados novos').waitFor()
+  assert.deepEqual(cenario.cargaPlanilhas, { funil: true, negociacoes: true })
+  await cartaoPlanilhas.getByText('2.119').waitFor()
+  await cartaoPlanilhas.getByText('1.841').waitFor()
+  checks.push('Master envia funil e NEGOCIAÇÕES pela Central e vê o que a IA leu; vendedor não vê o envio')
   if (capturas) await page.screenshot({ path: `${capturas}/portal-central.png`, fullPage: true })
   await ctx.close()
 

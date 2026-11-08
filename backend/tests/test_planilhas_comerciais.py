@@ -90,7 +90,7 @@ def test_envelope_adulterado_ou_de_outra_chave_nao_abre(cofre, tmp_path):
 
 def test_sem_pacote_fontes_ficam_vazias_sem_erro(cofre):
     assert planilhas_comerciais.registros("vendas_realizadas") == []
-    assert planilhas_comerciais.resumo() == {"disponivel": False, "erro": None, "arquivo_presente": False}
+    assert planilhas_comerciais.resumo() == {"disponivel": False, "erro": None}
 
 
 def test_ia_ve_planilhas_somente_admin_master(cofre, tmp_path, monkeypatch):
@@ -126,3 +126,62 @@ def test_rotas_chave_publica_aberta_e_resumo_so_gestao(cofre, monkeypatch):
         assert cliente.get("/crm-seguro/planilhas-comerciais/resumo", headers={"Authorization": "Bearer t"}).json()["disponivel"] is False
     finally:
         app.dependency_overrides.clear()
+
+
+def test_carga_pelo_cti_vai_para_o_cofre_e_mantem_a_outra_planilha(cofre, tmp_path):
+    funil = funil_ficticio(tmp_path).read_bytes()
+    resumo = planilhas_comerciais.atualizar_pacote(None, ("NEGOCIAÇÕES.xlsx", _negociacoes_ficticias()), "master")
+    assert resumo["totais"] == {"funil_vendas_atual": 0, "negociacoes_andamento": 1, "vendas_realizadas": 1}
+    resumo = planilhas_comerciais.atualizar_pacote(("funil.xlsx", funil), None, "master")
+    assert resumo["totais"] == {"funil_vendas_atual": 3, "negociacoes_andamento": 1, "vendas_realizadas": 1}
+    assert {a["tipo"] for a in resumo["arquivos"]} == {"FUNIL_VENDAS", "NEGOCIACOES"}
+    bruto = cofre.buckets["cti-agente"][planilhas_comerciais.COFRE_PACOTE]
+    assert b"Transportes Alfa" not in bruto  # compactado, em bucket privado
+    planilhas_comerciais.limpar_cache()  # outra instância do backend lê do cofre
+    assert len(planilhas_comerciais.registros("vendas_realizadas")) == 1
+
+
+def test_rota_de_carga_somente_master_e_valida_arquivo(cofre, monkeypatch):
+    from core.admin_auth import UsuarioAutenticado, usuario_atual
+    from main import app
+
+    cliente = TestClient(app)
+
+    def entrar(tipo, acesso_total=False):
+        usuario = UsuarioAutenticado(id="u", auth_id="a", email="u@x", nome="U", tipo_usuario=tipo, permissoes={"acesso_total": acesso_total})
+        app.dependency_overrides[usuario_atual] = lambda: usuario
+        monkeypatch.setattr("core.application_access.usuario_atual", lambda *a, **k: usuario)
+
+    cabecalho = {"Authorization": "Bearer t"}
+    neg = {"negociacoes": ("NEGOCIAÇÕES.xlsx", _negociacoes_ficticias(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    try:
+        entrar("DIRETOR_VIENA_SP", acesso_total=True)
+        assert cliente.post("/crm-seguro/planilhas-comerciais/carga", files=neg, headers=cabecalho).status_code == 403
+        entrar("ADMIN_MASTER", acesso_total=True)
+        assert cliente.post("/crm-seguro/planilhas-comerciais/carga", files={"negociacoes": ("n.pdf", b"x", "application/pdf")}, headers=cabecalho).status_code == 415
+        assert cliente.post("/crm-seguro/planilhas-comerciais/carga", files={"negociacoes": ("n.xlsx", b"nao e zip", "application/octet-stream")}, headers=cabecalho).status_code == 422
+        resposta = cliente.post("/crm-seguro/planilhas-comerciais/carga", files=neg, headers=cabecalho)
+        assert resposta.status_code == 200 and resposta.json()["totais"]["vendas_realizadas"] == 1
+        assert cliente.get("/crm-seguro/planilhas-comerciais/resumo", headers=cabecalho).json()["disponivel"] is True
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_envio_parcial_le_o_cofre_e_nao_apaga_planilha_gravada_por_outra_instancia(cofre, tmp_path):
+    assert planilhas_comerciais.carregar_pacote() is None  # esta instância guardou "vazio" em cache
+    outra = planilhas_comerciais._pacote(*planilhas_comerciais._ler_partes(None, ("NEGOCIAÇÕES.xlsx", _negociacoes_ficticias())), "OUTRA_INSTANCIA")
+    cofre.buckets["cti-agente"][planilhas_comerciais.COFRE_PACOTE] = planilhas_comerciais.compactar(outra)
+    resumo = planilhas_comerciais.atualizar_pacote(("funil.xlsx", funil_ficticio(tmp_path).read_bytes()), None, "master")
+    assert resumo["totais"] == {"funil_vendas_atual": 3, "negociacoes_andamento": 1, "vendas_realizadas": 1}
+
+
+def test_envio_parcial_nao_grava_se_o_cofre_falhar(cofre, tmp_path, monkeypatch):
+    from services import cofre_agente
+
+    def falha(_):
+        raise cofre_agente.CofreIndisponivel("fora do ar")
+
+    monkeypatch.setattr(cofre_agente, "ler_binario", falha)
+    with pytest.raises(cofre_agente.CofreIndisponivel):
+        planilhas_comerciais.atualizar_pacote(("funil.xlsx", funil_ficticio(tmp_path).read_bytes()), None, "master")
+    assert planilhas_comerciais.COFRE_PACOTE not in cofre.buckets.get("cti-agente", {})
