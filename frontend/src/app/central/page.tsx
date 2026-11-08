@@ -6,6 +6,7 @@ import { Boxes, GraduationCap, Loader2, RefreshCw } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import BriefingComercialView from "@/components/inteligencia/BriefingComercialView"
+import PlanilhasComerciaisCard from "@/components/inteligencia/PlanilhasComerciaisCard"
 import { useBriefingComercial } from "@/components/inteligencia/useBriefingComercial"
 import { useAuth } from "@/core/auth/AuthContext"
 import { possuiVisaoConsolidada } from "@/core/rbac/commercial-scope"
@@ -61,6 +62,8 @@ export default function CentralInteligenciaPage() {
 
           {erro && <div className="rounded-xl border border-red-500/60 bg-red-950/30 p-4 text-sm text-red-200">{erro}</div>}
           {briefing ? <BriefingComercialView briefing={briefing} canal="web" onAtualizar={atualizar}/> : carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : null}
+
+          <PlanilhasComerciaisCard/>
 
           {outrosModulos.length > 0 && (
             <section className="rounded-3xl border border-[#13203f] bg-[#061126] p-5">

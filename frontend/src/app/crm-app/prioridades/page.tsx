@@ -5,6 +5,7 @@ import { ArrowLeft, Loader2, RefreshCw } from "lucide-react"
 import BriefingComercialView from "@/components/inteligencia/BriefingComercialView"
 import { useBriefingComercial } from "@/components/inteligencia/useBriefingComercial"
 import ResumoDiarioToggle from "@/components/inteligencia/ResumoDiarioToggle"
+import PlanilhasComerciaisCard from "@/components/inteligencia/PlanilhasComerciaisCard"
 
 export default function CrmAppPrioridadesPage() {
   const { briefing, carregando, erro, atualizar } = useBriefingComercial({ limite: 15 })
@@ -24,6 +25,7 @@ export default function CrmAppPrioridadesPage() {
         {erro && <div className="mb-4 rounded-2xl border border-red-900 bg-red-950/40 p-4 text-sm text-red-200">{erro}</div>}
         {briefing ? <BriefingComercialView briefing={briefing} canal="app" onAtualizar={atualizar}/> : carregando ? <div className="grid min-h-64 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div> : null}
         <div className="mt-6"><ResumoDiarioToggle/></div>
+        <div className="mt-6"><PlanilhasComerciaisCard/></div>
       </div>
     </main>
   )

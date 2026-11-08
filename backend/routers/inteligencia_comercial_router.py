@@ -168,6 +168,50 @@ def resumo_planilhas_comerciais(usuario: UsuarioAutenticado = Depends(usuario_at
     return resumo()
 
 
+LIMITE_PLANILHA = 25 * 1024 * 1024
+
+
+def _planilha(arquivo: UploadFile | None, rotulo: str) -> tuple[str, bytes] | None:
+    if arquivo is None or not arquivo.filename:
+        return None
+    if not arquivo.filename.lower().endswith((".xlsx", ".xlsm")):
+        raise HTTPException(status_code=415, detail=f"{rotulo}: envie o arquivo do Excel (.xlsx).")
+    conteudo = arquivo.file.read(LIMITE_PLANILHA + 1)
+    if not conteudo:
+        raise HTTPException(status_code=400, detail=f"{rotulo}: arquivo vazio.")
+    if len(conteudo) > LIMITE_PLANILHA:
+        raise HTTPException(status_code=413, detail=f"{rotulo}: arquivo acima de 25 MB.")
+    return arquivo.filename, conteudo
+
+
+@router.post("/planilhas-comerciais/carga")
+def carregar_planilhas_comerciais(
+    funil: UploadFile | None = File(default=None),
+    negociacoes: UploadFile | None = File(default=None),
+    usuario: UsuarioAutenticado = Depends(usuario_atual),
+):
+    """Master envia o funil e/ou as NEGOCIAÇÕES; o CTI lê e guarda no cofre privado."""
+    if usuario.tipo_usuario != "ADMIN_MASTER":
+        raise HTTPException(status_code=403, detail="Somente o Master atualiza as planilhas comerciais.")
+    from services.cofre_agente import CofreIndisponivel
+    from zipfile import BadZipFile
+
+    from services.planilhas_comerciais import atualizar_pacote
+
+    parte_funil = _planilha(funil, "Funil de vendas")
+    parte_neg = _planilha(negociacoes, "NEGOCIAÇÕES")
+    if not parte_funil and not parte_neg:
+        raise HTTPException(status_code=400, detail="Envie ao menos uma planilha.")
+    try:
+        return atualizar_pacote(parte_funil, parte_neg, str(usuario.id))
+    except CofreIndisponivel as erro:
+        raise HTTPException(status_code=503, detail="Cofre do agente indisponível; tente de novo em instantes.") from erro
+    except BadZipFile as erro:
+        raise HTTPException(status_code=422, detail="O arquivo não é uma planilha do Excel válida.") from erro
+    except (ValueError, KeyError) as erro:
+        raise HTTPException(status_code=422, detail=f"Planilha fora do formato esperado: {erro}") from erro
+
+
 chave_router = APIRouter(tags=["Ingestão cifrada"])
 
 
