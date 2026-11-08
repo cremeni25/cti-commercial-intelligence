@@ -158,7 +158,9 @@ def atualizar_pacote(funil: tuple[str, bytes] | None, negociacoes: tuple[str, by
     if not funil and not negociacoes:
         raise ValueError("Envie ao menos uma planilha.")
     novos, arquivos = _ler_partes(funil, negociacoes)
-    atual = carregar_pacote() or {}
+    # Leitura direta do cofre, sem cache: outra instância pode ter gravado a
+    # outra planilha há pouco. Se o cofre falhar, nada é gravado.
+    atual = _abrir_pacote() or {}
     dados = dict(atual.get("dados") or {})
     dados.update(novos)
     tipos_novos = {a["tipo"] for a in arquivos}

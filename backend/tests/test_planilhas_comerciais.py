@@ -165,3 +165,23 @@ def test_rota_de_carga_somente_master_e_valida_arquivo(cofre, monkeypatch):
         assert cliente.get("/crm-seguro/planilhas-comerciais/resumo", headers=cabecalho).json()["disponivel"] is True
     finally:
         app.dependency_overrides.clear()
+
+
+def test_envio_parcial_le_o_cofre_e_nao_apaga_planilha_gravada_por_outra_instancia(cofre, tmp_path):
+    assert planilhas_comerciais.carregar_pacote() is None  # esta instância guardou "vazio" em cache
+    outra = planilhas_comerciais._pacote(*planilhas_comerciais._ler_partes(None, ("NEGOCIAÇÕES.xlsx", _negociacoes_ficticias())), "OUTRA_INSTANCIA")
+    cofre.buckets["cti-agente"][planilhas_comerciais.COFRE_PACOTE] = planilhas_comerciais.compactar(outra)
+    resumo = planilhas_comerciais.atualizar_pacote(("funil.xlsx", funil_ficticio(tmp_path).read_bytes()), None, "master")
+    assert resumo["totais"] == {"funil_vendas_atual": 3, "negociacoes_andamento": 1, "vendas_realizadas": 1}
+
+
+def test_envio_parcial_nao_grava_se_o_cofre_falhar(cofre, tmp_path, monkeypatch):
+    from services import cofre_agente
+
+    def falha(_):
+        raise cofre_agente.CofreIndisponivel("fora do ar")
+
+    monkeypatch.setattr(cofre_agente, "ler_binario", falha)
+    with pytest.raises(cofre_agente.CofreIndisponivel):
+        planilhas_comerciais.atualizar_pacote(("funil.xlsx", funil_ficticio(tmp_path).read_bytes()), None, "master")
+    assert planilhas_comerciais.COFRE_PACOTE not in cofre.buckets.get("cti-agente", {})
