@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/core/database/supabase"
 
@@ -20,18 +20,24 @@ export default function RedefinirSenhaPage() {
   const [sessaoValida, setSessaoValida] = useState(false)
   const [verificando, setVerificando] = useState(true)
   const [tokenHash, setTokenHash] = useState("")
+  // Com código no link, a sessão que já existe no navegador (de outra pessoa,
+  // por exemplo) não vale: a senha só pode ser trocada depois de validar o código.
+  const codigoPendente = useRef(false)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
     let ativo = true
+    // Marcado antes de ouvir a sessão, para nenhum evento liberar o formulário antes da validação.
+    codigoPendente.current = new URLSearchParams(window.location.search).has("token_hash")
 
     async function verificarSessao() {
       const { data } = await supabase.auth.getSession()
       if (ativo) {
         // Link gerado pelo gestor: o código só é usado no toque em "Continuar"
         // (a prévia automática do WhatsApp não consome o link).
-        setTokenHash(new URLSearchParams(window.location.search).get("token_hash") || "")
-        setSessaoValida(Boolean(data.session))
+        const codigo = new URLSearchParams(window.location.search).get("token_hash") || ""
+        setTokenHash(codigo)
+        setSessaoValida(!codigo && Boolean(data.session))
         setVerificando(false)
       }
     }
@@ -39,7 +45,7 @@ export default function RedefinirSenhaPage() {
     void verificarSessao()
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!ativo) return
+      if (!ativo || codigoPendente.current) return
       if (event === "PASSWORD_RECOVERY" || session) {
         setSessaoValida(true)
         setVerificando(false)
@@ -58,6 +64,7 @@ export default function RedefinirSenhaPage() {
     try {
       const { error } = await getSupabaseClient().auth.verifyOtp({ token_hash: tokenHash, type: "recovery" })
       if (error) throw error
+      codigoPendente.current = false
       setTokenHash("")
       setSessaoValida(true)
     } catch {
