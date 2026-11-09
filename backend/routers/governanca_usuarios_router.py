@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from urllib.parse import urlencode
+
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -400,9 +402,13 @@ def gerar_link_nova_senha(usuario_id: str, usuario: UsuarioAutenticado = Depends
     except Exception as exc:
         raise HTTPException(status_code=502, detail="Não foi possível gerar o link agora. Confira se o e-mail do usuário está correto.") from exc
     propriedades = getattr(resposta, "properties", None)
-    link = getattr(propriedades, "action_link", None) or (resposta.get("action_link") if isinstance(resposta, dict) else None)
-    if not link:
+    token_hash = getattr(propriedades, "hashed_token", None)
+    if not token_hash:
         raise HTTPException(status_code=502, detail="O serviço de login não devolveu o link.")
+    # Link do próprio CTI: o código só é usado quando a pessoa toca em
+    # "Continuar" na página. A prévia automática do WhatsApp (que abre o link
+    # sozinha) não consome o código, como acontecia com o link direto.
+    link = f"https://app.cti-intelligence.com/redefinir-senha?{urlencode({'destino': destino, 'token_hash': token_hash, 'type': 'recovery'})}"
     return {"email": email, "link": link}
 
 

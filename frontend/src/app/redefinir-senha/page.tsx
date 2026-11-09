@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/core/database/supabase"
 
@@ -19,15 +19,25 @@ export default function RedefinirSenhaPage() {
   const [enviando, setEnviando] = useState(false)
   const [sessaoValida, setSessaoValida] = useState(false)
   const [verificando, setVerificando] = useState(true)
+  const [tokenHash, setTokenHash] = useState("")
+  // Com código no link, a sessão que já existe no navegador (de outra pessoa,
+  // por exemplo) não vale: a senha só pode ser trocada depois de validar o código.
+  const codigoPendente = useRef(false)
 
   useEffect(() => {
     const supabase = getSupabaseClient()
     let ativo = true
+    // Marcado antes de ouvir a sessão, para nenhum evento liberar o formulário antes da validação.
+    codigoPendente.current = new URLSearchParams(window.location.search).has("token_hash")
 
     async function verificarSessao() {
       const { data } = await supabase.auth.getSession()
       if (ativo) {
-        setSessaoValida(Boolean(data.session))
+        // Link gerado pelo gestor: o código só é usado no toque em "Continuar"
+        // (a prévia automática do WhatsApp não consome o link).
+        const codigo = new URLSearchParams(window.location.search).get("token_hash") || ""
+        setTokenHash(codigo)
+        setSessaoValida(!codigo && Boolean(data.session))
         setVerificando(false)
       }
     }
@@ -35,7 +45,7 @@ export default function RedefinirSenhaPage() {
     void verificarSessao()
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!ativo) return
+      if (!ativo || codigoPendente.current) return
       if (event === "PASSWORD_RECOVERY" || session) {
         setSessaoValida(true)
         setVerificando(false)
@@ -47,6 +57,22 @@ export default function RedefinirSenhaPage() {
       listener.subscription.unsubscribe()
     }
   }, [])
+
+  async function validarCodigo() {
+    setErro("")
+    setEnviando(true)
+    try {
+      const { error } = await getSupabaseClient().auth.verifyOtp({ token_hash: tokenHash, type: "recovery" })
+      if (error) throw error
+      codigoPendente.current = false
+      setTokenHash("")
+      setSessaoValida(true)
+    } catch {
+      setErro("Este link já foi usado ou expirou. Peça ao gestor um novo link de nova senha.")
+    } finally {
+      setEnviando(false)
+    }
+  }
 
   async function atualizarSenha(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -93,6 +119,11 @@ export default function RedefinirSenhaPage() {
 
         {verificando ? (
           <div className="text-center text-sm text-slate-400">Validando o link de recuperação...</div>
+        ) : !sessaoValida && tokenHash ? (
+          <div className="space-y-4 text-center">
+            <p className="text-sm text-slate-300">Toque em continuar para criar sua nova senha.</p>
+            <button type="button" disabled={enviando} onClick={() => void validarCodigo()} className="w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-slate-950 disabled:opacity-60">{enviando ? "Validando..." : "Continuar"}</button>
+          </div>
         ) : !sessaoValida ? (
           <div className="space-y-4 text-center">
             <div className="rounded-xl border border-amber-800 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">

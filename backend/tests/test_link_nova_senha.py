@@ -34,7 +34,7 @@ def ambiente(monkeypatch):
 
     def gerar(dados):
         pedidos.append(dados)
-        return SimpleNamespace(properties=SimpleNamespace(action_link="https://auth.example/verify?token=x"))
+        return SimpleNamespace(properties=SimpleNamespace(action_link="https://auth.example/verify?token=x", hashed_token="hash123"))
 
     monkeypatch.setattr(gov, "supabase", SimpleNamespace(table=lambda _n: Consulta(), auth=SimpleNamespace(admin=SimpleNamespace(generate_link=gerar))))
     return pedidos
@@ -42,7 +42,8 @@ def ambiente(monkeypatch):
 
 def test_master_gera_link_de_recuperacao_para_o_app(ambiente):
     resposta = gov.gerar_link_nova_senha("v1", _master())
-    assert resposta == {"email": "vendedora@example.invalid", "link": "https://auth.example/verify?token=x"}
+    # link do próprio CTI com o código; a página só usa o código quando a pessoa toca em "Continuar"
+    assert resposta == {"email": "vendedora@example.invalid", "link": "https://app.cti-intelligence.com/redefinir-senha?destino=%2Fcrm-app%2Flogin&token_hash=hash123&type=recovery"}
     assert ambiente[0]["type"] == "recovery" and ambiente[0]["options"]["redirect_to"].endswith("/redefinir-senha?destino=/crm-app/login")
 
 
