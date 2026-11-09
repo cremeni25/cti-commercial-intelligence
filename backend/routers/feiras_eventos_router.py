@@ -75,7 +75,9 @@ def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
         return ("empresa",str(vinculo["autorizada_id"])) if vinculo["papel"] == "GESTOR" else ("proprio",str(usuario.id))
     if usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
         return "global",None
-    if usuario.permissoes.get("feiras_eventos"):
+    # Equipe comercial interna: quem trabalha oportunidades no CRM atende em
+    # feiras e vê os próprios atendimentos, sem depender de marcação manual.
+    if usuario.permissoes.get("feiras_eventos") or usuario.permissoes.get("oportunidades_visualizar") or usuario.permissoes.get("oportunidades_editar"):
         return "proprio",str(usuario.id)
     raise HTTPException(403,"Feiras e Eventos não autorizado.")
 

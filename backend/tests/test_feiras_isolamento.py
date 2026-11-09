@@ -193,3 +193,19 @@ def test_creation_validates_catalog_and_uses_shared_atomic_validation(monkeypatc
     assert r.status_code==201 and calls[0][0]=='cti_feira_registrar'
     assert calls[0][1]['p_payload']['request_original']['itens'][0]['nome_produto']=='Modelo'
     assert calls[0][1]['p_itens'][0]['nome_produto']=='Modelo oficial'
+
+
+def test_equipe_comercial_interna_acessa_feiras_sem_marcacao_manual():
+    from core.admin_auth import UsuarioAutenticado
+    from fastapi import HTTPException
+    from routers.feiras_eventos_router import _escopo_feira
+
+    def usuario(tipo, **permissoes):
+        return UsuarioAutenticado(id='v1', auth_id='v1', email='v1@example.invalid', nome='v1', tipo_usuario=tipo, permissoes=permissoes)
+
+    assert _escopo_feira(usuario('REPRES_REGIAO_01', oportunidades_visualizar=True)) == ('proprio', 'v1')
+    assert _escopo_feira(usuario('REPRES_REGIAO_02', oportunidades_editar=True)) == ('proprio', 'v1')
+    with pytest.raises(HTTPException):
+        _escopo_feira(usuario('REPRES_REGIAO_01'))  # sem CRM comercial, sem feiras
+    with pytest.raises(HTTPException):
+        _escopo_feira(usuario('AUTORIZADO_CARRIER', oportunidades_visualizar=True))  # externo segue exigindo liberação e vínculo
