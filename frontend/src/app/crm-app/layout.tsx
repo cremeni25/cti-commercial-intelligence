@@ -8,6 +8,10 @@ export const metadata: Metadata = {
   description: "CRM comercial móvel integrado ao CTI Inteligência Comercial.",
   manifest: "/crm-app/manifest.webmanifest",
   applicationName: "CTI / Viena São Paulo — CRM",
+  icons: {
+    icon: [{ url: "/crm-app-icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/crm-app-icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
