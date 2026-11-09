@@ -75,11 +75,24 @@ def _escopo_feira(usuario: UsuarioAutenticado) -> tuple[str, str | None]:
         return ("empresa",str(vinculo["autorizada_id"])) if vinculo["papel"] == "GESTOR" else ("proprio",str(usuario.id))
     if usuario.tipo_usuario == "ADMIN_MASTER" or usuario.permissoes.get("acesso_total") or usuario.tipo_usuario in {"DIRETOR_VIENA_SP","ADMIN_COMERCIAL_VIENA_SP"}:
         return "global",None
+    if usuario.permissoes.get("feiras_eventos"):
+        return "proprio",str(usuario.id)
     # Equipe comercial interna: quem trabalha oportunidades no CRM atende em
-    # feiras e vê os próprios atendimentos, sem depender de marcação manual.
-    if usuario.permissoes.get("feiras_eventos") or usuario.permissoes.get("oportunidades_visualizar") or usuario.permissoes.get("oportunidades_editar"):
+    # feiras sem depender de marcação manual. A liberação é gravada na própria
+    # permissão do usuário (a mesma da tela Usuários), porque as funções do banco
+    # que salvam e editam atendimentos conferem esse campo.
+    if usuario.permissoes.get("oportunidades_visualizar") or usuario.permissoes.get("oportunidades_editar"):
+        _liberar_feiras_equipe_interna(usuario)
         return "proprio",str(usuario.id)
     raise HTTPException(403,"Feiras e Eventos não autorizado.")
+
+
+def _liberar_feiras_equipe_interna(usuario: UsuarioAutenticado) -> None:
+    try:
+        supabase.table("cti_user_permissions").update({"feiras_eventos": True}).eq("user_id", usuario.id).execute()
+    except Exception as erro:
+        raise HTTPException(503, "Não foi possível liberar Feiras e Eventos agora; tente de novo em instantes.") from erro
+    usuario.permissoes["feiras_eventos"] = True
 
 @router.get("")
 def listar_feiras(usuario: UsuarioAutenticado = Depends(usuario_atual)):

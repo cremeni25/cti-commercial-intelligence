@@ -195,16 +195,37 @@ def test_creation_validates_catalog_and_uses_shared_atomic_validation(monkeypatc
     assert calls[0][1]['p_itens'][0]['nome_produto']=='Modelo oficial'
 
 
-def test_equipe_comercial_interna_acessa_feiras_sem_marcacao_manual():
+def test_equipe_comercial_interna_acessa_feiras_sem_marcacao_manual(monkeypatch):
+    from types import SimpleNamespace
     from core.admin_auth import UsuarioAutenticado
     from fastapi import HTTPException
+    from routers import feiras_eventos_router
     from routers.feiras_eventos_router import _escopo_feira
+
+    gravacoes = []
+
+    class Tabela:
+        def update(self, dados):
+            self.dados = dados
+            return self
+        def eq(self, campo, valor):
+            gravacoes.append((self.dados, campo, valor))
+            return self
+        def execute(self):
+            return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(feiras_eventos_router, 'supabase', SimpleNamespace(table=lambda nome: Tabela()))
 
     def usuario(tipo, **permissoes):
         return UsuarioAutenticado(id='v1', auth_id='v1', email='v1@example.invalid', nome='v1', tipo_usuario=tipo, permissoes=permissoes)
 
-    assert _escopo_feira(usuario('REPRES_REGIAO_01', oportunidades_visualizar=True)) == ('proprio', 'v1')
+    vendedor = usuario('REPRES_REGIAO_01', oportunidades_visualizar=True)
+    assert _escopo_feira(vendedor) == ('proprio', 'v1')
+    # a liberação vai para a permissão do usuário, que as funções do banco conferem ao salvar/editar
+    assert gravacoes == [({'feiras_eventos': True}, 'user_id', 'v1')] and vendedor.permissoes['feiras_eventos'] is True
     assert _escopo_feira(usuario('REPRES_REGIAO_02', oportunidades_editar=True)) == ('proprio', 'v1')
+    gravacoes.clear()
+    assert _escopo_feira(usuario('REPRES_REGIAO_03', feiras_eventos=True)) == ('proprio', 'v1') and gravacoes == []
     with pytest.raises(HTTPException):
         _escopo_feira(usuario('REPRES_REGIAO_01'))  # sem CRM comercial, sem feiras
     with pytest.raises(HTTPException):
