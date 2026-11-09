@@ -1,7 +1,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useRef, useState } from "react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import { useAuth } from "@/core/auth/AuthContext"
@@ -93,7 +93,9 @@ export default function Page() {
   const [edicao, setEdicao] = useState<UsuarioAtualizacao | null>(null)
   const [dddsEdicao, setDddsEdicao] = useState("")
   const [excluindo, setExcluindo] = useState<UsuarioCTI | null>(null)
-  const [linkSenha, setLinkSenha] = useState<{ nome: string; link?: string; erro?: string; copiado?: boolean } | null>(null)
+  const [linkSenha, setLinkSenha] = useState<{ nome: string; link?: string; erro?: string; copia?: "ok" | "falhou" } | null>(null)
+  // Cada pedido de link tem um número; resposta de pedido antigo (janela fechada ou outro usuário) é ignorada.
+  const pedidoLinkAtual = useRef(0)
   const [confirmacaoEmail, setConfirmacaoEmail] = useState("")
   const [loading, setLoading] = useState(true)
   const [processando, setProcessando] = useState(false)
@@ -187,13 +189,19 @@ export default function Page() {
 
   async function linkNovaSenha(item: UsuarioCTI) {
     // Janela na frente da tela: o resultado aparece onde o gestor está olhando.
+    const pedido = ++pedidoLinkAtual.current
     setLinkSenha({ nome: item.nome })
     try {
       const { link } = await gerarLinkNovaSenha(item.id)
-      setLinkSenha({ nome: item.nome, link })
+      if (pedido === pedidoLinkAtual.current) setLinkSenha({ nome: item.nome, link })
     } catch (error) {
-      setLinkSenha({ nome: item.nome, erro: error instanceof Error ? error.message : "Não foi possível gerar o link de nova senha." })
+      if (pedido === pedidoLinkAtual.current) setLinkSenha({ nome: item.nome, erro: error instanceof Error ? error.message : "Não foi possível gerar o link de nova senha." })
     }
+  }
+
+  function fecharLinkSenha() {
+    pedidoLinkAtual.current += 1
+    setLinkSenha(null)
   }
 
   async function confirmarExclusao() {
@@ -231,7 +239,7 @@ export default function Page() {
 
             {editando && edicao && <UsuarioForm autorizadas={autorizadas} titulo={`Editar ${editando.nome}`} subtitulo={`E-mail de autenticação: ${editando.email}`} dados={edicao} dddsTexto={dddsEdicao} setDddsTexto={setDddsEdicao} onChange={(valor) => setEdicao(valor as UsuarioAtualizacao)} onMarcar={marcarEdicao} onSubmit={salvarEdicao} processando={processando} botao="Salvar dados e permissões" onCancelar={() => { setEditando(null); setEdicao(null) }} />}
 
-            {linkSenha && <div role="dialog" aria-modal="true" aria-label="Link de nova senha" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><section className="w-full max-w-lg rounded-3xl border border-cyan-800 bg-[#061126] p-6 shadow-2xl"><h2 className="text-xl font-bold text-cyan-100">Link de nova senha — {linkSenha.nome}</h2>{!linkSenha.link && !linkSenha.erro && <p className="mt-4 text-sm text-slate-300">Gerando link...</p>}{linkSenha.erro && <p role="alert" className="mt-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">{linkSenha.erro}</p>}{linkSenha.link && <><p className="mt-2 text-sm text-cyan-100/80">Envie este link pelo WhatsApp. A pessoa abre no celular, cria a nova senha e já pode entrar. O link vale uma única vez e expira; se expirar, gere outro.</p><input readOnly value={linkSenha.link} onFocus={(e) => e.currentTarget.select()} className="mt-4 w-full rounded-xl border border-cyan-800 bg-[#020817] px-4 py-3 text-xs text-slate-200" aria-label="Link gerado"/><div className="mt-4 flex flex-wrap gap-3"><a href={`https://wa.me/?text=${encodeURIComponent(`Olá! Para criar sua nova senha do CTI, abra este link no celular: ${linkSenha.link}`)}`} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950">Enviar pelo WhatsApp</a><button onClick={() => { const link = linkSenha.link || ""; void navigator.clipboard.writeText(link).then(() => setLinkSenha((atual) => atual && { ...atual, copiado: true })).catch(() => undefined) }} className="rounded-xl border border-cyan-700 px-5 py-3 text-sm font-semibold text-cyan-200">{linkSenha.copiado ? "Copiado!" : "Copiar link"}</button></div></>}<button onClick={() => setLinkSenha(null)} className="mt-5 w-full rounded-xl border border-slate-600 px-5 py-3 text-sm">Fechar</button></section></div>}
+            {linkSenha && <div role="dialog" aria-modal="true" aria-label="Link de nova senha" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"><section className="w-full max-w-lg rounded-3xl border border-cyan-800 bg-[#061126] p-6 shadow-2xl"><h2 className="text-xl font-bold text-cyan-100">Link de nova senha — {linkSenha.nome}</h2>{!linkSenha.link && !linkSenha.erro && <p className="mt-4 text-sm text-slate-300">Gerando link...</p>}{linkSenha.erro && <p role="alert" className="mt-4 rounded-xl border border-red-800 bg-red-950/40 px-4 py-3 text-sm text-red-200">{linkSenha.erro}</p>}{linkSenha.link && <><p className="mt-2 text-sm text-cyan-100/80">Envie este link pelo WhatsApp. A pessoa abre no celular, cria a nova senha e já pode entrar. O link vale uma única vez e expira; se expirar, gere outro.</p><input readOnly value={linkSenha.link} onFocus={(e) => e.currentTarget.select()} className="mt-4 w-full rounded-xl border border-cyan-800 bg-[#020817] px-4 py-3 text-xs text-slate-200" aria-label="Link gerado"/><div className="mt-4 flex flex-wrap gap-3"><a href={`https://wa.me/?text=${encodeURIComponent(`Olá! Para criar sua nova senha do CTI, abra este link no celular: ${linkSenha.link}`)}`} target="_blank" rel="noreferrer" className="rounded-xl bg-emerald-500 px-5 py-3 text-sm font-semibold text-slate-950">Enviar pelo WhatsApp</a><button onClick={() => { const link = linkSenha.link || ""; void navigator.clipboard.writeText(link).then(() => setLinkSenha((atual) => atual && { ...atual, copia: "ok" })).catch(() => setLinkSenha((atual) => atual && { ...atual, copia: "falhou" })) }} className="rounded-xl border border-cyan-700 px-5 py-3 text-sm font-semibold text-cyan-200">{linkSenha.copia === "ok" ? "Copiado!" : "Copiar link"}</button></div>{linkSenha.copia === "falhou" && <p role="alert" className="mt-3 text-sm text-amber-200">Este navegador não deixou copiar. Toque no link acima, selecione tudo e copie manualmente, ou use Enviar pelo WhatsApp.</p>}</>}<button onClick={fecharLinkSenha} className="mt-5 w-full rounded-xl border border-slate-600 px-5 py-3 text-sm">Fechar</button></section></div>}
             {excluindo && <section className="rounded-3xl border border-red-800 bg-red-950/20 p-6"><h2 className="text-xl font-bold text-red-200">Excluir definitivamente</h2><p className="mt-2 text-sm text-red-200/80">Disponível apenas enquanto o primeiro acesso não foi concluído. Para confirmar, digite o e-mail <strong>{excluindo.email}</strong>.</p><div className="mt-4 flex flex-col gap-3 sm:flex-row"><input value={confirmacaoEmail} onChange={(e) => setConfirmacaoEmail(e.target.value)} className="flex-1 rounded-xl border border-red-700 bg-[#061126] px-4 py-3" placeholder="Digite o e-mail completo" /><button disabled={processando || confirmacaoEmail.trim().toLowerCase() !== excluindo.email.toLowerCase()} onClick={() => void confirmarExclusao()} className="rounded-xl bg-red-600 px-5 py-3 font-semibold disabled:opacity-40">Excluir conta</button><button onClick={() => { setExcluindo(null); setConfirmacaoEmail("") }} className="rounded-xl border border-slate-600 px-5 py-3">Cancelar</button></div></section>}
 
             <div className="grid gap-4 sm:grid-cols-3"><Metric label="Usuários cadastrados" value={String(usuarios.length)} /><Metric label="Usuários ativos" value={String(usuarios.filter((item) => item.ativo).length)} /><Metric label="Primeiro acesso pendente" value={String(usuarios.filter((item) => item.status_acesso === "PRIMEIRO_ACESSO_PENDENTE").length)} /></div>
