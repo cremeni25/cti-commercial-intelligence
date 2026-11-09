@@ -7,6 +7,7 @@
     "tela inicial sem rolagem horizontal em 390px",
     "negociação e proposta compartilham uma única entrada",
     "carteira autentica as duas fontes e preserva homônimos com negócios por ID",
-    "atalhos respeitam permissões sem mudar a autorização do backend"
+    "atalhos respeitam permissões; equipe comercial vê Feiras e Eventos",
+    "sem permissão comercial, Feiras continua oculto"
   ]
 }

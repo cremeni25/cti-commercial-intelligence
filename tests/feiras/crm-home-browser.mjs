@@ -70,11 +70,16 @@ try {
   await page.goto('http://127.0.0.1:3103/crm-app')
   await page.reload()
   await page.getByRole('heading', { name: 'Meu dia', exact: true }).waitFor()
-  assert.equal(await page.locator('a[href="/crm-app/feiras"]').count(), 0)
+  assert.equal(await page.locator('a[href="/crm-app/feiras"]').count(), 1, 'equipe comercial vê Feiras e Eventos')
   assert.equal(await page.locator('a[href="/crm-app/propostas"]').count(), 0)
   assert.equal(await page.locator('a[href="/crm-app/pedidos"]').count(), 0)
   assert.equal(await page.locator('a[href="/crm-app/clientes"]').count(), 0)
-  checks.push('atalhos respeitam permissões sem mudar a autorização do backend')
+  checks.push('atalhos respeitam permissões; equipe comercial vê Feiras e Eventos')
+  perfil.permissoes = {}
+  await page.reload()
+  await page.getByRole('heading', { name: 'Meu dia', exact: true }).waitFor()
+  assert.equal(await page.locator('a[href="/crm-app/feiras"]').count(), 0)
+  checks.push('sem permissão comercial, Feiras continua oculto')
   await context.close()
   const report = { engine: 'Chromium real e Next build; APIs e identidades sintéticas, sem produção', checks }
   writeFileSync(new URL('./crm-home-results.json', import.meta.url), JSON.stringify(report, null, 2))

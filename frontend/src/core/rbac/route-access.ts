@@ -21,7 +21,8 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (perfil === "AUTORIZADO_CARRIER" || perfil === "GESTOR_AUTORIZADO_CARRIER") {
     return inicia(pathname, "/crm-app/feiras") && tem(permissoes, "feiras_eventos")
   }
-  if (inicia(pathname, "/crm-app/feiras")) return gestao || tem(permissoes, "feiras_eventos")
+  // Equipe comercial interna atende em feiras sem marcação manual (mesma regra do backend).
+  if (inicia(pathname, "/crm-app/feiras")) return gestao || tem(permissoes, "feiras_eventos") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
 
   if (inicia(pathname, "/backoffice-fontes")) return master
   if (inicia(pathname, "/configuracoes/modelos-oficiais")) return master
