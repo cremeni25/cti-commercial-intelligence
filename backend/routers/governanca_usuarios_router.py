@@ -375,6 +375,37 @@ def alterar_estado_usuario(usuario_id: str, payload: EstadoUsuario, usuario: Usu
     return dados[0]
 
 
+@router.post("/usuarios/{usuario_id}/link-senha")
+def gerar_link_nova_senha(usuario_id: str, usuario: UsuarioAutenticado = Depends(usuario_atual)):
+    """Link de nova senha gerado pelo Master, para enviar por WhatsApp.
+
+    Não depende do e-mail chegar: o Master copia o link e entrega à pessoa.
+    O link é de uso único e expira conforme a política do Supabase.
+    """
+    _exigir_master(usuario)
+    alvo = _buscar_usuario(usuario_id)
+    _proteger_admin_master(alvo, usuario)
+    email = str(alvo.get("email") or "").strip().lower()
+    if not email:
+        raise HTTPException(status_code=409, detail="Usuário sem e-mail cadastrado.")
+    if alvo.get("ativo") is False or str(alvo.get("status_acesso") or "").upper() in {"INATIVO", "BLOQUEADO", "REJEITADO"}:
+        raise HTTPException(status_code=409, detail="Usuário desativado. Reative a conta antes de gerar o link.")
+    destino = "/crm-app/login" if alvo.get("acesso_crm") is not False else "/login"
+    try:
+        resposta = supabase.auth.admin.generate_link({
+            "type": "recovery",
+            "email": email,
+            "options": {"redirect_to": f"https://app.cti-intelligence.com/redefinir-senha?destino={destino}"},
+        })
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail="Não foi possível gerar o link agora. Confira se o e-mail do usuário está correto.") from exc
+    propriedades = getattr(resposta, "properties", None)
+    link = getattr(propriedades, "action_link", None) or (resposta.get("action_link") if isinstance(resposta, dict) else None)
+    if not link:
+        raise HTTPException(status_code=502, detail="O serviço de login não devolveu o link.")
+    return {"email": email, "link": link}
+
+
 @router.delete("/usuarios/{usuario_id}")
 def excluir_usuario(usuario_id: str, payload: ConfirmacaoExclusao, usuario: UsuarioAutenticado = Depends(usuario_atual)):
     _exigir_master(usuario)

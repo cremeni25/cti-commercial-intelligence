@@ -87,6 +87,11 @@ export function alterarEstadoUsuario(usuarioId: string, ativo: boolean): Promise
   })
 }
 
+/** Link de nova senha (uso único) para o gestor enviar por WhatsApp. */
+export function gerarLinkNovaSenha(usuarioId: string): Promise<{ email: string; link: string }> {
+  return requisicao<{ email: string; link: string }>(`/governanca/usuarios/${usuarioId}/link-senha`, { method: "POST" })
+}
+
 export function excluirUsuario(usuarioId: string, email: string): Promise<{ excluido: boolean }> {
   return requisicao<{ excluido: boolean }>(`/governanca/usuarios/${usuarioId}`, {
     method: "DELETE",
