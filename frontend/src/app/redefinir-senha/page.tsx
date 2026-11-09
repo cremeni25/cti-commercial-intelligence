@@ -4,6 +4,12 @@ import { FormEvent, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseClient } from "@/core/database/supabase"
 
+// Para onde voltar depois de definir a senha: o app (/crm-app/login) ou o site.
+function destinoLogin() {
+  if (typeof window === "undefined") return "/login"
+  return new URLSearchParams(window.location.search).get("destino") === "/crm-app/login" ? "/crm-app/login" : "/login"
+}
+
 export default function RedefinirSenhaPage() {
   const router = useRouter()
   const [senha, setSenha] = useState("")
@@ -65,7 +71,7 @@ export default function RedefinirSenhaPage() {
 
       await supabase.auth.signOut()
       setMensagem("Senha definida com sucesso. Você será direcionado para o login.")
-      window.setTimeout(() => router.replace("/login"), 1500)
+      window.setTimeout(() => router.replace(destinoLogin()), 1500)
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível atualizar a senha.")
     } finally {
@@ -92,7 +98,7 @@ export default function RedefinirSenhaPage() {
             <div className="rounded-xl border border-amber-800 bg-amber-950/30 px-4 py-3 text-sm text-amber-200">
               O link de recuperação é inválido ou expirou. Solicite um novo link na tela de login.
             </div>
-            <button type="button" onClick={() => router.replace("/login")} className="text-sm font-semibold text-cyan-300 hover:text-cyan-200">Voltar ao login</button>
+            <button type="button" onClick={() => router.replace(destinoLogin())} className="text-sm font-semibold text-cyan-300 hover:text-cyan-200">Voltar ao login</button>
           </div>
         ) : (
           <form onSubmit={atualizarSenha} className="space-y-5">
