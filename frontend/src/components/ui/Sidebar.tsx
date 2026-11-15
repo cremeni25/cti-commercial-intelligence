@@ -42,6 +42,7 @@ const menuGroups: MenuGroup[] = [
   { tituloKey: "nav.masterData", itens: [
     { labelKey: "nav.companies", href: "/empresas", icon: "🏢", type: "emoji" },
     { label: { "pt-BR": "Carteiras Comerciais", en: "Customer Portfolios", es: "Carteras Comerciales" }, href: "/dashboard/carteiras-comerciais", icon: "🗂️", type: "emoji" },
+    { label: { "pt-BR": "Carteira setorizada", en: "Segmented portfolio", es: "Cartera segmentada" }, href: "/carteira", icon: "🧭", type: "emoji" },
     { labelKey: "nav.bodyBuilders", href: "/implementadoras", icon: "🏭", type: "emoji" },
   ]},
   { tituloKey: "nav.equipment", itens: [
@@ -54,6 +55,7 @@ const menuGroups: MenuGroup[] = [
     { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📊", type: "emoji" },
     { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
     { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
+    { label: { "pt-BR": "Acervo comercial", en: "Commercial archive", es: "Acervo comercial" }, href: "/acervo", icon: "🗄️", type: "emoji" },
     { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
     { labelKey: "nav.officialTemplates", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
   ]},
@@ -68,10 +70,11 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais" || href === "/inteligencia") return master
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
-  if (href === "/upload") return gestao
+  if (href === "/upload" || href === "/acervo") return gestao
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/catalogo") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar") || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")
+  if (href === "/carteira") return gestao || tem(permissoes, "clientes_visualizar") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/central") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/oportunidades" || href === "/pipeline" || href === "/historico-comercial" || href === "/ia-comercial" || href === "/atividades" || href === "/forecast" || href === "/mapa-estrategico") return gestao || tem(permissoes, "oportunidades_visualizar")

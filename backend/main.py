@@ -11,7 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 load_dotenv()
 
 from core.supabase_client import supabase
+from routers.acervo_comercial_router import router as acervo_comercial_router
 from routers.analytics_router import router as analytics_router
+from routers.carteira_setorizada_router import router as carteira_setorizada_router
 from routers.anfir_workbook_router import router as anfir_workbook_router
 from routers.autorizados_router import router as autorizados_router
 from routers.brasil_router import router as brasil_router
@@ -88,6 +90,8 @@ app.include_router(crm_router)
 app.include_router(crm_scope_router)
 app.include_router(inteligencia_comercial_router)
 app.include_router(ingestao_cifrada_router)
+app.include_router(acervo_comercial_router)
+app.include_router(carteira_setorizada_router)
 app.include_router(notificacoes_router)
 app.include_router(crm_scope_estabelecimento_router)
 app.include_router(crm_scope_atividades_router)

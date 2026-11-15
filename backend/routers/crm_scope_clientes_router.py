@@ -146,5 +146,8 @@ def definir_responsabilidade_cliente(cliente_id: str, dados: ResponsabilidadeCli
         perfil = _perfil_usuario(str(dados.responsavel_id))
         if not perfil or perfil.get("ativo") is False: raise HTTPException(status_code=422, detail="Responsável comercial inválido ou inativo.")
         novo_id = str(perfil["id"]); tipo_novo = "CONTA_DIRETA_MASTER" if dados.conta_direta_master else "ATRIBUICAO_MASTER"
-    supabase.table("clientes").update({"responsavel_comercial_id":novo_id,"responsabilidade_tipo":tipo_novo,"responsabilidade_atualizada_em":_agora(),"responsabilidade_atualizada_por":str(usuario.id)}).eq("id", cliente_id).execute()
+    # A troca leva só o que está em aberto: visitas feitas e negócios encerrados ficam com quem os fez.
+    from services.acervo_comercial import reparar_autoria_pendente, trocar_responsavel_preservando
+    reparar_autoria_pendente()
+    trocar_responsavel_preservando([cliente_id], lambda: supabase.table("clientes").update({"responsavel_comercial_id":novo_id,"responsabilidade_tipo":tipo_novo,"responsabilidade_atualizada_em":_agora(),"responsabilidade_atualizada_por":str(usuario.id)}).eq("id", cliente_id).execute(), f"responsável do cliente {cliente_id}")
     _registrar_historico(cliente_id, anterior_id, novo_id, tipo_anterior, tipo_novo, dados.motivo, str(usuario.id)); return _anotar_responsavel(_cliente_canonico(cliente_id))
