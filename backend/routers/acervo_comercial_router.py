@@ -43,8 +43,8 @@ def transferir(dados: Transferencia, usuario: UsuarioAutenticado = Depends(usuar
         return acervo.transferir_carteira(dados.de_usuario_id, dados.para_usuario_id, dados.motivo.strip(), str(usuario.id))
     except acervo.AcervoErro as erro:
         raise HTTPException(status_code=422, detail=str(erro)) from erro
-    except CofreIndisponivel as erro:
-        raise HTTPException(status_code=503, detail="Não foi possível guardar a cópia de segurança antes da transferência; nada foi alterado.") from erro
+    except (CofreIndisponivel, acervo.AcervoIncompleto) as erro:
+        raise HTTPException(status_code=503, detail="Não foi possível guardar a cópia de segurança completa antes da transferência; nada foi alterado.") from erro
 
 
 @router.get("/crm-seguro/acervo/exportacao")
@@ -71,8 +71,8 @@ def novo_backup(usuario: UsuarioAutenticado = Depends(usuario_atual)):
         from services.cofre_agente import caminho, url_assinada
 
         return {**registro, "url": url_assinada(caminho(acervo.PASTA_BACKUP, registro["arquivo"]), 3600)}
-    except CofreIndisponivel as erro:
-        raise HTTPException(status_code=503, detail="Cofre indisponível no momento.") from erro
+    except (CofreIndisponivel, acervo.AcervoIncompleto) as erro:
+        raise HTTPException(status_code=503, detail=f"Cópia não gerada: {erro}") from erro
 
 
 @router.post(ROTA_BACKUP_AGENDADO)
@@ -85,5 +85,6 @@ def backup_agendado(authorization: str | None = Header(default=None)):
         validar_token_workflow(partes[1].strip(), publico=PUBLICO_OIDC, workflow=WORKFLOW_BACKUP)
     except TokenInvalido as erro:
         raise HTTPException(status_code=401, detail="Disparo agendado não autorizado.") from erro
+    reparadas = acervo.reparar_autoria_pendente()
     registro = acervo.salvar_backup("cópia semanal automática")
-    return {"arquivo": registro["arquivo"], "totais": registro["totais"]}
+    return {"arquivo": registro["arquivo"], "totais": registro["totais"], "autoria_reparada": reparadas}

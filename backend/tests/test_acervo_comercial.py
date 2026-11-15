@@ -147,3 +147,63 @@ def test_troca_de_responsavel_de_um_cliente_tambem_preserva_quem_fez(banco, monk
     atv, opp = _por_id(dados["cti_atividades"]), _por_id(dados["cti_oportunidades"])
     assert atv["a-pendente"]["usuario_id"] == "beto" and atv["a-feita"]["usuario_id"] == "ana"
     assert opp["o-aberta"]["responsavel_id"] == "beto" and opp["o-ganha"]["responsavel_id"] == "ana"
+
+
+def test_fotografia_paginada_nao_perde_autoria_com_muitos_registros(banco, monkeypatch):
+    dados, _ = banco
+    monkeypatch.setattr(acervo, "LIMITE_PAGINA", 2)  # força várias páginas
+    for i in range(7):
+        dados["cti_atividades"].append({"id": f"feita-{i}", "cliente_id": "c1", "oportunidade_id": None, "usuario_id": "ana", "status": "CONCLUIDA"})
+    acervo.transferir_carteira("ana", "beto", "", "gestor")
+    atv = _por_id(dados["cti_atividades"])
+    assert all(atv[f"feita-{i}"]["usuario_id"] == "ana" for i in range(7))
+
+
+def test_copia_nao_sai_incompleta_e_transferencia_nao_acontece(banco, monkeypatch):
+    dados, _ = banco
+    original = acervo.paginar
+
+    def falha_em_pedidos(tabela, campos="*", filtro=None):
+        if tabela == "cti_pedidos":
+            raise RuntimeError("canceling statement due to statement timeout")
+        return original(tabela, campos, filtro)
+
+    monkeypatch.setattr(acervo, "paginar", falha_em_pedidos)
+    with pytest.raises(acervo.AcervoIncompleto):
+        acervo.salvar_backup("teste")
+    with pytest.raises(acervo.AcervoIncompleto):
+        acervo.transferir_carteira("ana", "beto", "", "gestor")
+    assert _por_id(dados["clientes"])["c1"]["responsavel_comercial_id"] == "ana"  # nada mudou
+
+    def tabela_inexistente(tabela, campos="*", filtro=None):
+        if tabela == "cti_pedidos":
+            raise RuntimeError("{'code': 'PGRST205', 'message': \"Could not find the table 'public.cti_pedidos'\"}")
+        return original(tabela, campos, filtro)
+
+    monkeypatch.setattr(acervo, "paginar", tabela_inexistente)
+    _, totais = acervo.gerar_exportacao()  # tabela que não existe no ambiente é tolerada
+    assert "Pedidos" not in totais
+
+
+def test_falha_no_meio_da_troca_ainda_devolve_autoria(banco):
+    dados, _ = banco
+
+    def troca_que_cai():
+        _gatilho_banco(dados, _por_id(dados["clientes"])["c1"], {"responsavel_comercial_id": "beto"})
+        raise RuntimeError("conexão caiu no segundo lote")
+
+    with pytest.raises(RuntimeError):
+        acervo.trocar_responsavel_preservando(["c1"], troca_que_cai, "teste")
+    assert _por_id(dados["cti_atividades"])["a-feita"]["usuario_id"] == "ana"
+    assert _por_id(dados["cti_oportunidades"])["o-ganha"]["responsavel_id"] == "ana"
+
+
+def test_diario_pendente_e_reparado_na_proxima_operacao(banco, monkeypatch):
+    dados, cofre = banco
+    foto = acervo.fotografar_autoria(["c1"])
+    acervo.abrir_diario(foto, "operação interrompida")  # restauração nunca rodou
+    _gatilho_banco(dados, _por_id(dados["clientes"])["c1"], {"responsavel_comercial_id": "beto"})
+    assert _por_id(dados["cti_atividades"])["a-feita"]["usuario_id"] == "beto"
+    assert acervo.reparar_autoria_pendente() == 1
+    assert _por_id(dados["cti_atividades"])["a-feita"]["usuario_id"] == "ana"
+    assert acervo.reparar_autoria_pendente() == 0  # já concluída

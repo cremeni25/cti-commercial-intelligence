@@ -19,6 +19,8 @@ import unicodedata
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
+from uuid import uuid4
+
 from openpyxl import Workbook
 
 STATUS_ATIVIDADE_FEITA = {
@@ -50,6 +52,15 @@ LIMITE_PAGINA = 1000
 
 class AcervoErro(ValueError):
     """Pedido inválido (destino inativo, mesma pessoa etc.)."""
+
+
+class AcervoIncompleto(RuntimeError):
+    """Uma tabela obrigatória não pôde ser lida: a cópia não é gerada."""
+
+
+def _tabela_inexistente(erro: Exception) -> bool:
+    texto = str(erro).lower()
+    return "pgrst205" in texto or "42p01" in texto or ("relation" in texto and "does not exist" in texto) or "could not find the table" in texto
 
 
 def _supabase():
@@ -102,17 +113,21 @@ def negocio_encerrado(oportunidade: dict[str, Any]) -> bool:
 # --------------------------------------------------------------- autoria ---
 
 def fotografar_autoria(cliente_ids: list[str]) -> dict[str, dict[str, str]]:
-    """Quem é o autor de cada atividade feita e de cada negócio encerrado dos clientes."""
-    sb = _supabase()
+    """Quem é o autor de cada atividade feita e de cada negócio encerrado dos clientes.
+
+    Todas as consultas são paginadas: um lote de clientes pode ter mais registros
+    do que o limite de uma resposta do banco.
+    """
+    campos_atividade = "id,usuario_id,status,cliente_id,oportunidade_id"
     oportunidades: list[dict[str, Any]] = []
     atividades: list[dict[str, Any]] = []
     for lote in _em_lotes(cliente_ids):
-        oportunidades += sb.table("cti_oportunidades").select("*").in_("cliente_id", lote).execute().data or []
-        atividades += sb.table("cti_atividades").select("id,usuario_id,status,cliente_id,oportunidade_id").in_("cliente_id", lote).execute().data or []
+        oportunidades += paginar("cti_oportunidades", "*", lambda q, l=lote: q.in_("cliente_id", l))
+        atividades += paginar("cti_atividades", campos_atividade, lambda q, l=lote: q.in_("cliente_id", l))
     ids_oportunidade = [str(o["id"]) for o in oportunidades if o.get("id")]
     vistos = {str(a.get("id")) for a in atividades}
     for lote in _em_lotes(ids_oportunidade):
-        for atividade in sb.table("cti_atividades").select("id,usuario_id,status,cliente_id,oportunidade_id").in_("oportunidade_id", lote).execute().data or []:
+        for atividade in paginar("cti_atividades", campos_atividade, lambda q, l=lote: q.in_("oportunidade_id", l)):
             if str(atividade.get("id")) not in vistos:
                 atividades.append(atividade)
                 vistos.add(str(atividade.get("id")))
@@ -120,6 +135,61 @@ def fotografar_autoria(cliente_ids: list[str]) -> dict[str, dict[str, str]]:
         "atividades": {str(a["id"]): str(a["usuario_id"]) for a in atividades if a.get("id") and a.get("usuario_id") and atividade_feita(a)},
         "oportunidades": {str(o["id"]): str(o["responsavel_id"]) for o in oportunidades if o.get("id") and o.get("responsavel_id") and negocio_encerrado(o)},
     }
+
+
+# Diário de autoria: a fotografia fica gravada no cofre ANTES de qualquer troca de
+# responsável. Se a troca ou a restauração cair no meio, a próxima operação do
+# acervo (ou a cópia semanal) devolve a autoria a partir do diário.
+PASTA_DIARIO = "autoria"
+
+
+def _caminho_diario(operacao_id: str) -> str:
+    from services import cofre_agente
+
+    return cofre_agente.caminho(PASTA_BACKUP, PASTA_DIARIO, f"{operacao_id}.json")
+
+
+def abrir_diario(foto: dict[str, dict[str, str]], descricao: str) -> str:
+    from services import cofre_agente
+
+    operacao_id = f"{_agora().strftime('%Y%m%d%H%M%S')}-{uuid4().hex[:8]}"
+    cofre_agente.gravar(_caminho_diario(operacao_id), {"status": "pendente", "descricao": descricao, "criado_em": _agora().isoformat(), "foto": foto})
+    return operacao_id
+
+
+def fechar_diario(operacao_id: str, foto: dict[str, dict[str, str]], descricao: str) -> None:
+    from services import cofre_agente
+
+    cofre_agente.gravar(_caminho_diario(operacao_id), {"status": "concluida", "descricao": descricao, "concluida_em": _agora().isoformat(), "foto": foto})
+
+
+def reparar_autoria_pendente() -> int:
+    """Reaplica a autoria de operações que não terminaram. Retorna quantas foram reparadas."""
+    from services import cofre_agente
+
+    reparadas = 0
+    for nome, registro in cofre_agente.ler_pasta(f"{PASTA_BACKUP}/{PASTA_DIARIO}").items():
+        if isinstance(registro, dict) and registro.get("status") == "pendente":
+            restaurar_autoria(registro.get("foto") or {})
+            fechar_diario(nome.removesuffix(".json"), registro.get("foto") or {}, f"{registro.get('descricao')} (reparada)")
+            reparadas += 1
+    return reparadas
+
+
+def trocar_responsavel_preservando(cliente_ids: list[str], atualizar, descricao: str) -> int:
+    """Executa `atualizar()` (que troca o responsável dos clientes) sem perder a autoria.
+
+    A fotografia é gravada no diário antes; a restauração roda mesmo se a troca falhar
+    no meio; se a própria restauração falhar, o diário fica pendente para reparo.
+    """
+    foto = fotografar_autoria(cliente_ids)
+    operacao_id = abrir_diario(foto, descricao)
+    try:
+        atualizar()
+    finally:
+        preservados = restaurar_autoria(foto)
+        fechar_diario(operacao_id, foto, descricao)
+    return preservados
 
 
 def restaurar_autoria(foto: dict[str, dict[str, str]]) -> int:
@@ -193,16 +263,19 @@ def transferir_carteira(de_id: str, para_id: str, motivo: str, ator_id: str) -> 
 
     backup = salvar_backup(f"antes da transferência da carteira de {perfis[de_id].get('nome') or de_id}")
 
+    reparar_autoria_pendente()
     clientes = paginar("clientes", "id,responsavel_comercial_id,responsabilidade_tipo", lambda q: q.eq("responsavel_comercial_id", de_id))
     cliente_ids = [str(c["id"]) for c in clientes if c.get("id")]
-    foto = fotografar_autoria(cliente_ids)
     agora = _agora().isoformat()
-    for lote in _em_lotes(cliente_ids):
-        sb.table("clientes").update({
-            "responsavel_comercial_id": para_id, "responsabilidade_tipo": "ATRIBUICAO_MASTER",
-            "responsabilidade_atualizada_em": agora, "responsabilidade_atualizada_por": ator_id,
-        }).in_("id", lote).execute()
-    preservados = restaurar_autoria(foto)
+
+    def atualizar() -> None:
+        for lote in _em_lotes(cliente_ids):
+            sb.table("clientes").update({
+                "responsavel_comercial_id": para_id, "responsabilidade_tipo": "ATRIBUICAO_MASTER",
+                "responsabilidade_atualizada_em": agora, "responsabilidade_atualizada_por": ator_id,
+            }).in_("id", lote).execute()
+
+    preservados = trocar_responsavel_preservando(cliente_ids, atualizar, f"transferência {de_id} -> {para_id}")
     historico = [{
         "cliente_id": c["id"], "responsavel_anterior_id": de_id, "responsavel_novo_id": para_id,
         "tipo_anterior": c.get("responsabilidade_tipo"), "tipo_novo": "ATRIBUICAO_MASTER",
@@ -251,11 +324,17 @@ def gerar_exportacao() -> tuple[bytes, dict[str, int]]:
     wb = Workbook(write_only=True)
     totais: dict[str, int] = {}
     abas: list[tuple[str, list[dict[str, Any]]]] = []
+    ausentes: list[str] = []
     for nome, tabela, campos in TABELAS_EXPORTACAO:
         try:
             abas.append((nome, paginar(tabela, campos)))
-        except Exception:  # tabela ausente neste ambiente: exporta o resto
-            abas.append((nome, []))
+        except Exception as erro:
+            # Só a tabela que não existe neste ambiente é tolerada (e fica registrada no
+            # resumo). Qualquer outra falha (tempo esgotado, permissão, rede) interrompe a
+            # cópia: uma cópia incompleta não pode passar por completa.
+            if not _tabela_inexistente(erro):
+                raise AcervoIncompleto(f"Não foi possível ler {nome}: {erro}") from erro
+            ausentes.append(nome)
     try:
         from services import planilhas_comerciais
 
@@ -265,6 +344,8 @@ def gerar_exportacao() -> tuple[bytes, dict[str, int]]:
         pass
     resumo = wb.create_sheet("Resumo")
     resumo.append(["Acervo comercial CTI", _agora().isoformat()])
+    if ausentes:
+        resumo.append(["Tabelas inexistentes neste ambiente", ", ".join(ausentes)])
     resumo.append(["Aba", "Registros"])
     for nome, linhas in abas:
         titulo, colunas, valores = _linhas_planilha(nome, linhas)
