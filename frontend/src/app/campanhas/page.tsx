@@ -16,6 +16,7 @@ import {
   type PainelCampanhas,
 } from "@/services/campanhas-comerciais"
 
+const PAGINA = 100
 const numero = (valor: number) => valor.toLocaleString("pt-BR")
 const ROTULO_AUTORIZACAO: Record<ClienteCampanha["autorizacao"], string> = { AUTORIZADO: "Autorizou", RECUSADO: "Pediu para sair", PENDENTE: "Autorização pendente" }
 
@@ -43,6 +44,8 @@ function Campanha({ codigo, onAlterada }: { codigo: string; onAlterada: () => vo
   const [erro, setErro] = useState("")
   const [aviso, setAviso] = useState("")
   const [salvando, setSalvando] = useState(false)
+  const [busca, setBusca] = useState("")
+  const [visiveis, setVisiveis] = useState(PAGINA)
 
   const carregar = useCallback(async () => {
     try {
@@ -102,6 +105,8 @@ function Campanha({ codigo, onAlterada }: { codigo: string; onAlterada: () => vo
   if (!dados) return erro ? <p role="alert" className="rounded-2xl border border-red-900/60 bg-red-950/30 px-5 py-4 text-sm text-red-200">{erro}</p> : <div className="grid min-h-32 place-items-center"><Loader2 className="animate-spin text-cyan-300"/></div>
   const aprovada = dados.status === "APROVADA" && mensagem === dados.mensagem
   const enviaveis = dados.clientes.filter((c) => c.link_whatsapp)
+  const termo = busca.trim().toLowerCase()
+  const filtrados = termo ? dados.clientes.filter((c) => [c.nome, c.cidade, c.responsavel_nome, c.telefone].some((v) => (v || "").toLowerCase().includes(termo))) : dados.clientes
 
   return (
     <section aria-label={`Campanha ${dados.titulo}`} className="space-y-4 rounded-3xl border border-[#13203f] bg-[#061126] p-5">
@@ -121,8 +126,9 @@ function Campanha({ codigo, onAlterada }: { codigo: string; onAlterada: () => vo
       {aviso && <p role="status" className="text-sm text-emerald-300">{aviso}</p>}
       {erro && <p role="alert" className="text-sm text-red-300">{erro}</p>}
       <p className="text-sm text-slate-400">{numero(dados.clientes.length)} clientes · {numero(enviaveis.length)} com WhatsApp · {numero(Object.keys(dados.enviados || {}).length)} já enviados. Quem ainda não autorizou recebe junto o pedido de autorização (LGPD).</p>
+      <input type="search" value={busca} onChange={(e) => { setBusca(e.target.value); setVisiveis(PAGINA) }} placeholder="Buscar cliente, cidade, responsável ou telefone" aria-label="Buscar cliente na campanha" className="min-h-10 w-full rounded-xl border border-[#24466f] bg-[#020817] px-3 text-sm"/>
       <ul className="divide-y divide-[#13203f]">
-        {dados.clientes.slice(0, 200).map((cliente) => (
+        {filtrados.slice(0, visiveis).map((cliente) => (
           <li key={cliente.cliente_id} className="flex flex-col gap-2 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <p className="font-semibold">{cliente.nome}</p>
@@ -140,7 +146,10 @@ function Campanha({ codigo, onAlterada }: { codigo: string; onAlterada: () => vo
           </li>
         ))}
       </ul>
-      {dados.clientes.length > 200 && <p className="text-xs text-slate-500">Mostrando os 200 primeiros por prioridade. A lista completa está na exportação.</p>}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>Mostrando {numero(Math.min(visiveis, filtrados.length))} de {numero(filtrados.length)}</span>
+        {visiveis < filtrados.length && <button type="button" onClick={() => setVisiveis((v) => v + PAGINA)} className="min-h-9 rounded-xl border border-[#24466f] px-3 font-semibold text-cyan-200">Mostrar mais {numero(Math.min(PAGINA, filtrados.length - visiveis))}</button>}
+      </div>
     </section>
   )
 }

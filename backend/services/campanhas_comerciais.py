@@ -163,7 +163,7 @@ def ler_campanha(codigo: str) -> dict[str, Any]:
     cofre = _cofre()
     salvo = cofre.ler(cofre.caminho(PASTA, f"{codigo}.json")) or {}
     return {"mensagem": salvo.get("mensagem") or CAMPANHAS[codigo]["mensagem"], "status": salvo.get("status") or "RASCUNHO",
-            "aprovada_por": salvo.get("aprovada_por"), "aprovada_em": salvo.get("aprovada_em"), "enviados": salvo.get("enviados") or {}}
+            "aprovada_por": salvo.get("aprovada_por"), "aprovada_em": salvo.get("aprovada_em"), "enviados": _envios(codigo)}
 
 
 def salvar_campanha(codigo: str, mensagem: str, aprovar: bool, ator: str) -> dict[str, Any]:
@@ -177,6 +177,7 @@ def salvar_campanha(codigo: str, mensagem: str, aprovar: bool, ator: str) -> dic
         raise ValueError("Use apenas os campos {contato}, {empresa} e {frota}.") from erro
     cofre = _cofre()
     atual = ler_campanha(codigo)
+    atual.pop("enviados", None)  # envios ficam em documentos próprios
     registro = {**atual, "mensagem": mensagem, "status": "APROVADA" if aprovar else "RASCUNHO",
                 "aprovada_por": ator if aprovar else None, "aprovada_em": _agora() if aprovar else None, "editada_em": _agora()}
     cofre.gravar(cofre.caminho(PASTA, f"{codigo}.json"), registro)
@@ -204,16 +205,20 @@ def publico_detalhado(codigo: str) -> dict[str, Any]:
     return {"codigo": codigo, "titulo": CAMPANHAS[codigo]["titulo"], **campanha, "texto_autorizacao": TEXTO_AUTORIZACAO, "clientes": itens}
 
 
+def _envios(codigo: str) -> dict[str, str]:
+    """Envios registrados (um documento por cliente, sem disputa entre gravações)."""
+    cofre = _cofre()
+    return {str(item["name"]).removesuffix(".json"): str(item.get("created_at") or item.get("updated_at") or "registrado")
+            for item in cofre.listar_itens(cofre.caminho(PASTA, "envios", codigo))}
+
+
 def marcar_enviado(codigo: str, cliente_id: str, ator: str) -> None:
     if codigo not in CAMPANHAS:
         raise KeyError(codigo)
-    cofre = _cofre()
-    caminho = cofre.caminho(PASTA, f"{codigo}.json")
-    atual = cofre.ler(caminho) or {"mensagem": CAMPANHAS[codigo]["mensagem"], "status": "RASCUNHO"}
-    if atual.get("status") != "APROVADA":
+    if ler_campanha(codigo)["status"] != "APROVADA":
         raise ValueError("Aprove a campanha antes de enviar.")
-    atual.setdefault("enviados", {})[cliente_id] = _agora()
-    cofre.gravar(caminho, atual)
+    cofre = _cofre()
+    cofre.gravar(cofre.caminho(PASTA, "envios", codigo, f"{cliente_id}.json"), {"cliente_id": cliente_id, "enviado_por": ator, "enviado_em": _agora()})
 
 
 def posts_do_canal() -> list[dict[str, str]]:

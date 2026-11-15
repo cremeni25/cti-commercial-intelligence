@@ -89,3 +89,22 @@ def test_rotas_so_para_gestao(ambiente):
         assert cliente.get("/crm-seguro/campanhas/NAO_EXISTE").status_code == 404
     finally:
         app.dependency_overrides.pop(usuario_atual, None)
+
+
+def test_recusa_nao_se_perde_com_mais_de_mil_autorizacoes(ambiente):
+    from services import cofre_agente
+
+    for i in range(1100):
+        cofre_agente.gravar(cofre_agente.caminho("consentimentos", f"a{i:04d}.json"), {"status": "AUTORIZADO"})
+    campanhas.registrar_consentimento("prospect-frota", "RECUSADO", "WhatsApp", "gestor")  # fica depois do milésimo na ordem
+    assert len(campanhas.consentimentos()) == 1101
+    gama = campanhas.publico_detalhado("CONQUISTA_CONCORRENTE")["clientes"][0]
+    assert gama["autorizacao"] == "RECUSADO" and gama["link_whatsapp"] is None
+
+
+def test_envios_e_edicao_nao_se_sobrescrevem(ambiente):
+    campanhas.salvar_campanha("REATIVACAO", "Oi {contato}, novidade para a {empresa}.", True, "gestor")
+    campanhas.marcar_enviado("REATIVACAO", "inativo", "a")
+    campanhas.marcar_enviado("REATIVACAO", "outro", "b")
+    campanhas.salvar_campanha("REATIVACAO", "Oi {contato}, condição nova para a {empresa}.", True, "gestor")
+    assert set(campanhas.ler_campanha("REATIVACAO")["enviados"]) == {"inativo", "outro"}

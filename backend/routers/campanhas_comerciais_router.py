@@ -33,7 +33,7 @@ class EdicaoCampanha(BaseModel):
 
 
 class Envio(BaseModel):
-    cliente_id: str = Field(min_length=1, max_length=80)
+    cliente_id: str = Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")
 
 
 class Autorizacao(BaseModel):
