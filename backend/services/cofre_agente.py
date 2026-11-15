@@ -104,15 +104,25 @@ def criar_exclusivo(caminho_doc: str, dados: Any) -> bool:
         raise CofreIndisponivel(str(erro)) from erro
 
 
-def listar(pasta: str) -> list[str]:
+def listar_itens(pasta: str) -> list[dict[str, Any]]:
+    """Todos os documentos JSON de uma pasta (com metadados), paginando a listagem do Storage."""
     provisionar()
-    try:
-        itens = _supabase().storage.from_(BUCKET).list(pasta, {"limit": 1000}) or []
-    except Exception as erro:
-        if _nao_encontrado(erro):
-            return []
-        raise CofreIndisponivel(str(erro)) from erro
-    return [str(item.get("name")) for item in itens if isinstance(item, dict) and str(item.get("name") or "").endswith(".json")]
+    pagina, inicio, todos = 1000, 0, []
+    while True:
+        try:
+            itens = _supabase().storage.from_(BUCKET).list(pasta, {"limit": pagina, "offset": inicio, "sortBy": {"column": "name", "order": "asc"}}) or []
+        except Exception as erro:
+            if _nao_encontrado(erro):
+                return []
+            raise CofreIndisponivel(str(erro)) from erro
+        todos.extend(item for item in itens if isinstance(item, dict) and str(item.get("name") or "").endswith(".json"))
+        if len(itens) < pagina:
+            return todos
+        inicio += pagina
+
+
+def listar(pasta: str) -> list[str]:
+    return [str(item["name"]) for item in listar_itens(pasta)]
 
 
 def ler_pasta(pasta: str) -> dict[str, Any]:

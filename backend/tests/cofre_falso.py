@@ -19,7 +19,10 @@ class _Bucket:
 
     def list(self, pasta, opcoes=None):
         prefixo = pasta.rstrip("/") + "/"
-        return [{"name": c[len(prefixo):]} for c in self.arquivos if c.startswith(prefixo) and "/" not in c[len(prefixo):]]
+        nomes = sorted(c[len(prefixo):] for c in self.arquivos if c.startswith(prefixo) and "/" not in c[len(prefixo):])
+        inicio = int((opcoes or {}).get("offset") or 0)
+        limite = int((opcoes or {}).get("limit") or 100)
+        return [{"name": n, "created_at": "2026-11-15T12:00:00Z"} for n in nomes[inicio:inicio + limite]]
 
 
 class StorageFalso:
