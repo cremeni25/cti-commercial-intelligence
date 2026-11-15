@@ -31,7 +31,7 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
 
   if (inicia(pathname, "/usuarios")) return master || tem(permissoes, "usuarios_administrar")
   if (inicia(pathname, "/configuracoes")) return master || tem(permissoes, "configuracoes_administrar")
-  if (inicia(pathname, "/upload")) return gestao
+  if (inicia(pathname, "/upload") || inicia(pathname, "/acervo")) return gestao
 
   if (inicia(pathname, "/dashboard")) return gestao || tem(permissoes, "dashboard_executivo")
   if (inicia(pathname, "/empresas") || inicia(pathname, "/implementadoras")) return gestao || tem(permissoes, "clientes_visualizar")

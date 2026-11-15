@@ -54,6 +54,7 @@ const menuGroups: MenuGroup[] = [
     { label: { "pt-BR": "Inteligência de Mercado", en: "Market Intelligence", es: "Inteligencia de Mercado" }, href: "/inteligencia", icon: "📊", type: "emoji" },
     { labelKey: "nav.sourceGovernance", href: "/backoffice-fontes", icon: "🗄️", type: "emoji" },
     { labelKey: "nav.users", href: "/usuarios", icon: "👥", type: "emoji" },
+    { label: { "pt-BR": "Acervo comercial", en: "Commercial archive", es: "Acervo comercial" }, href: "/acervo", icon: "🗄️", type: "emoji" },
     { labelKey: "nav.settings", href: "/configuracoes", icon: "⚙️", type: "emoji" },
     { labelKey: "nav.officialTemplates", href: "/configuracoes/modelos-oficiais", icon: "📑", type: "emoji" },
   ]},
@@ -68,7 +69,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/backoffice-fontes" || href === "/configuracoes/modelos-oficiais" || href === "/inteligencia") return master
   if (href === "/usuarios") return master || tem(permissoes, "usuarios_administrar")
   if (href === "/configuracoes") return master || tem(permissoes, "configuracoes_administrar")
-  if (href === "/upload") return gestao
+  if (href === "/upload" || href === "/acervo") return gestao
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/catalogo") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar") || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")

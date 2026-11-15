@@ -17,6 +17,8 @@ PUBLIC = {
     ("POST", "/interno/notificacoes/resumo-diario"),
     # Só a chave PÚBLICA de cifragem (não abre nada); ver services/cofre_cifrado.py.
     ("GET", "/ingestao-cifrada/chave-publica"),
+    # Cópia semanal do acervo: token OIDC do GitHub validado no endpoint.
+    ("POST", "/interno/acervo/backup"),
 }
 
 async def application_access(request: Request, call_next):

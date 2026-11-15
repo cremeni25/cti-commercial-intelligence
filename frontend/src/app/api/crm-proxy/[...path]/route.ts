@@ -200,7 +200,8 @@ async function encaminhar(
     if (
       tipoResposta.includes("application/pdf") ||
       tipoResposta.includes("image/") ||
-      tipoResposta.includes("application/octet-stream")
+      tipoResposta.includes("application/octet-stream") ||
+      tipoResposta.includes("spreadsheetml")
     ) {
       return new NextResponse(await resposta.arrayBuffer(), {
         status: resposta.status,
