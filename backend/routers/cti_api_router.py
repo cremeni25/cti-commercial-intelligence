@@ -42,6 +42,7 @@ from services import ia_comercial_fontes_dinamicas as _ia_fontes_dinamicas  # no
 from services import ia_comercial_fonte_prioridades as _ia_fonte_prioridades  # noqa: F401
 from services import ia_comercial_fonte_aplicacao as _ia_fonte_aplicacao  # noqa: F401
 from services import ia_comercial_fonte_planilhas as _ia_fonte_planilhas  # noqa: F401
+from services import ia_comercial_fonte_carteira as _ia_fonte_carteira  # noqa: F401
 from services import ia_comercial_rbac_runtime as _ia_rbac_runtime  # noqa: F401
 
 router = APIRouter()
