@@ -171,6 +171,39 @@ def perguntar(pergunta: str, responsavel_id: str | None, pode_ver_carteira: bool
     return {"pergunta": pergunta, "resposta": resposta, "destaques": destaques, "acoes": acoes}
 
 
+_CACHE_MODELOS: dict[str, Any] = {}
+
+
+def _modelos_catalogo() -> list[dict[str, Any]]:
+    """Modelos do catálogo (mesma fonte da vitrine: comercial, ou o oficial como reserva) + Tabela de Aplicação."""
+    import time
+
+    from services import catalogo_vitrine
+
+    if _CACHE_MODELOS and time.monotonic() - _CACHE_MODELOS["em"] < 600:
+        return _CACHE_MODELOS["modelos"]
+    try:
+        equipamentos, _ = catalogo_vitrine._ler_catalogo_comercial()
+        if not equipamentos:
+            raise LookupError("catálogo comercial vazio")
+    except Exception:
+        try:
+            equipamentos = catalogo_vitrine._equipamentos_do_catalogo_oficial()
+        except Exception:
+            equipamentos = []
+    vistos: dict[str, dict[str, Any]] = {}
+    for e in equipamentos:
+        nome = str(e.get("nome_comercial") or e.get("modelo_base") or "").strip()
+        if nome:
+            vistos.setdefault(dobrar(nome), {"modelo": nome, "linha": e.get("linha_produto")})
+    for e in (catalogo_vitrine.tabela_aplicacao() or {}).get("equipamentos") or []:
+        if e.get("modelo"):
+            vistos.setdefault(dobrar(e["modelo"]), {"modelo": e["modelo"], "linha": e.get("linha")})
+    modelos = list(vistos.values())
+    _CACHE_MODELOS.update({"modelos": modelos, "em": time.monotonic()})
+    return modelos
+
+
 def buscar(termo: str, responsavel_id: str | None, pode_ver_carteira: bool, limite: int = 8) -> dict[str, Any]:
     """Busca universal: telas, empresas da carteira e modelos de equipamento."""
     alvo = dobrar(termo)
@@ -190,9 +223,6 @@ def buscar(termo: str, responsavel_id: str | None, pode_ver_carteira: bool, limi
         achados.sort(key=lambda p: (not dobrar(p.get("nome")).startswith(alvo), carteira._prioridade(p)))
         resultado["empresas"] = [{"cliente_id": p["cliente_id"], "nome": p["nome"], "cidade": p.get("cidade"), "grupo": p["grupo"],
                                   "href": _link_carteira({"empresa": p["cliente_id"]})} for p in achados[:limite]]
-    from services.catalogo_vitrine import tabela_aplicacao
-
-    modelos = (tabela_aplicacao() or {}).get("equipamentos") or []
-    resultado["equipamentos"] = [{"modelo": e["modelo"], "linha": e.get("linha"), "href": "/catalogo?" + urlencode({"busca": e["modelo"]})}
-                                 for e in modelos if alvo in dobrar(e.get("modelo"))][:5]
+    resultado["equipamentos"] = [{"modelo": m["modelo"], "linha": m["linha"], "href": "/catalogo?" + urlencode({"busca": m["modelo"]})}
+                                 for m in _modelos_catalogo() if alvo in dobrar(m["modelo"])][:5]
     return resultado

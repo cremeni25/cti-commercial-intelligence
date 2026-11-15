@@ -111,7 +111,7 @@ export default function AssistenteCTI() {
           <section role="dialog" aria-modal="true" aria-label="Pergunte ao CTI" onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl overflow-hidden rounded-3xl border border-[#1d3a63] bg-[#061126] text-white shadow-2xl">
             <form onSubmit={(e) => { e.preventDefault(); void perguntar() }} className="flex items-center gap-2 border-b border-[#13203f] px-4">
               <Search size={18} className="shrink-0 text-cyan-400"/>
-              <input ref={campo} value={texto} onChange={(e) => { setTexto(e.target.value); setResposta(null); setErro("") }} placeholder="Pergunte ou procure: cliente, tela, modelo..." aria-label="Pergunta ou busca" maxLength={500} className="min-h-14 w-full bg-transparent text-base outline-none"/>
+              <input ref={campo} value={texto} onChange={(e) => { pedido.current += 1; setTexto(e.target.value); setResposta(null); setErro(""); setPensando(false) }} placeholder="Pergunte ou procure: cliente, tela, modelo..." aria-label="Pergunta ou busca" maxLength={500} className="min-h-14 w-full bg-transparent text-base outline-none"/>
               <button type="submit" disabled={!termoValido || pensando} className="shrink-0 rounded-xl bg-cyan-500 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">{pensando ? <Loader2 size={14} className="animate-spin"/> : "Perguntar"}</button>
               <button type="button" onClick={() => setAberto(false)} aria-label="Fechar" className="shrink-0 rounded-lg p-2 text-slate-400"><X size={18}/></button>
             </form>
