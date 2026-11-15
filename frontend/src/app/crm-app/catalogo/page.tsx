@@ -3,6 +3,13 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import CatalogoVitrineView from "@/components/catalogo/CatalogoVitrineView"
+import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+
+function VitrineComBusca(props: { compacto?: boolean }) {
+  const busca = useSearchParams().get("busca") || ""
+  return <CatalogoVitrineView key={busca} {...props} buscaInicial={busca}/>
+}
 
 export default function CrmAppCatalogoPage() {
   return (
@@ -16,7 +23,7 @@ export default function CrmAppCatalogoPage() {
             <p className="text-sm text-slate-400">Consulte modelos e envie materiais ao cliente.</p>
           </div>
         </header>
-        <CatalogoVitrineView compacto/>
+        <Suspense fallback={null}><VitrineComBusca compacto/></Suspense>
       </div>
     </main>
   )

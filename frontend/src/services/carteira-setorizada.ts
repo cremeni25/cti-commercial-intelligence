@@ -53,10 +53,9 @@ async function json<T>(resposta: Response, contexto: string): Promise<T> {
   return payload as T
 }
 
-export async function buscarSetorizacao(filtros: { grupo?: string; sinal?: string } = {}) {
+export async function buscarSetorizacao(filtros: { grupo?: string; sinal?: string; porte?: string; cidade?: string } = {}) {
   const params = new URLSearchParams()
-  if (filtros.grupo) params.set("grupo", filtros.grupo)
-  if (filtros.sinal) params.set("sinal", filtros.sinal)
+  for (const chave of ["grupo", "sinal", "porte", "cidade"] as const) if (filtros[chave]) params.set(chave, filtros[chave] as string)
   const sufixo = params.toString() ? `?${params}` : ""
   return json<Setorizacao>(await fetchCrmSeguroProxy(`crm-seguro/carteira/setorizacao${sufixo}`, { cache: "no-store" }, { timeoutMs: 90000, tentativas: 2 }), "A carteira")
 }

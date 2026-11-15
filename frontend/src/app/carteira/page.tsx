@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useState } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { BookOpen, Building2, Loader2, Search, X } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
@@ -99,19 +100,32 @@ function Ficha({ clienteId, onFechar }: { clienteId: string; onFechar: () => voi
 }
 
 export default function CarteiraPage() {
+  return <Suspense fallback={<main className="grid min-h-screen place-items-center bg-[#020817]"><Loader2 className="animate-spin text-cyan-300"/></main>}><CarteiraComFiltros/></Suspense>
+}
+
+function CarteiraComFiltros() {
+  const params = useSearchParams()
+  // Remonta quando o endereço muda (ex.: o "Pergunte ao CTI" abre a carteira já filtrada).
+  return <CarteiraConteudo key={params.toString()} inicial={params}/>
+}
+
+function CarteiraConteudo({ inicial }: { inicial: URLSearchParams }) {
+  const router = useRouter()
   const [dados, setDados] = useState<Setorizacao | null>(null)
   const [erro, setErro] = useState("")
-  const [grupo, setGrupo] = useState("")
-  const [sinal, setSinal] = useState("")
-  const [busca, setBusca] = useState("")
-  const [aberta, setAberta] = useState<string | null>(null)
+  const [grupo, setGrupo] = useState(inicial.get("grupo") || "")
+  const [sinal, setSinal] = useState(inicial.get("sinal") || "")
+  const [porte, setPorte] = useState(inicial.get("porte") || "")
+  const [cidade, setCidade] = useState(inicial.get("cidade") || "")
+  const [busca, setBusca] = useState(inicial.get("busca") || "")
+  const [aberta, setAberta] = useState<string | null>(inicial.get("empresa"))
   const [glossario, setGlossario] = useState<TermoGlossario[]>([])
 
   useEffect(() => {
     let ativo = true
-    buscarSetorizacao({ grupo, sinal }).then((r) => { if (ativo) { setDados(r); setErro("") } }).catch((e: unknown) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar a carteira.") })
+    buscarSetorizacao({ grupo, sinal, porte, cidade }).then((r) => { if (ativo) { setDados(r); setErro("") } }).catch((e: unknown) => { if (ativo) setErro(e instanceof Error ? e.message : "Não foi possível carregar a carteira.") })
     return () => { ativo = false }
-  }, [grupo, sinal])
+  }, [grupo, sinal, porte, cidade])
   useEffect(() => { void buscarGlossario().then(setGlossario).catch(() => setGlossario([])) }, [])
 
   const lista = useMemo(() => {
@@ -148,6 +162,12 @@ export default function CarteiraPage() {
                 <button type="button" onClick={() => setSinal("")} className={chip(!sinal)}>Todos os sinais</button>
                 {Object.keys(dados.rotulos.sinais).map((s) => <button key={s} type="button" aria-pressed={sinal === s} onClick={() => setSinal(sinal === s ? "" : s)} title={dados.rotulos.sinais[s]} className={chip(sinal === s)}>{ROTULO_CURTO[s]} ({numero(dados.por_sinal[s] || 0)})</button>)}
               </div>
+              {(porte || cidade) && (
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Filtros aplicados">
+                  {porte && <button type="button" onClick={() => setPorte("")} className={chip(true)}>{ROTULO_CURTO[porte] || porte} ✕</button>}
+                  {cidade && <button type="button" onClick={() => setCidade("")} className={chip(true)}>Cidade: {cidade} ✕</button>}
+                </div>
+              )}
               <label className="flex items-center gap-2 rounded-2xl border border-[#24466f] bg-[#061126] px-4">
                 <Search size={18} className="text-slate-500"/><span className="sr-only">Buscar cliente</span>
                 <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome, CNPJ, cidade ou responsável" className="min-h-12 w-full bg-transparent text-sm outline-none"/>
@@ -178,7 +198,7 @@ export default function CarteiraPage() {
           )}
         </div>
       </section>
-      {aberta && <Ficha clienteId={aberta} onFechar={() => setAberta(null)}/>}
+      {aberta && <Ficha clienteId={aberta} onFechar={() => { setAberta(null); if (inicial.get("empresa")) router.replace("/carteira") }}/>}
     </main>
   )
 }

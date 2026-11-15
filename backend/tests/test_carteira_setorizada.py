@@ -108,3 +108,11 @@ def test_glossario_traduz_sinonimos():
     from core.glossario_comercial import termo_oficial
 
     assert termo_oficial("vendedor") == "Responsável comercial" and termo_oficial("Oportunidade") == "Negócio" and termo_oficial("xyz") is None
+
+
+def test_filtro_por_porte_e_cidade(base):
+    base["clientes"][2]["cidade"] = "São José dos Campos"
+    carteira.limpar_cache()
+    assert [c["cliente_id"] for c in carteira.setorizacao(porte="GRANDE")["clientes"]] == ["prospect-frota"]
+    assert [c["cliente_id"] for c in carteira.setorizacao(cidade="sao jose dos campos")["clientes"]] == ["prospect-frota"]
+    assert carteira.setorizacao(cidade="Santos")["filtrados"] == 0
