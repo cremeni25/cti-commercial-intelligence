@@ -26,12 +26,14 @@ def setorizacao(
     grupo: str | None = Query(default=None, max_length=40),
     sinal: str | None = Query(default=None, max_length=40),
     responsavel_id: str | None = Query(default=None, max_length=80),
+    porte: str | None = Query(default=None, max_length=20),
+    cidade: str | None = Query(default=None, max_length=80),
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
     _pode_ver_carteira(usuario)
     # Gestão vê toda a empresa (ou filtra um responsável); a equipe vê só a própria carteira.
     alvo = responsavel_id if _gestao(usuario) else str(usuario.id)
-    return carteira.setorizacao(responsavel_id=alvo, grupo=grupo or None, sinal=sinal or None)
+    return carteira.setorizacao(responsavel_id=alvo, grupo=grupo or None, sinal=sinal or None, porte=porte or None, cidade=cidade or None)
 
 
 @router.get("/carteira/empresa/{cliente_id}")

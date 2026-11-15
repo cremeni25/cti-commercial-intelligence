@@ -104,7 +104,7 @@ function AnexarMaterial({ onAnexado }: { onAnexado: () => void }) {
   )
 }
 
-export default function CatalogoVitrineView({ compacto = false }: { compacto?: boolean }) {
+export default function CatalogoVitrineView({ compacto = false, buscaInicial = "" }: { compacto?: boolean; buscaInicial?: string }) {
   const { formatCurrency } = useOperationalI18n()
   const { usuario } = useAuth()
   const master = String(usuario?.tipo_usuario || "").toUpperCase() === "ADMIN_MASTER"
@@ -112,7 +112,7 @@ export default function CatalogoVitrineView({ compacto = false }: { compacto?: b
   const [vitrine, setVitrine] = useState<VitrineCatalogo | null>(null)
   const [erro, setErro] = useState("")
   const [linhaAtiva, setLinhaAtiva] = useState("TODAS")
-  const [busca, setBusca] = useState("")
+  const [busca, setBusca] = useState(buscaInicial)
   const [copiado, setCopiado] = useState("")
 
   useEffect(() => {

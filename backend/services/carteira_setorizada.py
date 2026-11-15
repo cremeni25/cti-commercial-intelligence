@@ -249,10 +249,13 @@ def _prioridade(p: dict[str, Any]) -> tuple:
     return (0 if "JANELA_RENOVACAO" in p["sinais"] else 1, ordem_grupo.get(p["grupo"], 9), -p["frota_registrada"], str(p["nome"] or ""))
 
 
-def setorizacao(responsavel_id: str | None = None, grupo: str | None = None, sinal: str | None = None, limite: int = 300) -> dict[str, Any]:
+def setorizacao(responsavel_id: str | None = None, grupo: str | None = None, sinal: str | None = None, limite: int = 300,
+                porte: str | None = None, cidade: str | None = None) -> dict[str, Any]:
     perfis, _, _ = _carteira_completa()
     base = [p for p in perfis if not responsavel_id or p["responsavel_id"] == responsavel_id]
-    filtrados = [p for p in base if (not grupo or p["grupo"] == grupo) and (not sinal or sinal in p["sinais"])]
+    cidade_alvo = _nome(cidade) if cidade else ""
+    filtrados = [p for p in base if (not grupo or p["grupo"] == grupo) and (not sinal or sinal in p["sinais"])
+                 and (not porte or p["porte"] == porte) and (not cidade_alvo or _nome(p.get("cidade")) == cidade_alvo)]
     filtrados.sort(key=_prioridade)
     return {
         "total_clientes": len(base),

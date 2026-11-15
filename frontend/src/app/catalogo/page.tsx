@@ -3,6 +3,13 @@
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
 import CatalogoVitrineView from "@/components/catalogo/CatalogoVitrineView"
+import { Suspense } from "react"
+import { useSearchParams } from "next/navigation"
+
+function VitrineComBusca(props: { compacto?: boolean }) {
+  const busca = useSearchParams().get("busca") || ""
+  return <CatalogoVitrineView key={busca} {...props} buscaInicial={busca}/>
+}
 
 export default function CatalogoPage() {
   return (
@@ -16,7 +23,7 @@ export default function CatalogoPage() {
             <h1 className="mt-2 text-3xl font-bold sm:text-4xl">Catálogo de produtos</h1>
             <p className="mt-2 max-w-2xl text-gray-400">Modelos Carrier Transicold por linha, com materiais de divulgação prontos para enviar ao cliente.</p>
           </header>
-          <CatalogoVitrineView/>
+          <Suspense fallback={null}><VitrineComBusca/></Suspense>
         </div>
       </section>
     </main>
