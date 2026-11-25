@@ -59,6 +59,7 @@ TELAS: list[dict[str, Any]] = [
     {"href": "/inteligencia", "titulo": "Inteligência de Mercado", "palavras": ("mercado", "anfir", "market share", "participacao", "emplacamento")},
     {"href": "/implementadoras", "titulo": "Implementadoras", "palavras": ("implementadora", "implementadoras", "encarrocador", "facchini", "randon", "librelato")},
     {"href": "/crm-app/feiras", "titulo": "Feiras e Eventos", "palavras": ("feira", "feiras", "evento", "eventos", "fenatran")},
+    {"href": "/indicadores", "titulo": "Indicadores e comissões", "palavras": ("indicador", "indicadores", "indicacao", "indicacoes", "indicou", "comissao", "comissoes", "nota fiscal do indicador")},
     {"href": "/campanhas", "titulo": "Campanhas e Canal", "palavras": ("campanha", "campanhas", "whatsapp", "canal", "lgpd", "disparo")},
     {"href": "/acervo", "titulo": "Acervo comercial", "palavras": ("acervo", "backup", "copia de seguranca", "transferir carteira", "quem saiu")},
     {"href": "/empresas", "titulo": "Empresas", "palavras": ("empresa", "empresas", "cadastro", "cnpj")},
