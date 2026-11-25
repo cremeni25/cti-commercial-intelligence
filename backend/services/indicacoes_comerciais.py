@@ -146,7 +146,6 @@ def salvar_indicador(dados: dict[str, Any], ator: str, indicador_id: str | None 
         "telefone": _texto(dados.get("telefone", atual.get("telefone")), 40) or None,
         "email": _texto(dados.get("email", atual.get("email")), 120) or None,
         "regiao": _texto(dados.get("regiao", atual.get("regiao")), 80) or None,
-        "usuario_id": _texto(dados.get("usuario_id", atual.get("usuario_id")), 80) or None,
         "dados_pagamento": _texto(dados.get("dados_pagamento", atual.get("dados_pagamento")), 200) or None,
         "ativo": bool(dados.get("ativo", atual.get("ativo", True))),
         "criado_em": atual.get("criado_em") or _agora(),
@@ -154,11 +153,6 @@ def salvar_indicador(dados: dict[str, Any], ator: str, indicador_id: str | None 
     }
     _historico(registro, ator, "cadastro atualizado" if atual else "cadastro criado")
     return _gravar(PASTA_INDICADORES, registro)
-
-
-def indicador_do_usuario(usuario_id: str) -> dict[str, Any] | None:
-    indicadores, _ = _todos()
-    return next((i for i in indicadores.values() if i.get("usuario_id") == str(usuario_id)), None)
 
 
 # ---------------------------------------------------------------- indicações

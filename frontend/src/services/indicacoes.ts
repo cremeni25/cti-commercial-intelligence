@@ -11,7 +11,6 @@ export type Indicador = {
   telefone?: string | null
   email?: string | null
   regiao?: string | null
-  usuario_id?: string | null
   dados_pagamento?: string | null
   ativo?: boolean
 }
@@ -61,7 +60,7 @@ export type Painel = {
   por_linha: (Agregado & { linha: Linha; comissao_por_equipamento: number })[]
 }
 export type Extrato = { indicador: Indicador; periodo: { ano: number | null; mes: number | null }; resumo: Agregado; indicacoes: Indicacao[] }
-export type Acesso = { gestao: boolean; interno: boolean; indicador: { id: string; nome: string } | null; tabela_comissao: Record<Linha, number> | null }
+export type Acesso = { tabela_comissao: Record<Linha, number> }
 export type Periodo = { ano?: number; mes?: number }
 
 async function json<T>(resposta: Response, contexto: string): Promise<T> {
