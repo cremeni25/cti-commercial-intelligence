@@ -27,6 +27,7 @@ import { rotaAutorizadaCTI } from "@/core/rbac/route-access"
 import { ocorreuNoDiaCrm, registrosResumoCrm } from "@/services/crm-resumo"
 import { fetchCrmSeguroProxy } from "@/services/crm-secure"
 import PrioridadesAgenteCard from "@/components/inteligencia/PrioridadesAgenteCard"
+import CartoesHoje from "@/components/hoje/CartoesHoje"
 
 type Registro = Record<string, unknown>
 type Locale = "pt-BR" | "en" | "es"
@@ -243,6 +244,7 @@ export default function CrmAppPage() {
         </section>
 
         {usuario && rotaAutorizadaCTI("/crm-app/prioridades", usuario) && <PrioridadesAgenteCard />}
+        <CartoesHoje canal="app" />
 
 
         <LinkCrm href="/crm-app/feiras" className="mt-5 flex items-center justify-between rounded-3xl border border-cyan-700 bg-[#08233b] p-5 text-white"><span><strong className="block text-lg">Feiras e Eventos</strong><span className="block text-sm text-slate-300">Atendimentos, intenções e lançamentos</span></span><ChevronRight size={22}/></LinkCrm>
