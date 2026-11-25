@@ -292,6 +292,8 @@ def atualizar_indicacao(indicacao_id: str, dados: dict[str, Any], ator: str) -> 
     if novo_comissao and novo_comissao != registro.get("comissao_status"):
         if registro["status"] != "VENDIDA":
             raise ErroIndicacao("A comissão só existe para venda concluída.")
+        if paga:
+            raise ErroIndicacao("Comissão já paga não pode mudar de situação.")
         if novo_comissao == "NF_RECEBIDA":
             nota = _texto(dados.get("nota_fiscal"), 40)
             if not nota:
@@ -302,8 +304,6 @@ def atualizar_indicacao(indicacao_id: str, dados: dict[str, Any], ator: str) -> 
                 raise ErroIndicacao("Registre a nota fiscal antes de marcar a comissão como paga.")
             registro.update({"comissao_status": "PAGA", "paga_em": (_texto(dados.get("paga_em"), 10) or _agora()[:10])})
         elif novo_comissao == "A_PAGAR":
-            if paga:
-                raise ErroIndicacao("Comissão já paga não volta para a pagar.")
             registro.update({"comissao_status": "A_PAGAR", "nota_fiscal": None, "nf_recebida_em": None})
         else:
             raise ErroIndicacao("Situação de comissão inválida.")
@@ -319,7 +319,10 @@ def atualizar_indicacao(indicacao_id: str, dados: dict[str, Any], ator: str) -> 
 def sincronizar_com_oportunidades() -> int:
     """Indicação ligada a oportunidade ganha vira venda; perdida vira perdida. Devolve quantas mudaram."""
     _, indicacoes = _todos()
-    abertas = {i["oportunidade_id"]: i for i in indicacoes.values() if i.get("oportunidade_id") and i["status"] in {"INDICADA", "EM_NEGOCIACAO"}}
+    abertas: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for i in indicacoes.values():
+        if i.get("oportunidade_id") and i["status"] in {"INDICADA", "EM_NEGOCIACAO"}:
+            abertas[i["oportunidade_id"]].append(i)
     if not abertas:
         return 0
     try:
@@ -330,26 +333,25 @@ def sincronizar_com_oportunidades() -> int:
         return 0
     mudou = 0
     for oportunidade in dados:
-        registro = dict(abertas.get(str(oportunidade.get("id")), {}))
-        if not registro:
-            continue
         status = str(oportunidade.get("status") or "").upper()
-        if status in STATUS_OPORTUNIDADE_GANHA:
-            if not registro.get("valor_final") and _numero(oportunidade.get("valor_total")):
-                registro["valor_final"] = round(_numero(oportunidade.get("valor_total")), 2)
-            _concluir_venda(registro, str(oportunidade.get("data_fechamento_real") or oportunidade.get("updated_at") or "") or None)
-            _historico(registro, "sistema", f"venda concluída pela oportunidade ({status})")
-        elif status in STATUS_OPORTUNIDADE_PERDIDA:
-            registro["status"] = "PERDIDA"
-            _historico(registro, "sistema", f"oportunidade encerrada ({status})")
-        elif registro["status"] == "INDICADA":
-            registro["status"] = "EM_NEGOCIACAO"
-            _historico(registro, "sistema", "oportunidade em negociação")
-        else:
-            continue
-        registro["atualizado_em"] = _agora()
-        _gravar(PASTA_INDICACOES, registro)
-        mudou += 1
+        for original in abertas.get(str(oportunidade.get("id")), []):
+            registro = dict(original)
+            if status in STATUS_OPORTUNIDADE_GANHA:
+                if not registro.get("valor_final") and _numero(oportunidade.get("valor_total")):
+                    registro["valor_final"] = round(_numero(oportunidade.get("valor_total")), 2)
+                _concluir_venda(registro, str(oportunidade.get("data_fechamento_real") or oportunidade.get("updated_at") or "") or None)
+                _historico(registro, "sistema", f"venda concluída pela oportunidade ({status})")
+            elif status in STATUS_OPORTUNIDADE_PERDIDA:
+                registro["status"] = "PERDIDA"
+                _historico(registro, "sistema", f"oportunidade encerrada ({status})")
+            elif registro["status"] == "INDICADA":
+                registro["status"] = "EM_NEGOCIACAO"
+                _historico(registro, "sistema", "oportunidade em negociação")
+            else:
+                continue
+            registro["atualizado_em"] = _agora()
+            _gravar(PASTA_INDICACOES, registro)
+            mudou += 1
     return mudou
 
 

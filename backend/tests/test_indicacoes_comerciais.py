@@ -62,6 +62,9 @@ def test_ciclo_venda_nota_fiscal_e_pagamento(ambiente):
     assert pago["comissao_status"] == "PAGA" and pago["nota_fiscal"] == "NF 987" and len(pago["historico"]) == 4
     with pytest.raises(ind.ErroIndicacao):
         ind.atualizar_indicacao(i["id"], {"quantidade": 5}, "gestor")
+    for volta in ({"comissao_status": "NF_RECEBIDA", "nota_fiscal": "NF 1"}, {"comissao_status": "A_PAGAR"}):
+        with pytest.raises(ind.ErroIndicacao):  # comissão paga não reabre
+            ind.atualizar_indicacao(i["id"], volta, "gestor")
 
 
 def test_valor_por_equipamento_fica_gravado_na_venda(ambiente, monkeypatch):
@@ -155,3 +158,23 @@ def test_permissoes_da_api(ambiente):
 
     estranho = _cliente(_usuario("USUARIO_CTI", {}, "x"))
     assert estranho.get("/crm-seguro/indicacoes").status_code == 403
+
+
+def test_varias_indicacoes_na_mesma_oportunidade(ambiente):
+    joao, maria = _indicador(), _indicador("Maria Indica")
+    a = _indicacao(joao["id"], oportunidade_id="op-ganha")
+    b = _indicacao(maria["id"], oportunidade_id="op-ganha")
+    assert ind.sincronizar_com_oportunidades() == 2
+    _, todas = ind._todos()
+    assert todas[a["id"]]["status"] == todas[b["id"]]["status"] == "VENDIDA"
+
+
+def test_equipe_interna_nao_ve_tabela_e_leitura_sincroniza(ambiente):
+    joao = _indicador(usuario_id="ind-1")
+    i = _indicacao(joao["id"], oportunidade_id="op-ganha")
+    vendedor = _cliente(_usuario("REPRES_REGIAO_01", {"oportunidades_editar": True}, "v1"))
+    assert vendedor.get("/crm-seguro/indicacoes/acesso").json()["tabela_comissao"] is None
+    indicador = _cliente(_usuario("INDICADOR_VIENA_SP", {}, "ind-1"))
+    assert indicador.get("/crm-seguro/indicacoes/acesso").json()["tabela_comissao"]["TRAILER"] == 1400
+    extrato = indicador.get(f"/crm-seguro/indicacoes/indicadores/{joao['id']}/extrato").json()  # sem visita da gestão
+    assert extrato["indicacoes"][0]["id"] == i["id"] and extrato["indicacoes"][0]["status"] == "VENDIDA"

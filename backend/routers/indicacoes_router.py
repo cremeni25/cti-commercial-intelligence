@@ -91,8 +91,9 @@ class AtualizarIndicacao(BaseModel):
 def acesso(usuario: UsuarioAutenticado = Depends(usuario_atual)):
     """O que este usuário pode fazer na tela (a tela se adapta)."""
     proprio = _indicador_proprio(usuario)
+    ve_comissao = _gestao(usuario) or bool(proprio)  # equipe interna não vê valores de comissão
     return {"gestao": _gestao(usuario), "interno": _interno(usuario), "indicador": proprio and {"id": proprio["id"], "nome": proprio["nome"]},
-            "tabela_comissao": ind.COMISSAO_POR_LINHA}
+            "tabela_comissao": ind.COMISSAO_POR_LINHA if ve_comissao else None}
 
 
 @router.get("/indicadores")
@@ -134,8 +135,8 @@ def listar(
     regiao: str | None = Query(default=None, max_length=80),
     usuario: UsuarioAutenticado = Depends(usuario_atual),
 ):
+    ind.sincronizar_com_oportunidades()  # vale para qualquer leitor: a venda fechada no CRM aparece para todos
     if _gestao(usuario):
-        ind.sincronizar_com_oportunidades()
         return {"indicacoes": ind.listar_indicacoes(indicador_id, ano, mes, status, regiao)}
     proprio = _indicador_proprio(usuario)
     if proprio:
@@ -189,10 +190,12 @@ def painel(
 
 def _pode_ver_extrato(usuario: UsuarioAutenticado, indicador_id: str) -> None:
     if _gestao(usuario):
+        ind.sincronizar_com_oportunidades()
         return
     proprio = _indicador_proprio(usuario)
     if not proprio or proprio["id"] != indicador_id:
         raise HTTPException(status_code=403, detail="Extrato disponível para a gestão e para o próprio indicador.")
+    ind.sincronizar_com_oportunidades()
 
 
 @router.get("/indicadores/{indicador_id}/extrato")

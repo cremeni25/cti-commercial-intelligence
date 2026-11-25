@@ -165,7 +165,8 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
     return () => { window.clearTimeout(id); controle.abort() }
   }, [form.cliente_nome, form.cliente_id])
 
-  const comissaoPrevista = (acesso.tabela_comissao[form.linha] || 0) * (Number(form.quantidade) || 0)
+  const tabela = acesso.tabela_comissao
+  const comissaoPrevista = tabela ? (tabela[form.linha] || 0) * (Number(form.quantidade) || 0) : null
 
   async function enviar() {
     setEnviando(true); setErro(""); setOk("")
@@ -210,7 +211,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
         <label className="text-xs text-slate-400">Região do cliente<input value={form.regiao} onChange={(e) => mudar("regiao", e.target.value)} placeholder="Ex.: Campinas, Grande SP, Vale" className={campo}/></label>
         <label className="text-xs text-slate-400">Linha
           <select value={form.linha} onChange={(e) => mudar("linha", e.target.value)} className={campo}>
-            {LINHAS.map((l) => <option key={l} value={l}>{ROTULO_LINHA[l]} — {moeda(acesso.tabela_comissao[l])} por equipamento</option>)}
+            {LINHAS.map((l) => <option key={l} value={l}>{ROTULO_LINHA[l]}{tabela ? ` — ${moeda(tabela[l])} por equipamento` : ""}</option>)}
           </select>
         </label>
         <label className="text-xs text-slate-400">Máquina (modelo)<input value={form.modelo} onChange={(e) => mudar("modelo", e.target.value)} placeholder="Ex.: Vector HE19, Supra 850" className={campo}/></label>
@@ -221,7 +222,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="button" disabled={enviando} onClick={() => void enviar()} className={`${botao} bg-cyan-500 text-slate-950`}>{enviando ? "Registrando..." : "Registrar indicação"}</button>
-        <span className="text-xs text-slate-400">Comissão prevista se a venda for concluída: <b className="text-amber-200">{moeda(comissaoPrevista)}</b></span>
+        {comissaoPrevista !== null && <span className="text-xs text-slate-400">Comissão prevista se a venda for concluída: <b className="text-amber-200">{moeda(comissaoPrevista)}</b></span>}
         {form.oportunidade_id && <span className="text-xs text-slate-500">Com a oportunidade vinculada, a venda é concluída sozinha quando o negócio for ganho.</span>}
       </div>
       {erro && <p role="alert" className="mt-2 text-sm text-red-300">{erro}</p>}
@@ -422,7 +423,7 @@ export default function IndicadoresPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.22em] text-cyan-400">CRM</p>
               <h1 className="mt-2 flex items-center gap-2 text-3xl font-bold sm:text-4xl"><BadgeDollarSign className="text-cyan-300"/> Indicadores e comissões</h1>
-              <p className="mt-2 max-w-3xl text-gray-400">Quem indicou, para qual cliente e região, qual máquina, quantidade e valor final. Venda concluída gera a comissão por equipamento: Trailer {moeda(acesso?.tabela_comissao.TRAILER ?? 1400)}, Diesel Truck {moeda(acesso?.tabela_comissao["DIESEL TRUCK"] ?? 900)} e Direct Drive {moeda(acesso?.tabela_comissao["DIRECT DRIVE"] ?? 400)}. O pagamento é feito com a nota fiscal do indicador.</p>
+              <p className="mt-2 max-w-3xl text-gray-400">Quem indicou, para qual cliente e região, qual máquina, quantidade e valor final.{acesso?.tabela_comissao ? ` Venda concluída gera a comissão por equipamento: Trailer ${moeda(acesso.tabela_comissao.TRAILER)}, Diesel Truck ${moeda(acesso.tabela_comissao["DIESEL TRUCK"])} e Direct Drive ${moeda(acesso.tabela_comissao["DIRECT DRIVE"])}. O pagamento é feito com a nota fiscal do indicador.` : ""}</p>
             </div>
             <Seletor periodo={periodo} onMudar={setPeriodo}/>
           </header>
