@@ -29,6 +29,7 @@ const menuGroups: MenuGroup[] = [
   { tituloKey: "nav.crm", itens: [
     { label: { "pt-BR": "Nova interação", en: "New interaction", es: "Nueva interacción" }, href: "/atividades/interacao", icon: "✚", type: "emoji" },
     { labelKey: "nav.opportunities", href: "/oportunidades", icon: "📈", type: "emoji" },
+    { label: { "pt-BR": "Indicadores e comissões", en: "Referrers and commissions", es: "Indicadores y comisiones" }, href: "/indicadores", icon: "🤝", type: "emoji" },
     { labelKey: "nav.pipeline", href: "/pipeline", icon: "🔄", type: "emoji" },
     { labelKey: "nav.import", href: "/upload", icon: "📤", type: "emoji" },
     { labelKey: "nav.proposals", href: "/propostas", icon: "📄", type: "emoji" },
@@ -75,6 +76,7 @@ function rotaPermitida(href: string, perfil: string, permissoes: PermissoesSessa
   if (href === "/dashboard" || href === "/inteligencia-comercial") return gestao || tem(permissoes, "dashboard_executivo") || tem(permissoes, "oportunidades_visualizar")
   if (href === "/empresas" || href === "/dashboard/carteiras-comerciais" || href === "/implementadoras") return gestao || tem(permissoes, "clientes_visualizar")
   if (href === "/catalogo") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar") || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")
+  if (href === "/indicadores") return gestao || perfil.startsWith("INDICADOR_") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/carteira") return gestao || tem(permissoes, "clientes_visualizar") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/central") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (href === "/atividades/interacao") return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")

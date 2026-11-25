@@ -65,3 +65,7 @@ def test_busca_de_modelos_usa_o_catalogo(base, monkeypatch):  # noqa: F811
     monkeypatch.setattr(catalogo_vitrine, "_equipamentos_do_catalogo_oficial", lambda: [{"nome_comercial": "X4 7700", "linha_produto": "TRAILER"}])
     assert assistente.buscar("x4", None, False)["equipamentos"][0]["modelo"] == "X4 7700"
     assistente._CACHE_MODELOS.clear()
+
+
+def test_tela_de_indicadores(base):  # noqa: F811
+    assert assistente.perguntar("quanto devo de comissão aos indicadores?", None, True)["acoes"][0]["href"] == "/indicadores"

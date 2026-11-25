@@ -36,6 +36,7 @@ export function rotaAutorizadaCTI(pathname: string, usuario: UsuarioCTI) {
   if (inicia(pathname, "/dashboard")) return gestao || tem(permissoes, "dashboard_executivo")
   if (inicia(pathname, "/empresas") || inicia(pathname, "/implementadoras")) return gestao || tem(permissoes, "clientes_visualizar")
   if (inicia(pathname, "/catalogo") || inicia(pathname, "/crm-app/catalogo")) return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar") || tem(permissoes, "propostas_visualizar") || tem(permissoes, "propostas_emitir")
+  if (inicia(pathname, "/indicadores")) return gestao || perfil.startsWith("INDICADOR_") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (inicia(pathname, "/carteira")) return gestao || tem(permissoes, "clientes_visualizar") || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (inicia(pathname, "/central") || inicia(pathname, "/crm-app/prioridades")) return gestao || tem(permissoes, "oportunidades_visualizar") || tem(permissoes, "oportunidades_editar")
   if (inicia(pathname, "/oportunidades") || inicia(pathname, "/pipeline") || inicia(pathname, "/historico-comercial") || inicia(pathname, "/ia-comercial") || inicia(pathname, "/atividades") || inicia(pathname, "/forecast") || inicia(pathname, "/mapa-estrategico") || inicia(pathname, "/detalhamento") || inicia(pathname, "/equipamentos")) return gestao || tem(permissoes, "oportunidades_visualizar")

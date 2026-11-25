@@ -63,6 +63,7 @@ def http(monkeypatch):
     monkeypatch.setattr(servico, "_carregar_atividades", lambda: [])
     monkeypatch.setattr(servico, "_carregar_feedback", lambda hoje: list(estado["gravados"]))
     monkeypatch.setattr(rota, "hoje_operacional", lambda: HOJE)
+    monkeypatch.setattr(servico, "hoje_operacional", lambda: HOJE)  # o briefing usa a mesma data congelada
 
     def gravar(**dados):
         if estado["falhar"]:
