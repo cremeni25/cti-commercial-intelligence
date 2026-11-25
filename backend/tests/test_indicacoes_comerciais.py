@@ -131,33 +131,29 @@ def _usuario(tipo, permissoes=None, uid="u1"):
     return UsuarioAutenticado(id=uid, auth_id=uid, email=f"{uid}@example.invalid", nome=uid, tipo_usuario=tipo, permissoes=permissoes or {})
 
 
-def test_permissoes_da_api(ambiente):
-    joao = _indicador(usuario_id="ind-1")
+def test_somente_o_master_acessa(ambiente):
     maria = _indicador("Maria Indica")
-    gestao = _cliente(_usuario("ADMIN_MASTER"))
-    criada = gestao.post("/crm-seguro/indicacoes", json={"indicador_id": maria["id"], "cliente_nome": "Gama", "regiao": "Santos", "linha": "Trailer", "quantidade": 1, "valor_final": 200000}).json()
-    assert gestao.patch(f"/crm-seguro/indicacoes/{criada['id']}", json={"status": "VENDIDA"}).json()["comissao_valor"] == 1400
-    assert gestao.get("/crm-seguro/indicacoes/painel").status_code == 200
-
-    vendedor = _cliente(_usuario("REPRES_REGIAO_01", {"oportunidades_editar": True}, "v1"))
-    lista = vendedor.get("/crm-seguro/indicacoes").json()["indicacoes"]
-    assert lista and "comissao_valor" not in lista[0]
-    assert vendedor.get("/crm-seguro/indicacoes/painel").status_code == 403
-    assert vendedor.patch(f"/crm-seguro/indicacoes/{criada['id']}", json={"comissao_status": "NF_RECEBIDA", "nota_fiscal": "1"}).status_code == 403
-    assert "documento" not in vendedor.get("/crm-seguro/indicacoes/indicadores").json()["indicadores"][0]
-
-    indicador = _cliente(_usuario("INDICADOR_VIENA_SP", {}, "ind-1"))
-    nova = indicador.post("/crm-seguro/indicacoes", json={"indicador_id": maria["id"], "cliente_nome": "Delta", "regiao": "ABC", "linha": "DD", "quantidade": 2, "valor_final": 90000}).json()
-    assert nova["indicador_id"] == joao["id"]  # sempre em nome próprio
-    assert [i["cliente_nome"] for i in indicador.get("/crm-seguro/indicacoes").json()["indicacoes"]] == ["Delta"]
-    assert indicador.get(f"/crm-seguro/indicacoes/indicadores/{maria['id']}/extrato").status_code == 403
-    assert indicador.get(f"/crm-seguro/indicacoes/indicadores/{joao['id']}/extrato").status_code == 200
-    assert indicador.patch(f"/crm-seguro/indicacoes/{nova['id']}", json={"status": "VENDIDA"}).status_code == 403
-    csv = gestao.get(f"/crm-seguro/indicacoes/indicadores/{maria['id']}/extrato.csv")
+    master = _cliente(_usuario("ADMIN_MASTER"))
+    criada = master.post("/crm-seguro/indicacoes", json={"indicador_id": maria["id"], "cliente_nome": "Gama", "regiao": "Santos", "linha": "Trailer", "quantidade": 1, "valor_final": 200000}).json()
+    assert master.patch(f"/crm-seguro/indicacoes/{criada['id']}", json={"status": "VENDIDA"}).json()["comissao_valor"] == 1400
+    assert master.get("/crm-seguro/indicacoes/painel").status_code == 200
+    assert master.get("/crm-seguro/indicacoes/acesso").json()["tabela_comissao"]["TRAILER"] == 1400
+    csv = master.get(f"/crm-seguro/indicacoes/indicadores/{maria['id']}/extrato.csv")
     assert csv.status_code == 200 and "Gama;Santos;TRAILER" in csv.text and "1400,00" in csv.text
 
-    estranho = _cliente(_usuario("USUARIO_CTI", {}, "x"))
-    assert estranho.get("/crm-seguro/indicacoes").status_code == 403
+    outros = [
+        _usuario("DIRETOR_VIENA_SP", {"acesso_total": True}, "d1"),
+        _usuario("REPRES_REGIAO_01", {"oportunidades_editar": True, "oportunidades_visualizar": True}, "v1"),
+        _usuario("INDICADOR_VIENA_SP", {"oportunidades_visualizar": True}, "i1"),
+    ]
+    for perfil in outros:
+        c = _cliente(perfil)
+        assert c.get("/crm-seguro/indicacoes").status_code == 403
+        assert c.get("/crm-seguro/indicacoes/acesso").status_code == 403
+        assert c.get("/crm-seguro/indicacoes/painel").status_code == 403
+        assert c.get(f"/crm-seguro/indicacoes/indicadores/{maria['id']}/extrato").status_code == 403
+        assert c.post("/crm-seguro/indicacoes", json={"indicador_id": maria["id"], "cliente_nome": "X", "regiao": "Y", "linha": "DD", "quantidade": 1, "valor_final": 1}).status_code == 403
+        assert c.patch(f"/crm-seguro/indicacoes/{criada['id']}", json={"status": "PERDIDA"}).status_code == 403
 
 
 def test_varias_indicacoes_na_mesma_oportunidade(ambiente):
@@ -169,12 +165,8 @@ def test_varias_indicacoes_na_mesma_oportunidade(ambiente):
     assert todas[a["id"]]["status"] == todas[b["id"]]["status"] == "VENDIDA"
 
 
-def test_equipe_interna_nao_ve_tabela_e_leitura_sincroniza(ambiente):
-    joao = _indicador(usuario_id="ind-1")
+def test_leitura_sincroniza_com_oportunidade(ambiente):
+    joao = _indicador()
     i = _indicacao(joao["id"], oportunidade_id="op-ganha")
-    vendedor = _cliente(_usuario("REPRES_REGIAO_01", {"oportunidades_editar": True}, "v1"))
-    assert vendedor.get("/crm-seguro/indicacoes/acesso").json()["tabela_comissao"] is None
-    indicador = _cliente(_usuario("INDICADOR_VIENA_SP", {}, "ind-1"))
-    assert indicador.get("/crm-seguro/indicacoes/acesso").json()["tabela_comissao"]["TRAILER"] == 1400
-    extrato = indicador.get(f"/crm-seguro/indicacoes/indicadores/{joao['id']}/extrato").json()  # sem visita da gestão
+    extrato = _cliente(_usuario("ADMIN_MASTER")).get(f"/crm-seguro/indicacoes/indicadores/{joao['id']}/extrato").json()
     assert extrato["indicacoes"][0]["id"] == i["id"] and extrato["indicacoes"][0]["status"] == "VENDIDA"

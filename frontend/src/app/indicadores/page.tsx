@@ -1,11 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { BadgeDollarSign, Download, FileText, Handshake, Loader2, Plus, Printer, Users, X } from "lucide-react"
 import Sidebar from "@/components/ui/Sidebar"
 import Topbar from "@/components/ui/Topbar"
-import { listarUsuarios } from "@/modules/usuarios/services/usuarios.service"
-import type { UsuarioCTI } from "@/modules/usuarios/types/usuario.types"
 import { buscarNoCTI, type ResultadoBusca } from "@/services/assistente-cti"
 import {
   atualizarIndicacao,
@@ -150,7 +148,7 @@ function ExtratoModal({ indicadorId, periodo, onFechar }: { indicadorId: string;
 }
 
 function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indicadores: Indicador[]; onCriada: () => void }) {
-  const [form, setForm] = useState({ indicador_id: acesso.indicador?.id || "", cliente_nome: "", cliente_id: "", regiao: "", linha: "TRAILER" as Linha, modelo: "", quantidade: "1", valor_final: "", oportunidade_id: "", observacao: "" })
+  const [form, setForm] = useState({ indicador_id: "", cliente_nome: "", cliente_id: "", regiao: "", linha: "TRAILER" as Linha, modelo: "", quantidade: "1", valor_final: "", oportunidade_id: "", observacao: "" })
   const [sugestoes, setSugestoes] = useState<ResultadoBusca | null>(null)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState("")
@@ -166,7 +164,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
   }, [form.cliente_nome, form.cliente_id])
 
   const tabela = acesso.tabela_comissao
-  const comissaoPrevista = tabela ? (tabela[form.linha] || 0) * (Number(form.quantidade) || 0) : null
+  const comissaoPrevista = (tabela[form.linha] || 0) * (Number(form.quantidade) || 0)
 
   async function enviar() {
     setEnviando(true); setErro(""); setOk("")
@@ -191,7 +189,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
     <section aria-label="Nova indicação" className={caixa}>
       <h2 className="flex items-center gap-2 text-lg font-semibold"><Plus size={18} className="text-cyan-300"/> Nova indicação</h2>
       <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {!acesso.indicador && (
+        {(
           <label className="text-xs text-slate-400">Indicador
             <select value={form.indicador_id} onChange={(e) => mudar("indicador_id", e.target.value)} className={campo}>
               <option value="">Escolha o indicador</option>
@@ -211,7 +209,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
         <label className="text-xs text-slate-400">Região do cliente<input value={form.regiao} onChange={(e) => mudar("regiao", e.target.value)} placeholder="Ex.: Campinas, Grande SP, Vale" className={campo}/></label>
         <label className="text-xs text-slate-400">Linha
           <select value={form.linha} onChange={(e) => mudar("linha", e.target.value)} className={campo}>
-            {LINHAS.map((l) => <option key={l} value={l}>{ROTULO_LINHA[l]}{tabela ? ` — ${moeda(tabela[l])} por equipamento` : ""}</option>)}
+            {LINHAS.map((l) => <option key={l} value={l}>{ROTULO_LINHA[l]} — {moeda(tabela[l])} por equipamento</option>)}
           </select>
         </label>
         <label className="text-xs text-slate-400">Máquina (modelo)<input value={form.modelo} onChange={(e) => mudar("modelo", e.target.value)} placeholder="Ex.: Vector HE19, Supra 850" className={campo}/></label>
@@ -222,7 +220,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <button type="button" disabled={enviando} onClick={() => void enviar()} className={`${botao} bg-cyan-500 text-slate-950`}>{enviando ? "Registrando..." : "Registrar indicação"}</button>
-        {comissaoPrevista !== null && <span className="text-xs text-slate-400">Comissão prevista se a venda for concluída: <b className="text-amber-200">{moeda(comissaoPrevista)}</b></span>}
+        {<span className="text-xs text-slate-400">Comissão prevista se a venda for concluída: <b className="text-amber-200">{moeda(comissaoPrevista)}</b></span>}
         {form.oportunidade_id && <span className="text-xs text-slate-500">Com a oportunidade vinculada, a venda é concluída sozinha quando o negócio for ganho.</span>}
       </div>
       {erro && <p role="alert" className="mt-2 text-sm text-red-300">{erro}</p>}
@@ -231,7 +229,7 @@ function NovaIndicacao({ acesso, indicadores, onCriada }: { acesso: Acesso; indi
   )
 }
 
-function ListaIndicacoes({ acesso, periodo, versao, onAlterada }: { acesso: Acesso; periodo: Periodo; versao: number; onAlterada: () => void }) {
+function ListaIndicacoes({ periodo, versao, onAlterada }: { periodo: Periodo; versao: number; onAlterada: () => void }) {
   const [itens, setItens] = useState<Indicacao[] | null>(null)
   const [erro, setErro] = useState("")
   const [filtro, setFiltro] = useState<"" | StatusIndicacao | "A_PAGAR">("")
@@ -256,16 +254,15 @@ function ListaIndicacoes({ acesso, periodo, versao, onAlterada }: { acesso: Aces
     }
   }
 
-  const podeMudarStatus = acesso.gestao || (acesso.interno && !acesso.indicador)
   const lista = (itens || []).filter((i) => !filtro || (filtro === "A_PAGAR" ? i.status === "VENDIDA" && i.comissao_status !== "PAGA" : i.status === filtro))
   return (
     <section aria-label="Indicações" className={caixa}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-lg font-semibold"><Handshake size={18} className="text-cyan-300"/> {acesso.indicador ? "Minhas indicações" : "Indicações"}</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold"><Handshake size={18} className="text-cyan-300"/> Indicações</h2>
         <select aria-label="Filtrar indicações" value={filtro} onChange={(e) => setFiltro(e.target.value as typeof filtro)} className={campoBase}>
           <option value="">Todas</option>
           {(Object.keys(ROTULO_STATUS) as StatusIndicacao[]).map((s) => <option key={s} value={s}>{ROTULO_STATUS[s]}</option>)}
-          {(acesso.gestao || acesso.indicador) && <option value="A_PAGAR">Comissão pendente</option>}
+          <option value="A_PAGAR">Comissão pendente</option>
         </select>
       </div>
       {erro && <p role="alert" className="mt-2 text-sm text-red-300">{erro}</p>}
@@ -275,23 +272,23 @@ function ListaIndicacoes({ acesso, periodo, versao, onAlterada }: { acesso: Aces
           <li key={i.id} className="flex flex-col gap-2 py-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0">
               <p className="flex flex-wrap items-center gap-2"><strong>{i.cliente_nome}</strong><span className={`rounded-full border px-2 py-0.5 text-[11px] ${COR_STATUS[i.status]}`}>{ROTULO_STATUS[i.status]}</span>{i.comissao_status && <span className="rounded-full border border-amber-800 px-2 py-0.5 text-[11px] text-amber-200">{ROTULO_COMISSAO[i.comissao_status]}{i.nota_fiscal ? ` · NF ${i.nota_fiscal}` : ""}</span>}</p>
-              <p className="text-xs text-slate-400">{[!acesso.indicador && `Indicador: ${i.indicador_nome}`, i.regiao, `${i.quantidade}× ${ROTULO_LINHA[i.linha]}${i.modelo ? ` ${i.modelo}` : ""}`, moeda(i.valor_final), `indicada em ${data(i.data_indicacao)}`, i.data_venda && `vendida em ${data(i.data_venda)}`, i.comissao_valor ? `comissão ${moeda(i.comissao_valor)}` : null].filter(Boolean).join(" · ")}</p>
+              <p className="text-xs text-slate-400">{[`Indicador: ${i.indicador_nome}`, i.regiao, `${i.quantidade}× ${ROTULO_LINHA[i.linha]}${i.modelo ? ` ${i.modelo}` : ""}`, moeda(i.valor_final), `indicada em ${data(i.data_indicacao)}`, i.data_venda && `vendida em ${data(i.data_venda)}`, i.comissao_valor ? `comissão ${moeda(i.comissao_valor)}` : null].filter(Boolean).join(" · ")}</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              {podeMudarStatus && i.status !== "VENDIDA" && i.status !== "PERDIDA" && (
+              {i.status !== "VENDIDA" && i.status !== "PERDIDA" && (
                 <>
                   {i.status === "INDICADA" && <button type="button" disabled={ocupado === i.id} onClick={() => void mudar(i, { status: "EM_NEGOCIACAO" })} className="min-h-9 rounded-xl border border-cyan-800 px-3 text-xs text-cyan-200">Em negociação</button>}
                   <button type="button" disabled={ocupado === i.id} onClick={() => void mudar(i, { status: "VENDIDA" })} className="min-h-9 rounded-xl border border-emerald-800 px-3 text-xs text-emerald-200">Venda concluída</button>
                   <button type="button" disabled={ocupado === i.id} onClick={() => void mudar(i, { status: "PERDIDA" })} className="min-h-9 rounded-xl border border-red-900 px-3 text-xs text-red-200">Perdida</button>
                 </>
               )}
-              {acesso.gestao && i.status === "VENDIDA" && i.comissao_status === "A_PAGAR" && (
+              {i.status === "VENDIDA" && i.comissao_status === "A_PAGAR" && (
                 <span className="flex items-center gap-1">
                   <input aria-label={`Nota fiscal de ${i.cliente_nome}`} value={nota[i.id] || ""} onChange={(e) => setNota((n) => ({ ...n, [i.id]: e.target.value }))} placeholder="Nº da NF" className="min-h-9 w-28 rounded-xl border border-[#24466f] bg-[#020817] px-2 text-xs"/>
                   <button type="button" disabled={ocupado === i.id || !nota[i.id]} onClick={() => void mudar(i, { comissao_status: "NF_RECEBIDA", nota_fiscal: nota[i.id] })} className="min-h-9 rounded-xl border border-amber-800 px-3 text-xs text-amber-200 disabled:opacity-40">NF recebida</button>
                 </span>
               )}
-              {acesso.gestao && i.comissao_status === "NF_RECEBIDA" && <button type="button" disabled={ocupado === i.id} onClick={() => void mudar(i, { comissao_status: "PAGA" })} className="min-h-9 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white">Marcar comissão paga</button>}
+              {i.comissao_status === "NF_RECEBIDA" && <button type="button" disabled={ocupado === i.id} onClick={() => void mudar(i, { comissao_status: "PAGA" })} className="min-h-9 rounded-xl bg-emerald-600 px-3 text-xs font-bold text-white">Marcar comissão paga</button>}
             </div>
           </li>
         ))}
@@ -302,17 +299,15 @@ function ListaIndicacoes({ acesso, periodo, versao, onAlterada }: { acesso: Aces
 }
 
 function CadastroIndicadores({ indicadores, onSalvo, onExtrato }: { indicadores: Indicador[]; onSalvo: () => void; onExtrato: (id: string) => void }) {
-  const vazio = { nome: "", documento: "", telefone: "", email: "", regiao: "", usuario_id: "", dados_pagamento: "", ativo: true }
+  const vazio = { nome: "", documento: "", telefone: "", email: "", regiao: "", dados_pagamento: "", ativo: true }
   const [form, setForm] = useState(vazio)
   const [editando, setEditando] = useState<string | null>(null)
-  const [usuarios, setUsuarios] = useState<UsuarioCTI[]>([])
   const [erro, setErro] = useState("")
-  useEffect(() => { listarUsuarios().then((u) => setUsuarios(u.filter((x) => String(x.tipo_usuario || "").toUpperCase().startsWith("INDICADOR")))).catch(() => setUsuarios([])) }, [])
 
   async function salvar() {
     setErro("")
     try {
-      await salvarIndicador({ ...form, documento: form.documento || null, usuario_id: form.usuario_id || null }, editando || undefined)
+      await salvarIndicador({ ...form, documento: form.documento || null }, editando || undefined)
       setForm(vazio); setEditando(null); onSalvo()
     } catch (falha) {
       setErro(falha instanceof Error ? falha.message : "Não foi possível salvar.")
@@ -329,12 +324,6 @@ function CadastroIndicadores({ indicadores, onSalvo, onExtrato }: { indicadores:
         <label className="text-xs text-slate-400">E-mail<input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} className={campo}/></label>
         <label className="text-xs text-slate-400">Região de atuação<input value={form.regiao} onChange={(e) => setForm({ ...form, regiao: e.target.value })} className={campo}/></label>
         <label className="text-xs text-slate-400">Dados para pagamento<input value={form.dados_pagamento} onChange={(e) => setForm({ ...form, dados_pagamento: e.target.value })} placeholder="Banco, agência, conta ou PIX" className={campo}/></label>
-        <label className="text-xs text-slate-400">Acesso ao CTI (usuário indicador)
-          <select value={form.usuario_id} onChange={(e) => setForm({ ...form, usuario_id: e.target.value })} className={campo}>
-            <option value="">Sem acesso</option>
-            {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
-          </select>
-        </label>
         <label className="flex items-center gap-2 text-xs text-slate-400"><input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })}/> Ativo</label>
       </div>
       <div className="mt-3 flex gap-2">
@@ -345,10 +334,10 @@ function CadastroIndicadores({ indicadores, onSalvo, onExtrato }: { indicadores:
       <ul className="mt-4 divide-y divide-[#13203f]">
         {indicadores.map((i) => (
           <li key={i.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
-            <span><strong>{i.nome}</strong> <span className="text-xs text-slate-400">{[i.documento, i.regiao, i.telefone, i.ativo === false && "inativo", i.usuario_id && "com acesso ao CTI"].filter(Boolean).join(" · ")}</span></span>
+            <span><strong>{i.nome}</strong> <span className="text-xs text-slate-400">{[i.documento, i.regiao, i.telefone, i.ativo === false && "inativo"].filter(Boolean).join(" · ")}</span></span>
             <span className="flex gap-2">
               <button type="button" onClick={() => onExtrato(i.id)} className="min-h-9 rounded-xl border border-[#24466f] px-3 text-xs"><FileText size={14} className="mr-1 inline"/>Extrato</button>
-              <button type="button" onClick={() => { setEditando(i.id); setForm({ nome: i.nome, documento: i.documento || "", telefone: i.telefone || "", email: i.email || "", regiao: i.regiao || "", usuario_id: i.usuario_id || "", dados_pagamento: i.dados_pagamento || "", ativo: i.ativo !== false }) }} className="min-h-9 rounded-xl border border-[#24466f] px-3 text-xs">Editar</button>
+              <button type="button" onClick={() => { setEditando(i.id); setForm({ nome: i.nome, documento: i.documento || "", telefone: i.telefone || "", email: i.email || "", regiao: i.regiao || "", dados_pagamento: i.dados_pagamento || "", ativo: i.ativo !== false }) }} className="min-h-9 rounded-xl border border-[#24466f] px-3 text-xs">Editar</button>
             </span>
           </li>
         ))}
@@ -400,7 +389,7 @@ export default function IndicadoresPage() {
 
   useEffect(() => {
     let ativo = true
-    buscarAcesso().then((a) => { if (ativo) { setAcesso(a); if (!a.gestao) setAba("indicacoes") } }).catch((e: unknown) => { if (ativo) setErro(e instanceof Error ? e.message : "Sem acesso ao módulo.") })
+    buscarAcesso().then((a) => { if (ativo) { setAcesso(a) } }).catch((e: unknown) => { if (ativo) setErro(e instanceof Error ? e.message : "Sem acesso ao módulo.") })
     return () => { ativo = false }
   }, [])
   useEffect(() => {
@@ -411,7 +400,7 @@ export default function IndicadoresPage() {
   }, [acesso, versao])
 
   const recarregar = () => setVersao((v) => v + 1)
-  const abas = useMemo(() => acesso?.gestao ? [["painel", "Painel e relatórios"], ["indicacoes", "Indicações"], ["indicadores", "Indicadores"]] as const : [["indicacoes", acesso?.indicador ? "Minhas indicações" : "Indicações"]] as const, [acesso])
+  const abas = [["painel", "Painel e relatórios"], ["indicacoes", "Indicações"], ["indicadores", "Indicadores"]] as const
 
   return (
     <main className="flex min-h-screen bg-[#020817] text-white">
@@ -423,7 +412,7 @@ export default function IndicadoresPage() {
             <div>
               <p className="text-xs font-semibold uppercase tracking-[.22em] text-cyan-400">CRM</p>
               <h1 className="mt-2 flex items-center gap-2 text-3xl font-bold sm:text-4xl"><BadgeDollarSign className="text-cyan-300"/> Indicadores e comissões</h1>
-              <p className="mt-2 max-w-3xl text-gray-400">Quem indicou, para qual cliente e região, qual máquina, quantidade e valor final.{acesso?.tabela_comissao ? ` Venda concluída gera a comissão por equipamento: Trailer ${moeda(acesso.tabela_comissao.TRAILER)}, Diesel Truck ${moeda(acesso.tabela_comissao["DIESEL TRUCK"])} e Direct Drive ${moeda(acesso.tabela_comissao["DIRECT DRIVE"])}. O pagamento é feito com a nota fiscal do indicador.` : ""}</p>
+              <p className="mt-2 max-w-3xl text-gray-400">Quem indicou, para qual cliente e região, qual máquina, quantidade e valor final.{acesso ? ` Venda concluída gera a comissão por equipamento: Trailer ${moeda(acesso.tabela_comissao.TRAILER)}, Diesel Truck ${moeda(acesso.tabela_comissao["DIESEL TRUCK"])} e Direct Drive ${moeda(acesso.tabela_comissao["DIRECT DRIVE"])}. O pagamento é feito com a nota fiscal do indicador.` : ""}</p>
             </div>
             <Seletor periodo={periodo} onMudar={setPeriodo}/>
           </header>
@@ -436,15 +425,14 @@ export default function IndicadoresPage() {
                   {abas.map(([codigo, rotulo]) => <button key={codigo} type="button" role="tab" aria-selected={aba === codigo} onClick={() => setAba(codigo)} className={`shrink-0 rounded-full border px-4 py-2 text-sm font-semibold ${aba === codigo ? "border-cyan-500 bg-cyan-950/60 text-cyan-100" : "border-[#24466f] text-slate-400"}`}>{rotulo}</button>)}
                 </div>
               )}
-              {acesso.indicador && <button type="button" onClick={() => setExtrato(acesso.indicador!.id)} className={`${botao} border border-[#24466f]`}><FileText size={16}/>Meu extrato de comissões</button>}
-              {aba === "painel" && acesso.gestao && <PainelGestao periodo={periodo} versao={versao} onExtrato={setExtrato}/>}
+              {aba === "painel" && <PainelGestao periodo={periodo} versao={versao} onExtrato={setExtrato}/>}
               {aba === "indicacoes" && (
                 <>
                   <NovaIndicacao acesso={acesso} indicadores={indicadores} onCriada={recarregar}/>
-                  <ListaIndicacoes acesso={acesso} periodo={periodo} versao={versao} onAlterada={recarregar}/>
+                  <ListaIndicacoes periodo={periodo} versao={versao} onAlterada={recarregar}/>
                 </>
               )}
-              {aba === "indicadores" && acesso.gestao && <CadastroIndicadores indicadores={indicadores} onSalvo={recarregar} onExtrato={setExtrato}/>}
+              {aba === "indicadores" && <CadastroIndicadores indicadores={indicadores} onSalvo={recarregar} onExtrato={setExtrato}/>}
             </>
           )}
         </div>
