@@ -17,6 +17,7 @@ const paginas: Record<string, Pagina> = {
   "/transportadoras": { tituloKey: "nav.companies", descricao: { "pt-BR": "Redirecionamento legado para Empresas", en: "Legacy redirect to Companies", es: "Redirección heredada a Empresas" } },
   "/implementadoras": { tituloKey: "nav.bodyBuilders", descricao: { "pt-BR": "Rede estratégica de implementadoras homologadas", en: "Strategic network of approved body builders", es: "Red estratégica de carroceros homologados" } },
   "/locadoras": { titulo: "Locadoras", descricao: { "pt-BR": "Gestão comercial e expansão de locadoras", en: "Commercial management and rental-fleet expansion", es: "Gestión comercial y expansión de empresas de alquiler" } },
+  "/hoje": { titulo: "Hoje", descricao: { "pt-BR": "O que fazer agora, em ordem de prioridade", en: "What to do now, by priority", es: "Qué hacer ahora, por prioridad" } },
   "/indicadores": { titulo: "Indicadores e comissões", descricao: { "pt-BR": "Indicações, vendas concluídas e comissões dos indicadores", en: "Referrals, closed sales and referrer commissions", es: "Indicaciones, ventas concluidas y comisiones de los indicadores" } },
   "/oportunidades": { tituloKey: "nav.opportunities", descricao: { "pt-BR": "Pipeline estratégico e gestão de oportunidades", en: "Strategic pipeline and opportunity management", es: "Pipeline estratégico y gestión de oportunidades" } },
   "/pipeline": { tituloKey: "nav.pipeline", descricao: { "pt-BR": "Gestão visual do funil comercial", en: "Visual sales-pipeline management", es: "Gestión visual del pipeline comercial" } },
